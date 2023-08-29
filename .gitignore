@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# Build folder
+build/
+python_module/
+dist/
+.vscode/settings.json
