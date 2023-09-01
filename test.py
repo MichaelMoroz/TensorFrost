@@ -1,9 +1,8 @@
-import test_pybind
+import TensorFrost as tf
+import numpy as np
 
-# Create a list of integers
-numbers = [1, 2, 3, 4, 5]
+# Create a 2x3 tensor
+tensor = tf.Tensor([2, 2]) + [[4, 5], [6, 7]]
 
-# Use the add_one function from the test_pybind module
-result = test_pybind.add_one(numbers)
-
-print(result)
+print(tensor.shape)
+print(tensor.type)
