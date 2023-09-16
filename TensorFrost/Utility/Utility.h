@@ -4,7 +4,7 @@
 
 namespace TensorFrost {
 using namespace std;
-typedef unsigned int uint;
+using uint = unsigned int;
 
 // function to convert float bits to uint bits
 inline uint AsUint(float f) { return *reinterpret_cast<uint*>(&f); }

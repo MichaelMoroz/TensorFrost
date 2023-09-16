@@ -200,5 +200,5 @@ Standard:        Auto
 StatementAttributeLikeMacros:
 StatementMacros:
 TabWidth:        2
-UseTab:          Never
+UseTab:          ForIndentation
 WhitespaceSensitiveMacros: []
