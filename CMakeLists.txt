@@ -18,3 +18,5 @@ set(CMAKE_PDB_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/python_module)
 add_subdirectory(pybind11)
 add_subdirectory(TensorFrost)
 add_subdirectory(examples)
+
+set_property(DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT TensorFrost)
