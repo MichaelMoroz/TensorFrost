@@ -1,38 +1,27 @@
 #pragma once
 
+#include <functional>
 #include <iostream>
+#include <list>
 #include <unordered_map>
 #include <vector>
-#include <functional>
-#include <list>
-#include <../../TensorFrost/IR/Operations.h>
-#include <../../TensorFrost/Utility/Utility.h>
 
-namespace TensorFrost
-{
-	class Tensor;
+#include "Operations.h"
+#include "Utility/Utility.h"
 
-    class IR
-    {
-        list<shared_ptr<Tensor>> nodes;
+namespace TensorFrost {
+class Tensor;
 
-    public:
-        void AddNode(shared_ptr<Tensor> node)
-        {
-            nodes.push_back(node);
-        }
+class IR {
+  list<shared_ptr<Tensor>> nodes;
 
-        list<shared_ptr<Tensor>> GetNodes()
-        {
-            return nodes;
-        }
+ public:
+  void AddNode(shared_ptr<Tensor> node) { nodes.push_back(node); }
 
-        void Clear()
-        {
-            nodes.clear();
-        }
+  list<shared_ptr<Tensor>> GetNodes() { return nodes; }
 
+  void Clear() { nodes.clear(); }
 
-        string GetOperationListing();
-    };
-}
+  string GetOperationListing();
+};
+}  // namespace TensorFrost

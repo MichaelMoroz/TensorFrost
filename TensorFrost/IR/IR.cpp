@@ -1,8 +1,3 @@
-#pragma once
+#include "IR.h"
 
-#include<../../TensorFrost/IR/IR.h>
-
-namespace TensorFrost
-{
-    
-}
+namespace TensorFrost {}
