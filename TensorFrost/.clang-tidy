@@ -1,0 +1,48 @@
+Checks: >
+  -*,
+  abseil-*,
+  bugprone-*,
+  google-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -google-readability-braces-around-statements,
+  -google-readability-namespace-comments,
+  -google-runtime-references,
+  -misc-non-private-member-variables-in-classes,
+  -misc-const-correctness,
+  -misc-no-recursion,
+  -modernize-return-braced-init-list,
+  -modernize-use-trailing-return-type,
+  -modernize-avoid-c-arrays,
+  -readability-braces-around-statements,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-named-parameter,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -bugprone-unchecked-optional-access
+
+UseColor: true
+HeaderFilterRegex: ".*\\.h(pp)?$"
+
+CheckOptions:
+  - { key: readability-identifier-naming.NamespaceCase,                  value: CamelCase  }
+  - { key: readability-identifier-naming.ClassCase,                      value: CamelCase  }
+  - { key: readability-identifier-naming.StructCase,                     value: CamelCase  }
+  - { key: readability-identifier-naming.TemplateParameterCase,          value: aNy_CasE   }
+  - { key: readability-identifier-naming.FunctionCase,                   value: aNy_CasE   }
+  - { key: readability-identifier-naming.VariableCase,                   value: lower_case }
+  - { key: readability-identifier-naming.ClassMemberCase,                value: lower_case }
+  - { key: readability-identifier-naming.ClassMemberSuffix,              value: _          }
+  - { key: readability-identifier-naming.PrivateMemberSuffix,            value: _          }
+  - { key: readability-identifier-naming.ProtectedMemberSuffix,          value: _          }
+  - { key: readability-identifier-naming.EnumConstantCase,               value: CamelCase  }
+  - { key: readability-identifier-naming.ConstexprVariableCase,          value: CamelCase  }
+  - { key: readability-identifier-naming.GlobalConstantCase,             value: CamelCase  }
+  - { key: readability-identifier-naming.MemberConstantCase,             value: CamelCase  }
+  - { key: readability-identifier-naming.StaticConstantCase,             value: CamelCase  }
+  - { key: readability-implicit-bool-conversion.AllowIntegerConditions,  value: 1          }
+  - { key: readability-implicit-bool-conversion.AllowPointerConditions,  value: 1          }
+  - { key: readability-function-cognitive-complexity.IgnoreMacros,       value: 1          }

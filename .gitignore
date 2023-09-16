@@ -33,6 +33,7 @@
 
 # Build folder
 build/
+build_tidy/
 python_module/
 dist/
 .vscode/settings.json
