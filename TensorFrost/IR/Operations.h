@@ -1,5 +1,4 @@
-#ifndef _OPERATIONS_H_
-#define _OPERATIONS_H_
+#pragma once
 
 #include <string>
 #include <tuple>
@@ -11,12 +10,12 @@ namespace TensorFrost {
 using namespace std;
 
 enum class DataType {
-  f32,
-  u32,
-  i32,
-  b1,
-  memory_ref,
-  none,
+	F32,
+	U32,
+	I32,
+	B1,
+	MemoryRef,
+	None,
 };
 
 #define dtype(x) DataType::x
@@ -27,45 +26,48 @@ DataTypeList Types(initializer_list<DataType> elements);
 
 class Operation {
  private:
-  string name;
-  vector<pair<vector<DataType>, DataType>> overloads;
+	string name_;
+	vector<pair<vector<DataType>, DataType>> overloads_;
 
  public:
-  Operation(const string& name,
-            initializer_list<pair<vector<DataType>, DataType>> oloads)
-      : name(name), overloads(oloads) {}
+	Operation(string name,
+	          initializer_list<pair<vector<DataType>, DataType>> oloads)
+	    : name_(std::move(std::move(name))), overloads_(oloads) {}
 
-  string GetName() const { return name; }
+	[[nodiscard]] [[nodiscard]] string GetName() const { return name_; }
 
-  vector<pair<vector<DataType>, DataType>> GetOverloads() const {
-    return overloads;
-  }
+	[[nodiscard]] [[nodiscard]] vector<pair<vector<DataType>, DataType>>
+	GetOverloads() const {
+		return overloads_;
+	}
 
-  int GetInputCount() const { return overloads[0].first.size(); }
+	[[nodiscard]] [[nodiscard]] int GetInputCount() const {
+		return overloads_[0].first.size();
+	}
 
-  bool IsInputValid(const vector<DataType>& input_types) const {
-    for (const auto& overload : overloads) {
-      if (overload.first.size() != input_types.size()) {
-        continue;
-      }
+	[[nodiscard]] [[nodiscard]] bool IsInputValid(
+	    const vector<DataType>& input_types) const {
+		for (const auto& overload : overloads_) {
+			if (overload.first.size() != input_types.size()) {
+				continue;
+			}
 
-      bool valid = true;
-      for (size_t i = 0; i < input_types.size(); i++) {
-        if (overload.first[i] != input_types[i]) {
-          valid = false;
-          break;
-        }
-      }
+			bool valid = true;
+			for (size_t i = 0; i < input_types.size(); i++) {
+				if (overload.first[i] != input_types[i]) {
+					valid = false;
+					break;
+				}
+			}
 
-      if (valid) {
-        return true;
-      }
-    }
-    return false;
-  }
+			if (valid) {
+				return true;
+			}
+		}
+		return false;
+	}
 };
 
-Operation FindOperation(string name);
+Operation FindOperation(const string& name);
 
 }  // namespace TensorFrost
-#endif

@@ -13,15 +13,15 @@ namespace TensorFrost {
 class Tensor;
 
 class IR {
-  list<shared_ptr<Tensor>> nodes;
+	list<shared_ptr<Tensor>> nodes_;
 
  public:
-  void AddNode(shared_ptr<Tensor> node) { nodes.push_back(node); }
+	void AddNode(const shared_ptr<Tensor>& node) { nodes_.push_back(node); }
 
-  list<shared_ptr<Tensor>> GetNodes() { return nodes; }
+	list<shared_ptr<Tensor>> GetNodes() { return nodes_; }
 
-  void Clear() { nodes.clear(); }
+	void Clear() { nodes_.clear(); }
 
-  string GetOperationListing();
+	string GetOperationListing();
 };
 }  // namespace TensorFrost
