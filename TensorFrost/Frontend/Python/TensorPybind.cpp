@@ -1,82 +1,18 @@
 #include <utility>
 #include <vector>
 
-#include <TensorFrost.h>
-#include <pybind11/functional.h>
-#include <pybind11/numpy.h>
-#include <pybind11/operators.h>
-#include <pybind11/pybind11.h>
-#include <pybind11/stl.h>
+#include <Frontend/Python/PyTensor.h>
 
 namespace py = pybind11;
 
 namespace TensorFrost {
 
-// Tensor wrapper for python
-class PyTensor {
-	Tensor* tensor_;
-
- public:
-	explicit PyTensor(Tensor* tensor) : tensor_(tensor) {}
-	~PyTensor() = default;
-
-	[[nodiscard]] Tensor& Get() const { return *tensor_; }
-
-	PyTensor(const std::vector<int>& shape, DataType type = DataType::Float) {
-		switch (type) {
-			case DataType::Float:
-				tensor_ = &Tensor::Constant(shape, 0.0F);
-				break;
-			case DataType::Int:
-				tensor_ = &Tensor::Constant(shape, 0);
-				break;
-			case DataType::Uint:
-				tensor_ = &Tensor::Constant(shape, 0U);
-				break;
-			default:
-				throw std::runtime_error("Invalid data type");
-		}
-	}
-
-	PyTensor(const TensorView& indexed_tensor) {
-		// load the elements of the indexed tensor
-		tensor_ = &Tensor::Load(*indexed_tensor.value, indexed_tensor.indices);
-	}
-
-	PyTensor(float value) { tensor_ = &Tensor::Constant(Shape(), value); }
-	PyTensor(int value) { tensor_ = &Tensor::Constant(Shape(), value); }
-	PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(Shape(), value); }
-};
-
-Tensor TensorFromPyArray(const py::array_t<float>& array) {
-	auto buffer = array.request();
-	auto* ptr = static_cast<float*>(buffer.ptr);
-	std::vector<int> shape = std::vector<int>();
-	for (int i = 0; i < buffer.ndim; i++) {
-		shape.push_back(buffer.shape[i]);
-	}
-	return Tensor::Constant(shape, ptr);
-}
-
-py::array_t<float> TensorToPyArray(const Tensor& tensor) {
-	std::vector<int> shape = tensor.shape.GetShape();
-	py::array::ShapeContainer shape2 =
-	    py::array::ShapeContainer(shape.begin(), shape.end());
-	py::array_t<float> array(shape2);
-	auto buffer = array.request();
-	auto* ptr = static_cast<float*>(buffer.ptr);
-	for (int i = 0; i < tensor.Size(); i++) {
-		ptr[i] = 0.0;
-	}
-	return array;
-}
-
 PYBIND11_MODULE(TensorFrost, m) {
-	//py::enum_<TensorFrost::DataType>(m, "DataType")
-	//    .value("float", TensorFrost::DataType::Float)
-	//    .value("int", TensorFrost::DataType::Int)
-	//    .value("uint", TensorFrost::DataType::Uint)
-	//    .value("bool", TensorFrost::DataType::Bool);
+	py::enum_<TensorFrost::DataType>(m, "DataType")
+	    .value("float", TensorFrost::DataType::Float)
+	    .value("int", TensorFrost::DataType::Int)
+	    .value("uint", TensorFrost::DataType::Uint)
+	    .value("bool", TensorFrost::DataType::Bool);
 
 #define PT(tensor) PyTensor(&(tensor))
 #define T(tensor) (tensor).Get()
@@ -170,38 +106,52 @@ PYBIND11_MODULE(TensorFrost, m) {
 	// end power operator
 	// end operator overloads
 	;
+#undef DEFINE_OPERATOR
 
-#define DEFINE_OPERATOR(opname, op)                                       \
-	.def("__" #opname "__", [](const TensorView& t, const TensorView& t2) { \
-		return PT(T(PyTensor(t)) op T(PyTensor(t2)));                         \
-	}).def("__" #opname "__", [](const TensorView& t, const float f) {      \
-		return PT(Tensor::Constant(t.value->shape, f) op T(PyTensor(t)));     \
-	})
+	auto tensorView = py::class_<TensorView>(m, "TensorView");
 
-	py::class_<TensorView>(m, "TensorView") DEFINE_OPERATOR(add, +)
-	    DEFINE_OPERATOR(sub, -) DEFINE_OPERATOR(mul, *) DEFINE_OPERATOR(div, /)
-	        DEFINE_OPERATOR(mod, %)
-	            // negative
-	            .def("__neg__",
-	                 [](const TensorView& t) { return PT(-T(PyTensor(t))); })
-	    // comparison
-	    DEFINE_OPERATOR(eq, ==) DEFINE_OPERATOR(ne, !=) DEFINE_OPERATOR(lt, <)
-	        DEFINE_OPERATOR(le, <=) DEFINE_OPERATOR(gt, >) DEFINE_OPERATOR(ge, >=)
-	    // logical
-	    DEFINE_OPERATOR(and, &&) DEFINE_OPERATOR(or, ||)
-	            .def("__not__",
-	                 [](const TensorView& t) { return PT(!T(PyTensor(t))); })
-	    // bitwise
-	    DEFINE_OPERATOR(xor, ^) DEFINE_OPERATOR(lshift, <<)
-	        DEFINE_OPERATOR(rshift, >>) DEFINE_OPERATOR(and_, &)
-	            DEFINE_OPERATOR(or_, |)
-	            .def("__invert__",
-	                 [](const TensorView& t) { return PT(~T(PyTensor(t))); })
+#define DEFINE_OPERATOR(opname, op)                                          \
+	tensorView.def("__" #opname "__",                                          \
+	               [](const TensorView& t, const TensorView& t2) {             \
+		               return PT(T(PyTensor(t)) op T(PyTensor(t2)));             \
+	               });                                                         \
+	tensorView.def("__" #opname "__", [](const TensorView& t, const float f) { \
+		return PT(Tensor::Constant(t.value->shape, f) op T(PyTensor(t)));        \
+	});
 
-	            //** operator overload
-	            .def("__pow__", [](const TensorView& t, const TensorView& t2) {
-		            return PT(Tensor::pow(PyTensor(t).Get(), PyTensor(t2).Get()));
-	            });
+	DEFINE_OPERATOR(add, +);
+	DEFINE_OPERATOR(sub, -);
+	DEFINE_OPERATOR(mul, *);
+	DEFINE_OPERATOR(div, /);
+	DEFINE_OPERATOR(mod, %);
+	// negative
+	tensorView.def("__neg__",
+	               [](const TensorView& t) { return PT(-T(PyTensor(t))); });
+	// comparison
+	DEFINE_OPERATOR(eq, ==);
+	DEFINE_OPERATOR(ne, !=);
+	DEFINE_OPERATOR(lt, <);
+	DEFINE_OPERATOR(le, <=);
+	DEFINE_OPERATOR(gt, >);
+	DEFINE_OPERATOR(ge, >=);
+	// logical
+	DEFINE_OPERATOR(and, &&);
+	DEFINE_OPERATOR(or, ||);
+	tensorView.def("__not__",
+	               [](const TensorView& t) { return PT(!T(PyTensor(t))); });
+	// bitwise
+	DEFINE_OPERATOR(xor, ^);
+	DEFINE_OPERATOR(lshift, <<);
+	DEFINE_OPERATOR(rshift, >>);
+	DEFINE_OPERATOR(and_, &);
+	DEFINE_OPERATOR(or_, |);
+	tensorView.def("__invert__",
+	               [](const TensorView& t) { return PT(~T(PyTensor(t))); });
+
+	//** operator overload
+	tensorView.def("__pow__", [](const TensorView& t, const TensorView& t2) {
+		return PT(Tensor::pow(PyTensor(t).Get(), PyTensor(t2).Get()));
+	});
 
 	// implicit conversion from TensorView to PyTensor
 	py::implicitly_convertible<TensorView, PyTensor>();

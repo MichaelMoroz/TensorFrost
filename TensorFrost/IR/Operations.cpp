@@ -1,6 +1,8 @@
 #include "Operations.h"
 
 namespace TensorFrost {
+#define dtype(x) DataType::x
+
 vector<pair<string, vector<Operation>>> operations = {
     {"operators",
      {Operation("add", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},

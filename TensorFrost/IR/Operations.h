@@ -18,8 +18,6 @@ enum class DataType {
 	None,
 };
 
-#define dtype(x) DataType::x
-
 using DataTypeList = vector<DataType>;
 
 DataTypeList Types(initializer_list<DataType> elements);
