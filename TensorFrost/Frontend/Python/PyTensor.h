@@ -9,6 +9,9 @@
 
 namespace TensorFrost {
 
+#define PT(tensor) PyTensor(&(tensor))
+#define T(tensor) (tensor).Get()
+
 namespace py = pybind11;
 
 // Tensor wrapper for python
