@@ -20,7 +20,7 @@ string IR::GetOperationListing() {
 	for (const shared_ptr<Tensor>& node : nodes_) {
 		listing += names[node.get()] + "(" + to_string(node->shape[0]);
 		for (int i = 1; i < node->shape.size(); i++) {
-			listing += "x" + to_string(node->shape[i]);
+			listing += "," + to_string(node->shape[i]);
 		}
 		listing += ") = " + node->name + "(" + node->GetConstantString();
 		for (int i = 0; i < node->inputs.size(); i++) {

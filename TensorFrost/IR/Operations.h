@@ -10,10 +10,10 @@ namespace TensorFrost {
 using namespace std;
 
 enum class DataType {
-	F32,
-	U32,
-	I32,
-	B1,
+	Float,
+	Uint,
+	Int,
+	Bool,
 	MemoryRef,
 	None,
 };

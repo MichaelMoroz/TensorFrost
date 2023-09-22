@@ -1,6 +1,7 @@
 #include <utility>
 #include <vector>
 
+#include <TensorFrost.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
@@ -8,9 +9,6 @@
 #include <pybind11/stl.h>
 
 namespace py = pybind11;
-
-#include "Tensor/Tensor.h"
-#include "Tensor/TensorProgram.h"
 
 namespace TensorFrost {
 
@@ -24,9 +22,30 @@ class PyTensor {
 
 	[[nodiscard]] Tensor& Get() const { return *tensor_; }
 
-	PyTensor(const std::vector<int>& shape, DataType /*type*/) {
-		tensor_ = &Tensor::Constant(shape, 0.0F);
+	PyTensor(const std::vector<int>& shape, DataType type = DataType::Float) {
+		switch (type) {
+			case DataType::Float:
+				tensor_ = &Tensor::Constant(shape, 0.0F);
+				break;
+			case DataType::Int:
+				tensor_ = &Tensor::Constant(shape, 0);
+				break;
+			case DataType::Uint:
+				tensor_ = &Tensor::Constant(shape, 0U);
+				break;
+			default:
+				throw std::runtime_error("Invalid data type");
+		}
 	}
+
+	PyTensor(const TensorView& indexed_tensor) {
+		// load the elements of the indexed tensor
+		tensor_ = &Tensor::Load(*indexed_tensor.value, indexed_tensor.indices);
+	}
+
+	PyTensor(float value) { tensor_ = &Tensor::Constant(Shape(), value); }
+	PyTensor(int value) { tensor_ = &Tensor::Constant(Shape(), value); }
+	PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(Shape(), value); }
 };
 
 Tensor TensorFromPyArray(const py::array_t<float>& array) {
@@ -40,7 +59,7 @@ Tensor TensorFromPyArray(const py::array_t<float>& array) {
 }
 
 py::array_t<float> TensorToPyArray(const Tensor& tensor) {
-	std::vector<int> shape = tensor.shape;
+	std::vector<int> shape = tensor.shape.GetShape();
 	py::array::ShapeContainer shape2 =
 	    py::array::ShapeContainer(shape.begin(), shape.end());
 	py::array_t<float> array(shape2);
@@ -53,98 +72,157 @@ py::array_t<float> TensorToPyArray(const Tensor& tensor) {
 }
 
 PYBIND11_MODULE(TensorFrost, m) {
-	py::enum_<DataType>(m, "DataType")
-	    .value("f32", DataType::F32)
-	    .value("i32", DataType::I32)
-	    .value("u32", DataType::U32)
-	    .value("b1", DataType::B1);
+	//py::enum_<TensorFrost::DataType>(m, "DataType")
+	//    .value("float", TensorFrost::DataType::Float)
+	//    .value("int", TensorFrost::DataType::Int)
+	//    .value("uint", TensorFrost::DataType::Uint)
+	//    .value("bool", TensorFrost::DataType::Bool);
 
 #define PT(tensor) PyTensor(&(tensor))
 #define T(tensor) (tensor).Get()
 
-#define DEFINE_OPERATOR(opname, op)                                            \
-	.def(                                                                        \
-	    "__" #opname "__",                                                       \
-	    [](const PyTensor& t, const PyTensor& t2) { return PT(T(t) op T(t2)); }) \
-	    .def("__" #opname "__",                                                  \
-	         [](const PyTensor& t, float f) {                                    \
-		         return PT(T(t) op Tensor::Constant(T(t).shape, f));               \
-	         })                                                                  \
-	    .def("__" #opname "__",                                                  \
-	         [](const PyTensor& t, py::array_t<float> f) {                       \
-		         return PT(T(t) op TensorFromPyArray(f));                          \
-	         })                                                                  \
-	    .def("__r" #opname "__",                                                 \
-	         [](const PyTensor& t, float f) {                                    \
-		         return PT(Tensor::Constant(T(t).shape, f) op T(t));               \
-	         })                                                                  \
-	    .def("__r" #opname "__", [](const PyTensor& t, py::array_t<float> f) {   \
-		    return PT(TensorFromPyArray(f) op T(t));                               \
-	    })
+	auto pyTensor = py::class_<PyTensor>(m, "Tensor");
 
-	py::class_<PyTensor>(m, "Tensor")
-	    .def(py::init<std::vector<int>, DataType>())
-	    .def("get", [](const PyTensor& t,
-	                   std::vector<int> indices) { return t.Get().get(indices); })
-	    .def("set", [](const PyTensor& t, std::vector<int> indices,
-	                   float value) { t.Get().set(indices, value); })
-	    .def("__getitem__",
-	         [](const PyTensor& t, std::vector<int> indices) {
-		         return t.Get().get(indices);
-	         })
-	    .def("__setitem__", [](const PyTensor& t, std::vector<int> indices,
-	                           float value) { t.Get().set(indices, value); })
-	    .def_property_readonly("shape",
-	                           [](const PyTensor& t) { return t.Get().shape; })
+	// initializers
+	pyTensor.def(py::init<std::vector<int>, DataType>())
+	    .def(py::init<const TensorView&>())
+	    .def(py::init<float>())
+	    .def(py::init<int>())
+	    .def(py::init<unsigned int>());
+
+	// properties
+	pyTensor
+	    .def_property_readonly(
+	        "shape", [](const PyTensor& t) { return t.Get().shape.GetShape(); })
 	    .def_property_readonly("type",
 	                           [](const PyTensor& t) { return t.Get().type; })
 	    .def("numpy", [](const PyTensor& t) { return TensorToPyArray(t.Get()); })
-	    // operator overloads
-	    DEFINE_OPERATOR(add, +) DEFINE_OPERATOR(sub, -) DEFINE_OPERATOR(mul, *)
-	        DEFINE_OPERATOR(div, /) DEFINE_OPERATOR(mod, %)
-	    // negative
-	    .def("__neg__", [](const PyTensor& t) { return PT(-T(t)); })
+	    .def("index",
+	         [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
+
+	// getter and setter
+	pyTensor
+	    .def("__getitem__",
+	         [](const PyTensor& t, py::tuple indices_tuple) {
+		         std::vector<const Tensor*> indices;
+		         for (auto arg : indices_tuple) {
+			         indices.push_back(&arg.cast<const PyTensor&>().Get());
+		         }
+		         return TensorView(&t.Get(), indices);
+	         })
+	    .def("__setitem__",
+	         [](const PyTensor& t, py::tuple indices_tuple, const PyTensor& t2) {
+		         std::vector<const Tensor*> indices;
+		         for (auto arg : indices_tuple) {
+			         indices.push_back(&arg.cast<const PyTensor&>().Get());
+		         }
+		         Tensor::Store(t.Get(), T(t2), indices);
+	         });
+#define DEFINE_OPERATOR(opname, op)                                           \
+	pyTensor.def("__" #opname "__", [](const PyTensor& t, const PyTensor& t2) { \
+		return PT(T(t) op T(t2));                                                 \
+	});                                                                         \
+	pyTensor.def("__r" #opname "__", [](const PyTensor& t, const float f) {     \
+		return PT(Tensor::Constant(T(t).shape, f) op T(t));                       \
+	});                                                                         \
+	// operator overloads
+	DEFINE_OPERATOR(add, +);
+	DEFINE_OPERATOR(sub, -);
+	DEFINE_OPERATOR(mul, *);
+	DEFINE_OPERATOR(div, /);
+	DEFINE_OPERATOR(mod, %);
+	// negative
+	pyTensor.def("__neg__", [](const PyTensor& t) { return PT(-T(t)); });
+	// comparison
+	DEFINE_OPERATOR(eq, ==);
+	DEFINE_OPERATOR(ne, !=);
+	DEFINE_OPERATOR(lt, <);
+	DEFINE_OPERATOR(le, <=);
+	DEFINE_OPERATOR(gt, >);
+	DEFINE_OPERATOR(ge, >=);
+	// logical
+	DEFINE_OPERATOR(and, &&);
+	DEFINE_OPERATOR(or, ||);
+	pyTensor.def("__not__", [](const PyTensor& t) { return PT(!T(t)); });
+	// bitwise
+	DEFINE_OPERATOR(xor, ^);
+	DEFINE_OPERATOR(lshift, <<);
+	DEFINE_OPERATOR(rshift, >>);
+	DEFINE_OPERATOR(and_, &);
+	DEFINE_OPERATOR(or_, |);
+	pyTensor.def("__invert__", [](const PyTensor& t) { return PT(~T(t)); });
+	// power operator
+	pyTensor.def("__pow__", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::pow(T(t), T(t2)));
+	});
+	pyTensor.def("__pow__", [](const PyTensor& t, float f) {
+		return PT(Tensor::pow(T(t), Tensor::Constant(T(t).shape, f)));
+	});
+	pyTensor.def("__pow__", [](const PyTensor& t, py::array_t<float> f) {
+		return PT(Tensor::pow(T(t), TensorFromPyArray(f)));
+	});
+	pyTensor.def("__rpow__", [](const PyTensor& t, float f) {
+		return PT(Tensor::pow(Tensor::Constant(T(t).shape, f), T(t)));
+	});
+	pyTensor.def("__rpow__", [](const PyTensor& t, py::array_t<float> f) {
+		return PT(Tensor::pow(TensorFromPyArray(f), T(t)));
+	});
+	// end power operator
+	// end operator overloads
+	;
+
+#define DEFINE_OPERATOR(opname, op)                                       \
+	.def("__" #opname "__", [](const TensorView& t, const TensorView& t2) { \
+		return PT(T(PyTensor(t)) op T(PyTensor(t2)));                         \
+	}).def("__" #opname "__", [](const TensorView& t, const float f) {      \
+		return PT(Tensor::Constant(t.value->shape, f) op T(PyTensor(t)));     \
+	})
+
+	py::class_<TensorView>(m, "TensorView") DEFINE_OPERATOR(add, +)
+	    DEFINE_OPERATOR(sub, -) DEFINE_OPERATOR(mul, *) DEFINE_OPERATOR(div, /)
+	        DEFINE_OPERATOR(mod, %)
+	            // negative
+	            .def("__neg__",
+	                 [](const TensorView& t) { return PT(-T(PyTensor(t))); })
 	    // comparison
 	    DEFINE_OPERATOR(eq, ==) DEFINE_OPERATOR(ne, !=) DEFINE_OPERATOR(lt, <)
 	        DEFINE_OPERATOR(le, <=) DEFINE_OPERATOR(gt, >) DEFINE_OPERATOR(ge, >=)
 	    // logical
 	    DEFINE_OPERATOR(and, &&) DEFINE_OPERATOR(or, ||)
-	    .def("__not__", [](const PyTensor& t) { return PT(!T(t)); })
+	            .def("__not__",
+	                 [](const TensorView& t) { return PT(!T(PyTensor(t))); })
 	    // bitwise
 	    DEFINE_OPERATOR(xor, ^) DEFINE_OPERATOR(lshift, <<)
 	        DEFINE_OPERATOR(rshift, >>) DEFINE_OPERATOR(and_, &)
 	            DEFINE_OPERATOR(or_, |)
-	    .def("__invert__", [](const PyTensor& t) { return PT(~T(t)); })
-	    // power operator
-	    .def("__pow__",
-	         [](const PyTensor& t, const PyTensor& t2) {
-		         return PT(Tensor::pow(T(t), T(t2)));
-	         })
-	    .def("__pow__",
-	         [](const PyTensor& t, float f) {
-		         return PT(Tensor::pow(T(t), Tensor::Constant(T(t).shape, f)));
-	         })
-	    .def("__pow__",
-	         [](const PyTensor& t, py::array_t<float> f) {
-		         return PT(Tensor::pow(T(t), TensorFromPyArray(f)));
-	         })
-	    .def("__rpow__",
-	         [](const PyTensor& t, float f) {
-		         return PT(Tensor::pow(Tensor::Constant(T(t).shape, f), T(t)));
-	         })
-	    .def("__rpow__",
-	         [](const PyTensor& t, py::array_t<float> f) {
-		         return PT(Tensor::pow(TensorFromPyArray(f), T(t)));
-	         })
-	    // end power operator
-	    // end operator overloads
-	    ;
+	            .def("__invert__",
+	                 [](const TensorView& t) { return PT(~T(PyTensor(t))); })
+
+	            //** operator overload
+	            .def("__pow__", [](const TensorView& t, const TensorView& t2) {
+		            return PT(Tensor::pow(PyTensor(t).Get(), PyTensor(t2).Get()));
+	            });
+
+	// implicit conversion from TensorView to PyTensor
+	py::implicitly_convertible<TensorView, PyTensor>();
+	py::implicitly_convertible<float, PyTensor>();
+	py::implicitly_convertible<int, PyTensor>();
+	py::implicitly_convertible<unsigned int, PyTensor>();
 
 // unary functions
 #define UNARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t) { return PT(Tensor::name(T(t))); })
 
-	// basic
+#define BINARY_FUNCTION(name)                              \
+	m.def(#name, [](const PyTensor& t, const PyTensor& t2) { \
+		return PT(Tensor::name(T(t), T(t2)));                  \
+	})
+
+#define TERNARY_FUNCTION(name)                                                 \
+	m.def(#name, [](const PyTensor& t, const PyTensor& t2, const PyTensor& t3) { \
+		return PT(Tensor::name(T(t), T(t2), T(t3)));                               \
+	})
+
 	UNARY_FUNCTION(abs);
 	UNARY_FUNCTION(ceil);
 	UNARY_FUNCTION(floor);
@@ -153,7 +231,6 @@ PYBIND11_MODULE(TensorFrost, m) {
 	UNARY_FUNCTION(sign);
 	UNARY_FUNCTION(frac);
 
-	// trigonometric
 	UNARY_FUNCTION(sin);
 	UNARY_FUNCTION(cos);
 	UNARY_FUNCTION(tan);
@@ -164,7 +241,6 @@ PYBIND11_MODULE(TensorFrost, m) {
 	UNARY_FUNCTION(cosh);
 	UNARY_FUNCTION(tanh);
 
-	// exponential
 	UNARY_FUNCTION(exp);
 	UNARY_FUNCTION(exp2);
 	UNARY_FUNCTION(log);
@@ -174,102 +250,26 @@ PYBIND11_MODULE(TensorFrost, m) {
 	UNARY_FUNCTION(rsqrt);
 	UNARY_FUNCTION(rcp);
 
-// end unary functions
-
-// binary functions
-#define BINARY_FUNCTION(name)                                                \
-	m.def(#name,                                                               \
-	      [](const PyTensor& t, const PyTensor& t2) {                          \
-		      return PT(Tensor::name(T(t), T(t2)));                              \
-	      })                                                                   \
-	    .def(#name,                                                            \
-	         [](const PyTensor& t, float f) {                                  \
-		         return PT(Tensor::name(T(t), Tensor::Constant(T(t).shape, f))); \
-	         })                                                                \
-	    .def(#name,                                                            \
-	         [](const PyTensor& t, py::array_t<float> f) {                     \
-		         return PT(Tensor::name(T(t), TensorFromPyArray(f)));            \
-	         })                                                                \
-	    .def(#name,                                                            \
-	         [](float f, const PyTensor& t) {                                  \
-		         return PT(Tensor::name(Tensor::Constant(T(t).shape, f), T(t))); \
-	         })                                                                \
-	    .def(#name, [](py::array_t<float> f, const PyTensor& t) {              \
-		    return PT(Tensor::name(TensorFromPyArray(f), T(t)));                 \
-	    })
-
-	// basic
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);
 	BINARY_FUNCTION(atan2);
 
-// end binary functions
-
-// ternary functions
-#define TERNARY_FUNCTION(name)                                                \
-	m.def(#name,                                                                \
-	      [](const PyTensor& t, const PyTensor& t2, const PyTensor& t3) {       \
-		      return PT(Tensor::name(T(t), T(t2), T(t3)));                        \
-	      })                                                                    \
-	    .def(#name,                                                             \
-	         [](const PyTensor& t, float f, const PyTensor& t2) {               \
-		         return PT(                                                       \
-		             Tensor::name(T(t), Tensor::Constant(T(t).shape, f), T(t2))); \
-	         })                                                                 \
-	    .def(#name,                                                             \
-	         [](const PyTensor& t, py::array_t<float> f, const PyTensor& t2) {  \
-		         return PT(Tensor::name(T(t), TensorFromPyArray(f), T(t2)));      \
-	         })                                                                 \
-	    .def(#name,                                                             \
-	         [](const PyTensor& t, const PyTensor& t2, float f) {               \
-		         return PT(                                                       \
-		             Tensor::name(T(t), T(t2), Tensor::Constant(T(t).shape, f))); \
-	         })                                                                 \
-	    .def(#name,                                                             \
-	         [](const PyTensor& t, const PyTensor& t2, py::array_t<float> f) {  \
-		         return PT(Tensor::name(T(t), T(t2), TensorFromPyArray(f)));      \
-	         })                                                                 \
-	    .def(#name,                                                             \
-	         [](float f, const PyTensor& t, const PyTensor& t2) {               \
-		         return PT(                                                       \
-		             Tensor::name(Tensor::Constant(T(t).shape, f), T(t), T(t2))); \
-	         })                                                                 \
-	    .def(#name,                                                             \
-	         [](py::array_t<float> f, const PyTensor& t, const PyTensor& t2) {  \
-		         return PT(Tensor::name(TensorFromPyArray(f), T(t), T(t2)));      \
-	         })
-
-	// basic
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);
 
-	// end ternary functions
+	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
+	});
 
-	// special functions
-	// m.def("thread_id", [](py::array_t<float> shape) { return
-	// Tensor::thread_id(PyArrayToVector(shape)); }); m.def("dim", [](int dim,
-	// py::array_t<float> shape) { return Tensor::dim(dim,
-	// PyArrayToVector(shape)); }); m.def("rand", [](py::array_t<float> shape) {
-	// return Tensor::rand(PyArrayToVector(shape)); }); m.def("randn",
-	// [](py::array_t<float> shape) { return
-	// Tensor::randn(PyArrayToVector(shape)); }); m.def("break", []() { return
-	// Tensor::break_(); }); m.def("continue", []() { return Tensor::continue_();
-	// }); m.def("loop", [](int count, const py::function& func) { return
-	// Tensor::loop(count, func); });
-	//
-	// py::class_<IndexedTensor>(m, "IndexedTensor")
-	//    .def(py::init<&Tensor, std::vector<&Tensor>>())
-	//    ;
-	//
-	////scatter functions
-	// m.def("scatterAdd", [](const Tensor& t, const Tensor& t2, const Tensor& t3)
-	// { return Tensor::scatterAdd(t, t2, t3); }); m.def("scatterMin", [](const
-	// Tensor& t, const Tensor& t2, const Tensor& t3) { return
-	// Tensor::scatterMin(t, t2, t3); }); m.def("scatterMax", [](const Tensor& t,
-	// const Tensor& t2, const Tensor& t3) { return Tensor::scatterMax(t, t2, t3);
-	// });
+	m.def("scatterMin", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterMin(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterMax", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterMax(*t.value, T(t2), t.indices);
+	});
 
 	m.def("zeros", [](std::vector<int> shape) {
 		std::string debug = "Received shape: " + std::to_string(shape[0]);
@@ -280,28 +280,19 @@ PYBIND11_MODULE(TensorFrost, m) {
 		return PT(Tensor::Constant(shape, 0.0F));
 	});
 
+	m.def("input",
+	      [](std::vector<int> shape) { return PT(Tensor::Input(Shape(shape))); });
+	m.def("index", [](int dim, std::vector<int> shape) {
+		return PT(Tensor::Index(Shape(shape), dim));
+	});
 	m.def(
 	    "Program",
 	    [](const py::function& py_evaluate) {
-		    return TensorProgram([py_evaluate](const std::vector<Tensor>& inputs)
-		                             -> std::vector<Tensor> {
+		    return TensorProgram([py_evaluate]() -> std::vector<Tensor> {
 			    py::gil_scoped_acquire acquire;  // Acquire the GIL
 
-			    // Create C++ vector of PyTensors
-			    std::vector<PyTensor> py_in;
-			    py_in.reserve(inputs.size());
-			    for (Tensor input : inputs) {
-				    py_in.push_back(PT(input));
-			    }
-
-			    // 1. Convert C++ vector to Python list
-			    py::list py_inputs = py::cast(py_in);
-
-			    // Debug print to ensure conversion was successful
-			    py::print("Converted to py_inputs:", py_inputs);
-
 			    // 2. Call the Python function
-			    py::object result = py_evaluate(py_inputs);
+			    py::object result = py_evaluate();
 
 			    // Debug print to check the result
 			    py::print("Result from Python function:", result);

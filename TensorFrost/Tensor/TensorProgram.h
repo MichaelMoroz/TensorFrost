@@ -14,22 +14,21 @@ using namespace std;
 
 class TensorProgram {
  public:
-	using EvaluateFunction = function<vector<Tensor>(vector<Tensor>)>;
+	using EvaluateFunction = function<vector<Tensor>()>;
 	EvaluateFunction evaluate_callback;
 	IR ir;
 	bool debug = false;
 
 	explicit TensorProgram(EvaluateFunction evaluate)
 	    : evaluate_callback(std::move(evaluate)) {
-		vector<Tensor> inputs = vector<Tensor>();
 		ir = IR();
-		CreateExecutionGraph(inputs);
+		CreateExecutionGraph();
 	}
 
-	void CreateExecutionGraph(vector<Tensor> inputs) {
+	void CreateExecutionGraph() {
 		// create new IR graph
 		Tensor::SetIR(&ir);
-		vector<Tensor> outputs = evaluate_callback(std::move(inputs));
+		vector<Tensor> outputs = evaluate_callback();
 	}
 
 	static vector<Tensor> Evaluate(const vector<Tensor>& /*inputs*/) {
