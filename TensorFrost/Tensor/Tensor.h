@@ -17,6 +17,7 @@ class Argument {
 	enum Type {
 		Input,
 		Index,
+		Shape,
 		RefCopy,
 		Loop,
 	};

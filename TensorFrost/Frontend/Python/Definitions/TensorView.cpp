@@ -48,6 +48,16 @@ void TensorViewDefinition(py::module& m, py::class_<TensorView>& tensorView) {
 	tensorView.def("__pow__", [](const TensorView& t, const TensorView& t2) {
 		return PT(Tensor::pow(PyTensor(t).Get(), PyTensor(t2).Get()));
 	});
+
+	//+= operator overload
+	tensorView.def("__iadd__", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterAdd(*t.value, t2.Get(), t.indices);
+	});
+
+	//= operator overload
+	tensorView.def("__setitem__", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::Store(*t.value, t2.Get(), t.indices);
+	});
 }
 
 }  // namespace TensorFrost

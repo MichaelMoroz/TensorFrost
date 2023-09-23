@@ -23,24 +23,25 @@ void PyTensorDefinition(py::module& m, py::class_<PyTensor>& pyTensor) {
 	    .def("index",
 	         [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
 
-	// getter and setter
-	pyTensor
-	    .def("__getitem__",
-	         [](const PyTensor& t, py::tuple indices_tuple) {
-		         std::vector<const Tensor*> indices;
-		         for (auto arg : indices_tuple) {
-			         indices.push_back(&arg.cast<const PyTensor&>().Get());
-		         }
-		         return TensorView(&t.Get(), indices);
-	         })
-	    .def("__setitem__",
-	         [](const PyTensor& t, py::tuple indices_tuple, const PyTensor& t2) {
-		         std::vector<const Tensor*> indices;
-		         for (auto arg : indices_tuple) {
-			         indices.push_back(&arg.cast<const PyTensor&>().Get());
-		         }
-		         Tensor::Store(t.Get(), T(t2), indices);
-	         });
+	// getter
+	pyTensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
+		std::vector<const Tensor*> indices;
+		for (auto arg : indices_tuple) {
+			indices.push_back(&arg.cast<const PyTensor&>().Get());
+		}
+		return TensorView(&t.Get(), indices);
+	});
+
+	// setter
+	pyTensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
+	                               const PyTensor& t2) {
+		std::vector<const Tensor*> indices;
+		for (auto arg : indices_tuple) {
+			indices.push_back(&arg.cast<const PyTensor&>().Get());
+		}
+		Tensor::Store(t.Get(), T(t2), indices);
+	});
+
 #define DEFINE_OPERATOR(opname, op)                                           \
 	pyTensor.def("__" #opname "__", [](const PyTensor& t, const PyTensor& t2) { \
 		return PT(T(t) op T(t2));                                                 \
@@ -93,7 +94,6 @@ void PyTensorDefinition(py::module& m, py::class_<PyTensor>& pyTensor) {
 	// end power operator
 	// end operator overloads
 	;
-#undef DEFINE_OPERATOR
 }
 
 }  // namespace TensorFrost
