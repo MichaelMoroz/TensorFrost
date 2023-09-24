@@ -5,40 +5,40 @@
 
 namespace TensorFrost {
 
-#define DEFINE_OPERATOR(opname, op)                                           \
-	pyTensor.def("__" #opname "__", [](const PyTensor& t, const PyTensor& t2) { \
-		return PT(T(t) op T(t2));                                                 \
-	});                                                                         \
-	pyTensor.def("__r" #opname "__", [](const PyTensor& t, const float f) {     \
-		return PT(Tensor::Constant(f) op T(t));                                   \
+#define DEFINE_OPERATOR(opname, op)                                            \
+	py_tensor.def("__" #opname "__", [](const PyTensor& t, const PyTensor& t2) { \
+		return PT(T(t) op T(t2));                                                  \
+	});                                                                          \
+	py_tensor.def("__r" #opname "__", [](const PyTensor& t, const float f) {     \
+		return PT(Tensor::Constant(f) op T(t));                                    \
 	});
 
-void PyTensorDefinition(py::module&  /*m*/, py::class_<PyTensor>& pyTensor) {
+void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	// initializers
-	pyTensor.def(py::init<const TensorView&>());
-	pyTensor.def(py::init<float>());
-	pyTensor.def(py::init<int>());
-	pyTensor.def(py::init<unsigned int>());
+	py_tensor.def(py::init<const TensorView&>());
+	py_tensor.def(py::init<float>());
+	py_tensor.def(py::init<int>());
+	py_tensor.def(py::init<unsigned int>());
 
 	// properties
-	pyTensor.def_property_readonly(
+	py_tensor.def_property_readonly(
 	    "shape", [](const PyTensor& t) { return t.Get().GetShape(); });
 
-	pyTensor.def_property_readonly(
+	py_tensor.def_property_readonly(
 	    "type", [](const PyTensor& t) { return t.Get().type; });
 
-	pyTensor.def("index",
-	             [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
+	py_tensor.def("index",
+	              [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
 
 	// getter
-	pyTensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
+	py_tensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		return TensorView(&t.Get(), indices);
 	});
 
 	// setter
-	pyTensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
-	                               const PyTensor& t2) {
+	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
+	                                const PyTensor& t2) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		Tensor::Store(t.Get(), T(t2), indices);
 	});
@@ -50,7 +50,7 @@ void PyTensorDefinition(py::module&  /*m*/, py::class_<PyTensor>& pyTensor) {
 	DEFINE_OPERATOR(div, /);
 	DEFINE_OPERATOR(mod, %);
 	// negative
-	pyTensor.def("__neg__", [](const PyTensor& t) { return PT(-T(t)); });
+	py_tensor.def("__neg__", [](const PyTensor& t) { return PT(-T(t)); });
 	// comparison
 	DEFINE_OPERATOR(eq, ==);
 	DEFINE_OPERATOR(ne, !=);
@@ -61,22 +61,22 @@ void PyTensorDefinition(py::module&  /*m*/, py::class_<PyTensor>& pyTensor) {
 	// logical
 	DEFINE_OPERATOR(and, &&);
 	DEFINE_OPERATOR(or, ||);
-	pyTensor.def("__not__", [](const PyTensor& t) { return PT(!T(t)); });
+	py_tensor.def("__not__", [](const PyTensor& t) { return PT(!T(t)); });
 	// bitwise
 	DEFINE_OPERATOR(xor, ^);
 	DEFINE_OPERATOR(lshift, <<);
 	DEFINE_OPERATOR(rshift, >>);
 	DEFINE_OPERATOR(and_, &);
 	DEFINE_OPERATOR(or_, |);
-	pyTensor.def("__invert__", [](const PyTensor& t) { return PT(~T(t)); });
+	py_tensor.def("__invert__", [](const PyTensor& t) { return PT(~T(t)); });
 	// power operator
-	pyTensor.def("__pow__", [](const PyTensor& t, const PyTensor& t2) {
+	py_tensor.def("__pow__", [](const PyTensor& t, const PyTensor& t2) {
 		return PT(Tensor::pow(T(t), T(t2)));
 	});
-	pyTensor.def("__pow__", [](const PyTensor& t, float f) {
+	py_tensor.def("__pow__", [](const PyTensor& t, float f) {
 		return PT(Tensor::pow(T(t), Tensor::Constant(f)));
 	});
-	pyTensor.def("__rpow__", [](const PyTensor& t, float f) {
+	py_tensor.def("__rpow__", [](const PyTensor& t, float f) {
 		return PT(Tensor::pow(Tensor::Constant(f), T(t)));
 	});
 	// end power operator

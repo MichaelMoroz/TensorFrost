@@ -20,7 +20,7 @@ Tensors TensorsFromTuple(const py::tuple& tuple) {
 
 PyTensors PyTensorsFromTensors(const Tensors& tensors) {
 	PyTensors py_tensors;
-	for (const auto *tensor : tensors) {
+	for (const auto* tensor : tensors) {
 		py_tensors.push_back(new PyTensor(tensor));
 	}
 	return py_tensors;

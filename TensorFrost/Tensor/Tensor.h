@@ -34,20 +34,20 @@ class Argument {
 	}
 };
 
-using Tensors = vector<const Tensor *>;
+using Tensors = vector<const Tensor*>;
 using Arguments = vector<Argument>;
 
 class Tensor {
  private:
-	static void AddArguments(Arguments& arguments, const Tensors& tensors,
+	static void AddArguments(Arguments& arguments, const Tensors tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
 			arguments.emplace_back(type, const_cast<Tensor*>(tensors[i]), i);
 		}
 	}
 
-	static void AddArguments(Arguments& arguments, Arguments toadd) {
-		for (const auto & i : toadd) {
+	static void AddArguments(Arguments& arguments, const Arguments toadd) {
+		for (const auto& i : toadd) {
 			arguments.push_back(i);
 		}
 	}
@@ -151,18 +151,20 @@ class Tensor {
 		this->type = type;
 	}
 
-	[[nodiscard]] [[nodiscard]] Arguments GetArguments(Argument::Type type) const {
+	[[nodiscard]] [[nodiscard]] Arguments GetArguments(
+	    Argument::Type type) const {
 		Arguments result = Arguments();
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == type) {
 				result.push_back(input);
 			}
 		}
 		return result;
 	}
-	[[nodiscard]] [[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
+	[[nodiscard]] [[nodiscard]] Tensors GetArgumentTensors(
+	    Argument::Type type) const {
 		Tensors result = Tensors();
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == type) {
 				result.push_back(input.tensor);
 			}
@@ -173,7 +175,7 @@ class Tensor {
 		vector<const Tensor*> result = vector<const Tensor*>();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == Argument::Type::Shape) {
 				max_dim = std::max(max_dim, input.index);
 			}
@@ -189,7 +191,7 @@ class Tensor {
 			result[i] = nullptr;
 		}
 		// fill result
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == Argument::Type::Shape) {
 				result[input.index] = input.tensor;
 			}
@@ -207,7 +209,7 @@ class Tensor {
 		vector<int> result = vector<int>();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == Argument::Type::Shape) {
 				max_dim = std::max(max_dim, input.index);
 			}
@@ -223,7 +225,7 @@ class Tensor {
 			result[i] = 1;
 		}
 		// fill result
-		for (const auto & input : inputs) {
+		for (const auto& input : inputs) {
 			if (input.type == Argument::Type::Shape) {
 				result[input.index] = AsInt(input.tensor->data[0]);
 			}
@@ -232,7 +234,7 @@ class Tensor {
 	}
 
 	// tensor factory methods
-	static Tensors GetConstantShape(vector<int> shape) {
+	static Tensors GetConstantShape(const vector<int> shape) {
 		Tensors result = vector<const Tensor*>();
 		for (int i : shape) {
 			result.push_back(&Constant(i));
@@ -259,7 +261,7 @@ class Tensor {
 		return *output;
 	}
 
-	static Tensor& Constant(const vector<int>&& shape, float* data) {
+	static Tensor& Constant(const vector<int> shape, float* data) {
 		shared_ptr<Tensor> output = Static("const_memory", GetConstantShape(shape));
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
@@ -273,7 +275,7 @@ class Tensor {
 		AddArguments(output.inputs, shape, Argument::Type::Shape);
 		return output;
 	}
-	static Tensor& Constant(const vector<int>&& shape, float value) {
+	static Tensor& Constant(const vector<int> shape, float value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, int value) {
@@ -281,7 +283,7 @@ class Tensor {
 		AddArguments(output.inputs, shape, Argument::Type::Shape);
 		return output;
 	}
-	static Tensor& Constant(const vector<int>&& shape, int value) {
+	static Tensor& Constant(const vector<int> shape, int value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, uint value) {
@@ -297,12 +299,12 @@ class Tensor {
 		output->type = DataType::Float;
 		return *output;
 	}
-	static Tensor& Input(const Tensors&& shape) {
+	static Tensor& Input(const Tensors shape) {
 		shared_ptr<Tensor> output = Static("input_memory", shape);
 		output->type = DataType::MemoryRef;
 		return *output;
 	}
-	static vector<const Tensor*> GetInputShape(vector<int> shape) {
+	static vector<const Tensor*> GetInputShape(const vector<int> shape) {
 		Tensors result = vector<const Tensor*>();
 		for (int i : shape) {
 			if (i < 0) {
@@ -313,7 +315,7 @@ class Tensor {
 		}
 		return result;
 	}
-	static Tensor& Input(const vector<int>&& shape) {
+	static Tensor& Input(const vector<int> shape) {
 		return Input(GetInputShape(shape));
 	}
 

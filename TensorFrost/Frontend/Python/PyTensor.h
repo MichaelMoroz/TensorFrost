@@ -52,7 +52,7 @@ class PyTensor {
 	explicit PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(value); }
 };
 
-using PyTensors = std::vector<PyTensor *>;
+using PyTensors = std::vector<PyTensor*>;
 
 PyTensors PyTensorsFromTuple(const py::tuple& tuple);
 Tensors TensorsFromTuple(const py::tuple& tuple);

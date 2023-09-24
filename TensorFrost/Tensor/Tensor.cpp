@@ -3,14 +3,13 @@
 namespace TensorFrost {
 IR* Tensor::graph_ = nullptr;
 
-using TensorNames = std::unordered_map<const Tensor *, string>;
+using TensorNames = std::unordered_map<const Tensor*, string>;
 
 string GetNodeName(const Tensor* tensor, TensorNames& names) {
 	if (tensor->name == "const") {
 		return tensor->GetConstantString();
-	} 
-		return names[tensor];
-
+	}
+	return names[tensor];
 }
 
 string IR::GetOperationListing() {

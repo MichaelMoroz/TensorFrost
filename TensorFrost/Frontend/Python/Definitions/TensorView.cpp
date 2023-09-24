@@ -14,7 +14,8 @@ namespace TensorFrost {
 		return PT(Tensor::Constant(f) op T(PyTensor(t)));                        \
 	});
 
-void TensorViewDefinition(py::module&  /*m*/, py::class_<TensorView>& tensorView) {
+void TensorViewDefinition(py::module& /*m*/,
+                          py::class_<TensorView>& tensorView) {
 	DEFINE_OPERATOR(add, +);
 	DEFINE_OPERATOR(sub, -);
 	DEFINE_OPERATOR(mul, *);

@@ -2,7 +2,7 @@
 
 namespace TensorFrost {
 
-int GetSize(vector<int> shape) {
+int GetSize(const vector<int>& shape) {
 	int size = 1;
 	for (int i : shape) {
 		size *= i;
