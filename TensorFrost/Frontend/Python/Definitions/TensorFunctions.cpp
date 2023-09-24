@@ -10,14 +10,14 @@ void TensorFunctionsDefinition(py::module& m) {
 #define UNARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t) { return PT(Tensor::name(T(t))); })
 
-#define BINARY_FUNCTION(name)                              \
+#define BINARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t, const PyTensor& t2) { \
-		return PT(Tensor::name(T(t), T(t2)));                  \
+		return PT(Tensor::name(T(t), T(t2))); \
 	})
 
-#define TERNARY_FUNCTION(name)                                                 \
+#define TERNARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t, const PyTensor& t2, const PyTensor& t3) { \
-		return PT(Tensor::name(T(t), T(t2), T(t3)));                               \
+		return PT(Tensor::name(T(t), T(t2), T(t3))); \
 	})
 
 	UNARY_FUNCTION(abs);
@@ -68,19 +68,17 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
 	});
 
-	m.def("zeros", [](std::vector<int> shape) {
-		std::string debug = "Received shape: " + std::to_string(shape[0]);
-		for (int i = 1; i < shape.size(); i++) {
-			debug += ", " + std::to_string(shape[i]);
-		}
-		py::print(debug);
-		return PT(Tensor::Constant(shape, 0.0F));
+	m.def("zeros", [](py::tuple shape_tuple) {
+		return PT(Tensor::Constant(TensorsFromTuple(shape_tuple), 0));
 	});
 
-	m.def("input",
-	      [](std::vector<int> shape) { return PT(Tensor::Input(Shape(shape))); });
-	m.def("index", [](int dim, std::vector<int> shape) {
-		return PT(Tensor::Index(Shape(shape), dim));
+	m.def("const", [](py::tuple shape_tuple, float value) {
+		return PT(Tensor::Constant(TensorsFromTuple(shape_tuple), value));
+	});
+
+	m.def("input", [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
+	m.def("index", [](int dim, py::tuple shape_tuple) {
+		return PT(Tensor::Index(TensorsFromTuple(shape_tuple), dim));
 	});
 }
 

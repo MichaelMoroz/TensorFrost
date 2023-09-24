@@ -5,16 +5,16 @@
 
 namespace TensorFrost {
 
-void TensorViewDefinition(py::module& m, py::class_<TensorView>& tensorView) {
-#define DEFINE_OPERATOR(opname, op)                                          \
-	tensorView.def("__" #opname "__",                                          \
-	               [](const TensorView& t, const TensorView& t2) {             \
-		               return PT(T(PyTensor(t)) op T(PyTensor(t2)));             \
-	               });                                                         \
+#define DEFINE_OPERATOR(opname, op) \
+	tensorView.def("__" #opname "__", \
+	               [](const TensorView& t, const TensorView& t2) { \
+		               return PT(T(PyTensor(t)) op T(PyTensor(t2))); \
+	               }); \
 	tensorView.def("__" #opname "__", [](const TensorView& t, const float f) { \
-		return PT(Tensor::Constant(t.value->shape, f) op T(PyTensor(t)));        \
+		return PT(Tensor::Constant(f) op T(PyTensor(t))); \
 	});
 
+void TensorViewDefinition(py::module& m, py::class_<TensorView>& tensorView) {
 	DEFINE_OPERATOR(add, +);
 	DEFINE_OPERATOR(sub, -);
 	DEFINE_OPERATOR(mul, *);

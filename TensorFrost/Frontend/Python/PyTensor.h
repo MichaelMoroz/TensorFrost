@@ -20,37 +20,41 @@ class PyTensor {
 
  public:
 	explicit PyTensor(Tensor* tensor) : tensor_(tensor) {}
+	explicit PyTensor(const Tensor* tensor) : tensor_(const_cast<Tensor*>(tensor)) {}
 	~PyTensor() = default;
 
 	[[nodiscard]] Tensor& Get() const { return *tensor_; }
 
-	PyTensor(const std::vector<int>& shape, DataType type = DataType::Float) {
-		switch (type) {
-			case DataType::Float:
-				tensor_ = &Tensor::Constant(shape, 0.0F);
-				break;
-			case DataType::Int:
-				tensor_ = &Tensor::Constant(shape, 0);
-				break;
-			case DataType::Uint:
-				tensor_ = &Tensor::Constant(shape, 0U);
-				break;
-			default:
-				throw std::runtime_error("Invalid data type");
-		}
-	}
+	//PyTensor(const std::vector<int>& shape, DataType type = DataType::Float) {
+	//	switch (type) {
+	//		case DataType::Float:
+	//			tensor_ = &Tensor::Constant(0.0F);
+	//			break;
+	//		case DataType::Int:
+	//			tensor_ = &Tensor::Constant(shape, 0);
+	//			break;
+	//		case DataType::Uint:
+	//			tensor_ = &Tensor::Constant(shape, 0U);
+	//			break;
+	//		default:
+	//			throw std::runtime_error("Invalid data type");
+	//	}
+	//}
 
 	PyTensor(const TensorView& indexed_tensor) {
 		// load the elements of the indexed tensor
 		tensor_ = &Tensor::Load(*indexed_tensor.value, indexed_tensor.indices);
 	}
 
-	PyTensor(float value) { tensor_ = &Tensor::Constant(Shape(), value); }
-	PyTensor(int value) { tensor_ = &Tensor::Constant(Shape(), value); }
-	PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(Shape(), value); }
+	PyTensor(float value) { tensor_ = &Tensor::Constant(value); }
+	PyTensor(int value) { tensor_ = &Tensor::Constant(value); }
+	PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(value); }
 };
 
-Tensor TensorFromPyArray(const py::array_t<float>& array);
-py::array_t<float> TensorToPyArray(const Tensor& tensor);
+typedef std::vector<PyTensor*> PyTensors;
+
+PyTensors PyTensorsFromTuple(const py::tuple& tuple);
+Tensors TensorsFromTuple(const py::tuple& tuple);
+PyTensors PyTensorsFromTensors(const Tensors& tensors);
 
 }  // namespace TensorFrost

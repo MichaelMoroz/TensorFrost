@@ -39,7 +39,7 @@ class Operation {
 		return overloads_;
 	}
 
-	[[nodiscard]] [[nodiscard]] int GetInputCount() const {
+	[[nodiscard]] [[nodiscard]] size_t GetInputCount() const {
 		return overloads_[0].first.size();
 	}
 

@@ -2,27 +2,28 @@
 
 namespace TensorFrost {
 
-Tensor TensorFromPyArray(const py::array_t<float>& array) {
-	auto buffer = array.request();
-	auto* ptr = static_cast<float*>(buffer.ptr);
-	std::vector<int> shape = std::vector<int>();
-	for (int i = 0; i < buffer.ndim; i++) {
-		shape.push_back(buffer.shape[i]);
+PyTensors PyTensorsFromTuple(const py::tuple& tuple) { 
+	PyTensors tensors;
+	for (auto arg : tuple) {
+		tensors.push_back(&arg.cast<PyTensor&>());
 	}
-	return Tensor::Constant(shape, ptr);
+	return tensors;
 }
 
-py::array_t<float> TensorToPyArray(const Tensor& tensor) {
-	std::vector<int> shape = tensor.shape.GetShape();
-	py::array::ShapeContainer shape2 =
-	    py::array::ShapeContainer(shape.begin(), shape.end());
-	py::array_t<float> array(shape2);
-	auto buffer = array.request();
-	auto* ptr = static_cast<float*>(buffer.ptr);
-	for (int i = 0; i < tensor.Size(); i++) {
-		ptr[i] = 0.0;
+Tensors TensorsFromTuple(const py::tuple& tuple) {
+	Tensors tensors;
+	for (auto arg : tuple) {
+		tensors.push_back(&arg.cast<PyTensor&>().Get());
 	}
-	return array;
+	return tensors;
+}
+
+PyTensors PyTensorsFromTensors(const Tensors& tensors) { 
+	PyTensors pyTensors;
+	for (auto tensor : tensors) {
+		pyTensors.push_back(new PyTensor(tensor));
+	}
+	return pyTensors;
 }
 
 }  // namespace TensorFrost

@@ -52,7 +52,7 @@ void TensorProgramDefinition(py::module& m,
 	    "Evaluate the TensorProgram with the given inputs");
 	tensorProgram.def("ListGraphOperations", [](TensorProgram& program) {
 		std::string listing = "List of operations:\n";
-		listing += program.ir.GetOperationListing();
+		listing += program.ir->GetOperationListing();
 		py::str result = py::str(listing);
 		py::print(result);
 	});

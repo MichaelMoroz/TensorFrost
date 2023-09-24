@@ -34,6 +34,13 @@ def SomeFunction2():
 
     return [C]
 
+def SomeFunction3():
+    A = tf.input([-1, -1])
+    B = tf.input([-1, -1])
+    C = A + B
+    return [C]
+
+
 # Create a program that initializes the wave simulation
 SomeFunctionProgram = tf.Program(SomeFunction)
 
