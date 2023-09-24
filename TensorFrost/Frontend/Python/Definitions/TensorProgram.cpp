@@ -16,9 +16,6 @@ void TensorProgramDefinition(py::module& m,
 			    // 2. Call the Python function
 			    py::object result = py_evaluate();
 
-			    // Debug print to check the result
-			    py::print("Result from Python function:", result);
-
 			    // 3. Convert back to std::vector<Tensor>
 			    auto py_outputs = py::cast<std::vector<PyTensor>>(result);
 			    std::vector<Tensor> outputs = std::vector<Tensor>();
@@ -35,7 +32,6 @@ void TensorProgramDefinition(py::module& m,
 	    "__call__",
 	    [](TensorProgram& /*program*/, py::list py_inputs) {
 		    auto inputs = py::cast<std::vector<PyTensor>>(py_inputs);
-		    py::print("Received inputs: " + std::to_string(inputs.size()));
 		    std::vector<Tensor> inputs2 = std::vector<Tensor>();
 		    for (PyTensor input : inputs) {
 			    inputs2.push_back(input.Get());
@@ -46,7 +42,6 @@ void TensorProgramDefinition(py::module& m,
 		    for (Tensor output : outputs) {
 			    outputs2.push_back(PT(output));
 		    }
-		    py::print("Returning outputs: " + std::to_string(outputs2.size()));
 		    return py::cast(outputs2);
 	    },
 	    "Evaluate the TensorProgram with the given inputs");

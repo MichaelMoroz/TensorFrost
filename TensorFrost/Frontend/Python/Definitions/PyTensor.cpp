@@ -5,15 +5,15 @@
 
 namespace TensorFrost {
 
-#define DEFINE_OPERATOR(opname, op) \
+#define DEFINE_OPERATOR(opname, op)                                           \
 	pyTensor.def("__" #opname "__", [](const PyTensor& t, const PyTensor& t2) { \
-		return PT(T(t) op T(t2)); \
-	}); \
-	pyTensor.def("__r" #opname "__", [](const PyTensor& t, const float f) { \
-		return PT(Tensor::Constant(f) op T(t)); \
-	}); \
+		return PT(T(t) op T(t2));                                                 \
+	});                                                                         \
+	pyTensor.def("__r" #opname "__", [](const PyTensor& t, const float f) {     \
+		return PT(Tensor::Constant(f) op T(t));                                   \
+	});
 
-void PyTensorDefinition(py::module& m, py::class_<PyTensor>& pyTensor) {
+void PyTensorDefinition(py::module&  /*m*/, py::class_<PyTensor>& pyTensor) {
 	// initializers
 	pyTensor.def(py::init<const TensorView&>());
 	pyTensor.def(py::init<float>());
@@ -28,7 +28,7 @@ void PyTensorDefinition(py::module& m, py::class_<PyTensor>& pyTensor) {
 	    "type", [](const PyTensor& t) { return t.Get().type; });
 
 	pyTensor.def("index",
-	         [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
+	             [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
 
 	// getter
 	pyTensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {

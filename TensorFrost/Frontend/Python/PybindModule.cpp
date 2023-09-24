@@ -11,18 +11,18 @@ void TensorFunctionsDefinition(py::module&);
 void TensorProgramDefinition(py::module&, py::class_<TensorProgram>&);
 
 PYBIND11_MODULE(TensorFrost, m) {
-	auto dataType = py::enum_<DataType>(m, "DataType");
-	auto pyTensor = py::class_<PyTensor>(m, "Tensor");
-	auto tensorView = py::class_<TensorView>(m, "TensorView");
-	auto tensorProgram = py::class_<TensorProgram>(m, "TensorProgram");
+	auto data_type = py::enum_<DataType>(m, "DataType");
+	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
+	auto tensor_view = py::class_<TensorView>(m, "TensorView");
+	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
 
-	dataType.value("float", DataType::Float);
-	dataType.value("int", DataType::Int);
-	dataType.value("uint", DataType::Uint);
-	dataType.value("bool", DataType::Bool);
+	data_type.value("float", DataType::Float);
+	data_type.value("int", DataType::Int);
+	data_type.value("uint", DataType::Uint);
+	data_type.value("bool", DataType::Bool);
 
-	PyTensorDefinition(m, pyTensor);
-	TensorViewDefinition(m, tensorView);
+	PyTensorDefinition(m, py_tensor);
+	TensorViewDefinition(m, tensor_view);
 
 	// implicit conversion from TensorView to PyTensor
 	py::implicitly_convertible<TensorView, PyTensor>();
@@ -31,7 +31,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	py::implicitly_convertible<unsigned int, PyTensor>();
 
 	TensorFunctionsDefinition(m);
-	TensorProgramDefinition(m, tensorProgram);
+	TensorProgramDefinition(m, tensor_program);
 
 	py::print("TensorFrost module loaded!");
 }

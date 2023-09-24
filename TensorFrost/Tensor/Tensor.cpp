@@ -3,14 +3,14 @@
 namespace TensorFrost {
 IR* Tensor::graph_ = nullptr;
 
-typedef std::unordered_map<const Tensor*, string> TensorNames;
+using TensorNames = std::unordered_map<const Tensor *, string>;
 
 string GetNodeName(const Tensor* tensor, TensorNames& names) {
-	if(tensor->name == "const") {
+	if (tensor->name == "const") {
 		return tensor->GetConstantString();
-	} else {
+	} 
 		return names[tensor];
-	}
+
 }
 
 string IR::GetOperationListing() {
@@ -27,20 +27,50 @@ string IR::GetOperationListing() {
 	// now create the listing
 	string listing;
 	for (const shared_ptr<Tensor>& node : nodes_) {
-		vector<int> shape = node->TryGetShape();
+		if (node->name == "const") continue;
 
-		listing += names[node.get()] + "(";
+		listing += names[node.get()];
 
-		for (int i = 1; i < shape.size(); i++) {
-			if (i != 1) listing += ",";
-			listing += to_string(shape[i]);
+		listing += " = " + node->name + "(";
+
+		Arguments inputs = node->GetArguments(Argument::Type::Input);
+		Arguments indices = node->GetArguments(Argument::Type::Index);
+		Arguments shape = node->GetArguments(Argument::Type::Shape);
+
+		if (!inputs.empty()) {
+			listing += "inputs=[";
+			for (int i = 0; i < inputs.size(); i++) {
+				if (i != 0) listing += ",";
+				listing += GetNodeName(inputs[i].tensor, names);
+			}
+			listing += "] ";
 		}
-		
-		listing += ") = " + node->name + "(" + node->GetConstantString();
 
-		for (int i = 0; i < node->inputs.size(); i++) {
-			if (i != 0) listing += ",";
-			listing += GetNodeName(node->inputs[i].tensor, names);
+		if (!indices.empty()) {
+			listing += "indices=[";
+			for (int i = 0; i < indices.size(); i++) {
+				if (i != 0) listing += ",";
+				listing += GetNodeName(indices[i].tensor, names);
+			}
+			listing += "] ";
+		}
+
+		if (!shape.empty()) {
+			listing += "shape=[";
+			for (int i = 0; i < shape.size(); i++) {
+				if (i != 0) listing += ",";
+				listing += GetNodeName(shape[i].tensor, names);
+			}
+			listing += "] ";
+		}
+
+		if (!node->data.empty()) {
+			listing += "data=[";
+			for (int i = 0; i < node->data.size(); i++) {
+				if (i != 0) listing += ",";
+				listing += to_string(node->data[i]);
+			}
+			listing += "] ";
 		}
 
 		listing += ")\n";
@@ -48,4 +78,22 @@ string IR::GetOperationListing() {
 
 	return listing;
 }
+
+inline string Tensor::GetConstantString() const {
+	if (name == "const" || name == "dim_id") {
+		switch (type) {
+			case DataType::Float:
+				return to_string(AsFloat(data[0]));
+			case DataType::Int:
+				return to_string(AsInt(data[0]));
+			case DataType::Uint:
+				return to_string(data[0]);
+			default:
+				return "";
+		}
+	} else {
+		return "";
+	}
+}
+
 }  // namespace TensorFrost

@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def SomeFunction():
-    u = tf.input([-1, -1])
-    v = tf.input([-1, -1])
+    u = tf.input([16, 16])
+    v = tf.input([16, 16])
 
     i = u.index(0)
     j = u.index(1)

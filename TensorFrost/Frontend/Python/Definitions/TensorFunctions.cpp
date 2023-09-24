@@ -10,14 +10,14 @@ void TensorFunctionsDefinition(py::module& m) {
 #define UNARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t) { return PT(Tensor::name(T(t))); })
 
-#define BINARY_FUNCTION(name) \
+#define BINARY_FUNCTION(name)                              \
 	m.def(#name, [](const PyTensor& t, const PyTensor& t2) { \
-		return PT(Tensor::name(T(t), T(t2))); \
+		return PT(Tensor::name(T(t), T(t2)));                  \
 	})
 
-#define TERNARY_FUNCTION(name) \
+#define TERNARY_FUNCTION(name)                                                 \
 	m.def(#name, [](const PyTensor& t, const PyTensor& t2, const PyTensor& t3) { \
-		return PT(Tensor::name(T(t), T(t2), T(t3))); \
+		return PT(Tensor::name(T(t), T(t2), T(t3)));                               \
 	})
 
 	UNARY_FUNCTION(abs);
@@ -76,7 +76,8 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Constant(TensorsFromTuple(shape_tuple), value));
 	});
 
-	m.def("input", [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
+	m.def("input",
+	      [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
 	m.def("index", [](int dim, py::tuple shape_tuple) {
 		return PT(Tensor::Index(TensorsFromTuple(shape_tuple), dim));
 	});

@@ -1,7 +1,8 @@
 #pragma once
 
-#include <intrin.h>
 #include <vector>
+
+#include <intrin.h>
 
 namespace TensorFrost {
 using namespace std;

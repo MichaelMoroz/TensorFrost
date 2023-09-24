@@ -2,7 +2,7 @@
 
 namespace TensorFrost {
 
-PyTensors PyTensorsFromTuple(const py::tuple& tuple) { 
+PyTensors PyTensorsFromTuple(const py::tuple& tuple) {
 	PyTensors tensors;
 	for (auto arg : tuple) {
 		tensors.push_back(&arg.cast<PyTensor&>());
@@ -18,12 +18,12 @@ Tensors TensorsFromTuple(const py::tuple& tuple) {
 	return tensors;
 }
 
-PyTensors PyTensorsFromTensors(const Tensors& tensors) { 
-	PyTensors pyTensors;
-	for (auto tensor : tensors) {
-		pyTensors.push_back(new PyTensor(tensor));
+PyTensors PyTensorsFromTensors(const Tensors& tensors) {
+	PyTensors py_tensors;
+	for (const auto *tensor : tensors) {
+		py_tensors.push_back(new PyTensor(tensor));
 	}
-	return pyTensors;
+	return py_tensors;
 }
 
 }  // namespace TensorFrost
