@@ -124,15 +124,19 @@ class Tensor {
 	static void AddToGraph(const shared_ptr<Tensor>& node) {
 		// check if IR is not null
 		if (evaluation_context_ir_ == nullptr) {
-			throw std::runtime_error(
-			    "Operation cannot be added to graph because the graph is null");
+			throw std::runtime_error("Evaluation context has not been set.");
 		}
 
 		evaluation_context_ir_->AddNode(node);
 	}
 
  public:
-	static void SetEvaluationContext(IR* ir) { evaluation_context_ir_ = ir; }
+	static void SetEvaluationContext(IR* ir) {
+		 if(evaluation_context_ir_ != nullptr && ir != nullptr) {
+			 throw std::runtime_error("Evaluation context change is forbidden.");
+		 }
+		 evaluation_context_ir_ = ir; 
+	}
 
 	[[nodiscard]] string GetConstantString() const;
 

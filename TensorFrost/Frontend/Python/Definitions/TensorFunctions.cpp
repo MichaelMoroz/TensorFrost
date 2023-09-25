@@ -68,18 +68,18 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
 	});
 
-	m.def("zeros", [](py::tuple shape_tuple) {
-		return PT(Tensor::Constant(TensorsFromTuple(shape_tuple), 0));
+	m.def("zeros", [](py::list shape) {
+		return PT(Tensor::Constant(TensorsFromList(shape), 0));
 	});
 
-	m.def("const", [](py::tuple shape_tuple, float value) {
-		return PT(Tensor::Constant(TensorsFromTuple(shape_tuple), value));
+	m.def("const", [](py::list shape, float value) {
+		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
 
 	m.def("input",
 	      [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
-	m.def("index", [](int dim, py::tuple shape_tuple) {
-		return PT(Tensor::Index(TensorsFromTuple(shape_tuple), dim));
+	m.def("index", [](int dim, py::list shape) {
+		return PT(Tensor::Index(TensorsFromList(shape), dim));
 	});
 }
 

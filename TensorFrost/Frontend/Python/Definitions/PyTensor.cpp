@@ -21,8 +21,9 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def(py::init<unsigned int>());
 
 	// properties
-	py_tensor.def_property_readonly(
-	    "shape", [](const PyTensor& t) { return t.Get().GetShape(); });
+	py_tensor.def_property_readonly("shape", [](const PyTensor& t) {
+		return PyTensorsFromTensors(t.Get().GetShape());
+	});
 
 	py_tensor.def_property_readonly(
 	    "type", [](const PyTensor& t) { return t.Get().type; });

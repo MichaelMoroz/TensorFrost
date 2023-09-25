@@ -55,6 +55,8 @@ using PyTensors = std::vector<PyTensor*>;
 
 PyTensors PyTensorsFromTuple(const py::tuple& tuple);
 Tensors TensorsFromTuple(const py::tuple& tuple);
+PyTensors PyTensorsFromList(const py::list& list);
+Tensors TensorsFromList(const py::list& list);
 PyTensors PyTensorsFromTensors(const Tensors& tensors);
 
 }  // namespace TensorFrost

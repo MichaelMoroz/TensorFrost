@@ -42,7 +42,7 @@ def SomeFunction3():
 
 
 # Create a program that initializes the wave simulation
-SomeFunctionProgram = tf.Program(SomeFunction)
+SomeFunctionProgram = tf.Program(SomeFunction2)
 
 SomeFunctionProgram(list())
 
