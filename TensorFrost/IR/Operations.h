@@ -34,8 +34,7 @@ class Operation {
 
 	[[nodiscard]] string GetName() const { return name_; }
 
-	[[nodiscard]] vector<pair<vector<DataType>, DataType>>
-	GetOverloads() const {
+	[[nodiscard]] vector<pair<vector<DataType>, DataType>> GetOverloads() const {
 		return overloads_;
 	}
 
@@ -43,8 +42,7 @@ class Operation {
 		return overloads_[0].first.size();
 	}
 
-	[[nodiscard]] bool IsInputValid(
-	    const vector<DataType>& input_types) const {
+	[[nodiscard]] bool IsInputValid(const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;

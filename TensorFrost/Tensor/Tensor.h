@@ -148,8 +148,7 @@ class Tensor {
 		this->type = type;
 	}
 
-	[[nodiscard]] Arguments GetArguments(
-	    Argument::Type type) const {
+	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs) {
 			if (input.type == type) {
@@ -158,8 +157,7 @@ class Tensor {
 		}
 		return result;
 	}
-	[[nodiscard]] Tensors GetArgumentTensors(
-	    Argument::Type type) const {
+	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
 		Tensors result = Tensors();
 		for (const auto& input : inputs) {
 			if (input.type == type) {
