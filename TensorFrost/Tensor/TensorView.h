@@ -8,7 +8,7 @@ class TensorView {
 	const Tensor* value;
 	std::vector<const Tensor*> indices;
 
-	TensorView(const Tensor* value, std::vector<const Tensor*>&& indices)
+	TensorView(const Tensor* value, std::vector<const Tensor*>& indices)
 	    : value(value), indices(std::move(indices)) {}
 };
 }  // namespace TensorFrost

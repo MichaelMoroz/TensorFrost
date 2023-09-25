@@ -288,7 +288,7 @@ class Tensor {
 		AddArguments(output.inputs, shape, Argument::Type::Shape);
 		return output;
 	}
-	static Tensor& Constant(const vector<int>&& shape, uint value) {
+	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Input() {
@@ -316,7 +316,7 @@ class Tensor {
 		return Input(GetInputShape(shape));
 	}
 
-	static Tensor& Index(const Tensors&& shape, int dim) {
+	static Tensor& Index(const Tensors& shape, int dim) {
 		shared_ptr<Tensor> output = Static("dim_id", shape);
 		output->data = std::vector<uint>(1, dim);
 		output->type = DataType::Int;
