@@ -16,15 +16,14 @@ namespace py = pybind11;
 
 // Tensor wrapper for python
 class PyTensor {
-	Tensor* tensor_;
+	const Tensor* tensor_;
 
  public:
 	explicit PyTensor(Tensor* tensor) : tensor_(tensor) {}
-	explicit PyTensor(const Tensor* tensor)
-	    : tensor_(const_cast<Tensor*>(tensor)) {}
+	explicit PyTensor(const Tensor* tensor) : tensor_(tensor) {}
 	~PyTensor() = default;
 
-	[[nodiscard]] Tensor& Get() const { return *tensor_; }
+	[[nodiscard]] const Tensor& Get() const { return *tensor_; }
 
 	// PyTensor(const std::vector<int>& shape, DataType type = DataType::Float) {
 	//	switch (type) {
