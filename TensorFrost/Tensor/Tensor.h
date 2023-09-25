@@ -24,14 +24,11 @@ class Argument {
 	};
 
 	Type type;
-	Tensor* tensor;
+	const Tensor* tensor;
 	int index;
 
-	Argument(Type type, Tensor* tensor, int index) {
-		this->type = type;
-		this->tensor = tensor;
-		this->index = index;
-	}
+	Argument(Type type, const Tensor* tensor, int index)
+	    : type(type), tensor(tensor), index(index) {}
 };
 
 using Tensors = vector<const Tensor*>;
@@ -39,14 +36,14 @@ using Arguments = vector<Argument>;
 
 class Tensor {
  private:
-	static void AddArguments(Arguments& arguments, const Tensors tensors,
+	static void AddArguments(Arguments& arguments, const Tensors& tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
-			arguments.emplace_back(type, const_cast<Tensor*>(tensors[i]), i);
+			arguments.emplace_back(type, tensors[i], i);
 		}
 	}
 
-	static void AddArguments(Arguments& arguments, const Arguments toadd) {
+	static void AddArguments(Arguments& arguments, const Arguments& toadd) {
 		for (const auto& i : toadd) {
 			arguments.push_back(i);
 		}
@@ -234,7 +231,7 @@ class Tensor {
 	}
 
 	// tensor factory methods
-	static Tensors GetConstantShape(const vector<int> shape) {
+	static Tensors GetConstantShape(const vector<int>& shape) {
 		Tensors result = vector<const Tensor*>();
 		for (int i : shape) {
 			result.push_back(&Constant(i));
@@ -261,7 +258,7 @@ class Tensor {
 		return *output;
 	}
 
-	static Tensor& Constant(const vector<int> shape, float* data) {
+	static Tensor& Constant(const vector<int>& shape, float* data) {
 		shared_ptr<Tensor> output = Static("const_memory", GetConstantShape(shape));
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
@@ -275,7 +272,7 @@ class Tensor {
 		AddArguments(output.inputs, shape, Argument::Type::Shape);
 		return output;
 	}
-	static Tensor& Constant(const vector<int> shape, float value) {
+	static Tensor& Constant(const vector<int>& shape, float value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, int value) {
@@ -283,7 +280,7 @@ class Tensor {
 		AddArguments(output.inputs, shape, Argument::Type::Shape);
 		return output;
 	}
-	static Tensor& Constant(const vector<int> shape, int value) {
+	static Tensor& Constant(const vector<int>& shape, int value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, uint value) {
@@ -299,12 +296,12 @@ class Tensor {
 		output->type = DataType::Float;
 		return *output;
 	}
-	static Tensor& Input(const Tensors shape) {
+	static Tensor& Input(const Tensors& shape) {
 		shared_ptr<Tensor> output = Static("input_memory", shape);
 		output->type = DataType::MemoryRef;
 		return *output;
 	}
-	static vector<const Tensor*> GetInputShape(const vector<int> shape) {
+	static vector<const Tensor*> GetInputShape(const vector<int>& shape) {
 		Tensors result = vector<const Tensor*>();
 		for (int i : shape) {
 			if (i < 0) {
@@ -315,7 +312,7 @@ class Tensor {
 		}
 		return result;
 	}
-	static Tensor& Input(const vector<int> shape) {
+	static Tensor& Input(const vector<int>& shape) {
 		return Input(GetInputShape(shape));
 	}
 

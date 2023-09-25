@@ -33,7 +33,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	// getter
 	py_tensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
-		return TensorView(&t.Get(), indices);
+		return TensorView(&t.Get(), std::move(indices));
 	});
 
 	// setter

@@ -5,12 +5,10 @@
 namespace TensorFrost {
 class TensorView {
  public:
-	Tensor* value;
+	const Tensor* value;
 	std::vector<const Tensor*> indices;
 
-	TensorView(Tensor* value, std::vector<const Tensor*> indices) {
-		this->value = value;
-		this->indices = std::move(indices);
-	}
+	TensorView(const Tensor* value, std::vector<const Tensor*>&& indices)
+	    : value(value), indices(std::move(indices)) {}
 };
 }  // namespace TensorFrost
