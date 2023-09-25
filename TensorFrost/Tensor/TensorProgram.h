@@ -16,19 +16,20 @@ class TensorProgram {
  public:
 	using EvaluateFunction = function<vector<Tensor>()>;
 	EvaluateFunction evaluate_callback;
-	shared_ptr<IR> ir;
+	IR ir;
 	bool debug = false;
 
 	explicit TensorProgram(EvaluateFunction evaluate)
 	    : evaluate_callback(std::move(evaluate)) {
-		ir = make_shared<IR>();
+		ir = IR();
 		CreateExecutionGraph();
 	}
 
 	void CreateExecutionGraph() {
 		// create new IR graph
-		Tensor::SetIR(ir.get());
+		Tensor::SetEvaluationContext(&ir);
 		vector<Tensor> outputs = evaluate_callback();
+		Tensor::SetEvaluationContext(nullptr);
 	}
 
 	static vector<Tensor> Evaluate(const vector<Tensor>& /*inputs*/) {

@@ -119,20 +119,20 @@ class Tensor {
 		return output;
 	}
 
-	static IR* graph_;
+	static IR* evaluation_context_ir_;
 
 	static void AddToGraph(const shared_ptr<Tensor>& node) {
 		// check if IR is not null
-		if (graph_ == nullptr) {
+		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error(
 			    "Operation cannot be added to graph because the graph is null");
 		}
 
-		graph_->AddNode(node);
+		evaluation_context_ir_->AddNode(node);
 	}
 
  public:
-	static void SetIR(IR* ir) { graph_ = ir; }
+	static void SetEvaluationContext(IR* ir) { evaluation_context_ir_ = ir; }
 
 	[[nodiscard]] string GetConstantString() const;
 

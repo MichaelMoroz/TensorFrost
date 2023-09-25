@@ -6,7 +6,7 @@
 namespace TensorFrost {
 
 void TensorProgramDefinition(py::module& m,
-                             py::class_<TensorProgram>& tensorProgram) {
+                             py::class_<TensorProgram>& tensor_program) {
 	m.def(
 	    "Program",
 	    [](const py::function& py_evaluate) {
@@ -28,7 +28,7 @@ void TensorProgramDefinition(py::module& m,
 	    },
 	    "Compile a TensorProgram from a python function");
 
-	tensorProgram.def(
+	tensor_program.def(
 	    "__call__",
 	    [](TensorProgram& /*program*/, py::list py_inputs) {
 		    auto inputs = py::cast<std::vector<PyTensor>>(py_inputs);
@@ -45,9 +45,9 @@ void TensorProgramDefinition(py::module& m,
 		    return py::cast(outputs2);
 	    },
 	    "Evaluate the TensorProgram with the given inputs");
-	tensorProgram.def("ListGraphOperations", [](TensorProgram& program) {
+	tensor_program.def("ListGraphOperations", [](TensorProgram& program) {
 		std::string listing = "List of operations:\n";
-		listing += program.ir->GetOperationListing();
+		listing += program.ir.GetOperationListing();
 		py::str result = py::str(listing);
 		py::print(result);
 	});

@@ -1,9 +1,10 @@
 #include "Tensor.h"
 
 namespace TensorFrost {
-IR* Tensor::graph_ = nullptr;
 
 using TensorNames = std::unordered_map<const Tensor*, string>;
+
+IR* Tensor::evaluation_context_ir_ = nullptr;
 
 string GetNodeName(const Tensor* tensor, TensorNames& names) {
 	if (tensor->name == "const") {
