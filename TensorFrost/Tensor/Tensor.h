@@ -134,7 +134,7 @@ class Tensor {
  public:
 	static void SetIR(IR* ir) { graph_ = ir; }
 
-	[[nodiscard]] [[nodiscard]] string GetConstantString() const;
+	[[nodiscard]] string GetConstantString() const;
 
 	string name;
 	DataType type = DataType::Float;
@@ -148,7 +148,7 @@ class Tensor {
 		this->type = type;
 	}
 
-	[[nodiscard]] [[nodiscard]] Arguments GetArguments(
+	[[nodiscard]] Arguments GetArguments(
 	    Argument::Type type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs) {
@@ -158,7 +158,7 @@ class Tensor {
 		}
 		return result;
 	}
-	[[nodiscard]] [[nodiscard]] Tensors GetArgumentTensors(
+	[[nodiscard]] Tensors GetArgumentTensors(
 	    Argument::Type type) const {
 		Tensors result = Tensors();
 		for (const auto& input : inputs) {
@@ -168,7 +168,7 @@ class Tensor {
 		}
 		return result;
 	}
-	[[nodiscard]] [[nodiscard]] vector<const Tensor*> GetShape() const {
+	[[nodiscard]] vector<const Tensor*> GetShape() const {
 		vector<const Tensor*> result = vector<const Tensor*>();
 		// get max dimension
 		int max_dim = -1;
@@ -202,7 +202,7 @@ class Tensor {
 		}
 		return result;
 	}
-	[[nodiscard]] [[nodiscard]] vector<int> TryGetShape() const {
+	[[nodiscard]] vector<int> TryGetShape() const {
 		vector<int> result = vector<int>();
 		// get max dimension
 		int max_dim = -1;
@@ -326,7 +326,7 @@ class Tensor {
 		return *IndexedOp("load", indices, &tensor);
 	}
 
-	[[nodiscard]] [[nodiscard]] Tensor& Index(int dim) const {
+	[[nodiscard]] Tensor& Index(int dim) const {
 		shared_ptr<Tensor> output =
 		    Static("dim_id", this->GetArguments(Argument::Type::Shape));
 		output->data = std::vector<uint>(1, dim);

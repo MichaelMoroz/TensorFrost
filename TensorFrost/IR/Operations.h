@@ -30,20 +30,20 @@ class Operation {
  public:
 	Operation(string name,
 	          initializer_list<pair<vector<DataType>, DataType>> oloads)
-	    : name_(std::move(std::move(name))), overloads_(oloads) {}
+	    : name_(std::move(name)), overloads_(oloads) {}
 
-	[[nodiscard]] [[nodiscard]] string GetName() const { return name_; }
+	[[nodiscard]] string GetName() const { return name_; }
 
-	[[nodiscard]] [[nodiscard]] vector<pair<vector<DataType>, DataType>>
+	[[nodiscard]] vector<pair<vector<DataType>, DataType>>
 	GetOverloads() const {
 		return overloads_;
 	}
 
-	[[nodiscard]] [[nodiscard]] size_t GetInputCount() const {
+	[[nodiscard]] size_t GetInputCount() const {
 		return overloads_[0].first.size();
 	}
 
-	[[nodiscard]] [[nodiscard]] bool IsInputValid(
+	[[nodiscard]] bool IsInputValid(
 	    const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
