@@ -132,10 +132,10 @@ class Tensor {
 
  public:
 	static void SetEvaluationContext(IR* ir) {
-		 if(evaluation_context_ir_ != nullptr && ir != nullptr) {
-			 throw std::runtime_error("Evaluation context change is forbidden.");
-		 }
-		 evaluation_context_ir_ = ir; 
+		if (evaluation_context_ir_ != nullptr && ir != nullptr) {
+			throw std::runtime_error("Evaluation context change is forbidden.");
+		}
+		evaluation_context_ir_ = ir;
 	}
 
 	[[nodiscard]] string GetConstantString() const;

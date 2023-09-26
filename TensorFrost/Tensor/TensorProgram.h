@@ -14,7 +14,7 @@ using namespace std;
 
 class TensorProgram {
  public:
-	using EvaluateFunction = function<vector<Tensor>()>;
+	using EvaluateFunction = function<Tensors()>;
 	EvaluateFunction evaluate_callback;
 	IR ir;
 	bool debug = false;
@@ -28,13 +28,11 @@ class TensorProgram {
 	void CreateExecutionGraph() {
 		// create new IR graph
 		Tensor::SetEvaluationContext(&ir);
-		vector<Tensor> outputs = evaluate_callback();
+		Tensors outputs = evaluate_callback();
 		Tensor::SetEvaluationContext(nullptr);
 	}
 
-	static vector<Tensor> Evaluate(const vector<Tensor>& /*inputs*/) {
-		return vector<Tensor>();
-	}
+	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }
 };
 
 }  // namespace TensorFrost

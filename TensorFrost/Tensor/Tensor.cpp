@@ -27,7 +27,7 @@ string IR::GetOperationListing() {
 	// now create the listing
 	string listing;
 	for (const shared_ptr<Tensor>& node : nodes_) {
-		if (node->name == "const") continue;
+		// if (node->name == "const") continue;
 
 		listing += names[node.get()];
 

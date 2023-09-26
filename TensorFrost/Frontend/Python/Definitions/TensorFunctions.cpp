@@ -5,8 +5,6 @@
 
 namespace TensorFrost {
 
-void TensorFunctionsDefinition(py::module& m) {
-// unary functions
 #define UNARY_FUNCTION(name) \
 	m.def(#name, [](const PyTensor& t) { return PT(Tensor::name(T(t))); })
 
@@ -20,6 +18,7 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::name(T(t), T(t2), T(t3)));                               \
 	})
 
+void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(abs);
 	UNARY_FUNCTION(ceil);
 	UNARY_FUNCTION(floor);
@@ -27,7 +26,6 @@ void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(trunc);
 	UNARY_FUNCTION(sign);
 	UNARY_FUNCTION(frac);
-
 	UNARY_FUNCTION(sin);
 	UNARY_FUNCTION(cos);
 	UNARY_FUNCTION(tan);
@@ -37,7 +35,6 @@ void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(sinh);
 	UNARY_FUNCTION(cosh);
 	UNARY_FUNCTION(tanh);
-
 	UNARY_FUNCTION(exp);
 	UNARY_FUNCTION(exp2);
 	UNARY_FUNCTION(log);
@@ -78,6 +75,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("input",
 	      [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
+
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
 	});

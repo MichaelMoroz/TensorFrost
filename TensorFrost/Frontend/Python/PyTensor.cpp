@@ -26,7 +26,7 @@ PyTensors PyTensorsFromList(const py::list& list) {
 	return tensors;
 }
 
-Tensors TensorsFromList(const py::list& list) { 
+Tensors TensorsFromList(const py::list& list) {
 	Tensors tensors;
 	for (auto arg : list) {
 		tensors.push_back(&arg.cast<PyTensor&>().Get());
