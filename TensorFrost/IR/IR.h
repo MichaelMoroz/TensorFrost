@@ -24,8 +24,6 @@ class IR {
 
 	string GetOperationListing();
 
-	~IR() {
-		for (Tensor* node : nodes_) delete node;
-	}
+	~IR();
 };
 }  // namespace TensorFrost

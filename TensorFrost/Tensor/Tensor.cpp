@@ -79,6 +79,12 @@ string IR::GetOperationListing() {
 	return listing;
 }
 
+IR::~IR() {
+	for (Tensor* node : nodes_) {
+		delete node;
+	}
+}
+
 inline string Tensor::GetConstantString() const {
 	if (name == "const" || name == "dim_id") {
 		switch (type) {
