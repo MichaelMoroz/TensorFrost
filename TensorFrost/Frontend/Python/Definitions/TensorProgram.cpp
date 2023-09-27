@@ -10,7 +10,7 @@ void TensorProgramDefinition(py::module& m,
 	m.def(
 	    "Program",
 	    [](const py::function& py_evaluate) {
-		    return TensorProgram([py_evaluate]() -> Tensors {
+		    return new TensorProgram([py_evaluate]() -> Tensors {
 			    py::gil_scoped_acquire acquire;
 			    py::object result = py_evaluate();
 			    auto py_outputs = py::cast<vector<PyTensor>>(result);

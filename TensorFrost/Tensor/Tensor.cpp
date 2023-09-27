@@ -19,17 +19,17 @@ string IR::GetOperationListing() {
 	// first give unique names to all the tensors
 	TensorNames names = TensorNames();
 	int index = 0;
-	for (const shared_ptr<Tensor>& node : nodes_) {
-		names[node.get()] = "t" + to_string(index);
+	for (const Tensor* node : nodes_) {
+		names[node] = "t" + to_string(index);
 		index++;
 	}
 
 	// now create the listing
 	string listing;
-	for (const shared_ptr<Tensor>& node : nodes_) {
+	for (const Tensor* node : nodes_) {
 		// if (node->name == "const") continue;
 
-		listing += names[node.get()];
+		listing += names[node];
 
 		listing += " = " + node->name + "(";
 

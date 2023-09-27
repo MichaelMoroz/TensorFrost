@@ -13,15 +13,19 @@ namespace TensorFrost {
 class Tensor;
 
 class IR {
-	list<shared_ptr<Tensor>> nodes_;
+	list<Tensor*> nodes_;
 
  public:
-	void AddNode(const shared_ptr<Tensor>& node) { nodes_.push_back(node); }
+	void AddNode(Tensor* node) { nodes_.push_back(node); }
 
-	list<shared_ptr<Tensor>> GetNodes() { return nodes_; }
+	list<Tensor*> GetNodes() { return nodes_; }
 
 	void Clear() { nodes_.clear(); }
 
 	string GetOperationListing();
+
+	~IR() {
+		for (Tensor* node : nodes_) delete node;
+	}
 };
 }  // namespace TensorFrost

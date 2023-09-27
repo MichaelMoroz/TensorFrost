@@ -50,7 +50,7 @@ class Tensor {
 	}
 
 	template <typename... Args>
-	static shared_ptr<Tensor> Op(const std::string& op, const Args*... args) {
+	static Tensor& Op(const std::string& op, const Args*... args) {
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -60,17 +60,16 @@ class Tensor {
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, tensors[0]->GetArguments(Argument::Type::Shape));
 
-		shared_ptr<Tensor> output =
-		    make_shared<Tensor>(arguments, op, tensors[0]->type);
+		auto* output = new Tensor(arguments, op, tensors[0]->type);
 
 		// create the output tensor
 		AddToGraph(output);
-		return output;
+		return *output;
 	}
 
 	template <typename... Args>
-	static shared_ptr<Tensor> IndexedOp(const string op, const Tensors indices,
-	                                    const Args*... args) {
+	static Tensor& IndexedOp(const string op, const Tensors indices,
+	                         const Args*... args) {
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -87,41 +86,37 @@ class Tensor {
 		AddArguments(arguments, indices[0]->GetArguments(Argument::Type::Shape));
 
 		// create the output tensor
-		shared_ptr<Tensor> output =
-		    make_shared<Tensor>(arguments, op, tensors[0]->type);
+		auto* output = new Tensor(arguments, op, tensors[0]->type);
 
 		// create the output tensor
 		AddToGraph(output);
 
-		return output;
+		return *output;
 	}
 
-	static shared_ptr<Tensor> Static(const string& op) {
-		shared_ptr<Tensor> output =
-		    make_shared<Tensor>(Arguments(), op, DataType::Float);
+	static Tensor& Static(const string& op) {
+		auto* output = new Tensor(Arguments(), op, DataType::Float);
 		AddToGraph(output);
-		return output;
+		return *output;
 	}
-	static shared_ptr<Tensor> Static(const string& op, const Tensors& shape) {
+	static Tensor& Static(const string& op, const Tensors& shape) {
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape, Argument::Type::Shape);
-		shared_ptr<Tensor> output =
-		    make_shared<Tensor>(arguments, op, DataType::Float);
+		auto* output = new Tensor(arguments, op, DataType::Float);
 		AddToGraph(output);
-		return output;
+		return *output;
 	}
-	static shared_ptr<Tensor> Static(const string& op, const Arguments& shape) {
+	static Tensor& Static(const string& op, const Arguments& shape) {
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape);
-		shared_ptr<Tensor> output =
-		    make_shared<Tensor>(arguments, op, DataType::Float);
+		auto* output = new Tensor(arguments, op, DataType::Float);
 		AddToGraph(output);
-		return output;
+		return *output;
 	}
 
 	static IR* evaluation_context_ir_;
 
-	static void AddToGraph(const shared_ptr<Tensor>& node) {
+	static void AddToGraph(Tensor* node) {
 		// check if IR is not null
 		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error("Evaluation context has not been set.");
@@ -242,32 +237,32 @@ class Tensor {
 	}
 
 	static Tensor& Constant(float value) {
-		shared_ptr<Tensor> output = Static("const");
-		output->data = std::vector<uint>(1, AsUint(value));
-		output->type = DataType::Float;
-		return *output;
+		Tensor& output = Static("const");
+		output.data = std::vector<uint>(1, AsUint(value));
+		output.type = DataType::Float;
+		return output;
 	}
 	static Tensor& Constant(int value) {
-		shared_ptr<Tensor> output = Static("const");
-		output->data = std::vector<uint>(1, AsUint(value));
-		output->type = DataType::Int;
-		return *output;
+		Tensor& output = Static("const");
+		output.data = std::vector<uint>(1, AsUint(value));
+		output.type = DataType::Int;
+		return output;
 	}
 	static Tensor& Constant(uint value) {
-		shared_ptr<Tensor> output = Static("const");
-		output->data = std::vector<uint>(1, value);
-		output->type = DataType::Uint;
-		return *output;
+		Tensor& output = Static("const");
+		output.data = std::vector<uint>(1, value);
+		output.type = DataType::Uint;
+		return output;
 	}
 
 	static Tensor& Constant(const vector<int>& shape, float* data) {
-		shared_ptr<Tensor> output = Static("const_memory", GetConstantShape(shape));
+		Tensor& output = Static("const_memory", GetConstantShape(shape));
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
-			output->data.push_back(AsUint(data[i]));
+			output.data.push_back(AsUint(data[i]));
 		}
-		output->type = DataType::Float;
-		return *output;
+		output.type = DataType::Float;
+		return output;
 	}
 	static Tensor& Constant(const Tensors& shape, float value) {
 		Tensor& output = Constant(value);
@@ -294,14 +289,14 @@ class Tensor {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Input() {
-		shared_ptr<Tensor> output = Static("input_memory");
-		output->type = DataType::Float;
-		return *output;
+		Tensor& output = Static("input_memory");
+		output.type = DataType::Float;
+		return output;
 	}
 	static Tensor& Input(const Tensors& shape) {
-		shared_ptr<Tensor> output = Static("input_memory", shape);
-		output->type = DataType::MemoryRef;
-		return *output;
+		Tensor& output = Static("input_memory", shape);
+		output.type = DataType::MemoryRef;
+		return output;
 	}
 	static vector<const Tensor*> GetInputShape(const vector<int>& shape) {
 		Tensors result = vector<const Tensor*>();
@@ -319,21 +314,21 @@ class Tensor {
 	}
 
 	static Tensor& Index(const Tensors& shape, int dim) {
-		shared_ptr<Tensor> output = Static("dim_id", shape);
-		output->data = std::vector<uint>(1, dim);
-		output->type = DataType::Int;
-		return *output;
+		Tensor& output = Static("dim_id", shape);
+		output.data = std::vector<uint>(1, dim);
+		output.type = DataType::Int;
+		return output;
 	}
 	static Tensor& Load(const Tensor& tensor, const Tensors& indices) {
-		return *IndexedOp("load", indices, &tensor);
+		return IndexedOp("load", indices, &tensor);
 	}
 
 	[[nodiscard]] Tensor& Index(int dim) const {
-		shared_ptr<Tensor> output =
+		Tensor& output =
 		    Static("dim_id", this->GetArguments(Argument::Type::Shape));
-		output->data = std::vector<uint>(1, dim);
-		output->type = DataType::Int;
-		return *output;
+		output.data = std::vector<uint>(1, dim);
+		output.type = DataType::Int;
+		return output;
 	}
 
 	static void Store(const Tensor& tensor, const Tensor& value,
@@ -374,145 +369,145 @@ class Tensor {
 	// destructor
 	~Tensor() = default;
 
-	Tensor& operator-() const { return *Op("neg", this); }
-	Tensor& operator!() const { return *Op("not", this); }
-	Tensor& operator~() const { return *Op("bnot", this); }
+	Tensor& operator-() const { return Op("neg", this); }
+	Tensor& operator!() const { return Op("not", this); }
+	Tensor& operator~() const { return Op("bnot", this); }
 
 	Tensor& operator+(const Tensor& other) const {
-		return *Op("add", this, &other);
+		return Op("add", this, &other);
 	}
 
 	Tensor& operator-(const Tensor& other) const {
-		return *Op("sub", this, &other);
+		return Op("sub", this, &other);
 	}
 
 	Tensor& operator*(const Tensor& other) const {
-		return *Op("mul", this, &other);
+		return Op("mul", this, &other);
 	}
 
 	Tensor& operator/(const Tensor& other) const {
-		return *Op("div", this, &other);
+		return Op("div", this, &other);
 	}
 
 	Tensor& operator%(const Tensor& other) const {
-		return *Op("mod", this, &other);
+		return Op("mod", this, &other);
 	}
 
 	Tensor& operator>(const Tensor& other) const {
-		return *Op("gt", this, &other);
+		return Op("gt", this, &other);
 	}
 
 	Tensor& operator<(const Tensor& other) const {
-		return *Op("lt", this, &other);
+		return Op("lt", this, &other);
 	}
 
 	Tensor& operator>=(const Tensor& other) const {
-		return *Op("gte", this, &other);
+		return Op("gte", this, &other);
 	}
 
 	Tensor& operator<=(const Tensor& other) const {
-		return *Op("lte", this, &other);
+		return Op("lte", this, &other);
 	}
 
 	Tensor& operator==(const Tensor& other) const {
-		return *Op("eq", this, &other);
+		return Op("eq", this, &other);
 	}
 
 	Tensor& operator!=(const Tensor& other) const {
-		return *Op("neq", this, &other);
+		return Op("neq", this, &other);
 	}
 
 	Tensor& operator&&(const Tensor& other) const {
-		return *Op("and", this, &other);
+		return Op("and", this, &other);
 	}
 
 	Tensor& operator||(const Tensor& other) const {
-		return *Op("or", this, &other);
+		return Op("or", this, &other);
 	}
 
 	Tensor& operator&(const Tensor& other) const {
-		return *Op("band", this, &other);
+		return Op("band", this, &other);
 	}
 
 	Tensor& operator|(const Tensor& other) const {
-		return *Op("bor", this, &other);
+		return Op("bor", this, &other);
 	}
 
 	Tensor& operator^(const Tensor& other) const {
-		return *Op("bxor", this, &other);
+		return Op("bxor", this, &other);
 	}
 
 	Tensor& operator<<(const Tensor& other) const {
-		return *Op("blshift", this, &other);
+		return Op("blshift", this, &other);
 	}
 
 	Tensor& operator>>(const Tensor& other) const {
-		return *Op("brshift", this, &other);
+		return Op("brshift", this, &other);
 	}
 
 	static Tensor& ifcond(const Tensor& condition, const Tensor& ifTrue,
 	                      const Tensor& ifFalse) {
-		return *Op("cond", &condition, &ifTrue, &ifFalse);
+		return Op("cond", &condition, &ifTrue, &ifFalse);
 	}
 
-	static Tensor& sin(const Tensor& x) { return *Op("sin", &x); }
-	static Tensor& cos(const Tensor& x) { return *Op("cos", &x); }
-	static Tensor& tan(const Tensor& x) { return *Op("tan", &x); }
-	static Tensor& asin(const Tensor& x) { return *Op("asin", &x); }
-	static Tensor& acos(const Tensor& x) { return *Op("acos", &x); }
-	static Tensor& atan(const Tensor& x) { return *Op("atan", &x); }
-	static Tensor& sinh(const Tensor& x) { return *Op("sinh", &x); }
-	static Tensor& cosh(const Tensor& x) { return *Op("cosh", &x); }
-	static Tensor& tanh(const Tensor& x) { return *Op("tanh", &x); }
-	static Tensor& asinh(const Tensor& x) { return *Op("asinh", &x); }
-	static Tensor& acosh(const Tensor& x) { return *Op("acosh", &x); }
-	static Tensor& atanh(const Tensor& x) { return *Op("atanh", &x); }
-	static Tensor& exp(const Tensor& x) { return *Op("exp", &x); }
-	static Tensor& log(const Tensor& x) { return *Op("log", &x); }
-	static Tensor& log2(const Tensor& x) { return *Op("log2", &x); }
-	static Tensor& exp2(const Tensor& x) { return *Op("exp2", &x); }
-	static Tensor& sqrt(const Tensor& x) { return *Op("sqrt", &x); }
-	static Tensor& sqr(const Tensor& x) { return *Op("sqr", &x); }
-	static Tensor& rsqrt(const Tensor& x) { return *Op("rsqrt", &x); }
-	static Tensor& rcp(const Tensor& x) { return *Op("rcp", &x); }
-	static Tensor& abs(const Tensor& x) { return *Op("abs", &x); }
-	static Tensor& sign(const Tensor& x) { return *Op("sign", &x); }
-	static Tensor& floor(const Tensor& x) { return *Op("floor", &x); }
-	static Tensor& ceil(const Tensor& x) { return *Op("ceil", &x); }
-	static Tensor& round(const Tensor& x) { return *Op("round", &x); }
-	static Tensor& trunc(const Tensor& x) { return *Op("trunc", &x); }
-	static Tensor& frac(const Tensor& x) { return *Op("frac", &x); }
+	static Tensor& sin(const Tensor& x) { return Op("sin", &x); }
+	static Tensor& cos(const Tensor& x) { return Op("cos", &x); }
+	static Tensor& tan(const Tensor& x) { return Op("tan", &x); }
+	static Tensor& asin(const Tensor& x) { return Op("asin", &x); }
+	static Tensor& acos(const Tensor& x) { return Op("acos", &x); }
+	static Tensor& atan(const Tensor& x) { return Op("atan", &x); }
+	static Tensor& sinh(const Tensor& x) { return Op("sinh", &x); }
+	static Tensor& cosh(const Tensor& x) { return Op("cosh", &x); }
+	static Tensor& tanh(const Tensor& x) { return Op("tanh", &x); }
+	static Tensor& asinh(const Tensor& x) { return Op("asinh", &x); }
+	static Tensor& acosh(const Tensor& x) { return Op("acosh", &x); }
+	static Tensor& atanh(const Tensor& x) { return Op("atanh", &x); }
+	static Tensor& exp(const Tensor& x) { return Op("exp", &x); }
+	static Tensor& log(const Tensor& x) { return Op("log", &x); }
+	static Tensor& log2(const Tensor& x) { return Op("log2", &x); }
+	static Tensor& exp2(const Tensor& x) { return Op("exp2", &x); }
+	static Tensor& sqrt(const Tensor& x) { return Op("sqrt", &x); }
+	static Tensor& sqr(const Tensor& x) { return Op("sqr", &x); }
+	static Tensor& rsqrt(const Tensor& x) { return Op("rsqrt", &x); }
+	static Tensor& rcp(const Tensor& x) { return Op("rcp", &x); }
+	static Tensor& abs(const Tensor& x) { return Op("abs", &x); }
+	static Tensor& sign(const Tensor& x) { return Op("sign", &x); }
+	static Tensor& floor(const Tensor& x) { return Op("floor", &x); }
+	static Tensor& ceil(const Tensor& x) { return Op("ceil", &x); }
+	static Tensor& round(const Tensor& x) { return Op("round", &x); }
+	static Tensor& trunc(const Tensor& x) { return Op("trunc", &x); }
+	static Tensor& frac(const Tensor& x) { return Op("frac", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
-		return *Op("clamp", &x, &min, &max);
+		return Op("clamp", &x, &min, &max);
 	}
 
 	static Tensor& pow(const Tensor& x, const Tensor& y) {
-		return *Op("pow", &x, &y);
+		return Op("pow", &x, &y);
 	}
 
 	static Tensor& min(const Tensor& x, const Tensor& y) {
-		return *Op("min", &x, &y);
+		return Op("min", &x, &y);
 	}
 
 	static Tensor& max(const Tensor& x, const Tensor& y) {
-		return *Op("max", &x, &y);
+		return Op("max", &x, &y);
 	}
 
 	static Tensor& mod(const Tensor& x, const Tensor& y) {
-		return *Op("mod", &x, &y);
+		return Op("mod", &x, &y);
 	}
 
 	static Tensor& atan2(const Tensor& x, const Tensor& y) {
-		return *Op("atan2", &x, &y);
+		return Op("atan2", &x, &y);
 	}
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {
-		return *Op("lerp", &x, &y, &a);
+		return Op("lerp", &x, &y, &a);
 	}
 
 	static Tensor& fma(const Tensor& x, const Tensor& y, const Tensor& z) {
-		return *Op("fma", &x, &y, &z);
+		return Op("fma", &x, &y, &z);
 	}
 };
 

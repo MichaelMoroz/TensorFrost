@@ -21,7 +21,6 @@ class TensorProgram {
 
 	explicit TensorProgram(EvaluateFunction evaluate)
 	    : evaluate_callback(std::move(evaluate)) {
-		ir = IR();
 		CreateExecutionGraph();
 	}
 
@@ -33,6 +32,8 @@ class TensorProgram {
 	}
 
 	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }
+
+	~TensorProgram() = default;
 };
 
 }  // namespace TensorFrost
