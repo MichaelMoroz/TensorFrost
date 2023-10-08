@@ -37,12 +37,13 @@ void TensorProgramDefinition(py::module& m,
 	    },
 	    "Evaluate the TensorProgram with the given inputs");
 
-	tensor_program.def("ListGraphOperations", [](TensorProgram& program) {
+	tensor_program.def("ListGraphOperations",
+	                   [](TensorProgram& program, bool compact) {
 		std::string listing = "List of operations:\n";
-		listing += program.ir.GetOperationListing();
+		listing += GetOperationListing(program.ir, compact);
 		py::str result = py::str(listing);
 		py::print(result);
-	});
+	}, py::arg("compact") = true);
 }
 
 }  // namespace TensorFrost

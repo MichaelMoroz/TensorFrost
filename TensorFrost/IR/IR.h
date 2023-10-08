@@ -18,11 +18,9 @@ class IR {
  public:
 	void AddNode(Tensor* node) { nodes_.push_back(node); }
 
-	list<Tensor*> GetNodes() { return nodes_; }
+	list<Tensor*> GetNodes() const { return nodes_; }
 
 	void Clear() { nodes_.clear(); }
-
-	string GetOperationListing();
 
 	~IR();
 };
