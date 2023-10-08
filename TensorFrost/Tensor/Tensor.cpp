@@ -7,9 +7,9 @@ using TensorNames = std::unordered_map<const Tensor*, string>;
 IR* Tensor::evaluation_context_ir_ = nullptr;
 
 string GetNodeName(const Tensor* tensor, TensorNames& names) {
-	if (tensor->name == "const") {
-		return tensor->GetConstantString();
-	}
+	//if (tensor->name == "const") {
+	//	return tensor->GetConstantString();
+	//}
 	return names[tensor];
 }
 
@@ -26,8 +26,18 @@ string IR::GetOperationListing() {
 
 	// now create the listing
 	string listing;
+	int indent = 0;
 	for (const Tensor* node : nodes_) {
 		// if (node->name == "const") continue;
+
+		if (node->name == "loop_end") {
+			indent--;
+		}
+
+		// indent
+		for (int i = 0; i < indent; i++) {
+			listing += "  ";
+		}
 
 		listing += names[node];
 
@@ -74,6 +84,10 @@ string IR::GetOperationListing() {
 		}
 
 		listing += ")\n";
+
+		if (node->name == "loop_begin") {
+			indent++;
+		}
 	}
 
 	return listing;

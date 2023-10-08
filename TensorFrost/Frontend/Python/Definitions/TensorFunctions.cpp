@@ -79,6 +79,30 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
 	});
+
+	m.def("indices", [](py::list shape) {
+		Tensors shapeTensors = TensorsFromList(shape);
+		py::tuple indices = py::tuple(shapeTensors.size());
+		for (size_t i = 0; i < shapeTensors.size(); i++) {
+			PyTensor t = PT(Tensor::Index(shapeTensors, i));
+			indices[i] = t;
+		}
+		return indices;
+	});
+
+	m.def("sum", [](const PyTensor& t, int dim) {
+		return PT(Tensor::Sum(T(t), dim));
+	}, py::arg("t"), py::arg("dim") = -1);
+
+	m.def("loop", [](const PyTensor& begin, const PyTensor& end, const PyTensor& step, const py::function& body) {
+		//wrap the function to convert the PyTensor to Tensor 
+		std::function<void(const Tensor&)> f2 = [&body](const Tensor& t) {
+			py::gil_scoped_acquire acquire;
+			body(PT(t));
+		};
+
+		Tensor::Loop(T(begin), T(end), T(step), f2);
+	}, py::arg("begin") = 0, py::arg("end"), py::arg("step") = 1, py::arg("body"));
 }
 
 }  // namespace TensorFrost

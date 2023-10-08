@@ -10,9 +10,21 @@ namespace TensorFrost {
 	                [](const TensorView& t, const TensorView& t2) {             \
 		                return PT(T(PyTensor(t)) op T(PyTensor(t2)));             \
 	                });                                                         \
+	tensor_view.def("__" #opname "__", [](const TensorView& t, const PyTensor& t2) { \
+		return PT(T(PyTensor(t)) op T(t2));                                      \
+	}); \
 	tensor_view.def("__" #opname "__", [](const TensorView& t, const float f) { \
 		return PT(Tensor::Constant(f) op T(PyTensor(t)));                         \
-	});
+	}); \
+	tensor_view.def("__r" #opname "__", [](const TensorView& t, const TensorView& t2) { \
+		return PT(T(PyTensor(t2)) op T(PyTensor(t)));                              \
+	}); \
+	tensor_view.def("__r" #opname "__", [](const TensorView& t, const PyTensor& t2) { \
+		return PT(T(t2) op T(PyTensor(t)));                                        \
+	}); \
+	tensor_view.def("__r" #opname "__", [](const TensorView& t, const float f) { \
+		return PT(Tensor::Constant(f) op T(PyTensor(t)));                         \
+	}); \
 
 void TensorViewDefinition(py::module& /*m*/,
                           py::class_<TensorView>& tensor_view) {
@@ -43,6 +55,9 @@ void TensorViewDefinition(py::module& /*m*/,
 	                [](const TensorView& t) { return PT(~T(PyTensor(t))); });
 	tensor_view.def("__pow__", [](const TensorView& t, const TensorView& t2) {
 		return PT(Tensor::pow(PyTensor(t).Get(), PyTensor(t2).Get()));
+	});
+	tensor_view.def("__pow__", [](const TensorView& t, const float f) {
+		return PT(Tensor::pow(PyTensor(t).Get(), Tensor::Constant(f)));
 	});
 	tensor_view.def("__iadd__", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterAdd(*t.value, t2.Get(), t.indices);

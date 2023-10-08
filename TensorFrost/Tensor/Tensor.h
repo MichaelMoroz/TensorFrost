@@ -164,7 +164,22 @@ class Tensor {
 			}
 		}
 		return result;
+	
 	}
+	[[nodiscard]] int GetDimension() const
+	{
+		//find max dimension
+		int max_dim = -1;
+
+		for (const auto& input : inputs) {
+			if (input.type == Argument::Type::Shape) {
+				max_dim = std::max(max_dim, input.index);
+			}
+		}
+
+		return max_dim + 1;
+	}
+
 	[[nodiscard]] vector<const Tensor*> GetShape() const {
 		vector<const Tensor*> result = vector<const Tensor*>();
 		// get max dimension
@@ -364,6 +379,24 @@ class Tensor {
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
 		IndexedOp("InterlockedXor", indices, &tensor, &value);
+	}
+
+	static Tensor& Sum(const Tensor& tensor, const int dim) {
+		Tensor& res = Op("sum", &tensor);
+		res.data = std::vector<uint>(1, dim);
+		return res;
+	}
+
+	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
+	                 const std::function<void(const Tensor&)>& body) {
+		// create the loop
+		Tensor& loop = Op("loop_begin", &start, &end, &step);
+
+		// create the body
+		body(loop);
+	
+		// end the loop
+		Op("loop_end", &loop);
 	}
 
 	// destructor
