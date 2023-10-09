@@ -58,7 +58,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 				if (i != 0) listing += ",";
 				listing += GetNodeName(inputs[i].tensor, names, compact);
 			}
-			listing += "] ";
+			listing += "], ";
 		}
 
 		if (!indices.empty()) {
@@ -67,7 +67,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 				if (i != 0) listing += ",";
 				listing += GetNodeName(indices[i].tensor, names, compact);
 			}
-			listing += "] ";
+			listing += "], ";
 		}
 
 		if (!shape.empty()) {
@@ -76,7 +76,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 				if (i != 0) listing += ",";
 				listing += GetNodeName(shape[i].tensor, names, compact);
 			}
-			listing += "] ";
+			listing += "], ";
 		}
 
 		if (!node->data.empty()) {
@@ -85,7 +85,11 @@ string GetOperationListing(const IR& ir, bool compact) {
 				if (i != 0) listing += ",";
 				listing += to_string(node->data[i]);
 			}
-			listing += "] ";
+			listing += "], ";
+		}
+
+		if (node->type != DataType::None) {
+			listing += "type = " + DataTypeToString(node->type);
 		}
 
 		listing += ")\n";

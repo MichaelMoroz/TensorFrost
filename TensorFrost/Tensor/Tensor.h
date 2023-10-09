@@ -76,6 +76,20 @@ class Tensor {
 		// create argument list
 		Arguments arguments = Arguments();
 
+		vector<DataType> input_types = vector<DataType>();
+		for (const auto& tensor : tensors) {
+			input_types.push_back(tensor->type);
+		}
+
+		const Operation& operation = FindOperation(op);
+
+		//check if input is valid
+		if (!operation.IsInputValid(input_types)) {
+			throw std::runtime_error("Invalid input types for operation " + op);
+		}
+
+		DataType output_type = operation.GetOutputType(input_types);
+
 		// add the input tensors
 		AddArguments(arguments, tensors, Argument::Type::Input);
 
@@ -88,6 +102,7 @@ class Tensor {
 		// create the output tensor
 		auto* output = new Tensor(arguments, op, tensors[0]->type);
 
+		output->type = output_type;
 		// create the output tensor
 		AddToGraph(output);
 

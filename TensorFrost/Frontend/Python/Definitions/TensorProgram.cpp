@@ -44,6 +44,12 @@ void TensorProgramDefinition(py::module& m,
 		py::str result = py::str(listing);
 		py::print(result);
 	}, py::arg("compact") = true);
+
+	tensor_program.def("ListHLSL", [](TensorProgram& program) {
+		std::string hlsl = GenerateHLSL(program.ir);
+		py::str result = py::str(hlsl);
+		py::print(result);
+	});
 }
 
 }  // namespace TensorFrost

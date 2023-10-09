@@ -3,197 +3,149 @@
 namespace TensorFrost {
 #define dtype(x) DataType::x
 
-vector<pair<string, vector<Operation>>> operations = {
-    {"operators",
-     {Operation("add", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("sub", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("mul", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("div", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("mod", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("lshift", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                           {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("rshift", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                           {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("and", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("or", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                       {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("xor", {{Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-      Operation("eq", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                       {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                       {Types({dtype(Int), dtype(Int)}), dtype(Bool)}}),
-      Operation("neq", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Bool)}}),
-      Operation("lt", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                       {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                       {Types({dtype(Int), dtype(Int)}), dtype(Bool)}}),
-      Operation("lte", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Bool)}}),
-      Operation("gt", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                       {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                       {Types({dtype(Int), dtype(Int)}), dtype(Bool)}}),
-      Operation("gte", {{Types({dtype(Float), dtype(Float)}), dtype(Bool)},
-                        {Types({dtype(Uint), dtype(Uint)}), dtype(Bool)},
-                        {Types({dtype(Int), dtype(Int)}), dtype(Bool)}})}},
-    {"unary",
-     {
-         Operation("uint", {{Types({dtype(Float)}), dtype(Uint)},
-                            {Types({dtype(Uint)}), dtype(Uint)},
-                            {Types({dtype(Int)}), dtype(Uint)}}),
-         Operation("int", {{Types({dtype(Float)}), dtype(Int)},
-                           {Types({dtype(Uint)}), dtype(Int)},
-                           {Types({dtype(Int)}), dtype(Int)}}),
-         Operation("float", {{Types({dtype(Float)}), dtype(Float)},
-                             {Types({dtype(Uint)}), dtype(Float)},
-                             {Types({dtype(Int)}), dtype(Float)}}),
-         Operation("min", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                           {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                           {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-         Operation("max", {{Types({dtype(Float), dtype(Float)}), dtype(Float)},
-                           {Types({dtype(Uint), dtype(Uint)}), dtype(Uint)},
-                           {Types({dtype(Int), dtype(Int)}), dtype(Int)}}),
-         Operation("abs", {{Types({dtype(Float)}), dtype(Float)},
-                           {Types({dtype(Uint)}), dtype(Uint)},
-                           {Types({dtype(Int)}), dtype(Int)}}),
-         Operation("sign", {{Types({dtype(Float)}), dtype(Float)},
-                            {Types({dtype(Uint)}), dtype(Uint)},
-                            {Types({dtype(Int)}), dtype(Int)}}),
-         Operation("ceil", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("floor", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("round", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("frac", {{Types({dtype(Float)}), dtype(Float)}}),
-     }},
-    {"unary math",
-     {
-         Operation("exp", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("exp2", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("log", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("log2", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("sqrt", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("rsqrt", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("rcp", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("sin", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("cos", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("tan", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("asin", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("acos", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("atan", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("sinh", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("cosh", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("tanh", {{Types({dtype(Float)}), dtype(Float)}}),
-         Operation("pcg", {{Types({dtype(Uint)}), dtype(Uint)}}),
-         Operation("pcgf", {{Types({dtype(Uint)}), dtype(Float)}}),
-     }},
-    {"binary",
-     {
-         Operation("pow",
-                   {{Types({dtype(Float), dtype(Float)}), dtype(Float)}}),
-         Operation("atan2",
-                   {{Types({dtype(Float), dtype(Float)}), dtype(Float)}}),
-         Operation("mod",
-                   {{Types({dtype(Float), dtype(Float)}), dtype(Float)}}),
-         Operation("step",
-                   {{Types({dtype(Float), dtype(Float)}), dtype(Float)}}),
-     }},
-    {"ternary",
-     {
-         Operation("clamp", {{Types({dtype(Float), dtype(Float), dtype(Float)}),
-                              dtype(Float)}}),
-         Operation("lerp", {{Types({dtype(Float), dtype(Float), dtype(Float)}),
-                             dtype(Float)}}),
-         Operation("fma", {{Types({dtype(Float), dtype(Float), dtype(Float)}),
-                            dtype(Float)}}),
-         Operation(
-             "ternary",
-             {{Types({dtype(Bool), dtype(Float), dtype(Float)}), dtype(Float)},
-              {Types({dtype(Bool), dtype(Uint), dtype(Uint)}), dtype(Uint)},
-              {Types({dtype(Bool), dtype(Int), dtype(Int)}), dtype(Int)}}),
-     }},
-    {"memory",
-     {Operation("load", {{Types({dtype(MemoryRef)}), dtype(Float)},
-                         {Types({dtype(MemoryRef)}), dtype(Uint)},
-                         {Types({dtype(MemoryRef)}), dtype(Int)}}),
-      Operation("store",
-                {{Types({dtype(MemoryRef), dtype(Float)}), dtype(None)},
-                 {Types({dtype(MemoryRef), dtype(Uint)}), dtype(None)},
-                 {Types({dtype(MemoryRef), dtype(Int)}), dtype(None)}}),
-      Operation("const_memory", {{Types({}), dtype(MemoryRef)}}),
-      Operation("input_memory", {{Types({}), dtype(MemoryRef)}})}},
-    {"atomic",
-     {Operation(
-          "InterlockedAdd",
-          {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Int), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Float), dtype(Uint)}),
-            dtype(None)}}),
-      Operation(
-          "InterlockedMin",
-          {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Int), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Float), dtype(Uint)}),
-            dtype(None)}}),
-      Operation(
-          "InterlockedMax",
-          {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Int), dtype(Uint)}), dtype(None)},
-           {Types({dtype(MemoryRef), dtype(Float), dtype(Uint)}),
-            dtype(None)}}),
-      Operation(
-          "InterlockedAnd",
-          {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}), dtype(None)}}),
-      Operation(
-          "InterlockedOr",
-          {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}), dtype(None)}}),
-      Operation("InterlockedXor",
-                {{Types({dtype(MemoryRef), dtype(Uint), dtype(Uint)}),
-                  dtype(None)}})}},
-    {"variables",
-     {Operation("variable", {{Types({}), dtype(Uint)},
-                             {Types({}), dtype(Int)},
-                             {Types({}), dtype(Float)}}),
-      Operation("const", {{Types({}), dtype(Uint)},
-                          {Types({}), dtype(Int)},
-                          {Types({}), dtype(Float)}}),
-      Operation("dim_id", {{Types({}), dtype(Uint)}}),
-      Operation("thread_id", {{Types({}), dtype(Uint)}}),
-      Operation("group_thread_id", {{Types({}), dtype(Uint)}}),
-      Operation("group_id", {{Types({}), dtype(Uint)}}),
-      Operation("group_count", {{Types({}), dtype(Uint)}}),
-      Operation("thread_count", {{Types({}), dtype(Uint)}})}},
-    {"control flow",
-     {Operation("loop", {{Types({dtype(Uint), dtype(Uint), dtype(Uint)}),
-                          dtype(None)}}),
-      Operation("if", {{Types({dtype(Bool)}), dtype(None)}}),
-      Operation("break", {{Types({}), dtype(None)}}),
-      Operation("continue", {{Types({}), dtype(None)}}),
-      Operation("return", {{Types({}), dtype(None)}}),
-      Operation("GroupMemoryBarrierWithGroupSync",
-                {{Types({}), dtype(None)}})}}};
+map<DataType, string> TypeNames = {
+    {dtype(None), "void"},
+    {dtype(Bool), "bool"},
+    {dtype(Float), "float"},
+    {dtype(Uint), "uint"},
+    {dtype(Int), "int"},
+};
+
+vector<Operation> operations = {
+    Operation("add", {"ff_f", "uu_u", "ii_i"}, "+", true),
+    Operation("sub", {"ff_f", "uu_u", "ii_i"}, "-", true),
+    Operation("mul", {"ff_f", "uu_u", "ii_i"}, "*", true),
+    Operation("div", {"ff_f", "uu_u", "ii_i"}, "/", true),
+    Operation("mod", {"ff_f", "uu_u", "ii_i"}, "%", true),
+    Operation("lshift", {"uu_u", "ii_i"}, "<<", true),
+    Operation("rshift", {"uu_u", "ii_i"}, ">>", true),
+    Operation("and", {"uu_u", "ii_i"}, "&", true),
+    Operation("or", {"uu_u", "ii_i"}, "|", true),
+    Operation("xor", {"uu_u", "ii_i"}, "^", true),
+    Operation("eq", {"ff_b", "uu_b", "ii_b"}, "==", true),
+    Operation("neq", {"ff_b", "uu_b", "ii_b"}, "!=", true),
+    Operation("lt", {"ff_b", "uu_b", "ii_b"}, "<", true),
+    Operation("lte", {"ff_b", "uu_b", "ii_b"}, "<=", true),
+    Operation("gt", {"ff_b", "uu_b", "ii_b"}, ">", true),
+    Operation("gte", {"ff_b", "uu_b", "ii_b"}, ">=", true),
+    Operation("uint", {"f_u", "u_u", "i_u"}),
+    Operation("int", {"f_i", "u_i", "i_i"}),
+    Operation("float", {"f_f", "u_f", "i_f"}),
+    Operation("min", {"ff_f", "uu_u", "ii_i"}),
+    Operation("max", {"ff_f", "uu_u", "ii_i"}),
+    Operation("abs", {"f_f", "u_u", "i_i"}),
+    Operation("sign", {"f_f", "u_u", "i_i"}),
+    Operation("ceil", {"f_f"}),
+    Operation("floor", {"f_f"}),
+    Operation("round", {"f_f"}),
+    Operation("frac", {"f_f"}),
+    Operation("exp", {"f_f"}),
+    Operation("exp2", {"f_f"}),
+    Operation("log", {"f_f"}),
+    Operation("log2", {"f_f"}),
+    Operation("sqrt", {"f_f"}),
+    Operation("rsqrt", {"f_f"}),
+    Operation("rcp", {"f_f"}),
+    Operation("sin", {"f_f"}),
+    Operation("cos", {"f_f"}),
+    Operation("tan", {"f_f"}),
+    Operation("asin", {"f_f"}),
+    Operation("acos", {"f_f"}),
+    Operation("atan", {"f_f"}),
+    Operation("sinh", {"f_f"}),
+    Operation("cosh", {"f_f"}),
+    Operation("tanh", {"f_f"}),
+    Operation("pcg", {"u_u"}),
+    Operation("pcgf", {"u_f"}),
+    Operation("pow", {"ff_f"}),
+    Operation("atan2", {"ff_f"}),
+    Operation("mod", {"ff_f"}),
+    Operation("step", {"ff_f"}),
+    Operation("clamp", {"fff_f"}),
+    Operation("lerp", {"fff_f"}),
+    Operation("fma", {"fff_f"}),
+    Operation("ternary", {"bff_f", "buu_u", "bii_i"}),
+    Operation("load", {"m_f", "m_u", "m_i"}),
+    Operation("store",{"mf_", "mu_", "mi_"}),
+    Operation("const_memory", {"_m"}),
+    Operation("input_memory", {"_m"}),
+    Operation("InterlockedAdd", {"muu_", "miu_", "mfu_"}),
+    Operation("InterlockedMin", {"muu_", "miu_", "mfu_"}),
+    Operation("InterlockedMax", {"muu_", "miu_", "mfu_"}),
+    Operation("InterlockedAnd", {"muu_", "miu_"}),
+    Operation("InterlockedOr", {"muu_", "miu_"}),
+    Operation("InterlockedXor", {"muu_", "miu_"}),
+    Operation("variable", {"_f", "_u", "_i"}),
+    Operation("const", {"_f", "_u", "_i"}),
+    Operation("dim_id", {"_u"}),
+    Operation("thread_id", {"_u"}),
+    Operation("group_thread_id", {"_u"}),
+    Operation("group_id", {"_u"}),
+    Operation("group_count", {"_u"}),
+    Operation("thread_count", {"_u"}),
+    Operation("loop", {"iii_i"}),
+    Operation("if", {"b_"}),
+    Operation("break", {""}),
+    Operation("continue", {""}),
+    Operation("return", {""}),
+    Operation("GroupMemoryBarrierWithGroupSync", {""}),
+};
 
 DataTypeList Types(initializer_list<DataType> elements) {
 	return DataTypeList(elements);
 }
 
-Operation FindOperation(const string& name) {
-	for (auto& category : operations) {
-		for (auto& op : category.second) {
-			if (op.GetName() == name) {
-				return op;
-			}
-		}
-	}
-	return Operation("dtype(none)", {});
+const Operation& FindOperation(const string& name) {
+	for (const auto& op : operations) {
+        if (op.GetName() == name) {
+            return op;
+        }
+    }
+	throw runtime_error("Operation not found: " + name);
 }
+
+string DataTypeToString(DataType type) {
+    return TypeNames[type];
+}
+
+string Operation::GenerateOpString(const vector<string>& arguments) const
+{
+    string line = "";
+    if(is_operator_)
+    {
+        line += arguments[0] + " " + code_ + " " + arguments[1];
+    }
+    else
+    {
+        line += code_ + "(";
+        for(int i = 0; i < arguments.size(); i++)
+        {
+            if(i != 0)
+            {
+                line += ", ";
+            }
+            line += arguments[i];
+        }
+        line += ")";
+    }
+    return line;
+}
+
+string Operation::GenerateLine(const string& var_name, const vector<string>& arguments, const vector<DataType>& input_types) const
+{
+    //get output type
+    DataType output_type = GetOutputType(input_types);
+
+    //generate line
+    string line = TypeNames[output_type] + " " + var_name + " = ";
+
+    //generate op string
+    line += GenerateOpString(arguments);
+
+    //add semicolon
+    line += ";";
+
+    return line;
+}
+
 }  // namespace TensorFrost
