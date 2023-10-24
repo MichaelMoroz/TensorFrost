@@ -119,7 +119,16 @@ class Operation {
 		return false;
 	}
 
-	DataType GetOutputType(const vector<DataType>& input_types) const {
+	[[nodiscard]] bool IsOutputValid(const DataType& output_type) const {
+		for (const auto& overload : overloads_) {
+			if (overload.second == output_type) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	[[nodiscard]] DataType GetOutputType(const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;

@@ -20,6 +20,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_type.value("int", DataType::Int);
 	data_type.value("uint", DataType::Uint);
 	data_type.value("bool", DataType::Bool);
+	m.attr("float32") = DataType::Float;
+	m.attr("int32") = DataType::Int;
+	m.attr("uint32") = DataType::Uint;
+	m.attr("bool") = DataType::Bool;
 
 	PyTensorDefinition(m, py_tensor);
 	TensorViewDefinition(m, tensor_view);

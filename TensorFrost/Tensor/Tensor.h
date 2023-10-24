@@ -49,10 +49,32 @@ class Tensor {
 		}
 	}
 
+	static pair<Operation, DataType> GetOperation(const string& name, const Tensors& tensors) {
+		vector<DataType> input_types = vector<DataType>();
+		for (const auto& tensor : tensors) {
+			input_types.push_back(tensor->type);
+		}
+
+		const Operation& operation = FindOperation(name);
+
+		// check if input is valid
+		if (!operation.IsInputValid(input_types)) {
+			throw std::runtime_error("Invalid input types for operation " + name);
+		}
+
+		DataType output_type = operation.GetOutputType(input_types);
+
+		return pair<Operation, DataType>(operation, output_type);
+	}
+
 	template <typename... Args>
 	static Tensor& Op(const std::string& op, const Args*... args) {
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
+
+		// get the operation and output type
+		pair<Operation, DataType> operation = GetOperation(op, tensors);
+		DataType output_type = operation.second;
 
 		// create argument list
 		Arguments arguments = Arguments();
@@ -60,7 +82,7 @@ class Tensor {
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, tensors[0]->GetArguments(Argument::Type::Shape));
 
-		auto* output = new Tensor(arguments, op, tensors[0]->type);
+		auto* output = new Tensor(arguments, op, output_type);
 
 		// create the output tensor
 		AddToGraph(output);
@@ -73,22 +95,12 @@ class Tensor {
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
+		// get the operation and output type
+		pair<Operation, DataType> operation = GetOperation(op, tensors);
+		DataType output_type = operation.second;
+
 		// create argument list
 		Arguments arguments = Arguments();
-
-		vector<DataType> input_types = vector<DataType>();
-		for (const auto& tensor : tensors) {
-			input_types.push_back(tensor->type);
-		}
-
-		const Operation& operation = FindOperation(op);
-
-		//check if input is valid
-		if (!operation.IsInputValid(input_types)) {
-			throw std::runtime_error("Invalid input types for operation " + op);
-		}
-
-		DataType output_type = operation.GetOutputType(input_types);
 
 		// add the input tensors
 		AddArguments(arguments, tensors, Argument::Type::Input);
@@ -100,7 +112,7 @@ class Tensor {
 		AddArguments(arguments, indices[0]->GetArguments(Argument::Type::Shape));
 
 		// create the output tensor
-		auto* output = new Tensor(arguments, op, tensors[0]->type);
+		auto* output = new Tensor(arguments, op, output_type);
 
 		output->type = output_type;
 		// create the output tensor
@@ -109,24 +121,27 @@ class Tensor {
 		return *output;
 	}
 
-	static Tensor& Static(const string& op) {
-		auto* output = new Tensor(Arguments(), op, DataType::Float);
-		AddToGraph(output);
-		return *output;
-	}
-	static Tensor& Static(const string& op, const Tensors& shape) {
-		Arguments arguments = Arguments();
-		AddArguments(arguments, shape, Argument::Type::Shape);
-		auto* output = new Tensor(arguments, op, DataType::Float);
-		AddToGraph(output);
-		return *output;
-	}
-	static Tensor& Static(const string& op, const Arguments& shape) {
+	static Tensor& Static(const string& op, const Arguments& shape, const DataType type) {
+		const Operation& operation = FindOperation(op);
+		// check if output is valid
+		if (!operation.IsOutputValid(type)) {
+			throw std::runtime_error("Invalid output type for operation " + op);
+		}
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape);
-		auto* output = new Tensor(arguments, op, DataType::Float);
+		auto* output = new Tensor(arguments, op, type);
 		AddToGraph(output);
 		return *output;
+	}
+
+	static Tensor& Static(const string& op, const Tensors& shape, const DataType type) {
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, Argument::Type::Shape);
+		return Static(op, arguments, type);
+	}
+
+	static Tensor& Static(const string& op, const DataType type) {
+		return Static(op, Arguments(), type);
 	}
 
 	static IR* evaluation_context_ir_;
@@ -267,31 +282,27 @@ class Tensor {
 	}
 
 	static Tensor& Constant(float value) {
-		Tensor& output = Static("const");
+		Tensor& output = Static("const", DataType::Float);
 		output.data = std::vector<uint>(1, AsUint(value));
-		output.type = DataType::Float;
 		return output;
 	}
 	static Tensor& Constant(int value) {
-		Tensor& output = Static("const");
+		Tensor& output = Static("const", DataType::Int);
 		output.data = std::vector<uint>(1, AsUint(value));
-		output.type = DataType::Int;
 		return output;
 	}
 	static Tensor& Constant(uint value) {
-		Tensor& output = Static("const");
+		Tensor& output = Static("const", DataType::Uint);
 		output.data = std::vector<uint>(1, value);
-		output.type = DataType::Uint;
 		return output;
 	}
 
 	static Tensor& Constant(const vector<int>& shape, float* data) {
-		Tensor& output = Static("const_memory", GetConstantShape(shape));
+		Tensor& output = Static("const_memory", GetConstantShape(shape), DataType::Float);
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
 			output.data.push_back(AsUint(data[i]));
 		}
-		output.type = DataType::Float;
 		return output;
 	}
 	static Tensor& Constant(const Tensors& shape, float value) {
@@ -318,33 +329,31 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
-	static Tensor& Input() {
-		Tensor& output = Static("input_memory");
-		output.type = DataType::Float;
+	static Tensor& Input(const DataType type = DataType::Float) {
+		Tensor& output = Static("input_memory", type);
 		return output;
 	}
-	static Tensor& Input(const Tensors& shape) {
-		Tensor& output = Static("input_memory", shape);
-		output.type = DataType::MemoryRef;
+	static Tensor& Input(const Tensors& shape, const DataType type = DataType::Float) {
+		Tensor& output = Static("input_memory", shape, type);
 		return output;
 	}
 	static vector<const Tensor*> GetInputShape(const vector<int>& shape) {
 		Tensors result = vector<const Tensor*>();
 		for (int i : shape) {
 			if (i < 0) {
-				result.push_back(&Input());
+				result.push_back(&Input(DataType::Int));
 			} else {
 				result.push_back(&Constant(i));
 			}
 		}
 		return result;
 	}
-	static Tensor& Input(const vector<int>& shape) {
-		return Input(GetInputShape(shape));
+	static Tensor& Input(const vector<int>& shape, const DataType type = DataType::Float) {
+		return Input(GetInputShape(shape), type);
 	}
 
 	static Tensor& Index(const Tensors& shape, int dim) {
-		Tensor& output = Static("dim_id", shape);
+		Tensor& output = Static("dim_id", shape, DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;
 		return output;
@@ -355,7 +364,7 @@ class Tensor {
 
 	[[nodiscard]] Tensor& Index(int dim) const {
 		Tensor& output =
-		    Static("dim_id", this->GetArguments(Argument::Type::Shape));
+		    Static("dim_id", this->GetArguments(Argument::Type::Shape), DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;
 		return output;

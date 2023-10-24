@@ -73,8 +73,9 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
 
-	m.def("input",
-	      [](std::vector<int> shape) { return PT(Tensor::Input(shape)); });
+	m.def("input", [](std::vector<int> shape, DataType type) {
+		return PT(Tensor::Input(shape, type));
+	});
 
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));

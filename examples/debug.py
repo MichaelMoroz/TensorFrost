@@ -62,15 +62,15 @@ def QRDecomposition():
     return [Q, R]
 
 def PoissonSolver():
-    x = tf.input([-1, -1])
-    b = tf.input([-1, -1])
-    n = tf.input([])
+    x = tf.input([-1, -1], tf.float32)
+    b = tf.input([-1, -1], tf.float32)
+    n = tf.input([], tf.int32)
 
     i, j = x.indices
 
     def loop(t):
         nonlocal x
-        x = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b[i, j]) / 4.0
+        x = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b) / 4.0
 
     tf.loop(end = n, body = loop)
 
@@ -84,4 +84,3 @@ SomeFunctionProgram = tf.Program(PoissonSolver)
 SomeFunctionProgram(list())
 
 SomeFunctionProgram.ListGraphOperations()
-SomeFunctionProgram.ListHLSL()

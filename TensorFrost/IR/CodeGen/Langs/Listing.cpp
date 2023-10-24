@@ -32,8 +32,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 	string listing;
 	int indent = 0;
 	for (const Tensor* node : nodes) {
-		if (compact)
-		{
+		if (compact) {
 			if (node->name == "const") continue;
 		}
 
@@ -44,6 +43,11 @@ string GetOperationListing(const IR& ir, bool compact) {
 		// indent
 		for (int i = 0; i < indent; i++) {
 			listing += "  ";
+		}
+
+		if (node->type != DataType::None) {
+			// print the tensor name
+			listing += names[node] + " = ";
 		}
 
 		listing += node->name + "(";
