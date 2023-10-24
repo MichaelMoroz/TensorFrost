@@ -12,22 +12,22 @@ map<DataType, string> TypeNames = {
 };
 
 vector<Operation> operations = {
-    Operation("add", {"ff_f", "uu_u", "ii_i"}, "+", true),
-    Operation("sub", {"ff_f", "uu_u", "ii_i"}, "-", true),
-    Operation("mul", {"ff_f", "uu_u", "ii_i"}, "*", true),
-    Operation("div", {"ff_f", "uu_u", "ii_i"}, "/", true),
-    Operation("mod", {"ff_f", "uu_u", "ii_i"}, "%", true),
-    Operation("lshift", {"uu_u", "ii_i"}, "<<", true),
-    Operation("rshift", {"uu_u", "ii_i"}, ">>", true),
-    Operation("and", {"uu_u", "ii_i"}, "&", true),
-    Operation("or", {"uu_u", "ii_i"}, "|", true),
-    Operation("xor", {"uu_u", "ii_i"}, "^", true),
-    Operation("eq", {"ff_b", "uu_b", "ii_b"}, "==", true),
-    Operation("neq", {"ff_b", "uu_b", "ii_b"}, "!=", true),
-    Operation("lt", {"ff_b", "uu_b", "ii_b"}, "<", true),
-    Operation("lte", {"ff_b", "uu_b", "ii_b"}, "<=", true),
-    Operation("gt", {"ff_b", "uu_b", "ii_b"}, ">", true),
-    Operation("gte", {"ff_b", "uu_b", "ii_b"}, ">=", true),
+    Operation("add", {"ff_f", "uu_u", "ii_i"}, "+", OpType::Operator),
+    Operation("sub", {"ff_f", "uu_u", "ii_i"}, "-", OpType::Operator),
+    Operation("mul", {"ff_f", "uu_u", "ii_i"}, "*", OpType::Operator),
+    Operation("div", {"ff_f", "uu_u", "ii_i"}, "/", OpType::Operator),
+    Operation("mod", {"ff_f", "uu_u", "ii_i"}, "%", OpType::Operator),
+    Operation("lshift", {"uu_u", "ii_i"}, "<<", OpType::Operator),
+    Operation("rshift", {"uu_u", "ii_i"}, ">>", OpType::Operator),
+    Operation("and", {"uu_u", "ii_i"}, "&", OpType::Operator),
+    Operation("or", {"uu_u", "ii_i"}, "|", OpType::Operator),
+    Operation("xor", {"uu_u", "ii_i"}, "^", OpType::Operator),
+    Operation("eq", {"ff_b", "uu_b", "ii_b"}, "==", OpType::Operator),
+    Operation("neq", {"ff_b", "uu_b", "ii_b"}, "!=", OpType::Operator),
+    Operation("lt", {"ff_b", "uu_b", "ii_b"}, "<", OpType::Operator),
+    Operation("lte", {"ff_b", "uu_b", "ii_b"}, "<=", OpType::Operator),
+    Operation("gt", {"ff_b", "uu_b", "ii_b"}, ">", OpType::Operator),
+    Operation("gte", {"ff_b", "uu_b", "ii_b"}, ">=", OpType::Operator),
     Operation("uint", {"f_u", "u_u", "i_u"}),
     Operation("int", {"f_i", "u_i", "i_i"}),
     Operation("float", {"f_f", "u_f", "i_f"}),
@@ -87,9 +87,9 @@ vector<Operation> operations = {
     Operation("loop_end", {"i_"}),
     Operation("if_begin", {"b_"}),
     Operation("if_end", {""}),
-    Operation("break", {""}),
-    Operation("continue", {""}),
-    Operation("return", {""}),
+    Operation("break", {""}, "break", OpType::Keyword),
+    Operation("continue", {""}, "continue", OpType::Keyword),
+    Operation("return", {""}, "return", OpType::Keyword),
     Operation("GroupMemoryBarrierWithGroupSync", {""}),
 };
 
@@ -113,11 +113,11 @@ string DataTypeToString(DataType type) {
 string Operation::GenerateOpString(const vector<string>& arguments) const
 {
     string line = "";
-    if(is_operator_)
+    if(op_type_ == OpType::Operator)
     {
         line += arguments[0] + " " + code_ + " " + arguments[1];
     }
-    else
+    else if(op_type_ == OpType::Function)
     {
         line += code_ + "(";
         for(int i = 0; i < arguments.size(); i++)
@@ -130,6 +130,14 @@ string Operation::GenerateOpString(const vector<string>& arguments) const
         }
         line += ")";
     }
+    else if (op_type_ == OpType::Keyword)
+    {
+		line += code_;
+	}
+    else
+    {
+		throw runtime_error("Invalid op type");
+	}
     return line;
 }
 
@@ -138,14 +146,42 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     //get output type
     DataType output_type = GetOutputType(input_types);
 
-    //generate line
-    string line = TypeNames[output_type] + " " + var_name + " = ";
+    // generate line
+    string line = "";
 
-    //generate op string
-    line += GenerateOpString(arguments);
-
-    //add semicolon
-    line += ";";
+    if (name_ == "loop_begin")
+	{
+        line += "for (int " + var_name + " = " + arguments[0] + "; " + var_name + " < " + arguments[1] + "; " + var_name + " += " + arguments[2] + ") {";
+	} 
+    else if (name_ == "loop_end") 
+    {
+	    line += "}";
+	} 
+    else if (name_ == "if_begin") 
+    {
+	    line += "if (" + arguments[0] + ") {";
+    } 
+    else if (name_ == "if_end") 
+    {
+	    line += "}";
+    } 
+    else if (name_ == "load")
+    {
+		  line += TypeNames[output_type] + " " + var_name + " = ";
+          line += arguments[0] + "[" + arguments[1] + "];";
+    }
+    else if (name_ == "store")
+    {
+	    line += arguments[0] + "[" + arguments[2] + "] = " + arguments[1] + ";";      
+    }
+    else
+    {
+		  if (output_type != DataType::None) 
+          {
+		    line += TypeNames[output_type] + " " + var_name + " = ";
+		  }
+		  line += GenerateOpString(arguments) + ";";
+    }
 
     return line;
 }

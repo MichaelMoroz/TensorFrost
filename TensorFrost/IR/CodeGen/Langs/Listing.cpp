@@ -5,8 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetNodeName(const Tensor* tensor, TensorNames& names,
-                   bool compact = false) {
+string GetNodeName(const Tensor* tensor, TensorNames& names, bool compact) {
 	if (compact)
 	{
 		if (tensor->name == "const") {
@@ -14,6 +13,23 @@ string GetNodeName(const Tensor* tensor, TensorNames& names,
 		}
 	}
 	return names[tensor];
+}
+
+inline string Tensor::GetConstantString() const {
+	if (name == "const" || name == "dim_id") {
+		switch (type) {
+			case DataType::Float:
+				return to_string(AsFloat(data[0]));
+			case DataType::Int:
+				return to_string(AsInt(data[0]));
+			case DataType::Uint:
+				return to_string(data[0]);
+			default:
+				return "";
+		}
+	} else {
+		return "";
+	}
 }
 
 string GetOperationListing(const IR& ir, bool compact) {
@@ -104,23 +120,6 @@ string GetOperationListing(const IR& ir, bool compact) {
 	}
 
 	return listing;
-}
-
-inline string Tensor::GetConstantString() const {
-	if (name == "const" || name == "dim_id") {
-		switch (type) {
-			case DataType::Float:
-				return to_string(AsFloat(data[0]));
-			case DataType::Int:
-				return to_string(AsInt(data[0]));
-			case DataType::Uint:
-				return to_string(data[0]);
-			default:
-				return "";
-		}
-	} else {
-		return "";
-	}
 }
 
 }

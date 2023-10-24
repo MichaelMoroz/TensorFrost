@@ -149,7 +149,7 @@ class Tensor {
 	static void AddToGraph(Tensor* node) {
 		// check if IR is not null
 		if (evaluation_context_ir_ == nullptr) {
-			throw std::runtime_error("Evaluation context has not been set.");
+			throw std::runtime_error("Evaluation context has not been set. Are you doing operations outside a TensorProgram?");
 		}
 
 		evaluation_context_ir_->AddNode(node);

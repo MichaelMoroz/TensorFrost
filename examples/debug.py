@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def SomeFunction():
-    u = tf.input([16, 16])
-    v = tf.input([16, 16])
+    u = tf.input([16, 16], tf.float32)
+    v = tf.input([16, 16], tf.float32)
 
     i,j = u.indices
 
@@ -17,8 +17,8 @@ def SomeFunction():
     return [u_new, v_new]
 
 def SomeFunction2():
-    A = tf.input([-1, -1])
-    B = tf.input([-1, -1])
+    A = tf.input([-1, -1], tf.float32)
+    B = tf.input([-1, -1], tf.float32)
 
     N, M = A.shape
     K = B.shape[1]
@@ -37,7 +37,7 @@ def SomeFunction3():
     return [C]
 
 def QRDecomposition():
-    A = tf.input([-1, -1])
+    A = tf.input([-1, -1], tf.float32)
 
     m, n = A.shape
     Q = tf.zeros([m, n])
@@ -70,7 +70,7 @@ def PoissonSolver():
 
     def loop(t):
         nonlocal x
-        x = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b) / 4.0
+        x[i, j] = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b[i, j]) / 4.0
 
     tf.loop(end = n, body = loop)
 
@@ -84,3 +84,4 @@ SomeFunctionProgram = tf.Program(PoissonSolver)
 SomeFunctionProgram(list())
 
 SomeFunctionProgram.ListGraphOperations()
+SomeFunctionProgram.ListHLSL()

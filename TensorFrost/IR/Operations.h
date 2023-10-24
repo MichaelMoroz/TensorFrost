@@ -17,8 +17,13 @@ enum class DataType {
 	Uint,
 	Int,
 	Bool,
-	MemoryRef,
 	None,
+};
+
+enum class OpType {
+	Operator,
+	Function,
+	Keyword,
 };
 
 using DataTypeList = vector<DataType>;
@@ -30,12 +35,12 @@ class Operation {
 	string name_;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
-	bool is_operator_ = false;
+	OpType op_type_;
 
  public:
-	Operation(string name,
-	          initializer_list<string> oloads, string code = "", bool is_operator = false)
-	    : name_(std::move(name)), is_operator_(is_operator) 
+	Operation(string name, initializer_list<string> oloads, string code = "",
+	          OpType op_type = OpType::Function)
+	    : name_(std::move(name)), op_type_(op_type) 
 	{
 		if(code.empty())
 		{
@@ -65,9 +70,6 @@ class Operation {
 						break;
 					case 'b':
 						parsed_type = DataType::Bool;
-						break;
-					case 'm':
-						parsed_type = DataType::MemoryRef;
 						break;
 					case '_':
 						is_output = true;
@@ -149,7 +151,9 @@ class Operation {
 		throw std::runtime_error("Invalid input types for operation");
 	}
 
-	[[nodiscard]] bool IsOperator() const { return is_operator_; }
+	[[nodiscard]] bool IsOperator() const {
+		return op_type_ == OpType::Operator;
+	}
 
 	[[nodiscard]] string GetCode() const { return code_; }
 
