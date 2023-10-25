@@ -5,14 +5,14 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetNodeName(const Tensor* tensor, TensorNames& names, bool compact) {
+string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	if (compact)
 	{
-		if (tensor->name == "const") {
-			return tensor->GetConstantString();
+		if (node->tensor_->name == "const") {
+			return node->tensor_->GetConstantString();
 		}
 	}
-	return names[tensor];
+	return names[node];
 }
 
 inline string Tensor::GetConstantString() const {
@@ -37,10 +37,10 @@ string GetOperationListing(const IR& ir, bool compact)
 	list<const Node*> nodes = ir.GetNodes();
 
 	// first give unique names to all the tensors
-	TensorNames names = TensorNames();
+	NodeNames names = NodeNames();
 	int index = 0;
 	for (const Node* node : nodes) {
-		names[node->tensor_] = "t" + to_string(index);
+		names[node] = "t" + to_string(index);
 		index++;
 	}
 
@@ -63,20 +63,20 @@ string GetOperationListing(const IR& ir, bool compact)
 
 		if (node->tensor_->type != DataType::None) {
 			// print the tensor name
-			listing += names[node->tensor_] + " = ";
+			listing += names[node] + " = ";
 		}
 
 		listing += node->tensor_->name + "(";
 
-		Arguments inputs = node->tensor_->GetArguments(Argument::Type::Input);
-		Arguments indices = node->tensor_->GetArguments(Argument::Type::Index);
-		Arguments shape = node->tensor_->GetArguments(Argument::Type::Shape);
+		Arguments inputs = node->GetArguments(Argument::Type::Input);
+		Arguments indices = node->GetArguments(Argument::Type::Index);
+		Arguments shape = node->GetArguments(Argument::Type::Shape);
 
 		if (!inputs.empty()) {
 			listing += "inputs=[";
 			for (int i = 0; i < inputs.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].tensor, names, compact);
+				listing += GetNodeName(inputs[i].node_, names, compact);
 			}
 			listing += "], ";
 		}
@@ -85,7 +85,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "indices=[";
 			for (int i = 0; i < indices.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].tensor, names, compact);
+				listing += GetNodeName(indices[i].node_, names, compact);
 			}
 			listing += "], ";
 		}
@@ -94,7 +94,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "shape=[";
 			for (int i = 0; i < shape.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(shape[i].tensor, names, compact);
+				listing += GetNodeName(shape[i].node_, names, compact);
 			}
 			listing += "], ";
 		}

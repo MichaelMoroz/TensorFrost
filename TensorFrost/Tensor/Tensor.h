@@ -21,7 +21,7 @@ class Tensor {
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
-			arguments.emplace_back(type, tensors[i], i);
+			arguments.emplace_back(type, tensors[i]->node, i);
 		}
 	}
 
@@ -62,7 +62,7 @@ class Tensor {
 		Arguments arguments = Arguments();
 
 		AddArguments(arguments, tensors, Argument::Type::Input);
-		AddArguments(arguments, tensors[0]->GetArguments(Argument::Type::Shape));
+		AddArguments(arguments, tensors[0]->node->GetArguments(Argument::Type::Shape));
 
 		auto* output = new Tensor(op, output_type, operation.first);
 
@@ -91,7 +91,7 @@ class Tensor {
 		AddArguments(arguments, indices, Argument::Type::Index);
 
 		// add the shape
-		AddArguments(arguments, indices[0]->GetArguments(Argument::Type::Shape));
+		AddArguments(arguments, indices[0]->node->GetArguments(Argument::Type::Shape));
 
 		// create the output tensor
 		auto* output = new Tensor(op, output_type, operation.first);
@@ -129,12 +129,15 @@ class Tensor {
 	static IR* evaluation_context_ir_;
 
 	static void AddToGraph(Tensor* tensor, Arguments args) {
-		// check if IR is not null
 		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error("Evaluation context has not been set. Are you doing operations outside a TensorProgram?");
 		}
 
-		evaluation_context_ir_->AddNode(tensor, args);
+		if (tensor->node != nullptr) {
+			throw std::runtime_error("Tensor has already been added to the graph.");
+		}
+
+		tensor->node = evaluation_context_ir_->AddNode(tensor, args);
 	}
 
  public:
@@ -149,15 +152,91 @@ class Tensor {
 
 	string name;
 	const Operation* op;
+	Node* node = nullptr;
 	DataType type = DataType::Float;
 	std::vector<uint> data;
 
 	// Main constructor
-	Tensor(string name, DataType type, const Operation& operation)
-	{
+	Tensor(string name, DataType type, const Operation& operation) {
 		this->name = std::move(name);
 		this->type = type;
 		this->op = &operation;
+	}
+
+	[[nodiscard]] int GetDimension() const {
+		// find max dimension
+		int max_dim = -1;
+
+		for (const auto& input : node->arguments_) {
+			if (input.type_ == Argument::Type::Shape) {
+				max_dim = std::max(max_dim, input.index_);
+			}
+		}
+
+		return max_dim + 1;
+	}
+
+	[[nodiscard]] vector<const Tensor*> GetShape() const {
+		vector<const Tensor*> result = vector<const Tensor*>();
+		// get max dimension
+		int max_dim = -1;
+		for (const auto& input : node->arguments_) {
+			if (input.type_ == Argument::Type::Shape) {
+				max_dim = std::max(max_dim, input.index_);
+			}
+		}
+
+		if (max_dim == -1) {
+			return result;
+		}
+
+		// resize result
+		result.resize(max_dim + 1);
+		for (int i = 0; i <= max_dim; i++) {
+			result[i] = nullptr;
+		}
+		// fill result
+		for (const auto& input : node->arguments_) {
+			if (input.type_ == Argument::Type::Shape) {
+				result[input.index_] = input.node_->tensor_;
+			}
+		}
+		//if there are any missing dimensions, fill them with 1
+		Tensor& one = Constant(1);
+		for (int i = 0; i <= max_dim; i++) {
+			if (result[i] == nullptr) {
+				result[i] = &one;
+			}
+		}
+		return result;
+	}
+
+	[[nodiscard]] vector<int> TryGetShape() const {
+		vector<int> result = vector<int>();
+		// get max dimension
+		int max_dim = -1;
+		for (const auto& input : node->arguments_) {
+			if (input.type_ == Argument::Type::Shape) {
+				max_dim = std::max(max_dim, input.index_);
+			}
+		}
+
+		if (max_dim == -1) {
+			return result;
+		}
+
+		// resize result
+		result.resize(max_dim + 1);
+		for (int i = 0; i <= max_dim; i++) {
+			result[i] = 1;
+		}
+		// fill result
+		for (const auto& input : node->arguments_) {
+			if (input.type_ == Argument::Type::Shape) {
+				result[input.index_] = AsInt(input.node_->tensor_->data[0]);
+			}
+		}
+		return result;
 	}
 
 	// tensor factory methods
@@ -194,24 +273,30 @@ class Tensor {
 		return output;
 	}
 	static Tensor& Constant(const Tensors& shape, float value) {
-		Tensor& output = Constant(value);
-		AddArguments(output.inputs, shape, Argument::Type::Shape);
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, Argument::Type::Shape);
+		Tensor& output = Static("const", arguments, DataType::Float);
+		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
 	static Tensor& Constant(const vector<int>& shape, float value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, int value) {
-		Tensor& output = Constant(value);
-		AddArguments(output.inputs, shape, Argument::Type::Shape);
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, Argument::Type::Shape);
+		Tensor& output = Static("const", arguments, DataType::Int);
+		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
 	static Tensor& Constant(const vector<int>& shape, int value) {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, uint value) {
-		Tensor& output = Constant(value);
-		AddArguments(output.inputs, shape, Argument::Type::Shape);
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, Argument::Type::Shape);
+		Tensor& output = Static("const", arguments, DataType::Uint);
+		output.data = std::vector<uint>(1, value);
 		return output;
 	}
 	static Tensor& Constant(const vector<int>& shape, uint value) {
@@ -252,7 +337,7 @@ class Tensor {
 
 	[[nodiscard]] Tensor& Index(int dim) const {
 		Tensor& output =
-		    Static("dim_id", this->GetArguments(Argument::Type::Shape), DataType::Int);
+		    Static("dim_id", node->GetArguments(Argument::Type::Shape), DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;
 		return output;

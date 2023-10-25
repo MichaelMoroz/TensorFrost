@@ -12,6 +12,7 @@
 
 namespace TensorFrost {
 class Tensor;
+class Node;
 
 class Argument {
  public:
@@ -24,11 +25,11 @@ class Argument {
 	};
 
 	Type type_;
-	const Tensor* tensor_;
+	const Node* node_;
 	int index_;
 
-	Argument(Type type, const Tensor* tensor, int index)
-	    : type_(type), tensor_(tensor), index_(index) {}
+	Argument(Type type, const Node* node, int index)
+	    : type_(type), node_(node), index_(index) {}
 };
 
 using Arguments = vector<Argument>;
@@ -61,87 +62,14 @@ public:
 		          });
 		return result;
 	}
+
 	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
 		Tensors result = Tensors();
 		for (const auto& argument : arguments) {
-			result.push_back(argument.tensor_);
-		}
-		return result;
-	}
-	[[nodiscard]] int GetDimension() const {
-		// find max dimension
-		int max_dim = -1;
-
-		for (const auto& input : arguments_) {
-			if (input.type_ == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		return max_dim + 1;
-	}
-
-	[[nodiscard]] vector<const Tensor*> GetShape() const {
-		vector<const Tensor*> result = vector<const Tensor*>();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : arguments_) {
-			if (input.type_ == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = nullptr;
-		}
-		// fill result
-		for (const auto& input : arguments_) {
-			if (input.type_ == Argument::Type::Shape) {
-				result[input.index_] = input.tensor_;
-			}
-		}
-		// if there are any missing dimensions, fill them with 1
-		//Tensor& one = Constant(1);
-		//for (int i = 0; i <= max_dim; i++) {
-		//	if (result[i] == nullptr) {
-		//		result[i] = &one;
-		//	}
-		//}
-		return result;
-	}
-	[[nodiscard]] vector<int> TryGetShape() const {
-		vector<int> result = vector<int>();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : arguments_) {
-			if (input.type_ == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = 1;
-		}
-		// fill result
-		for (const auto& input : arguments_) {
-			if (input.type_ == Argument::Type::Shape) {
-				result[input.index_] = AsInt(input.tensor_->data[0]);
-			}
+			result.push_back(argument.node_->tensor_);
 		}
 		return result;
 	}
@@ -154,7 +82,9 @@ class IR {
 	list<Node> nodes_;
 
  public:
-	void AddNode(Tensor* tensor, Arguments args) { nodes_.emplace_back(tensor, args, false); }
+	Node* AddNode(Tensor* tensor, Arguments args) { 
+		return &nodes_.emplace_back(tensor, args, false); 
+	}
 
 	list<const Node*> GetNodes() const {
 		list<const Node*> nodes;

@@ -62,12 +62,11 @@ namespace TensorFrost {
 //    return false;
 //}
 
-bool IsBoundary(const Tensor* input, Node& output)
-{
-    bool isFromScatter = input->op->GetOpType() == OpType::Scatter;
-    bool isToScatter = output.tensor_->op->GetOpType() == OpType::Scatter;
-    bool isFromStore = input->op->GetOpType() == OpType::Store;
-	bool isFromOutput = false; //input->is_output_; //TODO move arguments to node
+bool IsBoundary(const Node* input, const Node* output) {
+	bool isFromScatter = input->tensor_->op->GetOpType() == OpType::Scatter;
+	bool isToScatter = output->tensor_->op->GetOpType() == OpType::Scatter;
+	bool isFromStore = input->tensor_->op->GetOpType() == OpType::Store;
+	bool isFromOutput = input->is_output_; 
 
     if(isFromScatter || isFromStore || isFromOutput)
     {
@@ -81,7 +80,7 @@ bool IsBoundary(const Tensor* input, Node& output)
         }
     }
 
-    bool isToLoad = output.tensor_->op->GetOpType() == OpType::Load;
+    bool isToLoad = output->tensor_->op->GetOpType() == OpType::Load;
 
     if(isToLoad)
     {
@@ -102,7 +101,7 @@ bool IsBoundary(const Tensor* input, Node& output)
     //    }
     //}
 
-    if(input->name == "input_memory")
+    if (input->tensor_->name == "input_memory")
     {
         return true;
     }
@@ -118,12 +117,12 @@ void IR::Clusterize() {
         Tensor* tensor = node.tensor_;
 
         //go over all inputs
-        for(auto& input: tensor->inputs)
+        for(auto& input: tensor->node->arguments_)
         {
-			if (input.type == Argument::Type::Shape) continue;
+			if (input.type_ == Argument::Type::Shape) continue;
 			//if (input.type == Argument::Type::Index) continue;
             //check if input is a cluster edge
-            if(IsBoundary(input.tensor, node))
+            if(IsBoundary(input.node_, &node))
             {
                 //if so, increment cluster id
                 cluster_id++;

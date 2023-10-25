@@ -9,11 +9,11 @@ string GenerateHLSL(const IR& ir) {
 	list<const Node*> nodes = ir.GetNodes();
 
 	// first give unique names to all the tensors
-	TensorNames names = TensorNames();
+	NodeNames names = NodeNames();
 	int index = 0;
 	for (const Node* node : nodes) 
 	{
-		names[node->tensor_] = "var" + to_string(index);
+		names[node] = "var" + to_string(index);
 		index++;
 	}
 
@@ -39,23 +39,23 @@ string GenerateHLSL(const IR& ir) {
 		const Operation& op = FindOperation(node->tensor_->name);
 
 		//get node arguments
-		Arguments inputs = node->tensor_->GetArguments(Argument::Type::Input);
-		Arguments indices = node->tensor_->GetArguments(Argument::Type::Index);
-		Arguments shape = node->tensor_->GetArguments(Argument::Type::Shape);
+		Arguments inputs = node->GetArguments(Argument::Type::Input);
+		Arguments indices = node->GetArguments(Argument::Type::Index);
+		Arguments shape = node->GetArguments(Argument::Type::Shape);
 
 		//get node names
 		vector<string> arguments;
 		vector<DataType> input_types;
 		for (const Argument& arg : inputs) {
-			arguments.push_back(GetNodeName(arg.tensor, names, true));
-			input_types.push_back(arg.tensor->type);
+			arguments.push_back(GetNodeName(arg.node_, names, true));
+			input_types.push_back(arg.node_->tensor_->type);
 		}
 		for (const Argument& arg : indices) {
-			arguments.push_back(GetNodeName(arg.tensor, names, true));
+			arguments.push_back(GetNodeName(arg.node_, names, true));
 		}
 
 		hlslCode +=
-		    op.GenerateLine(names[node->tensor_], arguments, input_types) + "\n";
+		    op.GenerateLine(names[node], arguments, input_types) + "\n";
 
 		if (node->tensor_->name == "loop_begin") {
 			indent++;
