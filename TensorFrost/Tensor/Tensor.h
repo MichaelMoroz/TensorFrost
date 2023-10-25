@@ -14,26 +14,7 @@
 
 namespace TensorFrost {
 
-class Argument {
- public:
-	enum Type {
-		Input,
-		Index,
-		Shape,
-		RefCopy,
-		Loop,
-	};
-
-	Type type;
-	const Tensor* tensor;
-	int index;
-
-	Argument(Type type, const Tensor* tensor, int index)
-	    : type(type), tensor(tensor), index(index) {}
-};
-
 using Tensors = vector<const Tensor*>;
-using Arguments = vector<Argument>;
 
 class Tensor {
  private:
@@ -83,10 +64,10 @@ class Tensor {
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, tensors[0]->GetArguments(Argument::Type::Shape));
 
-		auto* output = new Tensor(arguments, op, output_type, operation.first);
+		auto* output = new Tensor(op, output_type, operation.first);
 
 		// create the output tensor
-		AddToGraph(output);
+		AddToGraph(output, arguments);
 		return *output;
 	}
 
@@ -113,11 +94,11 @@ class Tensor {
 		AddArguments(arguments, indices[0]->GetArguments(Argument::Type::Shape));
 
 		// create the output tensor
-		auto* output = new Tensor(arguments, op, output_type, operation.first);
+		auto* output = new Tensor(op, output_type, operation.first);
 
 		output->type = output_type;
 		// create the output tensor
-		AddToGraph(output);
+		AddToGraph(output, arguments);
 
 		return *output;
 	}
@@ -130,8 +111,8 @@ class Tensor {
 		}
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape);
-		auto* output = new Tensor(arguments, op, type, operation);
-		AddToGraph(output);
+		auto* output = new Tensor(op, type, operation);
+		AddToGraph(output, arguments);
 		return *output;
 	}
 
@@ -147,13 +128,13 @@ class Tensor {
 
 	static IR* evaluation_context_ir_;
 
-	static void AddToGraph(Tensor* node) {
+	static void AddToGraph(Tensor* tensor, Arguments args) {
 		// check if IR is not null
 		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error("Evaluation context has not been set. Are you doing operations outside a TensorProgram?");
 		}
 
-		evaluation_context_ir_->AddNode(node);
+		evaluation_context_ir_->AddNode(tensor, args);
 	}
 
  public:
@@ -169,115 +150,14 @@ class Tensor {
 	string name;
 	const Operation* op;
 	DataType type = DataType::Float;
-	Arguments inputs;
 	std::vector<uint> data;
 
 	// Main constructor
-	Tensor(Arguments inputs, string name, DataType type, const Operation& operation)
+	Tensor(string name, DataType type, const Operation& operation)
 	{
-		this->inputs = std::move(inputs);
 		this->name = std::move(name);
 		this->type = type;
 		this->op = &operation;
-	}
-
-	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
-		Arguments result = Arguments();
-		for (const auto& input : inputs) {
-			if (input.type == type) {
-				result.push_back(input);
-			}
-		}
-		//sort by index
-		std::sort(result.begin(), result.end(), [](const Argument& a, const Argument& b) {
-			return a.index < b.index;
-		});
-		return result;
-	}
-	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
-		//get the arguments
-		Arguments arguments = GetArguments(type);
-		//convert to tensors
-		Tensors result = Tensors();
-		for (const auto& argument : arguments) {
-			result.push_back(argument.tensor);
-		}
-		return result;
-	}
-	[[nodiscard]] int GetDimension() const
-	{
-		//find max dimension
-		int max_dim = -1;
-
-		for (const auto& input : inputs) {
-			if (input.type == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index);
-			}
-		}
-
-		return max_dim + 1;
-	}
-
-	[[nodiscard]] vector<const Tensor*> GetShape() const {
-		vector<const Tensor*> result = vector<const Tensor*>();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : inputs) {
-			if (input.type == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = nullptr;
-		}
-		// fill result
-		for (const auto& input : inputs) {
-			if (input.type == Argument::Type::Shape) {
-				result[input.index] = input.tensor;
-			}
-		}
-		// if there are any missing dimensions, fill them with 1
-		Tensor& one = Constant(1);
-		for (int i = 0; i <= max_dim; i++) {
-			if (result[i] == nullptr) {
-				result[i] = &one;
-			}
-		}
-		return result;
-	}
-	[[nodiscard]] vector<int> TryGetShape() const {
-		vector<int> result = vector<int>();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : inputs) {
-			if (input.type == Argument::Type::Shape) {
-				max_dim = std::max(max_dim, input.index);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = 1;
-		}
-		// fill result
-		for (const auto& input : inputs) {
-			if (input.type == Argument::Type::Shape) {
-				result[input.index] = AsInt(input.tensor->data[0]);
-			}
-		}
-		return result;
 	}
 
 	// tensor factory methods
