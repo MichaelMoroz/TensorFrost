@@ -12,16 +12,34 @@
 namespace TensorFrost {
 class Tensor;
 
+class Node
+{
+public:
+	Tensor* tensor_;
+	bool is_output_;
+	int cluster_id_ = -1;
+
+	Node(Tensor* tensor, bool is_output = false)
+	    : tensor_(tensor), is_output_(is_output) {}
+
+	//desctructor
+	~Node();
+};
+
 class IR {
-	list<Tensor*> nodes_;
+	list<Node> nodes_;
 
  public:
-	void AddNode(Tensor* node) { nodes_.push_back(node); }
+	void AddNode(Tensor* tensor) { nodes_.emplace_back(tensor); }
 
-	list<Tensor*> GetNodes() const { return nodes_; }
+	list<const Node*> GetNodes() const {
+		list<const Node*> nodes;
+		for (const Node& node : nodes_) {
+			nodes.push_back(&node);
+		}
+		return nodes;
+	}
 
-	void Clear() { nodes_.clear(); }
-
-	~IR();
+	void Clusterize();
 };
 }  // namespace TensorFrost

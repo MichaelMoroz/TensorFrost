@@ -29,6 +29,8 @@ class TensorProgram {
 		Tensor::SetEvaluationContext(&ir);
 		Tensors outputs = evaluate_callback();
 		Tensor::SetEvaluationContext(nullptr);
+
+		ir.Clusterize();
 	}
 
 	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }

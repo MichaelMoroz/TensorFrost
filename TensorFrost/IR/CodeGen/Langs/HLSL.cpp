@@ -6,14 +6,14 @@ namespace TensorFrost {
 using namespace std;
 
 string GenerateHLSL(const IR& ir) {
-    list<Tensor*> nodes = ir.GetNodes();
+	list<const Node*> nodes = ir.GetNodes();
 
 	// first give unique names to all the tensors
 	TensorNames names = TensorNames();
 	int index = 0;
-	for (const Tensor* node : nodes) 
+	for (const Node* node : nodes) 
 	{
-		names[node] = "var" + to_string(index);
+		names[node->tensor_] = "var" + to_string(index);
 		index++;
 	}
 
@@ -23,10 +23,10 @@ string GenerateHLSL(const IR& ir) {
     hlslCode += "void main() {\n";
 	int indent = 1;
     // Translate each operation into HLSL
-    for (const Tensor* node : nodes) {
-		if (node->name == "const") continue;
+	for (const Node* node : nodes) {
+		if (node->tensor_->name == "const") continue;
 
-		if (node->name == "loop_end") {
+		if (node->tensor_->name == "loop_end") {
 			indent--;
 		}
 
@@ -36,12 +36,12 @@ string GenerateHLSL(const IR& ir) {
 		}
 
 		//get node operation
-		const Operation& op = FindOperation(node->name);
+		const Operation& op = FindOperation(node->tensor_->name);
 
 		//get node arguments
-		Arguments inputs = node->GetArguments(Argument::Type::Input);
-		Arguments indices = node->GetArguments(Argument::Type::Index);
-		Arguments shape = node->GetArguments(Argument::Type::Shape);
+		Arguments inputs = node->tensor_->GetArguments(Argument::Type::Input);
+		Arguments indices = node->tensor_->GetArguments(Argument::Type::Index);
+		Arguments shape = node->tensor_->GetArguments(Argument::Type::Shape);
 
 		//get node names
 		vector<string> arguments;
@@ -54,9 +54,10 @@ string GenerateHLSL(const IR& ir) {
 			arguments.push_back(GetNodeName(arg.tensor, names, true));
 		}
 
-		hlslCode += op.GenerateLine(names[node], arguments, input_types) + "\n";
+		hlslCode +=
+		    op.GenerateLine(names[node->tensor_], arguments, input_types) + "\n";
 
-		if (node->name == "loop_begin") {
+		if (node->tensor_->name == "loop_begin") {
 			indent++;
 		}
     }

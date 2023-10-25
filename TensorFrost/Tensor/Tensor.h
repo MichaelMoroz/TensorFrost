@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <algorithm>
 
 #include <math.h>
 
@@ -82,7 +83,7 @@ class Tensor {
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, tensors[0]->GetArguments(Argument::Type::Shape));
 
-		auto* output = new Tensor(arguments, op, output_type);
+		auto* output = new Tensor(arguments, op, output_type, operation.first);
 
 		// create the output tensor
 		AddToGraph(output);
@@ -112,7 +113,7 @@ class Tensor {
 		AddArguments(arguments, indices[0]->GetArguments(Argument::Type::Shape));
 
 		// create the output tensor
-		auto* output = new Tensor(arguments, op, output_type);
+		auto* output = new Tensor(arguments, op, output_type, operation.first);
 
 		output->type = output_type;
 		// create the output tensor
@@ -129,7 +130,7 @@ class Tensor {
 		}
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape);
-		auto* output = new Tensor(arguments, op, type);
+		auto* output = new Tensor(arguments, op, type, operation);
 		AddToGraph(output);
 		return *output;
 	}
@@ -166,15 +167,18 @@ class Tensor {
 	[[nodiscard]] string GetConstantString() const;
 
 	string name;
+	const Operation* op;
 	DataType type = DataType::Float;
 	Arguments inputs;
 	std::vector<uint> data;
 
 	// Main constructor
-	Tensor(Arguments inputs, string name, DataType type) {
+	Tensor(Arguments inputs, string name, DataType type, const Operation& operation)
+	{
 		this->inputs = std::move(inputs);
 		this->name = std::move(name);
 		this->type = type;
+		this->op = &operation;
 	}
 
 	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
@@ -184,17 +188,21 @@ class Tensor {
 				result.push_back(input);
 			}
 		}
+		//sort by index
+		std::sort(result.begin(), result.end(), [](const Argument& a, const Argument& b) {
+			return a.index < b.index;
+		});
 		return result;
 	}
 	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
+		//get the arguments
+		Arguments arguments = GetArguments(type);
+		//convert to tensors
 		Tensors result = Tensors();
-		for (const auto& input : inputs) {
-			if (input.type == type) {
-				result.push_back(input.tensor);
-			}
+		for (const auto& argument : arguments) {
+			result.push_back(argument.tensor);
 		}
 		return result;
-	
 	}
 	[[nodiscard]] int GetDimension() const
 	{

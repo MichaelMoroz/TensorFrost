@@ -65,16 +65,16 @@ vector<Operation> operations = {
     Operation("lerp", {"fff_f"}),
     Operation("fma", {"fff_f"}),
     Operation("ternary", {"bff_f", "buu_u", "bii_i"}),
-    Operation("load", {"f_f", "u_u", "i_i"}),
-    Operation("store",{"ff_", "uu_", "ii_"}),
+    Operation("load", {"f_f", "u_u", "i_i"}, "", OpType::Load),
+    Operation("store",{"ff_", "uu_", "ii_"}, "", OpType::Store),
     Operation("const_memory", {"_f", "_i", "_u"}),
     Operation("input_memory", {"_f", "_i", "_u"}),
-    Operation("InterlockedAdd", {"uuu_", "iiu_", "ffu_"}),
-    Operation("InterlockedMin", {"uuu_", "iiu_", "ffu_"}),
-    Operation("InterlockedMax", {"uuu_", "iiu_", "ffu_"}),
-    Operation("InterlockedAnd", {"uuu_", "iiu_"}),
-    Operation("InterlockedOr", {"uuu_", "iiu_"}),
-    Operation("InterlockedXor", {"uuu_", "iiu_"}),
+    Operation("InterlockedAdd", {"uu_", "ii_", "ff_"}, "", OpType::Scatter),
+    Operation("InterlockedMin", {"uu_", "ii_", "ff_"}, "", OpType::Scatter),
+    Operation("InterlockedMax", {"uu_", "ii_", "ff_"}, "", OpType::Scatter),
+    Operation("InterlockedAnd", {"uu_", "ii_"}, "", OpType::Scatter),
+    Operation("InterlockedOr", {"uu_", "ii_"}, "", OpType::Scatter),
+    Operation("InterlockedXor", {"uu_", "ii_"}, "", OpType::Scatter),
     Operation("variable", {"_f", "_u", "_i"}),
     Operation("const", {"_f", "_u", "_i"}),
     Operation("dim_id", {"_i", "_u"}),
@@ -167,8 +167,8 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     } 
     else if (name_ == "load")
     {
-		  line += TypeNames[output_type] + " " + var_name + " = ";
-          line += arguments[0] + "[" + arguments[1] + "];";
+        line += TypeNames[output_type] + " " + var_name + " = ";
+        line += arguments[0] + "[" + arguments[1] + "];";
     }
     else if (name_ == "store")
     {
@@ -176,11 +176,11 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     }
     else
     {
-		  if (output_type != DataType::None) 
-          {
-		    line += TypeNames[output_type] + " " + var_name + " = ";
-		  }
-		  line += GenerateOpString(arguments) + ";";
+        if (output_type != DataType::None) 
+        {
+            line += TypeNames[output_type] + " " + var_name + " = ";
+        }
+        line += GenerateOpString(arguments) + ";";
     }
 
     return line;

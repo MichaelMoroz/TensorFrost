@@ -26,7 +26,7 @@ void DefineOperator(std::string pyname, py::class_<PyTensor>& py_tensor, std::fu
 	});
 	py_tensor.def(l_op(pyname).c_str(), 
 	[op](const PyTensor& t, const int i) {
-		return PT(op(Tensor::Constant(i), T(t)));
+		return PT(op(T(t), Tensor::Constant(i)));
 	});
 	py_tensor.def(r_op(pyname).c_str(),
 	[op](const PyTensor& t, const float f) {

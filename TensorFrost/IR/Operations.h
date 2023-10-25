@@ -24,6 +24,12 @@ enum class OpType {
 	Operator,
 	Function,
 	Keyword,
+	Load,
+	Store,
+	Scatter,
+	Loop,
+	Conditional,
+	Special,
 };
 
 using DataTypeList = vector<DataType>;
@@ -89,6 +95,8 @@ class Operation {
 			overloads_.push_back({inputs, output});
 		}
 	}
+
+	[[nodiscard]] OpType GetOpType() const { return op_type_; }
 
 	[[nodiscard]] string GetName() const { return name_; }
 

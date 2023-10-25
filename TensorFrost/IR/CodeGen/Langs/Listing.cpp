@@ -32,27 +32,27 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-string GetOperationListing(const IR& ir, bool compact) {
-	
-    list<Tensor*> nodes = ir.GetNodes();
+string GetOperationListing(const IR& ir, bool compact) 
+{
+	list<const Node*> nodes = ir.GetNodes();
 
 	// first give unique names to all the tensors
 	TensorNames names = TensorNames();
 	int index = 0;
-	for (const Tensor* node : nodes) {
-		names[node] = "t" + to_string(index);
+	for (const Node* node : nodes) {
+		names[node->tensor_] = "t" + to_string(index);
 		index++;
 	}
 
 	// now create the listing
 	string listing;
 	int indent = 0;
-	for (const Tensor* node : nodes) {
+	for (const Node* node : nodes) {
 		if (compact) {
-			if (node->name == "const") continue;
+			if (node->tensor_->name == "const") continue;
 		}
 
-		if (node->name == "loop_end") {
+		if (node->tensor_->name == "loop_end") {
 			indent--;
 		}
 
@@ -61,16 +61,16 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "  ";
 		}
 
-		if (node->type != DataType::None) {
+		if (node->tensor_->type != DataType::None) {
 			// print the tensor name
-			listing += names[node] + " = ";
+			listing += names[node->tensor_] + " = ";
 		}
 
-		listing += node->name + "(";
+		listing += node->tensor_->name + "(";
 
-		Arguments inputs = node->GetArguments(Argument::Type::Input);
-		Arguments indices = node->GetArguments(Argument::Type::Index);
-		Arguments shape = node->GetArguments(Argument::Type::Shape);
+		Arguments inputs = node->tensor_->GetArguments(Argument::Type::Input);
+		Arguments indices = node->tensor_->GetArguments(Argument::Type::Index);
+		Arguments shape = node->tensor_->GetArguments(Argument::Type::Shape);
 
 		if (!inputs.empty()) {
 			listing += "inputs=[";
@@ -99,22 +99,27 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "], ";
 		}
 
-		if (!node->data.empty()) {
+		if (!node->tensor_->data.empty()) {
 			listing += "data=[";
-			for (int i = 0; i < node->data.size(); i++) {
+			for (int i = 0; i < node->tensor_->data.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += to_string(node->data[i]);
+				listing += to_string(node->tensor_->data[i]);
 			}
 			listing += "], ";
 		}
 
-		if (node->type != DataType::None) {
-			listing += "type = " + DataTypeToString(node->type);
+		if (node->cluster_id_ != -1)
+		{
+			listing += "cluster_id = " + to_string(node->cluster_id_) + ", ";
+		}
+
+		if (node->tensor_->type != DataType::None) {
+			listing += "type = " + DataTypeToString(node->tensor_->type);
 		}
 
 		listing += ")\n";
 
-		if (node->name == "loop_begin") {
+		if (node->tensor_->name == "loop_begin") {
 			indent++;
 		}
 	}

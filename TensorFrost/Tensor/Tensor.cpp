@@ -4,10 +4,9 @@ namespace TensorFrost {
 
 IR* Tensor::evaluation_context_ir_ = nullptr;
 
-IR::~IR() {
-	for (Tensor* node : nodes_) {
-		delete node;
-	}
+Node::~Node() 
+{ 
+	delete tensor_; 
 }
 
-}  // namespace TensorFrost
+}// namespace TensorFrost
