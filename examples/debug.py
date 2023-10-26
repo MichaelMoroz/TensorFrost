@@ -76,10 +76,23 @@ def PoissonSolver():
 
     return [x]
 
+def PoissonSolver2():
+    x = tf.input([-1, -1], tf.float32)
+    b = tf.input([-1, -1], tf.float32)
+    n = tf.input([], tf.int32)
+
+    i, j = x.indices
+
+    x = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b[i, j]) / 4.0
+
+    x = (x[i-1, j] + x[i+1, j] + x[i, j-1] + x[i, j+1] - b[i, j]) / 4.0
+   
+    return [x]
+
 
 
 # Create a program that initializes the wave simulation
-SomeFunctionProgram = tf.Program(PoissonSolver)
+SomeFunctionProgram = tf.Program(PoissonSolver2)
 
 SomeFunctionProgram(list())
 

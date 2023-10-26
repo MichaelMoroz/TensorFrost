@@ -8,7 +8,7 @@ using namespace std;
 string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	if (compact)
 	{
-		if (node->tensor_->name == "const") {
+		if (node->name == "const") {
 			return node->tensor_->GetConstantString();
 		}
 	}
@@ -16,7 +16,7 @@ string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 }
 
 inline string Tensor::GetConstantString() const {
-	if (name == "const" || name == "dim_id") {
+	if (node->name == "const" || node->name == "dim_id") {
 		switch (type) {
 			case DataType::Float:
 				return to_string(AsFloat(data[0]));
@@ -47,13 +47,21 @@ string GetOperationListing(const IR& ir, bool compact)
 	// now create the listing
 	string listing;
 	int indent = 0;
+	int prev_cluster_id = -1;
 	for (const Node* node : nodes) {
 		if (compact) {
-			if (node->tensor_->name == "const") continue;
+			if (node->name == "const") continue;
 		}
 
-		if (node->tensor_->name == "loop_end") {
+		if (node->name == "loop_end") {
 			indent--;
+		}
+
+		if (node->cluster_id_ != -1) {
+			if (node->cluster_id_ != prev_cluster_id) {
+				listing += "\n";
+			}
+			listing += to_string(node->cluster_id_) + ": ";
 		}
 
 		// indent
@@ -66,7 +74,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += names[node] + " = ";
 		}
 
-		listing += node->tensor_->name + "(";
+		listing += node->name + "(";
 
 		Arguments inputs = node->GetArguments(Argument::Type::Input);
 		Arguments indices = node->GetArguments(Argument::Type::Index);
@@ -108,20 +116,17 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "], ";
 		}
 
-		if (node->cluster_id_ != -1)
-		{
-			listing += "cluster_id = " + to_string(node->cluster_id_) + ", ";
-		}
-
 		if (node->tensor_->type != DataType::None) {
 			listing += "type = " + DataTypeToString(node->tensor_->type);
 		}
 
 		listing += ")\n";
 
-		if (node->tensor_->name == "loop_begin") {
+		if (node->name == "loop_begin") {
 			indent++;
 		}
+
+		prev_cluster_id = node->cluster_id_;
 	}
 
 	return listing;

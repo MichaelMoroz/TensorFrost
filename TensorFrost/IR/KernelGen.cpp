@@ -4,68 +4,14 @@
 
 namespace TensorFrost {
 
-//public static bool IsBoundary(TEdge edge)
-//{
-//    // Check if the 'From' node of the edge is a scatter or store function
-//    bool isFromScatter = TensorOp.IsScatterOp(edge.From.type);
-//    //check if the 'To' node is a scatter
-//    bool isToScatter = TensorOp.IsScatterOp(edge.To.type);
-//
-//    bool isFromStore = TensorOp.IsStoreOp(edge.From.type);
-//
-//    bool isFromOutput = false;//edge.From.property.isOutput;
-//
-//    if(isFromScatter || isFromStore || isFromOutput)
-//    {
-//        if(isFromScatter && isToScatter)
-//        {
-//            return false; //multiple scatters can be merged
-//        }
-//        else
-//        {
-//            return true;
-//        }
-//    }
-//
-//    // Check if the 'To' node of the edge is a load function
-//    bool isToLoad = TensorOp.IsLoadOp(edge.To.type);
-//
-//    //if to a load function, check edge is not the memory source argument (first argument)
-//
-//    if(isToLoad)
-//    {
-//        return edge.property == 0;
-//    }
-//    
-//    //if its the memory source for a scatter then its also an edge
-//    if(isToScatter)
-//    {
-//        return edge.property == 0;
-//    }
-//
-//    //check if the sizes of the node tensors are different (if so, then its a boundary)
-//    if(!Tensor.CompareShape(edge.From.property.shape.size, edge.To.property.shape.size))
-//    {
-//        //if not a scatter, then its a boundary
-//        if(!isToScatter)
-//        {
-//            return true;
-//        }
-//    }
-//
-//    //also if any of the nodes is TensorOp.Type.memory then its a boundary
-//    if(edge.From.type == TensorOp.Type.memory || edge.To.type == TensorOp.Type.memory)
-//    {
-//        return true;
-//    }
-//
-//    return false;
-//}
+bool IsBoundary(const Node* input, const Node* output, int arg_index,
+                Argument::Type arg_type) {
+    OpType input_type = input->op->GetOpType();
+    OpType output_type = output->op->GetOpType();
 
-bool IsBoundary(const Node* input, const Node* output) {
-	bool isFromScatter = input->tensor_->op->GetOpType() == OpType::Scatter;
-	bool isToScatter = output->tensor_->op->GetOpType() == OpType::Scatter;
-	bool isFromStore = input->tensor_->op->GetOpType() == OpType::Store;
+	bool isFromScatter = input_type == OpType::Scatter;
+	bool isToScatter = output_type == OpType::Scatter;
+	bool isFromStore = input_type == OpType::Store;
 	bool isFromOutput = input->is_output_; 
 
     if(isFromScatter || isFromStore || isFromOutput)
@@ -80,17 +26,15 @@ bool IsBoundary(const Node* input, const Node* output) {
         }
     }
 
-    bool isToLoad = output->tensor_->op->GetOpType() == OpType::Load;
-
-    if(isToLoad)
+    if (output_type == OpType::Load)
     {
-        return false;
+        return arg_index == 0 && arg_type == Argument::Type::Input;
     }
 
-    if(isToScatter)
+    if (output_type == OpType::Scatter)
     {
-        return false;
-    }
+	    return arg_index == 0 && arg_type == Argument::Type::Input;
+	}
 
     //TODO write shape comparison function
     //if(input.tensor_.shape_ != output.tensor_.shape_)
@@ -101,7 +45,8 @@ bool IsBoundary(const Node* input, const Node* output) {
     //    }
     //}
 
-    if (input->tensor_->name == "input_memory")
+    //input memory should not be inside work clusters
+    if (input->name == "input_memory")
     {
         return true;
     }
@@ -111,26 +56,41 @@ bool IsBoundary(const Node* input, const Node* output) {
 
 void IR::Clusterize() {
     int cluster_id = 0;
+    Node* prev = nullptr;
     for(auto& node: nodes_)
     {
         // check if node is a cluster edge
         Tensor* tensor = node.tensor_;
 
+        bool is_boundary = false;
+
+        if(prev != nullptr)
+        {
+			if (prev->cluster_id_ == cluster_id && IsBoundary(prev, &node, -1, Argument::Type::None))
+            {
+                is_boundary = true;
+            }
+        }
+
         //go over all inputs
         for(auto& input: tensor->node->arguments_)
         {
-			if (input.type_ == Argument::Type::Shape) continue;
-			//if (input.type == Argument::Type::Index) continue;
-            //check if input is a cluster edge
-            if(IsBoundary(input.node_, &node))
+            //check if input is the boundary of this cluster
+			if (input.node_->cluster_id_ == cluster_id &&
+			    IsBoundary(input.node_, &node, input.index_, input.type_))
             {
-                //if so, increment cluster id
-                cluster_id++;
+                is_boundary = true;
                 break;
             }
         }
 
+        if(is_boundary)
+        {
+            cluster_id++;
+        }
+
         node.cluster_id_ = cluster_id;
+        prev = &node;
     }
 }
 

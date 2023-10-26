@@ -24,9 +24,9 @@ string GenerateHLSL(const IR& ir) {
 	int indent = 1;
     // Translate each operation into HLSL
 	for (const Node* node : nodes) {
-		if (node->tensor_->name == "const") continue;
+		if (node->name == "const") continue;
 
-		if (node->tensor_->name == "loop_end") {
+		if (node->name == "loop_end") {
 			indent--;
 		}
 
@@ -36,7 +36,7 @@ string GenerateHLSL(const IR& ir) {
 		}
 
 		//get node operation
-		const Operation& op = FindOperation(node->tensor_->name);
+		const Operation& op = FindOperation(node->name);
 
 		//get node arguments
 		Arguments inputs = node->GetArguments(Argument::Type::Input);
@@ -57,7 +57,7 @@ string GenerateHLSL(const IR& ir) {
 		hlslCode +=
 		    op.GenerateLine(names[node], arguments, input_types) + "\n";
 
-		if (node->tensor_->name == "loop_begin") {
+		if (node->name == "loop_begin") {
 			indent++;
 		}
     }

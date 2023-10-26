@@ -18,6 +18,20 @@ using Tensors = vector<const Tensor*>;
 
 class Tensor {
  private:
+	static IR* evaluation_context_ir_;
+
+	static Tensor& CreateNode(DataType type, Arguments args, string name) {
+		if (evaluation_context_ir_ == nullptr) {
+			throw std::runtime_error(
+			    "Evaluation context has not been set. Are you doing operations "
+			    "outside a TensorProgram?");
+		}
+
+		auto* tensor = new Tensor(type);
+		tensor->node = evaluation_context_ir_->AddNode(tensor, args, name);
+		return *tensor;
+	}
+
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
@@ -64,11 +78,7 @@ class Tensor {
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, tensors[0]->node->GetArguments(Argument::Type::Shape));
 
-		auto* output = new Tensor(op, output_type, operation.first);
-
-		// create the output tensor
-		AddToGraph(output, arguments);
-		return *output;
+		return CreateNode(output_type, arguments, op);
 	}
 
 	template <typename... Args>
@@ -84,36 +94,24 @@ class Tensor {
 		// create argument list
 		Arguments arguments = Arguments();
 
-		// add the input tensors
 		AddArguments(arguments, tensors, Argument::Type::Input);
-
-		// add the indices
 		AddArguments(arguments, indices, Argument::Type::Index);
-
-		// add the shape
 		AddArguments(arguments, indices[0]->node->GetArguments(Argument::Type::Shape));
 
-		// create the output tensor
-		auto* output = new Tensor(op, output_type, operation.first);
-
-		output->type = output_type;
-		// create the output tensor
-		AddToGraph(output, arguments);
-
-		return *output;
+		return CreateNode(output_type, arguments, op);
 	}
 
 	static Tensor& Static(const string& op, const Arguments& shape, const DataType type) {
 		const Operation& operation = FindOperation(op);
 		// check if output is valid
 		if (!operation.IsOutputValid(type)) {
-			throw std::runtime_error("Invalid output type for operation " + op);
+			throw std::runtime_error(
+			    "Type " + DataTypeToString(type) +
+			                         " is not valid for operation " + op);
 		}
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape);
-		auto* output = new Tensor(op, type, operation);
-		AddToGraph(output, arguments);
-		return *output;
+		return CreateNode(type, arguments, op);
 	}
 
 	static Tensor& Static(const string& op, const Tensors& shape, const DataType type) {
@@ -126,20 +124,6 @@ class Tensor {
 		return Static(op, Arguments(), type);
 	}
 
-	static IR* evaluation_context_ir_;
-
-	static void AddToGraph(Tensor* tensor, Arguments args) {
-		if (evaluation_context_ir_ == nullptr) {
-			throw std::runtime_error("Evaluation context has not been set. Are you doing operations outside a TensorProgram?");
-		}
-
-		if (tensor->node != nullptr) {
-			throw std::runtime_error("Tensor has already been added to the graph.");
-		}
-
-		tensor->node = evaluation_context_ir_->AddNode(tensor, args);
-	}
-
  public:
 	static void SetEvaluationContext(IR* ir) {
 		if (evaluation_context_ir_ != nullptr && ir != nullptr) {
@@ -150,17 +134,13 @@ class Tensor {
 
 	[[nodiscard]] string GetConstantString() const;
 
-	string name;
-	const Operation* op;
 	Node* node = nullptr;
 	DataType type = DataType::Float;
 	std::vector<uint> data;
 
 	// Main constructor
-	Tensor(string name, DataType type, const Operation& operation) {
-		this->name = std::move(name);
+	Tensor(DataType type) {
 		this->type = type;
-		this->op = &operation;
 	}
 
 	[[nodiscard]] int GetDimension() const {

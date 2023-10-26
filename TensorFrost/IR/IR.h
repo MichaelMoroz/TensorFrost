@@ -22,6 +22,7 @@ class Argument {
 		Shape,
 		RefCopy,
 		Loop,
+		None,
 	};
 
 	Type type_;
@@ -38,14 +39,16 @@ using Tensors = vector<const Tensor*>;
 class Node
 {
 public:
+	const string name;
+	const Operation* op;
 	Tensor* tensor_;
 	Arguments arguments_;
 	bool is_output_;
 	int cluster_id_ = -1;
 
-	Node(Tensor* tensor, Arguments args, bool is_output)
-	    : tensor_(tensor), is_output_(is_output), arguments_(args) {}
-
+	Node(Tensor* tensor, Arguments args, string name, bool is_output)
+		: tensor_(tensor), is_output_(is_output), arguments_(args), name(name), op(&FindOperation(name)) {
+	}
 	
 	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
 		Arguments result = Arguments();
@@ -74,7 +77,6 @@ public:
 		return result;
 	}
 
-	//desctructor
 	~Node();
 };
 
@@ -82,8 +84,8 @@ class IR {
 	list<Node> nodes_;
 
  public:
-	Node* AddNode(Tensor* tensor, Arguments args) { 
-		return &nodes_.emplace_back(tensor, args, false); 
+	Node* AddNode(Tensor* tensor, Arguments args, string name) {
+		return &nodes_.emplace_back(tensor, args, name, false);
 	}
 
 	list<const Node*> GetNodes() const {
