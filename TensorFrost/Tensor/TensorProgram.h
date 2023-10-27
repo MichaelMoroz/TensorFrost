@@ -28,9 +28,15 @@ class TensorProgram {
 		// create new IR graph
 		Tensor::SetEvaluationContext(&ir);
 		Tensors outputs = evaluate_callback();
-		Tensor::SetEvaluationContext(nullptr);
+		//set outputs
+		for (const Tensor* output : outputs) {
+			output->SetMemoryType(MemoryType::Output);
+		}
 
 		ir.Clusterize();
+		ir.PostProcessClusters();
+		ir.Clusterize();
+		Tensor::SetEvaluationContext(nullptr);
 	}
 
 	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }

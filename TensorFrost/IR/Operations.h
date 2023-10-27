@@ -30,6 +30,7 @@ enum class OpType {
 	Loop,
 	Conditional,
 	Special,
+	Memory,
 };
 
 using DataTypeList = vector<DataType>;

@@ -34,13 +34,11 @@ inline string Tensor::GetConstantString() const {
 
 string GetOperationListing(const IR& ir, bool compact) 
 {
-	list<const Node*> nodes = ir.GetNodes();
-
 	// first give unique names to all the tensors
 	NodeNames names = NodeNames();
 	int index = 0;
-	for (const Node* node : nodes) {
-		names[node] = "t" + to_string(index);
+	for (auto node = ir.begin(); !node.is_end(); ++node) {
+		names[*node] = "t" + to_string(index);
 		index++;
 	}
 
@@ -48,7 +46,7 @@ string GetOperationListing(const IR& ir, bool compact)
 	string listing;
 	int indent = 0;
 	int prev_cluster_id = -1;
-	for (const Node* node : nodes) {
+	for (auto node = ir.begin(); !node.is_end(); ++node) {
 		if (compact) {
 			if (node->name == "const") continue;
 		}
@@ -71,7 +69,7 @@ string GetOperationListing(const IR& ir, bool compact)
 
 		if (node->tensor_->type != DataType::None) {
 			// print the tensor name
-			listing += names[node] + " = ";
+			listing += names[*node] + " = ";
 		}
 
 		listing += node->name + "(";
@@ -84,7 +82,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "inputs=[";
 			for (int i = 0; i < inputs.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].node_, names, compact);
+				listing += GetNodeName(inputs[i].from_->get(), names, compact);
 			}
 			listing += "], ";
 		}
@@ -93,7 +91,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "indices=[";
 			for (int i = 0; i < indices.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].node_, names, compact);
+				listing += GetNodeName(indices[i].from_->get(), names, compact);
 			}
 			listing += "], ";
 		}
@@ -102,7 +100,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "shape=[";
 			for (int i = 0; i < shape.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(shape[i].node_, names, compact);
+				listing += GetNodeName(shape[i].from_->get(), names, compact);
 			}
 			listing += "], ";
 		}
@@ -115,6 +113,20 @@ string GetOperationListing(const IR& ir, bool compact)
 			}
 			listing += "], ";
 		}
+		
+		switch (node->memory_type_) {
+			case MemoryType::Input:
+				listing += "memory_type=input, ";
+				break;
+			case MemoryType::Output:
+				listing += "memory_type=output, ";
+				break;
+			case MemoryType::Constant:
+				listing += "memory_type=constant, ";
+				break;
+			default:
+				break;
+		}	
 
 		if (node->tensor_->type != DataType::None) {
 			listing += "type = " + DataTypeToString(node->tensor_->type);

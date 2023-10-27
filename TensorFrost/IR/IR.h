@@ -14,6 +14,16 @@ namespace TensorFrost {
 class Tensor;
 class Node;
 
+class NodeLable {
+ public:
+	Node* node_;
+	NodeLable(Node* node) : node_(node) {}
+
+	Node* operator*() const { return node_; }
+	Node* operator->() { return node_; }
+	Node* get() { return node_; }
+};
+
 class Argument {
  public:
 	enum Type {
@@ -26,33 +36,72 @@ class Argument {
 	};
 
 	Type type_;
-	const Node* node_;
+	NodeLable* from_;
+	NodeLable* to_;
 	int index_;
 
-	Argument(Type type, const Node* node, int index)
-	    : type_(type), node_(node), index_(index) {}
+	Argument(Type type, NodeLable* node, int index)
+	    : type_(type), from_(node), index_(index), to_(nullptr) {}
+
+	void SetOutput(NodeLable* output) {
+		to_ = output;
+	}
 };
 
 using Arguments = vector<Argument>;
+using ArgumentRefs = vector<const Argument*>;
 using Tensors = vector<const Tensor*>;
+
+enum class MemoryType {
+	None,
+	Input,
+	Output,
+	Constant,
+};
 
 class Node
 {
 public:
+	NodeLable* lable_ = nullptr;
+
+	Node* prev_ = nullptr;
+	Node* next_ = nullptr;
+	
 	const string name;
 	const Operation* op;
 	Tensor* tensor_;
-	Arguments arguments_;
-	bool is_output_;
+	Arguments inputs_;
+	vector<const Argument*> outputs_;
+	MemoryType memory_type_ = MemoryType::None;
 	int cluster_id_ = -1;
 
-	Node(Tensor* tensor, Arguments args, string name, bool is_output)
-		: tensor_(tensor), is_output_(is_output), arguments_(args), name(name), op(&FindOperation(name)) {
+	Node(Tensor* tensor, Arguments args, string name)
+	    : tensor_(tensor),
+	      inputs_(args),
+	      name(name),
+	      op(&FindOperation(name)) 
+	{
+		lable_ = new NodeLable(this);
+		UpdateArgumentOutputs();
+	}
+
+	NodeLable* GetLable() {
+		return lable_;
+	}
+
+	void UpdateArgumentOutputs() {
+		for (Argument& input : inputs_) {
+			input.SetOutput(lable_);
+		}
+	}
+
+	void SetMemoryType(MemoryType memory_type) {
+		memory_type_ = memory_type;
 	}
 	
 	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
 		Arguments result = Arguments();
-		for (const auto& input : arguments_) {
+		for (const auto& input : inputs_) {
 			if (input.type_ == type) {
 				result.push_back(input);
 			}
@@ -72,7 +121,7 @@ public:
 		// convert to tensors
 		Tensors result = Tensors();
 		for (const auto& argument : arguments) {
-			result.push_back(argument.node_->tensor_);
+			result.push_back(argument.from_->get()->tensor_);
 		}
 		return result;
 	}
@@ -80,22 +129,119 @@ public:
 	~Node();
 };
 
+static void SwapLables(Node* a, Node* b) 
+{
+	// first swap the node addresses
+	a->lable_->node_ = b;
+	b->lable_->node_ = a;
+
+	// now swap the labels
+	NodeLable* temp = a->lable_;
+	a->lable_ = b->lable_;
+	b->lable_ = temp;
+}
+
 class IR {
-	list<Node> nodes_;
+	vector<Node*> nodes_;
 
  public:
+	 class iterator {
+		Node* node_ = nullptr;
+
+	 public:
+		iterator(Node* node) : node_(node) {}
+
+		Node* operator*() const { return node_; }
+
+		Node* operator->() { return node_; }
+
+		iterator& operator++() {
+			node_ = get_next();
+			return *this;
+		}
+
+		iterator& operator--() {
+			node_ = get_prev();
+			return *this;
+		}
+
+		bool operator!=(const iterator& other) const {
+			return node_ != other.node_;
+		}
+
+		bool operator==(const iterator& other) const {
+			return node_ == other.node_;
+		}
+
+		bool is_end() const {
+			return node_ == nullptr;
+		}
+
+		bool is_begin() const {
+			return node_->prev_ == nullptr;
+		}
+
+		Node* get()  {
+			return node_;
+		}
+
+		Node* get_next() {
+			return node_->next_;
+		}
+
+		Node* get_prev() {
+			return node_->prev_;
+		}
+	};
+	iterator cursor_ = iterator(nullptr);
+	iterator begin_ = iterator(nullptr);
+
 	Node* AddNode(Tensor* tensor, Arguments args, string name) {
-		return &nodes_.emplace_back(tensor, args, name, false);
+		Node* new_node = new Node(tensor, args, name);
+		InsertAfterCursor(new_node);
+		return new_node;
 	}
 
-	list<const Node*> GetNodes() const {
-		list<const Node*> nodes;
-		for (const Node& node : nodes_) {
-			nodes.push_back(&node);
+	void InsertAfterCursor(Node* node)
+	{
+		nodes_.push_back(node);
+		if (*cursor_ != nullptr) {
+			Node* prev_next = cursor_.get_next();
+			if (prev_next != nullptr) {
+				node->next_ = prev_next;
+				prev_next->prev_ = node;
+			}
+			node->prev_ = *cursor_;
+			cursor_->next_ = node;
 		}
-		return nodes;
+		else
+		{
+			begin_ = iterator(node);
+		}
+		SetCursor(node);
+	}
+
+	void SetCursor(Node* node) {
+		if (node != nullptr) 
+		{
+			cursor_ = iterator(node);
+		}
+		else
+		{
+			throw std::runtime_error("Cursor cannot be set to nullptr");
+		}
+	}
+
+	iterator begin() const {
+		return begin_;
 	}
 
 	void Clusterize();
+
+	void UpdateNodeOutputs();
+
+	void PostProcessClusters();
+
+	~IR();
 };
 }  // namespace TensorFrost

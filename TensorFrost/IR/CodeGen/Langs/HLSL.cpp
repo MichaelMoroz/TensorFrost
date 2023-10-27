@@ -6,14 +6,12 @@ namespace TensorFrost {
 using namespace std;
 
 string GenerateHLSL(const IR& ir) {
-	list<const Node*> nodes = ir.GetNodes();
-
 	// first give unique names to all the tensors
 	NodeNames names = NodeNames();
 	int index = 0;
-	for (const Node* node : nodes) 
+	for (auto node = ir.begin(); !node.is_end(); ++node)
 	{
-		names[node] = "var" + to_string(index);
+		names[*node] = "var" + to_string(index);
 		index++;
 	}
 
@@ -23,7 +21,7 @@ string GenerateHLSL(const IR& ir) {
     hlslCode += "void main() {\n";
 	int indent = 1;
     // Translate each operation into HLSL
-	for (const Node* node : nodes) {
+	for (auto node = ir.begin(); !node.is_end(); ++node) {
 		if (node->name == "const") continue;
 
 		if (node->name == "loop_end") {
@@ -43,19 +41,25 @@ string GenerateHLSL(const IR& ir) {
 		Arguments indices = node->GetArguments(Argument::Type::Index);
 		Arguments shape = node->GetArguments(Argument::Type::Shape);
 
+        //check number of indices
+        if(indices.size() > 1)
+        {
+            throw std::runtime_error("HLSL codegen does not support multidimensional indexing");
+        }
+
 		//get node names
 		vector<string> arguments;
 		vector<DataType> input_types;
 		for (const Argument& arg : inputs) {
-			arguments.push_back(GetNodeName(arg.node_, names, true));
-			input_types.push_back(arg.node_->tensor_->type);
+			      arguments.push_back(GetNodeName(arg.from_->get(), names, true));
+			      input_types.push_back(arg.from_->get()->tensor_->type);
 		}
 		for (const Argument& arg : indices) {
-			arguments.push_back(GetNodeName(arg.node_, names, true));
+			      arguments.push_back(GetNodeName(arg.from_->get(), names, true));
 		}
 
 		hlslCode +=
-		    op.GenerateLine(names[node], arguments, input_types) + "\n";
+		    op.GenerateLine(names[*node], arguments, input_types) + "\n";
 
 		if (node->name == "loop_begin") {
 			indent++;

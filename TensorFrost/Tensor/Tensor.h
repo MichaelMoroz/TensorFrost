@@ -35,7 +35,7 @@ class Tensor {
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
-			arguments.emplace_back(type, tensors[i]->node, i);
+			arguments.emplace_back(type, tensors[i]->node->GetLable(), i);
 		}
 	}
 
@@ -55,7 +55,12 @@ class Tensor {
 
 		// check if input is valid
 		if (!operation.IsInputValid(input_types)) {
-			throw std::runtime_error("Invalid input types for operation " + name);
+			string error = "Input types ";
+			for (const auto& type : input_types) {
+				error += DataTypeToString(type) + ", ";
+			}
+			error += "are not valid for operation " + name;
+			throw std::runtime_error(error);
 		}
 
 		DataType output_type = operation.GetOutputType(input_types);
@@ -96,7 +101,8 @@ class Tensor {
 
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, indices, Argument::Type::Index);
-		AddArguments(arguments, indices[0]->node->GetArguments(Argument::Type::Shape));
+		Node* shape_source = (indices.size() > 0) ? indices[0]->node : tensors[0]->node;
+		AddArguments(arguments, shape_source->GetArguments(Argument::Type::Shape));
 
 		return CreateNode(output_type, arguments, op);
 	}
@@ -143,11 +149,15 @@ class Tensor {
 		this->type = type;
 	}
 
+	void SetMemoryType(MemoryType memory_type) const {
+		node->SetMemoryType(memory_type);
+	}
+
 	[[nodiscard]] int GetDimension() const {
 		// find max dimension
 		int max_dim = -1;
 
-		for (const auto& input : node->arguments_) {
+		for (const auto& input : node->inputs_) {
 			if (input.type_ == Argument::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -160,7 +170,7 @@ class Tensor {
 		vector<const Tensor*> result = vector<const Tensor*>();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto& input : node->arguments_) {
+		for (const auto& input : node->inputs_) {
 			if (input.type_ == Argument::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -176,9 +186,9 @@ class Tensor {
 			result[i] = nullptr;
 		}
 		// fill result
-		for (const auto& input : node->arguments_) {
+		for (const auto& input : node->inputs_) {
 			if (input.type_ == Argument::Type::Shape) {
-				result[input.index_] = input.node_->tensor_;
+				result[input.index_] = input.from_->get()->tensor_;
 			}
 		}
 		//if there are any missing dimensions, fill them with 1
@@ -195,7 +205,7 @@ class Tensor {
 		vector<int> result = vector<int>();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto& input : node->arguments_) {
+		for (const auto& input : node->inputs_) {
 			if (input.type_ == Argument::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -211,9 +221,9 @@ class Tensor {
 			result[i] = 1;
 		}
 		// fill result
-		for (const auto& input : node->arguments_) {
+		for (const auto& input : node->inputs_) {
 			if (input.type_ == Argument::Type::Shape) {
-				result[input.index_] = AsInt(input.node_->tensor_->data[0]);
+				result[input.index_] = AsInt(input.from_->get()->tensor_->data[0]);
 			}
 		}
 		return result;
@@ -245,13 +255,15 @@ class Tensor {
 	}
 
 	static Tensor& Constant(const vector<int>& shape, float* data) {
-		Tensor& output = Static("const_memory", GetConstantShape(shape), DataType::Float);
+		Tensor& output = Static("memory", GetConstantShape(shape), DataType::Float);
+		output.SetMemoryType(MemoryType::Constant);
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
 			output.data.push_back(AsUint(data[i]));
 		}
 		return output;
 	}
+
 	static Tensor& Constant(const Tensors& shape, float value) {
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape, Argument::Type::Shape);
@@ -282,12 +294,26 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
+
+	static Tensor& Memory(const DataType type) {
+		return Static("memory", type);
+	}
+	static Tensor& Memory(const Tensors& shape,
+	                     const DataType type = DataType::Float) {
+		return Static("memory", shape, type);
+	}
+	static Tensor& Memory(const Arguments& shape,
+		const DataType type = DataType::Float) {
+		return Static("memory", shape, type);
+	}
 	static Tensor& Input(const DataType type = DataType::Float) {
-		Tensor& output = Static("input_memory", type);
+		Tensor& output = Memory(type);
+		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static Tensor& Input(const Tensors& shape, const DataType type = DataType::Float) {
-		Tensor& output = Static("input_memory", shape, type);
+		Tensor& output = Memory(shape, type);
+		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static vector<const Tensor*> GetInputShape(const vector<int>& shape) {
@@ -311,7 +337,7 @@ class Tensor {
 		output.type = DataType::Int;
 		return output;
 	}
-	static Tensor& Load(const Tensor& tensor, const Tensors& indices) {
+	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors()) {
 		return IndexedOp("load", indices, &tensor);
 	}
 
@@ -324,7 +350,7 @@ class Tensor {
 	}
 
 	static void Store(const Tensor& tensor, const Tensor& value,
-	                  const Tensors& indices) {
+	                  const Tensors& indices = Tensors()) {
 		IndexedOp("store", indices, &tensor, &value);
 	}
 

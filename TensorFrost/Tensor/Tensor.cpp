@@ -9,4 +9,10 @@ Node::~Node()
 	delete tensor_; 
 }
 
+IR::~IR()
+{
+	for (auto& node : nodes_) 
+		delete node; 
+}
+
 }// namespace TensorFrost
