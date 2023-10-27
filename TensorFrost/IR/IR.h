@@ -232,6 +232,26 @@ class IR {
 		}
 	}
 
+	void SetCursorBefore(Node* node) {
+		if (node != nullptr) {
+			cursor_ = iterator(node->prev_);
+		}
+		else
+		{
+			throw std::runtime_error("Node is nullptr");
+		}
+	}
+
+	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
+		SetCursor(node);
+		expression();
+	}
+
+	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
+		SetCursorBefore(node);
+		expression();
+	}
+
 	iterator begin() const {
 		return begin_;
 	}

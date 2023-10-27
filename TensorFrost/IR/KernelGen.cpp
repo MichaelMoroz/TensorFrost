@@ -88,11 +88,10 @@ void IR::Clusterize() {
 }
 
 void IR::PostProcessClusters() {
-	UpdateNodeOutputs();
-
 	//get cluster ranges
 	map<int, vector<Node*>> cluster_outputs;
 	map<int, Node*> cluster_begin;
+	UpdateNodeOutputs();
 
 	//find all nodes that are outputs of a cluster (i.e. point to a node outside the cluster)
 	for (auto node = begin(); !node.is_end(); ++node) {
@@ -128,29 +127,35 @@ void IR::PostProcessClusters() {
 
 		for (auto output : cluster_outs)
 		{
-			// create memory node before cluster
-			SetCursor(cluster_begin[cluster_id]->prev_);
-			Tensor& mem = Tensor::Memory(output->GetArguments(Argument::Type::Shape),
-			                             output->tensor_->type);
+			Node* mem;
+			// add memory node before this cluster
+			ExecuteExpressionBefore(cluster_begin[cluster_id],[&]() 
+			{
+				mem = Tensor::Memory(output->GetArguments(Argument::Type::Shape),
+										output->tensor_->type).node;
 
-			if (output->memory_type_ == MemoryType::Output) {
-				mem.node->memory_type_ = MemoryType::Output;
-				output->memory_type_ = MemoryType::None;
-			}
+				if (output->memory_type_ == MemoryType::Output) {
+					mem->memory_type_ = MemoryType::Output;
+					output->memory_type_ = MemoryType::None;
+				}
+			});
 
 			// all the nodes must now use to the memory node
 			// which stores the output result not the output node itslef
-			SwapLables(output, mem.node);
+			SwapLables(output, mem);
 
 			// add store node after this node
-			SetCursor(output);
-			Tensor::Store(mem, *output->tensor_);
-			cursor_->cluster_id_ = cluster_id;
+			ExecuteExpressionAfter(output, [&]()
+			{
+				// add store node after this node
+				Tensor::Store(*mem->tensor_, *output->tensor_);
+				cursor_->cluster_id_ = cluster_id;
+			});
 		}
 	}
 
 
-	//go over all nodes, and add load nodes for all inputs that are not in the cluster
+	//go over all nodes, and add load nodes (if not already) for all inputs that are not in the cluster
 	for (auto node = begin(); !node.is_end(); ++node) {
 		if (node->op->GetOpType() == OpType::Memory ||
 			node->op->GetOpType() == OpType::Store ||
@@ -164,13 +169,15 @@ void IR::PostProcessClusters() {
 			// check if input is the boundary of this cluster
 			if (input.from_->get()->cluster_id_ != node->cluster_id_ && input.type_ != Argument::Type::Shape) {
 				// add load node before this node
-				SetCursor(node->prev_);
-				//get memory node
-				Tensor* mem = input.from_->get()->tensor_;
-				Tensor& loaded = Tensor::Load(*mem);
-				loaded.node->cluster_id_ = node->cluster_id_;
-				// the node must now use the loaded node
-				input.from_ = loaded.node->GetLable();
+				ExecuteExpressionBefore(*node, [&]()
+				{
+					//get memory node
+					Tensor* mem = input.from_->get()->tensor_;
+					Tensor& loaded = Tensor::Load(*mem);
+					loaded.node->cluster_id_ = node->cluster_id_;
+					// the node must now use the loaded node
+					input.from_ = loaded.node->GetLable();
+				});
 			}
 		}
 	}	
