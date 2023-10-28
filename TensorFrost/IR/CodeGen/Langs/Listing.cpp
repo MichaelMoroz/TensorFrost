@@ -36,10 +36,21 @@ string GetOperationListing(const IR& ir, bool compact)
 {
 	// first give unique names to all the tensors
 	NodeNames names = NodeNames();
-	int index = 0;
+	map<int, int> cluster_var_index = map<int, int>();
+    int mem_index = 0;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		names[*node] = "t" + to_string(index);
-		index++;
+		if (node->name == "memory")
+		{
+			names[*node] = "mem" + to_string(mem_index);
+			mem_index++;
+		}
+		else
+		{
+			int cluster_id = node->cluster_id_;
+			int var_index = cluster_var_index[cluster_id];
+			names[*node] = "var" + to_string(cluster_id) + "_" + to_string(var_index);
+			cluster_var_index[cluster_id]++;
+		}
 	}
 
 	// now create the listing
@@ -77,6 +88,16 @@ string GetOperationListing(const IR& ir, bool compact)
 		Arguments inputs = node->GetArguments(Argument::Type::Input);
 		Arguments indices = node->GetArguments(Argument::Type::Index);
 		Arguments shape = node->GetArguments(Argument::Type::Shape);
+		Arguments memory = node->GetArguments(Argument::Type::Memory);
+
+		if (!memory.empty()) {
+			listing += "memory=[";
+			for (int i = 0; i < memory.size(); i++) {
+				if (i != 0) listing += ",";
+				listing += GetNodeName(memory[i].from_->get(), names, compact);
+			}
+			listing += "], ";
+		}
 
 		if (!inputs.empty()) {
 			listing += "inputs=[";

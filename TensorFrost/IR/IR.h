@@ -30,8 +30,7 @@ class Argument {
 		Input,
 		Index,
 		Shape,
-		RefCopy,
-		Loop,
+		Memory,
 		None,
 	};
 
@@ -142,10 +141,8 @@ static void SwapLables(Node* a, Node* b)
 }
 
 class IR {
-	vector<Node*> nodes_;
-
- public:
-	 class iterator {
+public:
+	class iterator {
 		Node* node_ = nullptr;
 
 	 public:
@@ -173,28 +170,16 @@ class IR {
 			return node_ == other.node_;
 		}
 
-		bool is_end() const {
-			return node_ == nullptr;
-		}
+		bool is_end() const { return node_ == nullptr; }
 
-		bool is_begin() const {
-			return node_->prev_ == nullptr;
-		}
+		bool is_begin() const { return node_->prev_ == nullptr; }
 
-		Node* get()  {
-			return node_;
-		}
+		Node* get() { return node_; }
 
-		Node* get_next() {
-			return node_->next_;
-		}
+		Node* get_next() { return node_->next_; }
 
-		Node* get_prev() {
-			return node_->prev_;
-		}
+		Node* get_prev() { return node_->prev_; }
 	};
-	iterator cursor_ = iterator(nullptr);
-	iterator begin_ = iterator(nullptr);
 
 	Node* AddNode(Tensor* tensor, Arguments args, string name) {
 		Node* new_node = new Node(tensor, args, name);
@@ -202,8 +187,37 @@ class IR {
 		return new_node;
 	}
 
-	void InsertAfterCursor(Node* node)
-	{
+	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
+		//TODO check if no future nodes are used
+		iterator old_cursor = cursor_;
+		SetCursor(node);
+		expression();
+		cursor_ = old_cursor;
+	}
+
+	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
+		iterator old_cursor = cursor_;
+		SetCursorBefore(node);
+		expression();
+		cursor_ = old_cursor;
+	}
+
+	iterator begin() const { return begin_; }
+
+	void Clusterize();
+
+	void UpdateNodeOutputs();
+
+	void PostProcessClusters();
+
+	~IR();
+
+ private:
+	vector<Node*> nodes_;
+	iterator cursor_ = iterator(nullptr);
+	iterator begin_ = iterator(nullptr);
+
+	void InsertAfterCursor(Node* node) {
 		nodes_.push_back(node);
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
@@ -213,21 +227,16 @@ class IR {
 			}
 			node->prev_ = *cursor_;
 			cursor_->next_ = node;
-		}
-		else
-		{
+		} else {
 			begin_ = iterator(node);
 		}
 		SetCursor(node);
 	}
 
 	void SetCursor(Node* node) {
-		if (node != nullptr) 
-		{
+		if (node != nullptr) {
 			cursor_ = iterator(node);
-		}
-		else
-		{
+		} else {
 			throw std::runtime_error("Cursor cannot be set to nullptr");
 		}
 	}
@@ -235,33 +244,9 @@ class IR {
 	void SetCursorBefore(Node* node) {
 		if (node != nullptr) {
 			cursor_ = iterator(node->prev_);
-		}
-		else
-		{
+		} else {
 			throw std::runtime_error("Node is nullptr");
 		}
 	}
-
-	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
-		SetCursor(node);
-		expression();
-	}
-
-	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
-		SetCursorBefore(node);
-		expression();
-	}
-
-	iterator begin() const {
-		return begin_;
-	}
-
-	void Clusterize();
-
-	void UpdateNodeOutputs();
-
-	void PostProcessClusters();
-
-	~IR();
 };
 }  // namespace TensorFrost

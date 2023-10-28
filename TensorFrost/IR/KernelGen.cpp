@@ -26,11 +26,11 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 		}
 
 		if (output_type == OpType::Load || output_type == OpType::Store) {
-			return arg_index == 0 && arg_type == Argument::Type::Input && !is_identity;
+			return arg_type == Argument::Type::Memory && !is_identity;
 		}
 
 		if (output_type == OpType::Scatter) {
-			return arg_index == 0 && arg_type == Argument::Type::Input;
+			return arg_type == Argument::Type::Memory;
 		}
 	}
 
@@ -157,17 +157,16 @@ void IR::PostProcessClusters() {
 
 	//go over all nodes, and add load nodes (if not already) for all inputs that are not in the cluster
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->op->GetOpType() == OpType::Memory ||
-			node->op->GetOpType() == OpType::Store ||
-			node->op->GetOpType() == OpType::Load || 
-			node->op->GetOpType() == OpType::Scatter) {
+		if (node->op->GetOpType() == OpType::Memory) {
 			continue;
 		}
 
 		// go over all inputs
 		for (auto& input : node->inputs_) {
 			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_id_ != node->cluster_id_ && input.type_ != Argument::Type::Shape) {
+			if (input.from_->get()->cluster_id_ != node->cluster_id_ && 
+				input.type_ != Argument::Type::Shape &&
+				input.type_ != Argument::Type::Memory) {
 				// add load node before this node
 				ExecuteExpressionBefore(*node, [&]()
 				{
@@ -175,7 +174,7 @@ void IR::PostProcessClusters() {
 					Tensor* mem = input.from_->get()->tensor_;
 					Tensor& loaded = Tensor::Load(*mem);
 					loaded.node->cluster_id_ = node->cluster_id_;
-					// the node must now use the loaded node
+					// the node must now use the loaded value
 					input.from_ = loaded.node->GetLable();
 				});
 			}

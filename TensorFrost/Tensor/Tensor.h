@@ -32,10 +32,14 @@ class Tensor {
 		return *tensor;
 	}
 
+	static void AddArgument(Arguments& arguments, const Tensor* tensor, Argument::Type type, int index = 0) {
+		arguments.emplace_back(type, tensor->node->GetLable(), index);
+	}
+
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
 	                         Argument::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
-			arguments.emplace_back(type, tensors[i]->node->GetLable(), i);
+			AddArgument(arguments, tensors[i], type, i);
 		}
 	}
 
@@ -87,7 +91,7 @@ class Tensor {
 	}
 
 	template <typename... Args>
-	static Tensor& IndexedOp(const string op, const Tensors indices,
+	static Tensor& MemoryOp(const string op, const Tensor* memory, const Tensors indices,
 	                         const Args*... args) {
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
@@ -99,9 +103,11 @@ class Tensor {
 		// create argument list
 		Arguments arguments = Arguments();
 
+		AddArgument(arguments, memory, Argument::Type::Memory);
 		AddArguments(arguments, tensors, Argument::Type::Input);
 		AddArguments(arguments, indices, Argument::Type::Index);
-		Node* shape_source = (indices.size() > 0) ? indices[0]->node : tensors[0]->node;
+		Node* shape_source =
+		    (indices.size() > 0) ? indices[0]->node : memory->node;
 		AddArguments(arguments, shape_source->GetArguments(Argument::Type::Shape));
 
 		return CreateNode(output_type, arguments, op);
@@ -338,7 +344,7 @@ class Tensor {
 		return output;
 	}
 	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors()) {
-		return IndexedOp("load", indices, &tensor);
+		return MemoryOp("load", &tensor, indices);
 	}
 
 	[[nodiscard]] Tensor& Index(int dim) const {
@@ -351,37 +357,37 @@ class Tensor {
 
 	static void Store(const Tensor& tensor, const Tensor& value,
 	                  const Tensors& indices = Tensors()) {
-		IndexedOp("store", indices, &tensor, &value);
+		MemoryOp("store", &tensor, indices, &value);
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		IndexedOp("InterlockedAdd", indices, &tensor, &value);
+		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		IndexedOp("InterlockedMax", indices, &tensor, &value);
+		MemoryOp("InterlockedMax", &tensor, indices, &value);
 	}
 
 	static void ScatterMin(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		IndexedOp("InterlockedMin", indices, &tensor, &value);
+		MemoryOp("InterlockedMin", &tensor, indices, &value);
 	}
 
 	static void ScatterOr(const Tensor& tensor, const Tensor& value,
 	                      const Tensors& indices) {
-		IndexedOp("InterlockedOr", indices, &tensor, &value);
+		MemoryOp("InterlockedOr", &tensor, indices, &value);
 	}
 
 	static void ScatterAnd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		IndexedOp("InterlockedAnd", indices, &tensor, &value);
+		MemoryOp("InterlockedAnd", &tensor, indices, &value);
 	}
 
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		IndexedOp("InterlockedXor", indices, &tensor, &value);
+		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
 	static Tensor& Sum(const Tensor& tensor, const int dim) {
