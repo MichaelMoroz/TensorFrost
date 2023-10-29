@@ -93,6 +93,13 @@ class Tensor {
 	template <typename... Args>
 	static Tensor& MemoryOp(const string op, const Tensor* memory, const Tensors indices,
 	                         const Args*... args) {
+		//check if indices are all integers
+		for (const Tensor* index : indices) {
+			if (index->type != DataType::Int) {
+				throw std::runtime_error("Tensor indices must be integers");
+			}
+		}
+
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -109,6 +116,8 @@ class Tensor {
 		Node* shape_source =
 		    (indices.size() > 0) ? indices[0]->node : memory->node;
 		AddArguments(arguments, shape_source->GetArguments(Argument::Type::Shape));
+
+		if (op == "load") output_type = memory->type;
 
 		return CreateNode(output_type, arguments, op);
 	}
@@ -343,6 +352,19 @@ class Tensor {
 		output.type = DataType::Int;
 		return output;
 	}
+
+	static Tensor& ThreadIndex(const Tensors& shape) {
+		Tensor& output = Static("thread_id", shape, DataType::Int);
+		output.type = DataType::Int;
+		return output;
+	}
+
+	Tensor& ThreadIndex() const {
+		Tensor& output = Static("thread_id", node->GetArguments(Argument::Type::Shape), DataType::Int);
+		output.type = DataType::Int;
+		return output;
+	}
+
 	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors()) {
 		return MemoryOp("load", &tensor, indices);
 	}

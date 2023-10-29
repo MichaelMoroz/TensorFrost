@@ -6,14 +6,7 @@ namespace TensorFrost {
 using namespace std;
 
 string GenerateHLSL(const IR& ir) {
-	// first give unique names to all the tensors
-	NodeNames names = NodeNames();
-	int index = 0;
-	for (auto node = ir.begin(); !node.is_end(); ++node)
-	{
-		names[*node] = "var" + to_string(index);
-		index++;
-	}
+	NodeNames names = GenerateNodeNames(ir);
 
     string hlslCode;
     
@@ -40,16 +33,19 @@ string GenerateHLSL(const IR& ir) {
 		Arguments inputs = node->GetArguments(Argument::Type::Input);
 		Arguments indices = node->GetArguments(Argument::Type::Index);
 		Arguments shape = node->GetArguments(Argument::Type::Shape);
-
+		Arguments memory = node->GetArguments(Argument::Type::Memory);
         //check number of indices
         if(indices.size() > 1)
         {
-            throw std::runtime_error("HLSL codegen does not support multidimensional indexing");
+          //  throw std::runtime_error("HLSL codegen does not support multidimensional indexing");
         }
 
 		//get node names
 		vector<string> arguments;
 		vector<DataType> input_types;
+		for (const Argument& arg : memory) {
+			      arguments.push_back(GetNodeName(arg.from_->get(), names, true));
+		}
 		for (const Argument& arg : inputs) {
 			      arguments.push_back(GetNodeName(arg.from_->get(), names, true));
 			      input_types.push_back(arg.from_->get()->tensor_->type);

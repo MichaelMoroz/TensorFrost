@@ -97,4 +97,4 @@ SomeFunctionProgram = tf.Program(PoissonSolver2)
 SomeFunctionProgram(list())
 
 SomeFunctionProgram.ListGraphOperations()
-#SomeFunctionProgram.ListHLSL()
+SomeFunctionProgram.ListHLSL()

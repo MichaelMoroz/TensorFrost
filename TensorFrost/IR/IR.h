@@ -128,17 +128,19 @@ public:
 	~Node();
 };
 
-static void SwapLables(Node* a, Node* b) 
-{
-	// first swap the node addresses
-	a->lable_->node_ = b;
-	b->lable_->node_ = a;
+void SwapLables(Node* a, Node* b);
+void CopyLable(Node* target, Node* copy);
 
-	// now swap the labels
-	NodeLable* temp = a->lable_;
-	a->lable_ = b->lable_;
-	b->lable_ = temp;
-}
+class ClusterProp
+{
+public:
+	map<int, vector<Node*>> output;
+	map<int, Node*> begin;
+	map<int, Node*> end;
+
+	ClusterProp(map<int, vector<Node*>> cluster_outputs, map<int, Node*> cluster_begin, map<int, Node*> cluster_end)
+		: output(cluster_outputs), begin(cluster_begin), end(cluster_end) {}
+};
 
 class IR {
 public:
@@ -174,6 +176,10 @@ public:
 
 		bool is_begin() const { return node_->prev_ == nullptr; }
 
+		bool is_cluster_begin() const { return node_->prev_ == nullptr || node_->prev_->cluster_id_ != node_->cluster_id_; }
+
+		bool is_cluster_end() const { return node_->next_ == nullptr || node_->next_->cluster_id_ != node_->cluster_id_; }
+
 		Node* get() { return node_; }
 
 		Node* get_next() { return node_->next_; }
@@ -190,16 +196,22 @@ public:
 	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
 		//TODO check if no future nodes are used
 		iterator old_cursor = cursor_;
+		int old_cluster_id = current_cluster_id_;
+		current_cluster_id_ = node->cluster_id_;
 		SetCursor(node);
 		expression();
 		cursor_ = old_cursor;
+		current_cluster_id_ = old_cluster_id;
 	}
 
 	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
 		iterator old_cursor = cursor_;
+		int old_cluster_id = current_cluster_id_;
+		current_cluster_id_ = node->cluster_id_;
 		SetCursorBefore(node);
 		expression();
 		cursor_ = old_cursor;
+		current_cluster_id_ = old_cluster_id;
 	}
 
 	iterator begin() const { return begin_; }
@@ -208,7 +220,11 @@ public:
 
 	void UpdateNodeOutputs();
 
+	ClusterProp GetClusterProperties();
+
 	void PostProcessClusters();
+
+	void TransformToLinearIndex();
 
 	~IR();
 
@@ -216,6 +232,7 @@ public:
 	vector<Node*> nodes_;
 	iterator cursor_ = iterator(nullptr);
 	iterator begin_ = iterator(nullptr);
+	int current_cluster_id_ = -1;
 
 	void InsertAfterCursor(Node* node) {
 		nodes_.push_back(node);
@@ -230,6 +247,7 @@ public:
 		} else {
 			begin_ = iterator(node);
 		}
+		node->cluster_id_ = current_cluster_id_;
 		SetCursor(node);
 	}
 

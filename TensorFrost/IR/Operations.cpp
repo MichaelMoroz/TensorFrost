@@ -136,7 +136,7 @@ string Operation::GenerateOpString(const vector<string>& arguments) const
 	}
     else
     {
-		throw runtime_error("Invalid op type");
+		line += "";//throw runtime_error("Invalid op type");
 	}
     return line;
 }
@@ -168,11 +168,11 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     else if (name_ == "load")
     {
         line += TypeNames[output_type] + " " + var_name + " = ";
-        line += arguments[0] + "[" + arguments[1] + "];";
+        line += arguments[0] + "[" + arguments[0] + "];";
     }
     else if (name_ == "store")
     {
-	    line += arguments[0] + "[" + arguments[2] + "] = " + arguments[1] + ";";      
+	    line += arguments[0] + "[" + arguments[1] + "] = " + arguments[1] + ";";      
     }
     else
     {

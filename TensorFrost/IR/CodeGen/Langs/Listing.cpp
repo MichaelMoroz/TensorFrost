@@ -5,53 +5,10 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetNodeName(const Node* node, NodeNames& names, bool compact) {
-	if (compact)
-	{
-		if (node->name == "const") {
-			return node->tensor_->GetConstantString();
-		}
-	}
-	return names[node];
-}
-
-inline string Tensor::GetConstantString() const {
-	if (node->name == "const" || node->name == "dim_id") {
-		switch (type) {
-			case DataType::Float:
-				return to_string(AsFloat(data[0]));
-			case DataType::Int:
-				return to_string(AsInt(data[0]));
-			case DataType::Uint:
-				return to_string(data[0]);
-			default:
-				return "";
-		}
-	} else {
-		return "";
-	}
-}
-
 string GetOperationListing(const IR& ir, bool compact) 
 {
 	// first give unique names to all the tensors
-	NodeNames names = NodeNames();
-	map<int, int> cluster_var_index = map<int, int>();
-    int mem_index = 0;
-	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		if (node->name == "memory")
-		{
-			names[*node] = "mem" + to_string(mem_index);
-			mem_index++;
-		}
-		else
-		{
-			int cluster_id = node->cluster_id_;
-			int var_index = cluster_var_index[cluster_id];
-			names[*node] = "var" + to_string(cluster_id) + "_" + to_string(var_index);
-			cluster_var_index[cluster_id]++;
-		}
-	}
+	NodeNames names = GenerateNodeNames(ir);
 
 	// now create the listing
 	string listing;
@@ -70,7 +27,6 @@ string GetOperationListing(const IR& ir, bool compact)
 			if (node->cluster_id_ != prev_cluster_id) {
 				listing += "\n";
 			}
-			listing += to_string(node->cluster_id_) + ": ";
 		}
 
 		// indent
