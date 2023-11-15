@@ -52,8 +52,17 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 }
 
 void IR::Clusterize() {
-	int cluster_id = 0;
+	Lable* current_cluster = nullptr;
 	for (auto node = begin(); !node.is_end(); ++node) {
+		// remove old cluster head
+		if (node->cluster_head_ != nullptr) {
+			//if last cluster node, delete lable
+			if (node->next_ == nullptr || node->next_->cluster_head_ != node->cluster_head_) {
+				delete node->cluster_head_;
+			}
+			node->cluster_head_ = nullptr;
+		}
+
 		// check if node is a cluster edge
 		Tensor* tensor = node->tensor_;
 		
@@ -63,7 +72,7 @@ void IR::Clusterize() {
 		bool is_boundary = false;
 		Node* prev = node.get_prev();
 		if (prev != nullptr) {
-			if (prev->cluster_id_ == cluster_id &&
+			if (prev->cluster_head_ == current_cluster &&
 			    IsBoundary(prev, *node, -1, Argument::Type::None, identity)) {
 				is_boundary = true;
 			}
@@ -72,7 +81,7 @@ void IR::Clusterize() {
 		// go over all inputs
 		for (auto& input : tensor->node->inputs_) {
 			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_id_ == cluster_id &&
+			if (input.from_->get()->cluster_head_ == current_cluster &&
 			    IsBoundary(input.from_->get(), *node, input.index_, input.type_, identity)) {
 				is_boundary = true;
 				break;
@@ -80,18 +89,19 @@ void IR::Clusterize() {
 		}
 
 		if (is_boundary) {
-			cluster_id++;
+			current_cluster = new Lable(*node);
 		}
 
-		node->cluster_id_ = cluster_id;
+		node->cluster_head_ = current_cluster;
 	}
 }
 
-ClusterProp IR::GetClusterProperties()
+ClusterProp IR::GetClusterProperties() const
 {
-    map<int, vector<Node*>> cluster_outputs;
-	map<int, Node*> cluster_begin;
-    map<int, Node*> cluster_end;
+    map<Lable*, vector<Node*>> cluster_outputs;
+	map<Node*, vector<Argument*>> node_output;
+	map<Node*, float> node_cost;
+	unordered_set<Lable*> cluster_heads;
 
 	UpdateNodeOutputs();
 	//find all nodes that are outputs of a cluster (i.e. point to a node outside the cluster)
@@ -99,31 +109,40 @@ ClusterProp IR::GetClusterProperties()
 		if (node->name == "memory") {
 			continue;
 		}
-	
-		if (node.is_cluster_begin()) {
-			cluster_begin[node->cluster_id_] = *node;
+
+		float input_cost = node->op->GetCost();
+		for (auto& input : node->inputs_) {
+			if (input.from_->get()->cluster_head_ == node->cluster_head_ &&
+			    input.type_ != Argument::Type::Memory && input.type_ != Argument::Type::Shape) {
+				input_cost += node_cost[input.from_->get()];
+			}
 		}
-		
-        if (node.is_cluster_end()) {
-            cluster_end[node->cluster_id_] = *node;
-        }
+		node_cost[*node] = input_cost;
 
 		bool is_output = node->memory_type_ == MemoryType::Output;
+
+		vector<Argument*> outputs;
 		for (auto& output : node->outputs_) {
 			Node* output_node = output->to_->get();
-			if (output_node->cluster_id_ != node->cluster_id_) {
+			if (output_node->cluster_head_ != node->cluster_head_) {
+				outputs.push_back(output);
 				is_output = true;
-				break;
 			}
 		}
 
 		if (is_output)
 		{
-			cluster_outputs[node->cluster_id_].push_back(*node);
+			cluster_outputs[node->cluster_head_].push_back(*node);
+			node_output[*node] = outputs;
+		}
+
+		//add cluster head if not already added
+		if (node->cluster_head_ != nullptr) {
+			cluster_heads.insert(node->cluster_head_);
 		}
 	}
 
-    return ClusterProp(cluster_outputs, cluster_begin, cluster_end);
+    return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
 }
 
 void IR::PostProcessClusters() {
@@ -134,13 +153,13 @@ void IR::PostProcessClusters() {
 	for (auto cluster_out : clusters.output)
 	{
 		vector<Node*> cluster_outs = cluster_out.second;
-		int cluster_id = cluster_out.first;
+		Lable* cluster_head = cluster_out.first;
 
 		for (auto output : cluster_outs)
 		{
 			Node* mem;
 			// add memory node before this cluster
-			ExecuteExpressionBefore(clusters.begin[cluster_id],[&]() 
+			ExecuteExpressionBefore(cluster_head->node_,[&]() 
 			{
 				mem = Tensor::Memory(output->GetArguments(Argument::Type::Shape),
 										output->tensor_->type).node;
@@ -151,46 +170,36 @@ void IR::PostProcessClusters() {
 				}
 			});
 
-			// all the nodes must now use to the memory node
-			// which stores the output result not the output node itslef
-			SwapLables(output, mem);
+			// go over all outputs of this node and replace their input with the memory node
+			for (auto& arg_out : clusters.node_output[output])
+			{
+				if(arg_out->type_ != Argument::Type::Shape && arg_out->type_ != Argument::Type::Memory)
+				{	
+					// if not a memory or shape argument, then the memory needs to be loaded before the node
+					ExecuteExpressionBefore(arg_out->to_->get(), [&]()
+					{
+						Tensor& loaded = Tensor::Load(*mem->tensor_);
+						//loaded.node->cluster_id_ = arg_out->to_->get()->cluster_id_;
+						// the node must now use the loaded value
+						arg_out->from_ = loaded.node->GetLable();
+					});
+				}
+				else
+				{
+					// otherwise the memory can be used directly
+					arg_out->from_ = mem->GetLable();
+				}
+			}
 
 			// add store node after this node
 			ExecuteExpressionAfter(output, [&]()
 			{
 				// add store node after this node
 				Tensor::Store(*mem->tensor_, *output->tensor_);
-				cursor_->cluster_id_ = cluster_id;
+				cursor_->cluster_head_ = cluster_head;
 			});
 		}
 	}
-
-
-	//go over all nodes, and add load nodes (if not already) for all inputs that are not in the cluster
-	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->op->GetOpType() == OpType::Memory) {
-			continue;
-		}
-
-		// go over all inputs
-		for (auto& input : node->inputs_) {
-			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_id_ != node->cluster_id_ && 
-				input.type_ != Argument::Type::Shape &&
-				input.type_ != Argument::Type::Memory) {
-				// add load node before this node
-				ExecuteExpressionBefore(*node, [&]()
-				{
-					//get memory node
-					Tensor* mem = input.from_->get()->tensor_;
-					Tensor& loaded = Tensor::Load(*mem);
-					loaded.node->cluster_id_ = node->cluster_id_;
-					// the node must now use the loaded value
-					input.from_ = loaded.node->GetLable();
-				});
-			}
-		}
-	}	
 }
 
 //INode Op(IType type, params INode[] inputs) {
@@ -328,10 +337,9 @@ void IR::TransformToLinearIndex()
 	ClusterProp clusters = GetClusterProperties();
 
 	//replace all dim_id nodes with the corresponding index computed from thread_id
-	for (auto cluster_begin : clusters.begin)
+	for (auto cluster_begin : clusters.cluster_heads)
 	{
-		Node* begin = cluster_begin.second;
-		int cluster_id = cluster_begin.first;
+		Node* begin = cluster_begin->node_;
 
 		// add thread node
 		Tensor* thread_index;

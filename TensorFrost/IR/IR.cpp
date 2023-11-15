@@ -2,7 +2,7 @@
 
 namespace TensorFrost {
 
-void IR::UpdateNodeOutputs() {
+void IR::UpdateNodeOutputs() const {
 	for (auto node = begin(); !node.is_end(); ++node) {
 		node->outputs_.clear();
 	}
@@ -20,7 +20,7 @@ void SwapLables(Node* a, Node* b) {
 	b->lable_->node_ = a;
 
 	// now swap the labels
-	NodeLable* temp = a->lable_;
+	Lable* temp = a->lable_;
 	a->lable_ = b->lable_;
 	b->lable_ = temp;
 }
@@ -29,7 +29,7 @@ void CopyLable(Node* target, Node* copy) {
 	// make old lable point to copy
 	target->lable_->node_ = copy;
 	// make new lable for target
-	target->lable_ = new NodeLable(target);
+	target->lable_ = new Lable(target);
 }
 
 }

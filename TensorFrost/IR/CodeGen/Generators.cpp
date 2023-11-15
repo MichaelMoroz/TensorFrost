@@ -8,18 +8,24 @@ using namespace std;
 NodeNames GenerateNodeNames(const IR& ir)
 {
     NodeNames names = NodeNames();
-    map<int, int> cluster_var_index = map<int, int>();
+	map<Lable*, int> cluster_var_index = map<Lable*, int>();
     int mem_index = 0;
+	int cluster_index = 0;
+	Lable* curent_cluster = nullptr;
     for (auto node = ir.begin(); !node.is_end(); ++node) {
+		if (node->cluster_head_ != curent_cluster) {
+			cluster_index++;
+		}
         if (node->name == "memory") {
             names[*node] = "mem" + to_string(mem_index);
             mem_index++;
         } else {
-            int cluster_id = node->cluster_id_;
+            Lable* cluster_id = node->cluster_head_;
             int var_index = cluster_var_index[cluster_id];
-            names[*node] = "var" + to_string(cluster_id) + "_" + to_string(var_index);
+            names[*node] = "var" + to_string(cluster_index) + "_" + to_string(var_index);
             cluster_var_index[cluster_id]++;
         }
+		curent_cluster = node->cluster_head_;
     }
 
     return names;

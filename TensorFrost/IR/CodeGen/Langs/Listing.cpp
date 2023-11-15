@@ -9,11 +9,12 @@ string GetOperationListing(const IR& ir, bool compact)
 {
 	// first give unique names to all the tensors
 	NodeNames names = GenerateNodeNames(ir);
+	ClusterProp clusters = ir.GetClusterProperties();
 
 	// now create the listing
 	string listing;
 	int indent = 0;
-	int prev_cluster_id = -1;
+	Lable* prev_cluster_head = nullptr;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
 		if (compact) {
 			if (node->name == "const") continue;
@@ -23,8 +24,8 @@ string GetOperationListing(const IR& ir, bool compact)
 			indent--;
 		}
 
-		if (node->cluster_id_ != -1) {
-			if (node->cluster_id_ != prev_cluster_id) {
+		if (node->cluster_head_ != nullptr) {
+			if (node->cluster_head_ != prev_cluster_head) {
 				listing += "\n";
 			}
 		}
@@ -103,10 +104,14 @@ string GetOperationListing(const IR& ir, bool compact)
 				break;
 			default:
 				break;
-		}	
+		}
+
+		if (clusters.node_cost[node.get()] != 0) {
+			listing += "cost=" + to_string(clusters.node_cost[node.get()]) + ", ";
+		}
 
 		if (node->tensor_->type != DataType::None) {
-			listing += "type = " + DataTypeToString(node->tensor_->type);
+			listing += "type=" + DataTypeToString(node->tensor_->type);
 		}
 
 		listing += ")\n";
@@ -115,7 +120,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			indent++;
 		}
 
-		prev_cluster_id = node->cluster_id_;
+		prev_cluster_head = node->cluster_head_;
 	}
 
 	return listing;

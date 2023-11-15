@@ -4,6 +4,7 @@
 #include <iostream>
 #include <list>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <algorithm>
 
@@ -14,10 +15,10 @@ namespace TensorFrost {
 class Tensor;
 class Node;
 
-class NodeLable {
+class Lable {
  public:
 	Node* node_;
-	NodeLable(Node* node) : node_(node) {}
+	Lable(Node* node) : node_(node) {}
 
 	Node* operator*() const { return node_; }
 	Node* operator->() { return node_; }
@@ -35,14 +36,14 @@ class Argument {
 	};
 
 	Type type_;
-	NodeLable* from_;
-	NodeLable* to_;
+	Lable* from_;
+	Lable* to_;
 	int index_;
 
-	Argument(Type type, NodeLable* node, int index)
+	Argument(Type type, Lable* node, int index)
 	    : type_(type), from_(node), index_(index), to_(nullptr) {}
 
-	void SetOutput(NodeLable* output) {
+	void SetOutput(Lable* output) {
 		to_ = output;
 	}
 };
@@ -61,18 +62,19 @@ enum class MemoryType {
 class Node
 {
 public:
-	NodeLable* lable_ = nullptr;
+	Lable* lable_ = nullptr;
+
+	Lable* cluster_head_ = nullptr;
 
 	Node* prev_ = nullptr;
 	Node* next_ = nullptr;
-	
+
 	const string name;
 	const Operation* op;
 	Tensor* tensor_;
 	Arguments inputs_;
-	vector<const Argument*> outputs_;
+	vector<Argument*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
-	int cluster_id_ = -1;
 
 	Node(Tensor* tensor, Arguments args, string name)
 	    : tensor_(tensor),
@@ -80,11 +82,22 @@ public:
 	      name(name),
 	      op(&FindOperation(name)) 
 	{
-		lable_ = new NodeLable(this);
+		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 	}
 
-	NodeLable* GetLable() {
+	//copy constructor
+	Node(const Node& other, Arguments args)
+		: tensor_(other.tensor_),
+		inputs_(args),
+		name(other.name),
+		op(other.op)
+	{
+		lable_ = new Lable(this);
+		UpdateArgumentOutputs();
+	}
+
+	Lable* GetLable() {
 		return lable_;
 	}
 
@@ -134,12 +147,15 @@ void CopyLable(Node* target, Node* copy);
 class ClusterProp
 {
 public:
-	map<int, vector<Node*>> output;
-	map<int, Node*> begin;
-	map<int, Node*> end;
+	unordered_set<Lable*> cluster_heads;
+	map<Lable*, vector<Node*>> output;
+	map<Node*, vector<Argument*>> node_output;
+	map<Node*, float> node_cost;
 
-	ClusterProp(map<int, vector<Node*>> cluster_outputs, map<int, Node*> cluster_begin, map<int, Node*> cluster_end)
-		: output(cluster_outputs), begin(cluster_begin), end(cluster_end) {}
+	ClusterProp(map<Lable*, vector<Node*>> cluster_outputs,
+	            map<Node*, vector<Argument*>> output, map<Node*, float> cost,
+	            unordered_set<Lable*> cluster_heads)
+		: output(cluster_outputs), node_output(output), node_cost(cost), cluster_heads(cluster_heads) {}
 };
 
 class IR {
@@ -176,9 +192,9 @@ public:
 
 		bool is_begin() const { return node_->prev_ == nullptr; }
 
-		bool is_cluster_begin() const { return node_->prev_ == nullptr || node_->prev_->cluster_id_ != node_->cluster_id_; }
+		bool is_cluster_begin() const { return node_->cluster_head_->node_ == node_; }
 
-		bool is_cluster_end() const { return node_->next_ == nullptr || node_->next_->cluster_id_ != node_->cluster_id_; }
+		bool is_cluster_end() const { return node_->next_ == nullptr || node_->next_->cluster_head_ != node_->cluster_head_; }
 
 		Node* get() { return node_; }
 
@@ -196,31 +212,31 @@ public:
 	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
 		//TODO check if no future nodes are used
 		iterator old_cursor = cursor_;
-		int old_cluster_id = current_cluster_id_;
-		current_cluster_id_ = node->cluster_id_;
+		Lable* old_cluster_head = current_cluster_head_;
+		current_cluster_head_ = node->cluster_head_;
 		SetCursor(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_id_ = old_cluster_id;
+		current_cluster_head_ = old_cluster_head;
 	}
 
 	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
 		iterator old_cursor = cursor_;
-		int old_cluster_id = current_cluster_id_;
-		current_cluster_id_ = node->cluster_id_;
+		Lable* old_cluster_head = current_cluster_head_;
+		current_cluster_head_ = node->cluster_head_;
 		SetCursorBefore(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_id_ = old_cluster_id;
+		current_cluster_head_ = old_cluster_head;
 	}
 
 	iterator begin() const { return begin_; }
 
 	void Clusterize();
 
-	void UpdateNodeOutputs();
+	void UpdateNodeOutputs() const;
 
-	ClusterProp GetClusterProperties();
+	ClusterProp GetClusterProperties() const;
 
 	void PostProcessClusters();
 
@@ -230,15 +246,21 @@ public:
 
  private:
 	vector<Node*> nodes_;
+	vector<Node*> cluster_nodes_;
 	iterator cursor_ = iterator(nullptr);
 	iterator begin_ = iterator(nullptr);
-	int current_cluster_id_ = -1;
+	Lable* current_cluster_head_ = nullptr;
 
 	void InsertAfterCursor(Node* node) {
 		nodes_.push_back(node);
+		node->cluster_head_ = current_cluster_head_;
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
+				if (current_cluster_head_->node_ == prev_next) {
+					// if the next node is a cluster head, then we need to update the cluster head
+					current_cluster_head_->node_ = node;
+				}
 				node->next_ = prev_next;
 				prev_next->prev_ = node;
 			}
@@ -247,7 +269,6 @@ public:
 		} else {
 			begin_ = iterator(node);
 		}
-		node->cluster_id_ = current_cluster_id_;
 		SetCursor(node);
 	}
 

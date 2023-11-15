@@ -40,12 +40,13 @@ DataTypeList Types(initializer_list<DataType> elements);
 class Operation {
  private:
 	string name_;
+	float cost_ = 0.0f;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
 	OpType op_type_;
 
  public:
-	Operation(string name, initializer_list<string> oloads, string code = "",
+	Operation(string name, initializer_list<string> oloads, float cost, string code = "",
 	          OpType op_type = OpType::Function)
 	    : name_(std::move(name)), op_type_(op_type) 
 	{
@@ -55,6 +56,7 @@ class Operation {
 		}
 
 		code_ = code;
+		cost_ = cost;
 
 		// parse the overloads
 		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool, uint, float in, float out
@@ -96,6 +98,8 @@ class Operation {
 			overloads_.push_back({inputs, output});
 		}
 	}
+
+	[[nodiscard]] float GetCost() const { return cost_; }
 
 	[[nodiscard]] OpType GetOpType() const { return op_type_; }
 

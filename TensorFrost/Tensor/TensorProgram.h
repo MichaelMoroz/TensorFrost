@@ -36,7 +36,7 @@ class TensorProgram {
 		ir.Clusterize();
 		ir.PostProcessClusters();
 		ir.Clusterize();
-		ir.TransformToLinearIndex();
+		//ir.TransformToLinearIndex();
 		Tensor::SetEvaluationContext(nullptr);
 	}
 
