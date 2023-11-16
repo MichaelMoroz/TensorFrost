@@ -5,7 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GenerateHLSL(const IR& ir) {
+string GenerateKernelHLSL(const IR& ir, const Lable* cluster) {
 	NodeNames names = GenerateNodeNames(ir);
 
     string hlslCode;
@@ -14,7 +14,8 @@ string GenerateHLSL(const IR& ir) {
     hlslCode += "void main() {\n";
 	int indent = 1;
     // Translate each operation into HLSL
-	for (auto node = ir.begin(); !node.is_end(); ++node) {
+	for (auto node = IR::iterator(cluster->node_); !node.is_cluster_end(cluster);
+	     ++node) {
 		if (node->name == "const") continue;
 
 		if (node->name == "loop_end") {
@@ -68,4 +69,23 @@ string GenerateHLSL(const IR& ir) {
     return hlslCode;
 }
 
+string GenerateHLSL(const IR& ir) {
+	string allKernels = "";
+
+	ClusterProp clusters = ir.GetClusterProperties();
+	
+	// Generate HLSL code for each cluster
+	int kernel_count = 0;
+	for (auto cluster : clusters.cluster_heads) {
+		if (cluster->node_->name == "memory") continue;
+
+		// Generate kernel
+		allKernels += "Kernel ID: " + to_string(kernel_count++) + "\n";
+		allKernels += GenerateKernelHLSL(ir, cluster);
+		allKernels += "\n";
+	}
+	
+	return allKernels;
+
 }
+}  // namespace TensorFrost

@@ -123,7 +123,8 @@ void IR::OptimizeClusters()
 
 		unordered_set<Argument*> args_to_copy;
 		//go over all nodes in the cluster and check if their inputs can be copied
-		for (auto node = iterator(begin); !node.is_cluster_end(); ++node) {
+		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		     ++node) {
 			//go over all inputs
 			for (auto& input : node->inputs_) {
 				//if input is memory or shape, then skip
@@ -267,6 +268,7 @@ ClusterProp IR::GetClusterProperties() const
 
 		vector<Argument*> outputs;
 		for (auto& output : node->outputs_) {
+			if (output->to_ == nullptr) continue;
 			Node* output_node = output->to_->get();
 			if (output_node->cluster_head_ != node->cluster_head_) {
 				outputs.push_back(output);
@@ -339,142 +341,12 @@ void IR::PostProcessClusters() {
 			ExecuteExpressionAfter(output, [&]()
 			{
 				// add store node after this node
-				Tensor::Store(*mem->tensor_, *output->tensor_);
-				cursor_->cluster_head_ = cluster_head;
+				Tensor* store = &Tensor::Store(*mem->tensor_, *output->tensor_);
+				store->node->cluster_head_ = cluster_head;
 			});
 		}
 	}
 }
-
-//INode Op(IType type, params INode[] inputs) {
-//	(INode, uint)[] inputs2 = new (INode, uint)[inputs.Length];
-//	for (int i = 0; i < inputs.Length; i++) {
-//		inputs2[i] = (inputs[i], (uint)i);
-//	}
-//	INode node = instructions.AddOperation(type, inputs2);
-//	return node;
-//
-//
-//Node Constant(IType type, uint constant) {
-//	INode node =
-//	    instructions.AddNode(type, new InstructionProperty{constant = constant});
-//	return node;
-//
-//
-/// first add a thread node
-//Node thread_id =
-//   instructions.AddNode(IType.thread_id, new InstructionProperty());
-//
-//int[] size = instructions.property.size;
-//int dims = (uint)size.Length;
-//
-/// then add the constant nodes for the shape of the kernel
-//Node[] kernelShape = new INode[dims];
-//or (uint i = 0; i < dims; i++) {
-//	INode constant = Constant(IType.constant, size[i]);
-//	kernelShape[i] = constant;
-//
-//
-/// then add nodes that compute each dimension index
-//Node[] indices = new INode[dims];
-//or (uint i = 0; i < dims; i++) {
-//	uint div = 1;
-//	for (uint j = i + 1; j < dims; j++) {
-//		div *= size[dims - j - 1];
-//	}
-//
-//	INode dim = thread_id;
-//
-//	if (div > 1) {
-//		dim = Op(IType.div_u32, dim, Constant(IType.constant, div));
-//	}
-//
-//	if (i > 0) {
-//		dim = Op(IType.mod_u32, dim, kernelShape[dims - i - 1]);
-//	}
-//
-//	indices[dims - i - 1] = dim;
-//
-//
-/// then replace all dim nodes with the corresponding index node
-/// i.e. rewire the edges from the dim node to the index node then remove the dim
-/// node
-//ist<INode> nodesToRemove = new ();
-//oreach (INode node in instructions.Nodes) {
-//	if (node.type == IType.dim_id) {
-//		uint dim = node.property.constant;
-//		if (dim >= dims)
-//			throw new Exception("Invalid dimension index " + dim +
-//			                    " for kernel of size " + dims);
-//		INode index = indices[dim];
-//		foreach (Edge edge in node.Outputs) {
-//			instructions.AddDirectedEdge(index, edge.To, edge.property);
-//		}
-//
-//		nodesToRemove.Add(node);
-//	}
-//
-//
-//oreach (INode node in nodesToRemove) {
-//	instructions.RemoveNode(node);
-//
-//
-/// go over all nodes that take an index as input (e.g. load, store, atomic)
-//ist<INode> nodes = new List<INode>(instructions.Nodes);
-//oreach (INode node in nodes) {
-//	bool loadOp = Instruction.IsLoadOp(node.type);
-//	bool storeOp = Instruction.IsStoreOp(node.type);
-//	bool atomicOp = Instruction.IsAtomicOp(node.type);
-//	if (loadOp || storeOp || atomicOp) {
-//		// get the input memory node
-//		INode memoryNode = node.GetInput(0);
-//		uint[] memoryShape = memoryNode.property.shape;
-//		uint memoryLength = 1;
-//		for (int i = 0; i < memoryShape.Length; i++) {
-//			memoryLength *= memoryShape[i];
-//		}
-//		uint memoryDim = (uint)memoryShape.Length;
-//
-//		// get the index nodes
-//		INode[] idx = new INode[memoryDim];
-//		uint input_offset = loadOp ? 1u : 2u;
-//
-//		for (uint i = 0; i < memoryDim; i++) {
-//			INode dimNode = node.GetInput(i + input_offset, false);
-//			if (dimNode == null) {
-//				idx[i] = indices[i];
-//			} else {
-//				idx[i] = dimNode;
-//			}
-//		}
-//
-//		// compute the flat index
-//		INode flatIndex = idx[memoryDim - 1];
-//		for (int i = (int)memoryDim - 2; i >= 0; i--) {
-//			flatIndex = Op(IType.add_u32,
-//			               Op(IType.mul_u32, flatIndex,
-//			                  Constant(IType.constant, memoryShape[i])),
-//			               idx[i]);
-//		}
-//
-//		// clamp index for safety
-//		flatIndex = Op(IType.min_u32, flatIndex,
-//		               Constant(IType.constant, memoryLength - 1));
-//
-//		// TODO clamp each dimension index individually instead of the flat index
-//		// TODO add different modes for clamping (e.g. clamp, wrap, mirror, zero)
-//
-//		// remove the index node edges
-//		for (uint i = 0; i < memoryDim; i++) {
-//			IEdge edge = node.GetInputEdge(i + input_offset, false);
-//			if (edge == null) continue;
-//			instructions.RemoveDirectedEdge(edge);
-//		}
-//
-//		// add the flat index node edge
-//		instructions.AddDirectedEdge(flatIndex, node, input_offset);
-//	}
-//
 
 void IR::TransformToLinearIndex()
 {
@@ -518,7 +390,8 @@ void IR::TransformToLinearIndex()
 		});
 
 		// replace all dim nodes with the corresponding index node
-		for (auto node = iterator(begin); !node.is_cluster_end(); ++node) {
+		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		     ++node) {
 			if (node->name == "dim_id") {
 				int dim = node->tensor_->data[0];
 				if (dim >= dims) {
@@ -528,6 +401,42 @@ void IR::TransformToLinearIndex()
 
 				//swap the dim node with the corresponding index node
 				CopyLable(node.get(), indices[dim]->node);
+			}
+		}
+
+		 // go over all nodes that take an index as input (e.g. load, store, atomic)
+		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		     ++node) {
+			auto op_type = node->op->GetOpType();
+			if ( op_type == OpType::Load || op_type == OpType::Store || op_type == OpType::Scatter) {
+				ExecuteExpressionBefore(*node, [&]()
+				{
+					// get the input memory node
+					const Tensor* memory =
+					    node.get()->GetArgumentTensors(Argument::Type::Memory)[0];
+					int memory_dim = kernel_shape.size();
+
+					// get the index nodes
+					Tensors idx = node->GetArgumentTensors(Argument::Type::Index);
+
+					// compute the flat index
+					Tensor* flat_index = const_cast<Tensor*>(idx[memory_dim - 1]);
+					for (int i = memory_dim - 2; i >= 0; i--) {
+						*flat_index = *flat_index * *kernel_shape[i];
+						*flat_index = *flat_index + *idx[i];
+					}
+
+					// TODO clamp each dimension index individually instead of the flat
+					// index
+					// TODO add different modes for clamping (e.g. clamp, wrap, mirror,
+					// zero)
+
+					// remove the index node edges
+					node->RemoveArguments(Argument::Type::Index);
+
+					// add the flat index node edge
+					node->AddArgument(flat_index->node, Argument::Type::Index, 0);
+				});
 			}
 		}
 	}

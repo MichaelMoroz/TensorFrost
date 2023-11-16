@@ -8,5 +8,7 @@ namespace TensorFrost {
     NodeNames GenerateNodeNames(const IR& ir);
     string GetNodeName(const Node* tensor, NodeNames& names, bool compact = false);
     string GetOperationListing(const IR&, bool compact = false);
+
     string GenerateHLSL(const IR&);
+    string GenerateKernelHLSL(const IR&, const Lable*);
 }   // namespace TensorFrost

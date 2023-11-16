@@ -187,8 +187,8 @@ class Tensor {
 		return max_dim + 1;
 	}
 
-	[[nodiscard]] vector<const Tensor*> GetShape() const {
-		vector<const Tensor*> result = vector<const Tensor*>();
+	[[nodiscard]] Tensors GetShape() const {
+		Tensors result = Tensors();
 		// get max dimension
 		int max_dim = -1;
 		for (const auto& input : node->inputs_) {
@@ -252,7 +252,7 @@ class Tensor {
 
 	// tensor factory methods
 	static Tensors GetConstantShape(const vector<int>& shape) {
-		Tensors result = vector<const Tensor*>();
+		Tensors result = Tensors();
 		for (int i : shape) {
 			result.push_back(&Constant(i));
 		}
@@ -337,8 +337,8 @@ class Tensor {
 		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
-	static vector<const Tensor*> GetInputShape(const vector<int>& shape) {
-		Tensors result = vector<const Tensor*>();
+	static Tensors GetInputShape(const vector<int>& shape) {
+		Tensors result = Tensors();
 		for (int i : shape) {
 			if (i < 0) {
 				result.push_back(&Input(DataType::Int));
@@ -383,9 +383,9 @@ class Tensor {
 		return output;
 	}
 
-	static void Store(const Tensor& tensor, const Tensor& value,
+	static Tensor& Store(const Tensor& tensor, const Tensor& value,
 	                  const Tensors& indices = Tensors()) {
-		MemoryOp("store", &tensor, indices, &value);
+		return MemoryOp("store", &tensor, indices, &value);
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,

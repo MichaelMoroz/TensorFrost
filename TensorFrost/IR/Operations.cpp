@@ -168,7 +168,7 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     else if (name_ == "load")
     {
         line += TypeNames[output_type] + " " + var_name + " = ";
-        line += arguments[0] + "[" + arguments[0] + "];";
+        line += arguments[0] + "[" + arguments[1] + "];";
     }
     else if (name_ == "store")
     {

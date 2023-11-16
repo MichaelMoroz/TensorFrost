@@ -116,15 +116,29 @@ public:
 		return result;
 	}
 
-	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) const {
+	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
 		Tensors result = Tensors();
-		for (const auto& argument : arguments) {
+		for (auto& argument : arguments) {
 			result.push_back(argument.from_->get()->tensor_);
 		}
 		return result;
+	}
+
+	void RemoveArguments(Argument::Type type) {
+		for (auto it = inputs_.begin(); it != inputs_.end();) {
+			if (it->type_ == type) {
+				it = inputs_.erase(it);
+			} else {
+				++it;
+			}
+		}
+	}
+
+	void AddArgument(Node* node, Argument::Type type, int index = 0) {
+		inputs_.push_back(Argument(type, node->GetLable(), index));
 	}
 
 	~Node();
@@ -181,9 +195,9 @@ public:
 
 		bool is_begin() const { return node_->prev_ == nullptr; }
 
-		bool is_cluster_begin() const { return node_->cluster_head_->node_ == node_; }
+		bool is_cluster_begin() const { return node_ == nullptr || node_->cluster_head_->node_ == node_; }
 
-		bool is_cluster_end() const { return node_->next_ == nullptr || node_->next_->cluster_head_ != node_->cluster_head_; }
+		bool is_cluster_end(const Lable* cluster) const { return node_ == nullptr || node_->cluster_head_ != cluster; }
 
 		Node* get() { return node_; }
 
