@@ -51,6 +51,150 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 	return false;
 }
 
+map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
+	// do a depth first search to copy all the nodes required for the targets
+	unordered_set<Node*> nodes_to_copy;
+	std::function<void(Node*)> dfs = [&](Node* node) {
+		if (nodes_to_copy.find(node) != nodes_to_copy.end()) {
+			return;
+		}
+		nodes_to_copy.insert(node);
+		for (auto& input : node->inputs_) {
+			if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape)
+				continue;
+
+			dfs(input.from_->get());
+		}
+	};
+
+	for (Node* target : targets) {
+		dfs(target);
+	}
+
+	// copy the nodes
+	map<Node*, Node*> copied_node_map;
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (!nodes_to_copy.contains(node.get())) {
+			continue;
+		}
+
+		// create new arguments
+		Arguments new_args;
+		for (Argument& arg : node->inputs_) {
+			//if shape or memory argument, then no need to use copied node
+			if (arg.type_ == Argument::Type::Memory || arg.type_ == Argument::Type::Shape) {
+				new_args.push_back(arg);
+				continue;
+			}
+
+			Node* from = arg.from_->get();
+
+			if (!copied_node_map.contains(from)) {
+				throw std::runtime_error("Node not found");
+			}
+
+			// create new argument
+			new_args.push_back(
+			    Argument(arg.type_, copied_node_map[from]->GetLable(), arg.index_));
+		}
+
+		// create new node
+		Tensor* tensor = Tensor::GetCopy(*node->tensor_, new_args);
+		Node* new_node = tensor->node;
+		copied_node_map[node.get()] = new_node;
+	}
+
+	return copied_node_map;
+}
+
+void IR::OptimizeClusters()
+{
+	//get cluster data
+	ClusterProp clusters = GetClusterProperties();
+
+	//go over each cluster and copy computations outside the cluster if they are cheap enough
+	for (auto cluster_begin : clusters.cluster_heads)
+	{
+		Node* begin = cluster_begin->node_;
+
+		if (begin->name == "memory") {
+			continue;
+		}
+
+		unordered_set<Argument*> args_to_copy;
+		//go over all nodes in the cluster and check if their inputs can be copied
+		for (auto node = iterator(begin); !node.is_cluster_end(); ++node) {
+			//go over all inputs
+			for (auto& input : node->inputs_) {
+				//if input is memory or shape, then skip
+				if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape) {
+					continue;
+				}
+
+				//if input is outside the cluster, then it can be copied
+				if (input.from_->get()->cluster_head_ != node->cluster_head_) {
+					//check if input is cheap enough to copy
+					if (clusters.node_cost[input.from_->get()] < 256.0f) {
+						args_to_copy.insert(&input);
+					}
+				}
+			}
+		}
+
+		unordered_set<Node*> nodes_to_copy;
+		for (auto arg : args_to_copy) {
+			nodes_to_copy.insert(arg->from_->get());
+		}
+
+		//copy all the nodes at the beginning of the cluster
+		map<Node*, Node*> copied_node_map;
+		ExecuteExpressionBefore(begin, [&]() { copied_node_map = CopyComputation(nodes_to_copy); });
+
+		//replace all the arguments that use the copied nodes
+		for (auto arg : args_to_copy) {
+			arg->from_ = copied_node_map[arg->from_->get()]->GetLable();
+		}
+	}
+}
+
+void IR::RemoveUnusedNodes()
+{
+	//use depth first search to find all nodes that are used for the output nodes
+	unordered_set<Node*> used_nodes;
+	
+	//go over all inputs of the output nodes
+	std::function<void(Node*)> dfs = [&](Node* node) {
+		if (used_nodes.contains(node)) {
+			return;
+		}
+		used_nodes.insert(node);
+		for (auto& input : node->inputs_) {
+			dfs(input.from_->get());
+		}
+	};
+
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (node->memory_type_ == MemoryType::Output) {
+			dfs(node.get());
+		}
+	}
+
+	//remove all nodes that are not used
+	unordered_set<Node*> nodes_to_remove;
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (node->name == "memory") {
+			continue;
+		}
+		if (!used_nodes.contains(node.get())) {
+			nodes_to_remove.insert(node.get());
+		}
+	}
+
+	for (auto node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
 void IR::Clusterize() {
 	Lable* current_cluster = nullptr;
 	for (auto node = begin(); !node.is_end(); ++node) {
@@ -168,7 +312,7 @@ void IR::PostProcessClusters() {
 					mem->memory_type_ = MemoryType::Output;
 					output->memory_type_ = MemoryType::None;
 				}
-			});
+			}, false);
 
 			// go over all outputs of this node and replace their input with the memory node
 			for (auto& arg_out : clusters.node_output[output])
@@ -357,13 +501,13 @@ void IR::TransformToLinearIndex()
 		ExecuteExpressionBefore(begin, [&]()
 		{
 			for (int i = 0; i < dims; i++) {
-				Tensor& div = Tensor::Constant(kernel_shape, 1);
+				Tensor* div = &Tensor::Constant(kernel_shape, 1);
 				
 				for (int j = i + 1; j < dims; j++) {
-					div = div * *kernel_shape[dims - j - 1];
+					div = &(*div * *kernel_shape[dims - j - 1]);
 				}
 
-				Tensor& dim = *thread_index / div;
+				Tensor& dim = *thread_index / *div;
 
 				if (i > 0) {
 					dim = dim % *kernel_shape[dims - i - 1];

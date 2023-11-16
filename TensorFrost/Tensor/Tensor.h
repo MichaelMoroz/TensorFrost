@@ -164,6 +164,12 @@ class Tensor {
 		this->type = type;
 	}
 
+	static Tensor* GetCopy(const Tensor& other, Arguments args) {
+		Tensor* copy = &CreateNode(other.type, args, other.node->name);
+		copy->data = other.data;
+		return copy;
+	}
+
 	void SetMemoryType(MemoryType memory_type) const {
 		node->SetMemoryType(memory_type);
 	}

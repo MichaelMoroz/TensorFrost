@@ -24,10 +24,9 @@ string GetOperationListing(const IR& ir, bool compact)
 			indent--;
 		}
 
-		if (node->cluster_head_ != nullptr) {
-			if (node->cluster_head_ != prev_cluster_head) {
-				listing += "\n";
-			}
+
+		if (node->cluster_head_ != prev_cluster_head) {
+			listing += "\n";
 		}
 
 		// indent

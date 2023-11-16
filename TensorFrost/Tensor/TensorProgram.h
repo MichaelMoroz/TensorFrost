@@ -34,9 +34,12 @@ class TensorProgram {
 		}
 
 		ir.Clusterize();
+		ir.OptimizeClusters();
+		ir.TransformToLinearIndex();
+		ir.RemoveUnusedNodes();
+		//ir.Clusterize();
 		ir.PostProcessClusters();
-		ir.Clusterize();
-		//ir.TransformToLinearIndex();
+		//ir.Clusterize();
 		Tensor::SetEvaluationContext(nullptr);
 	}
 

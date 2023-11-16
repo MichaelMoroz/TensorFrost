@@ -86,17 +86,6 @@ public:
 		UpdateArgumentOutputs();
 	}
 
-	//copy constructor
-	Node(const Node& other, Arguments args)
-		: tensor_(other.tensor_),
-		inputs_(args),
-		name(other.name),
-		op(other.op)
-	{
-		lable_ = new Lable(this);
-		UpdateArgumentOutputs();
-	}
-
 	Lable* GetLable() {
 		return lable_;
 	}
@@ -209,26 +198,58 @@ public:
 		return new_node;
 	}
 
-	void ExecuteExpressionAfter(Node* node, function<void()> expression) {
+	void RemoveNode(Node* node) {
+		if (node->prev_ != nullptr) {
+			node->prev_->next_ = node->next_;
+		}
+		if (node->next_ != nullptr) {
+			node->next_->prev_ = node->prev_;
+		}
+		if (node == *cursor_) {
+			cursor_ = iterator(node->prev_);
+		}
+		if (node == *begin_) {
+			begin_ = iterator(node->next_);
+		}
+		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
+		delete node;
+	}
+
+	void ExecuteExpressionAfter(Node* node, function<void()> expression, bool in_cluster = true) {
 		//TODO check if no future nodes are used
 		iterator old_cursor = cursor_;
 		Lable* old_cluster_head = current_cluster_head_;
-		current_cluster_head_ = node->cluster_head_;
+		if (!in_cluster) {
+			current_cluster_head_ = nullptr;
+		} else {
+			current_cluster_head_ = node->cluster_head_;
+		}
 		SetCursor(node);
 		expression();
 		cursor_ = old_cursor;
 		current_cluster_head_ = old_cluster_head;
 	}
 
-	void ExecuteExpressionBefore(Node* node, function<void()> expression) {
+	void ExecuteExpressionBefore(Node* node, function<void()> expression, bool in_cluster = true) {
 		iterator old_cursor = cursor_;
 		Lable* old_cluster_head = current_cluster_head_;
-		current_cluster_head_ = node->cluster_head_;
+		if (!in_cluster) {
+			current_cluster_head_ = nullptr;
+		} else {
+			current_cluster_head_ = node->cluster_head_;
+		}
 		SetCursorBefore(node);
 		expression();
 		cursor_ = old_cursor;
 		current_cluster_head_ = old_cluster_head;
 	}
+
+	//reexecute nodes and get map from old to copied nodes
+	map<Node*, Node*> CopyComputation(unordered_set<Node*> targets);
+
+	void OptimizeClusters();
+
+	void RemoveUnusedNodes();
 
 	iterator begin() const { return begin_; }
 
@@ -257,7 +278,7 @@ public:
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
-				if (current_cluster_head_->node_ == prev_next) {
+				if (current_cluster_head_ != nullptr && current_cluster_head_->node_ == prev_next) {
 					// if the next node is a cluster head, then we need to update the cluster head
 					current_cluster_head_->node_ = node;
 				}
