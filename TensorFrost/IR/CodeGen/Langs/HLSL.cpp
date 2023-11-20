@@ -35,10 +35,11 @@ string GenerateKernelHLSL(const IR& ir, const Lable* cluster) {
 		Arguments indices = node->GetArguments(Argument::Type::Index);
 		Arguments shape = node->GetArguments(Argument::Type::Shape);
 		Arguments memory = node->GetArguments(Argument::Type::Memory);
+
         //check number of indices
         if(indices.size() > 1)
         {
-          //  throw std::runtime_error("HLSL codegen does not support multidimensional indexing");
+			throw std::runtime_error("HLSL codegen does not support multidimensional indexing");
         }
 
 		//get node names
@@ -78,6 +79,9 @@ string GenerateHLSL(const IR& ir) {
 	int kernel_count = 0;
 	for (auto cluster : clusters.cluster_heads) {
 		if (cluster->node_->name == "memory") continue;
+
+		// Check if cluster has shape 
+		if (cluster->node_->GetArguments(Argument::Type::Shape).size() == 0) continue;
 
 		// Generate kernel
 		allKernels += "Kernel ID: " + to_string(kernel_count++) + "\n";

@@ -128,7 +128,8 @@ void IR::OptimizeClusters()
 			//go over all inputs
 			for (auto& input : node->inputs_) {
 				//if input is memory or shape, then skip
-				if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape) {
+				if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape || input.from_->get()->name == "memory")
+				{
 					continue;
 				}
 
@@ -251,7 +252,7 @@ ClusterProp IR::GetClusterProperties() const
 	UpdateNodeOutputs();
 	//find all nodes that are outputs of a cluster (i.e. point to a node outside the cluster)
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->name == "memory") {
+		if (node->name == "memory" || node->cluster_head_ == nullptr) {
 			continue;
 		}
 
@@ -269,6 +270,10 @@ ClusterProp IR::GetClusterProperties() const
 		vector<Argument*> outputs;
 		for (auto& output : node->outputs_) {
 			if (output->to_ == nullptr) continue;
+			//if is a shape or memory argument, then skip (shape is loaded on CPU)
+			if (output->type_ == Argument::Type::Shape) {
+				continue;
+			}
 			Node* output_node = output->to_->get();
 			if (output_node->cluster_head_ != node->cluster_head_) {
 				outputs.push_back(output);
@@ -282,10 +287,7 @@ ClusterProp IR::GetClusterProperties() const
 			node_output[*node] = outputs;
 		}
 
-		//add cluster head if not already added
-		if (node->cluster_head_ != nullptr) {
-			cluster_heads.insert(node->cluster_head_);
-		}
+		cluster_heads.insert(node->cluster_head_);
 	}
 
     return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
@@ -346,6 +348,29 @@ void IR::PostProcessClusters() {
 			});
 		}
 	}
+
+
+	//replace all inputs pointing to memory nodes with the memory node
+	for(auto node = begin(); !node.is_end(); ++node)
+	{
+		if(node->name == "memory") continue;
+
+		for(auto& input : node->inputs_)
+		{
+			if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape)
+				continue;
+
+			if(input.from_->get()->name == "memory")
+			{
+				//load the memory node before this node
+				ExecuteExpressionBefore(node.get(), [&]()
+				{
+					Tensor& loaded = Tensor::Load(*input.from_->get()->tensor_);
+					input.from_ = loaded.node->GetLable();
+				});
+			}
+		}
+	}
 }
 
 void IR::TransformToLinearIndex()
@@ -365,7 +390,17 @@ void IR::TransformToLinearIndex()
 		});
 
 		// load kernel shape
-		Tensors kernel_shape = begin->GetArgumentTensors(Argument::Type::Shape);
+		map<int, Tensor*> kernel_shape_map = begin->GetArgumentTensors(Argument::Type::Shape);
+		Tensors kernel_shape;
+		for (auto& shape : kernel_shape_map) {
+			kernel_shape.push_back(shape.second);
+		}
+
+		if (kernel_shape.size() == 0)
+		{
+			//can skip if no kernel shape - no index
+			continue;
+		}
 
 		// compute the index for each dimension
 		int dims = kernel_shape.size();
@@ -390,6 +425,7 @@ void IR::TransformToLinearIndex()
 		});
 
 		// replace all dim nodes with the corresponding index node
+		unordered_set<Node*> nodes_to_remove;
 		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			if (node->name == "dim_id") {
@@ -401,6 +437,9 @@ void IR::TransformToLinearIndex()
 
 				//swap the dim node with the corresponding index node
 				CopyLable(node.get(), indices[dim]->node);
+
+				//remove the dim node
+				nodes_to_remove.insert(node.get());
 			}
 		}
 
@@ -414,16 +453,25 @@ void IR::TransformToLinearIndex()
 					// get the input memory node
 					const Tensor* memory =
 					    node.get()->GetArgumentTensors(Argument::Type::Memory)[0];
-					int memory_dim = kernel_shape.size();
+					int memory_dim = kernel_shape.size(); //TODO get memory dim from memory tensor instead of kernel shape
 
 					// get the index nodes
-					Tensors idx = node->GetArgumentTensors(Argument::Type::Index);
+					map<int, Tensor*> idx = node->GetArgumentTensors(Argument::Type::Index);
+
+					//function to get index for given dimension, if not found then return default dim index
+					std::function<Tensor*(int)> get_index = [&](int dim) {
+						if (idx.find(dim) != idx.end()) {
+							return idx[dim];
+						} else {
+							return const_cast<Tensor*> (indices[dim]);
+						}
+					};
 
 					// compute the flat index
-					Tensor* flat_index = const_cast<Tensor*>(idx[memory_dim - 1]);
+					Tensor* flat_index = get_index(memory_dim - 1);
 					for (int i = memory_dim - 2; i >= 0; i--) {
 						*flat_index = *flat_index * *kernel_shape[i];
-						*flat_index = *flat_index + *idx[i];
+						*flat_index = *flat_index + *get_index(i);
 					}
 
 					// TODO clamp each dimension index individually instead of the flat
@@ -438,6 +486,11 @@ void IR::TransformToLinearIndex()
 					node->AddArgument(flat_index->node, Argument::Type::Index, 0);
 				});
 			}
+		}
+
+		// remove all dim nodes
+		for (auto node : nodes_to_remove) {
+			RemoveNode(node);
 		}
 	}
 }

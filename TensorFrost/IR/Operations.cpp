@@ -172,7 +172,7 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     }
     else if (name_ == "store")
     {
-	    line += arguments[0] + "[" + arguments[1] + "] = " + arguments[1] + ";";      
+	    line += arguments[0] + "[" + arguments[2] + "] = " + arguments[1] + ";";      
     }
     else
     {

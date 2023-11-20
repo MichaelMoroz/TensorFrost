@@ -84,7 +84,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("indices", [](py::list shape) {
 		Tensors shapeTensors = TensorsFromList(shape);
 		py::tuple indices = py::tuple(shapeTensors.size());
-		for (size_t i = 0; i < shapeTensors.size(); i++) {
+		for (int i = 0; i < shapeTensors.size(); i++) {
 			PyTensor t = PT(Tensor::Index(shapeTensors, i));
 			indices[i] = t;
 		}

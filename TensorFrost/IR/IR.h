@@ -62,6 +62,10 @@ enum class MemoryType {
 class Node
 {
 public:
+	const string name;
+	const Operation* op;
+	Tensor* tensor_;
+
 	Lable* lable_ = nullptr;
 
 	Lable* cluster_head_ = nullptr;
@@ -69,9 +73,6 @@ public:
 	Node* prev_ = nullptr;
 	Node* next_ = nullptr;
 
-	const string name;
-	const Operation* op;
-	Tensor* tensor_;
 	Arguments inputs_;
 	vector<Argument*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
@@ -84,6 +85,7 @@ public:
 	{
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
+		CheckIfValid();
 	}
 
 	Lable* GetLable() {
@@ -116,13 +118,13 @@ public:
 		return result;
 	}
 
-	[[nodiscard]] Tensors GetArgumentTensors(Argument::Type type) {
+	[[nodiscard]] map<int, Tensor*> GetArgumentTensors(Argument::Type type) {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
-		Tensors result = Tensors();
+		map<int, Tensor*> result = map<int, Tensor*>();
 		for (auto& argument : arguments) {
-			result.push_back(argument.from_->get()->tensor_);
+			result[argument.index_] = argument.from_->node_->tensor_;
 		}
 		return result;
 	}
@@ -139,6 +141,19 @@ public:
 
 	void AddArgument(Node* node, Argument::Type type, int index = 0) {
 		inputs_.push_back(Argument(type, node->GetLable(), index));
+	}
+
+	void CheckIfValid()
+	{
+		//must have operation
+		if (op == nullptr) {
+			throw std::runtime_error("Operation not found");
+		}
+
+		//must have tensor
+		if (tensor_ == nullptr) {
+			throw std::runtime_error("Tensor not found");
+		}
 	}
 
 	~Node();

@@ -92,9 +92,21 @@ def PoissonSolver2():
 
 
 # Create a program that initializes the wave simulation
-SomeFunctionProgram = tf.Program(PoissonSolver2)
+SomeFunctionProgram = tf.Program(SomeFunction)
 
 SomeFunctionProgram(list())
 
-SomeFunctionProgram.ListGraphOperations()
+SomeFunctionProgram.ListGraphOperations(compact=False)
 SomeFunctionProgram.ListHLSL()
+
+Anp0 = np.random.rand(2, 2)
+
+print(Anp0)
+
+A = tf.TensorMem(Anp0)
+
+print(A)
+
+Anp = A.numpy
+
+print(Anp)

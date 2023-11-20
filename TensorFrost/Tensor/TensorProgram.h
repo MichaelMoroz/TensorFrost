@@ -24,24 +24,7 @@ class TensorProgram {
 		CreateExecutionGraph();
 	}
 
-	void CreateExecutionGraph() {
-		// create new IR graph
-		Tensor::SetEvaluationContext(&ir);
-		Tensors outputs = evaluate_callback();
-		//set outputs
-		for (const Tensor* output : outputs) {
-			output->SetMemoryType(MemoryType::Output);
-		}
-
-		ir.Clusterize();
-		ir.OptimizeClusters();
-		ir.TransformToLinearIndex();
-		ir.RemoveUnusedNodes();
-		//ir.Clusterize();
-		ir.PostProcessClusters();
-		//ir.Clusterize();
-		Tensor::SetEvaluationContext(nullptr);
-	}
+	void CreateExecutionGraph();
 
 	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }
 
