@@ -39,7 +39,7 @@ public:
                 // Found a free available slot
                 break;
             }
-			      start = frame->end;
+			start = frame->end;
         }
 
         Frame* newFrame = new Frame();
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    uint32_t GetRequiredAllocatedStorage() {
+    uint32_t GetRequiredAllocatedStorage() const {
         if (Frames.empty()) return 0;
         // Get the end of the last frame in the sorted map
 		 return std::prev(Frames.end())->second->end;

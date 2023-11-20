@@ -8,13 +8,13 @@ namespace TensorFrost {
 void TensorMemoryDefinition(py::module& m, py::class_<TensorMemory>& py_tensor_mem) {
 	// "constructor"
 	m.def(
-	    "TensorMem",
+	    "memory",
 	    [](const std::vector<int>& shape, DataType type) {
         return GlobalMemoryManager->Allocate(shape);
     }, "Create a TensorMemory with the given shape");
     
     // "constructor" from numpy array
-    m.def("TensorMem", [](const py::array_t<float>& arr) {
+    m.def("memory", [](const py::array_t<float>& arr) {
         // get the shape
         std::vector<int> shape;
         py::buffer_info info = arr.request();
@@ -62,6 +62,11 @@ void TensorMemoryDefinition(py::module& m, py::class_<TensorMemory>& py_tensor_m
 
         return arr;
     }, "Readback data from tensor memory to a numpy array");
+
+    m.def(
+	    "used_memory",
+	    []() { return GlobalMemoryManager->GetAllocatedSize(); },
+	    "Get the amount of memory currently used by the memory manager");
 }
 
 }  // namespace TensorFrost

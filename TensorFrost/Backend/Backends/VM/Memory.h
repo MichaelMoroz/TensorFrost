@@ -14,7 +14,7 @@ namespace TensorFrost {
 
 using namespace std;
 
-class CPU_MemoryManager : public TensorMemoryManager
+class CPU_VM_MemoryManager : public TensorMemoryManager
 {
 public:
     vector<uint> memory;
@@ -29,7 +29,7 @@ public:
 			    memory.resize(frame->end);
         }
 
-        TensorMemory* tensorMemory = new TensorMemory(shape, frame);
+        TensorMemory* tensorMemory = new TensorMemory(shape, frame, this);
         allocated[frame] = tensorMemory;
         return tensorMemory;
     }
@@ -41,11 +41,12 @@ public:
         return tensorMemory;
     }
 
-    vector<uint> Readback(const TensorMemory* memory) override
+    vector<uint> Readback(const TensorMemory* mem) override
     {
         vector<uint> data;
-        data.resize(memory->GetSize());
-        memcpy(data.data(), this->memory.data() + memory->frame->start, data.size() * sizeof(uint));
+		    data.resize(mem->GetSize());
+		    memcpy(data.data(), this->memory.data() + mem->frame->start,
+		           data.size() * sizeof(uint));
         return data;
     }
 
@@ -54,10 +55,9 @@ public:
         Frame* frame = memory->frame;
         allocator.FreeFrame(*frame);
         allocated.erase(frame);
-        delete memory;
     }
 
-    ~CPU_MemoryManager() override
+    ~CPU_VM_MemoryManager() override
     {
         for (auto& pair : allocated)
         {

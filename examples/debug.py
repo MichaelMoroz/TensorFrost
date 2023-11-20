@@ -92,21 +92,38 @@ def PoissonSolver2():
 
 
 # Create a program that initializes the wave simulation
-SomeFunctionProgram = tf.Program(SomeFunction)
+test = tf.program(SomeFunction)
 
-SomeFunctionProgram(list())
+test(list())
 
-SomeFunctionProgram.ListGraphOperations(compact=False)
-SomeFunctionProgram.ListHLSL()
+test.list_operations(compact=False)
+test.kernel_hlsl()
 
-Anp0 = np.random.rand(2, 2)
+Anp0 = np.random.rand(4, 2)
+Bnp0 = np.random.rand(16)
 
 print(Anp0)
+print(Bnp0)
 
-A = tf.TensorMem(Anp0)
+A = tf.memory(Anp0)
+B = tf.memory(Bnp0)
+A = tf.memory(np.zeros([4, 16]))
 
 print(A)
+print(B)
 
 Anp = A.numpy
+Bnp = B.numpy
 
 print(Anp)
+print(Bnp)
+
+
+v = tf.memory(np.zeros([4, 4]))
+for i in range(32):
+    vnp = v.numpy
+    vnp = 1 + vnp
+    v = tf.memory(vnp)
+    print("Used memory: " + str(tf.used_memory()))
+	
+print(v.numpy)
