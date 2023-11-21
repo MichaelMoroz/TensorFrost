@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "TensorMemory.h"
+#include "ProgramExecutor.h"
 #include "Backends\VM\Memory.h"
 
 namespace TensorFrost {

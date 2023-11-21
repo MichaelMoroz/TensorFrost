@@ -2,7 +2,7 @@ import TensorFrost as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-def SomeFunction():
+def WaveEq():
     u = tf.input([16, 16], tf.float32)
     v = tf.input([16, 16], tf.float32)
 
@@ -79,7 +79,6 @@ def PoissonSolver():
 def PoissonSolver2():
     x = tf.input([-1, -1], tf.float32)
     b = tf.input([-1, -1], tf.float32)
-    n = tf.input([], tf.int32)
 
     i, j = x.indices
 
@@ -90,40 +89,45 @@ def PoissonSolver2():
     return [x]
 
 
-
-# Create a program that initializes the wave simulation
-test = tf.program(SomeFunction)
-
-test(list())
-
+test = tf.program(PoissonSolver2)
 test.list_operations(compact=False)
-test.kernel_hlsl()
 
-Anp0 = np.random.rand(4, 2)
-Bnp0 = np.random.rand(16)
+X = tf.memory(np.zeros([16, 16]))
+B = tf.memory(np.zeros([16, 16]))
 
-print(Anp0)
-print(Bnp0)
+X1 = test(X, B)
 
-A = tf.memory(Anp0)
-B = tf.memory(Bnp0)
-A = tf.memory(np.zeros([4, 16]))
+print(X1)
+print("Used memory: " + str(tf.used_memory()))
 
-print(A)
-print(B)
+#
+#test.kernel_hlsl()
 
-Anp = A.numpy
-Bnp = B.numpy
+#Anp0 = np.random.rand(4, 2)
+#Bnp0 = np.random.rand(16)
 
-print(Anp)
-print(Bnp)
-
-
-v = tf.memory(np.zeros([4, 4]))
-for i in range(32):
-    vnp = v.numpy
-    vnp = 1 + vnp
-    v = tf.memory(vnp)
-    print("Used memory: " + str(tf.used_memory()))
-	
-print(v.numpy)
+#print(Anp0)
+#print(Bnp0)
+#
+#A = tf.memory(Anp0)
+#B = tf.memory(Bnp0)
+#A = tf.memory(np.zeros([4, 16]))
+#
+#print(A)
+#print(B)
+#
+#Anp = A.numpy
+#Bnp = B.numpy
+#
+#print(Anp)
+#print(Bnp)
+#
+#
+#v = tf.memory(np.zeros([2, 3]))
+#for i in range(32):
+#    vnp = v.numpy
+#    vnp = 1 + vnp
+#    v = tf.memory(vnp)
+#    print("Used memory: " + str(tf.used_memory()))
+#	
+#print(v.numpy)

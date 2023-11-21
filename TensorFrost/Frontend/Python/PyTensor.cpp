@@ -34,6 +34,22 @@ Tensors TensorsFromList(const py::list& list) {
 	return tensors;
 }
 
+vector<TensorMemory*> TensorMemoryFromTuple(const py::tuple& tuple) {
+	vector<TensorMemory*> memories;
+	for (auto arg : tuple) {
+		memories.push_back(&arg.cast<TensorMemory&>());
+	}
+	return memories;
+}
+
+vector<TensorMemory*> TensorMemoryFromList(const py::list& list) {
+	vector<TensorMemory*> memories;
+	for (auto arg : list) {
+		memories.push_back(&arg.cast<TensorMemory&>());
+	}
+	return memories;
+}
+
 PyTensors PyTensorsFromTensors(const Tensors& tensors) {
 	PyTensors py_tensors;
 	for (const auto* tensor : tensors) {

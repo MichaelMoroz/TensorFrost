@@ -26,7 +26,7 @@ public:
         // reserve space in memory if needed
         if (frame->end > memory.size())
         {
-			    memory.resize(frame->end);
+			    memory.resize(frame->end*3/2);
         }
 
         TensorMemory* tensorMemory = new TensorMemory(shape, frame, this);

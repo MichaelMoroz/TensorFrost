@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "Tensor.h"
+#include "IR/KernelGen.h"
+#include "Backend/Backend.h"
 
 namespace TensorFrost {
 
@@ -17,18 +19,22 @@ class TensorProgram {
 	using EvaluateFunction = function<Tensors()>;
 	EvaluateFunction evaluate_callback;
 	IR ir;
+	Program* program;
 	bool debug = false;
 
 	explicit TensorProgram(EvaluateFunction evaluate)
 	    : evaluate_callback(std::move(evaluate)) {
-		CreateExecutionGraph();
+		CreateProgram();
 	}
 
-	void CreateExecutionGraph();
+	void CreateProgram();
 
-	static Tensors Evaluate(const Tensors& /*inputs*/) { return Tensors(); }
+	vector<TensorMemory*> Evaluate(const vector<TensorMemory*> input);
 
-	~TensorProgram() = default;
+	~TensorProgram()
+	{
+		delete program;
+	}
 };
 
 }  // namespace TensorFrost

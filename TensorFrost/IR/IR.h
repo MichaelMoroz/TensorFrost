@@ -210,7 +210,7 @@ public:
 
 		bool is_begin() const { return node_->prev_ == nullptr; }
 
-		bool is_cluster_begin() const { return node_ == nullptr || node_->cluster_head_->node_ == node_; }
+		bool is_cluster_begin() const { return node_ == nullptr || node_->cluster_head_ == nullptr || node_->cluster_head_->node_ == node_; }
 
 		bool is_cluster_end(const Lable* cluster) const { return node_ == nullptr || node_->cluster_head_ != cluster; }
 

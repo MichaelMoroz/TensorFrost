@@ -495,4 +495,44 @@ void IR::TransformToLinearIndex()
 	}
 }
 
+Program* GenerateProgram(IR* ir) {
+	Program* program = new Program(ir);
+
+	// go over all clusters, find their type, and add them to the program if they
+	// are used
+	for (auto node = ir->begin(); !node.is_end(); ++node) {
+		Node* begin;
+
+		if (node.is_cluster_begin()) {
+			begin = node.get();
+		} else {
+			continue;
+		}
+
+		// get the cluster type
+		KernelType type;
+		if (begin->name == "memory") {
+			type = KernelType::Memory;
+		} else {
+			type = KernelType::Compute;
+			bool has_output = false;
+			for (auto node = IR::iterator(begin); !node.is_cluster_end(begin->cluster_head_);
+			     ++node) {
+				if (node->op->GetOpType() == OpType::Store ||
+				    node->op->GetOpType() == OpType::Scatter) {
+					has_output = true;
+					break;
+				}
+			}
+
+			if (!has_output) continue;
+		}
+
+		// add the cluster to the program
+		program->AddKernel(type, begin);
+	}
+
+	return program;
+}
+
 }  // namespace TensorFrost

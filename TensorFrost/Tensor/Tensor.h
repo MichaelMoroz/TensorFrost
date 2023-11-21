@@ -341,7 +341,7 @@ class Tensor {
 		Tensors result = Tensors();
 		for (int i : shape) {
 			if (i < 0) {
-				result.push_back(&Input(DataType::Int));
+				result.push_back(&Memory(DataType::Int));
 			} else {
 				result.push_back(&Constant(i));
 			}

@@ -2,7 +2,7 @@
 
 namespace TensorFrost {
 
-void TensorProgram::CreateExecutionGraph()
+void TensorProgram::CreateProgram()
 {
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
@@ -17,7 +17,16 @@ void TensorProgram::CreateExecutionGraph()
 	ir.RemoveUnusedNodes();
 	ir.PostProcessClusters();
 	ir.TransformToLinearIndex();
+
+	program = GenerateProgram(&ir);
+
 	Tensor::SetEvaluationContext(nullptr);
+}
+
+vector<TensorMemory*> TensorProgram::Evaluate(
+    const vector<TensorMemory*> input) {
+
+	return ExecuteProgram(program, input);
 }
 
 }

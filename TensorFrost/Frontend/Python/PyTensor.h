@@ -43,4 +43,7 @@ PyTensors PyTensorsFromList(const py::list& list);
 Tensors TensorsFromList(const py::list& list);
 PyTensors PyTensorsFromTensors(const Tensors& tensors);
 
+vector<TensorMemory*> TensorMemoryFromTuple(const py::tuple& tuple);
+vector<TensorMemory*> TensorMemoryFromList(const py::list& list);
+
 }  // namespace TensorFrost
