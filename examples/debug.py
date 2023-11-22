@@ -2,20 +2,6 @@ import TensorFrost as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-def WaveEq():
-    u = tf.input([16, 16], tf.float32)
-    v = tf.input([16, 16], tf.float32)
-
-    i,j = u.indices
-
-    laplacian = u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - u[i, j] * 4.0
-
-    dt = 0.1
-    v_new = v + dt*laplacian
-    u_new = u + dt*v_new
-
-    return [u_new, v_new]
-
 def SomeFunction2():
     A = tf.input([-1, -1], tf.float32)
     B = tf.input([-1, -1], tf.float32)
@@ -88,9 +74,26 @@ def PoissonSolver2():
    
     return [x]
 
+def WaveEq():
+    u = tf.input([16, 16], tf.float32)
+    v = tf.input([16, 16], tf.float32)
 
-test = tf.program(PoissonSolver2)
-test.list_operations(compact=False)
+    i,j = u.indices
+
+    laplacian = u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - u[i, j] * 4.0
+
+    print("hello")
+
+    dt = 0.1
+    v_new = v + dt*laplacian
+    u_new = u + dt*v_new
+
+    return [u_new, v_new]
+
+tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
+
+test = tf.program(WaveEq)
+test.list_operations(compact=True)
 
 X = tf.memory(np.zeros([16, 16]))
 B = tf.memory(np.zeros([16, 16]))
@@ -98,36 +101,37 @@ B = tf.memory(np.zeros([16, 16]))
 X1 = test(X, B)
 
 print(X1)
+print(X1[0].numpy)
 print("Used memory: " + str(tf.used_memory()))
 
 #
-#test.kernel_hlsl()
+test.kernel_hlsl()
 
-#Anp0 = np.random.rand(4, 2)
-#Bnp0 = np.random.rand(16)
+Anp0 = np.random.rand(4, 2)
+Bnp0 = np.random.rand(16)
 
-#print(Anp0)
-#print(Bnp0)
-#
-#A = tf.memory(Anp0)
-#B = tf.memory(Bnp0)
-#A = tf.memory(np.zeros([4, 16]))
-#
-#print(A)
-#print(B)
-#
-#Anp = A.numpy
-#Bnp = B.numpy
-#
-#print(Anp)
-#print(Bnp)
-#
-#
-#v = tf.memory(np.zeros([2, 3]))
-#for i in range(32):
-#    vnp = v.numpy
-#    vnp = 1 + vnp
-#    v = tf.memory(vnp)
-#    print("Used memory: " + str(tf.used_memory()))
-#	
-#print(v.numpy)
+print(Anp0)
+print(Bnp0)
+
+A = tf.memory(Anp0)
+B = tf.memory(Bnp0)
+A = tf.memory(np.zeros([4, 16]))
+
+print(A)
+print(B)
+
+Anp = A.numpy
+Bnp = B.numpy
+
+print(Anp)
+print(Bnp)
+
+
+v = tf.memory(np.zeros([2, 3]))
+for i in range(32):
+    vnp = v.numpy
+    vnp = 1 + vnp
+    v = tf.memory(vnp)
+    print("Used memory: " + str(tf.used_memory()))
+	
+print(v.numpy)

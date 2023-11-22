@@ -9,8 +9,9 @@
 #include <algorithm>
 
 #include "TensorMemory.h"
-#include "ProgramExecutor.h"
-#include "Backends\VM\Memory.h"
+#include "KernelExecutor.h"
+
+#include "Backends\CPU\CPU.h"
 
 namespace TensorFrost {
 
@@ -19,10 +20,12 @@ using namespace std;
 extern TensorMemoryManager* GlobalMemoryManager;
 
 enum class BackendType {
-    CPU_VM,
+    CPU,
     WGPU,
 };
 
-void InitializeMemoryManager(/*BackendType backendType*/);
+vector<TensorMemory*> ExecuteProgram(Program* program, vector<TensorMemory*> inputs);
+
+void InitializeBackend(BackendType backendType, string compilerPath = "");
 
 }  // namespace TensorFrost

@@ -113,6 +113,10 @@ string GetOperationListing(const IR& ir, bool compact)
 			listing += "type=" + DataTypeToString(node->tensor_->type);
 		}
 
+		if (!compact && node->cluster_head_ != nullptr) {
+			listing += ", cluster=" + GetNodeName(node->cluster_head_->node_, names, compact);
+		}
+
 		listing += ")\n";
 
 		if (node->name == "loop_begin") {

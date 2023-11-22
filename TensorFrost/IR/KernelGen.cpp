@@ -501,17 +501,18 @@ Program* GenerateProgram(IR* ir) {
 	// go over all clusters, find their type, and add them to the program if they
 	// are used
 	for (auto node = ir->begin(); !node.is_end(); ++node) {
-		Node* begin;
+		Node* begin = node.get();
 
-		if (node.is_cluster_begin()) {
-			begin = node.get();
-		} else {
+		if (begin->name != "memory" && !node.is_cluster_begin()) {
 			continue;
 		}
 
 		// get the cluster type
 		KernelType type;
 		if (begin->name == "memory") {
+			if (begin->memory_type_ == MemoryType::Input) {
+				continue;
+			}
 			type = KernelType::Memory;
 		} else {
 			type = KernelType::Compute;

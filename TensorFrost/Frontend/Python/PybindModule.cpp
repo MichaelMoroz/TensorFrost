@@ -13,6 +13,7 @@ void TensorMemoryDefinition(py::module& m, py::class_<TensorMemory>& py_tensor_m
 
 PYBIND11_MODULE(TensorFrost, m) {
 	auto data_type = py::enum_<DataType>(m, "DataType");
+	auto backend_type = py::enum_<BackendType>(m, "BackendType");
 	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
 	auto tensor_view = py::class_<TensorView>(m, "TensorView");
 	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
@@ -22,10 +23,16 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_type.value("int", DataType::Int);
 	data_type.value("uint", DataType::Uint);
 	data_type.value("bool", DataType::Bool);
+	backend_type.value("cpu", BackendType::CPU);
+	backend_type.value("wgpu", BackendType::WGPU);
+
 	m.attr("float32") = DataType::Float;
 	m.attr("int32") = DataType::Int;
 	m.attr("uint32") = DataType::Uint;
 	m.attr("bool") = DataType::Bool;
+
+	m.attr("cpu") = BackendType::CPU;
+	m.attr("wgpu") = BackendType::WGPU;
 
 	PyTensorDefinition(m, py_tensor);
 	TensorViewDefinition(m, tensor_view);
@@ -40,7 +47,9 @@ PYBIND11_MODULE(TensorFrost, m) {
 	TensorProgramDefinition(m, tensor_program);
 	TensorMemoryDefinition(m, py_tensor_mem);
 
-	InitializeMemoryManager();
+	m.def("initialize", [](BackendType backend_type, const std::string& c_compiler_path) {
+		InitializeBackend(backend_type, c_compiler_path);
+	});
 
 	py::print("TensorFrost module loaded!");
 }

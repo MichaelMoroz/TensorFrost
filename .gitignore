@@ -36,4 +36,5 @@ build/
 build_tidy/
 python_module/
 dist/
+temp/
 .vscode/settings.json

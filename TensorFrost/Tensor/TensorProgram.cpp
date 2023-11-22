@@ -21,6 +21,8 @@ void TensorProgram::CreateProgram()
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);
+
+	loadLibraryWin();
 }
 
 vector<TensorMemory*> TensorProgram::Evaluate(

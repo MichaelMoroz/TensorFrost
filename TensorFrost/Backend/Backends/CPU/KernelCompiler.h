@@ -1,20 +1,25 @@
 #pragma once
 
-#include <algorithm>
 #include <functional>
 #include <iostream>
-#include <map>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <map>
+#include <algorithm>
+#include <fstream>
 
-#include "TensorMemory.h"
-#include "IR/KernelGen.h"
+#define NOMINMAX
+#include <windows.h>
 
 namespace TensorFrost {
 
 using namespace std;
 
-vector<TensorMemory*> ExecuteProgram(Program* program, vector<TensorMemory*> inputs);
+extern std::string C_COMPILER_PATH;
+
+void compileLibrary();
+
+void loadLibraryWin();
 
 }  // namespace TensorFrost

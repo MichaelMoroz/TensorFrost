@@ -14,7 +14,7 @@ namespace TensorFrost {
 
 using namespace std;
 
-class CPU_VM_MemoryManager : public TensorMemoryManager
+class CPU_MemoryManager : public TensorMemoryManager
 {
 public:
     vector<uint> memory;
@@ -57,7 +57,7 @@ public:
         allocated.erase(frame);
     }
 
-    ~CPU_VM_MemoryManager() override
+    ~CPU_MemoryManager() override
     {
         for (auto& pair : allocated)
         {
