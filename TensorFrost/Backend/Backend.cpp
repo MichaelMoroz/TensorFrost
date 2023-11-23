@@ -104,10 +104,17 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(Program* program, vector<Tenso
 						}
 						else 
 						{
-							//otherwise, load variable from memory
-							uint offset = memory_map[kernel->variables[j]]->frame->start;
-							uint variable = ((CPU_MemoryManager*)GlobalMemoryManager)->memory[offset];
-							variables.push_back(variable);
+							if (shape_constants.contains(kernel->variables[j])) {
+								variables.push_back(shape_constants[kernel->variables[j]]);
+							}
+							else
+							{
+								// otherwise, load variable from memory
+								uint offset = memory_map[kernel->variables[j]]->frame->start;
+								uint variable =
+									((CPU_MemoryManager*)GlobalMemoryManager)->memory[offset];
+								variables.push_back(variable);
+							}
 						}
 					}
 

@@ -466,8 +466,8 @@ void IR::TransformToLinearIndex()
 						} else {
 							out = const_cast<Tensor*> (indices[dim]);
 						}
-						return out;
-						//return Tensor::clamp(*out, out->Constant(0), *kernel_shape[dim] - 1);
+						//return out;
+						return &Tensor::clamp(*out, out->Constant(0), *kernel_shape[dim] - out->Constant(1));
 					};
 
 					// compute the flat index

@@ -1,17 +1,23 @@
 #include "KernelCompiler.h"
+#include <sstream>
 
 namespace TensorFrost {
 
 std::string C_COMPILER_PATH = "";
 
-bool RunCompiler() 
+bool RunCompiler(TCHAR* tempPath)
 {
 	std::string compilerPath = C_COMPILER_PATH;
-	//cout << "compilerPath: " << compilerPath << endl;
-    char command[512];
-    sprintf(command, "%s -shared temp/generated_lib.c -o temp/generated_lib.dll", compilerPath.c_str());
+	cout << "CompilerPath: " << compilerPath << endl;
+    //char command[512];
+	//sprintf(command, "%s -shared temp/generated_lib.c -o temp/generated_lib.dll", \
+         compilerPath.c_str());
 
-	//cout << "command: " << command << endl;
+	std::basic_stringstream<TCHAR> ss;
+	ss << compilerPath << " -shared " << tempPath << "generated_lib.c -o " << tempPath << "generated_lib.dll";
+	std::basic_string<TCHAR> command = ss.str();
+
+	cout << "Command: " << command << endl;
 
 	STARTUPINFO si;
 	PROCESS_INFORMATION pi;
@@ -21,7 +27,7 @@ bool RunCompiler()
 
 	// Start the child process
 	if (!CreateProcess(NULL,     // No module name (use command line)
-	                   command,  // Command line
+	                   command.data(),  // Command line
 	                   NULL,     // Process handle not inheritable
 	                   NULL,     // Thread handle not inheritable
 	                   FALSE,    // Set handle inheritance to FALSE
@@ -31,8 +37,7 @@ bool RunCompiler()
 	                   &si,      // Pointer to STARTUPINFO structure
 	                   &pi       // Pointer to PROCESS_INFORMATION structure
 	                   )) {
-		std::cerr << "CreateProcess failed (" << GetLastError() << ")\n";
-		return false;
+		throw std::runtime_error("Compiler error: cannot create compiler process");
 	}
 
 	// Wait until child process exits
@@ -45,18 +50,25 @@ bool RunCompiler()
 	return true;
 }
 
-void CompileKernelLibrary(string sourceCode)
-{
+void CompileKernelLibrary(string sourceCode, TCHAR* tempPath) {
+
+	// Append a file name to the tempPath
+	std::basic_stringstream<TCHAR> ss;
+	ss << tempPath << "generated_lib.c";  // Choose an appropriate file name
+	std::basic_string<TCHAR> fullFilePath = ss.str();
+
+	std::string filePath(fullFilePath);
+
 	// Write the generated source code to a file
-	std::ofstream outFile("temp/generated_lib.c");
+	std::ofstream outFile(filePath);
 	if (!outFile) {
-		std::cerr << "Error creating file generated_lib.c\n";
-		return;
+		throw std::runtime_error(
+		    "Compiler error: cannot open file for writing generated source code");
 	}
 	outFile << sourceCode;
 	outFile.close();
 
-	RunCompiler();
+	RunCompiler(tempPath);
 }
 
 typedef unsigned int uint;
@@ -64,19 +76,27 @@ typedef void (*kernel_func)(uint*, uint*, uint*, uint);
 
 void CompileAndLoadKernel(Program* program) 
 {
+	TCHAR tempPath[MAX_PATH];
+	DWORD pathLength = GetTempPath(MAX_PATH, tempPath);
+
+	if (pathLength == 0) {
+		throw std::runtime_error("Compiler error: cannot get temp path");
+	}
+
 	// Generate C code
 	pair<string, vector<string>> source_names = GenerateC(*program->ir_);
 	string sourceCode = source_names.first;
 	vector<string> kernel_names = source_names.second;
 
 	// Compile the library
-    CompileKernelLibrary(sourceCode);  
+    CompileKernelLibrary(sourceCode, tempPath);
 
 	// Load the library
-	HMODULE lib_handle = LoadLibrary(TEXT("temp/generated_lib.dll"));
+	TCHAR libPath[MAX_PATH];
+	sprintf(libPath, "%sgenerated_lib.dll", tempPath);
+	HMODULE lib_handle = LoadLibrary(libPath);
 	if (!lib_handle) {
-		std::cerr << "Cannot load library: " << GetLastError() << '\n';
-		return;
+		throw std::runtime_error("Compiler error: cannot load generated library");
 	}
 
 	// Create lambda function to free the library
@@ -100,9 +120,7 @@ void CompileAndLoadKernel(Program* program)
 		kernel_func kernel_callback = (kernel_func)GetProcAddress(lib_handle, symbol_name.c_str());
 
 		if (!kernel_callback) {
-			std::cerr << "Cannot load symbol '" << symbol_name << "': " << GetLastError() << '\n';
-			FreeLibrary(lib_handle);
-			return;
+			throw std::runtime_error("Compiler error: cannot load kernel function");
 		}
 
 		kernel->execute_callback = [kernel_callback](

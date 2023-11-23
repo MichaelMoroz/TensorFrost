@@ -106,12 +106,24 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	DefineOperators(py_tensor);
 
 	// indexing
-	py_tensor.def("__getitem__", [](const PyTensor& t, py::args indices_tuple) {
+	py_tensor.def("__getitem__", [](const PyTensor& t, const PyTensor& t1) {
+		Tensors indices;
+		indices.push_back(&t1.Get());
+		return TensorView(&t.Get(), indices);
+	});
+	py_tensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		return TensorView(&t.Get(), indices);
 	});
-	py_tensor.def("__setitem__", [](const PyTensor& t, py::args indices_tuple,
+	py_tensor.def("__setitem__",
+	              [](const PyTensor& t, const PyTensor& t1,
 	                                const PyTensor& t2) {
+		Tensors indices;
+		indices.push_back(&t1.Get());
+		Tensor::Store(t.Get(), T(t2), indices);
+	});
+	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
+		const PyTensor& t2) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		Tensor::Store(t.Get(), T(t2), indices);
 	});

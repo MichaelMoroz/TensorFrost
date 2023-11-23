@@ -83,8 +83,8 @@ def TEST():
     return [c]
 
 def WaveEq():
-    u = tf.input([16, 16], tf.float32)
-    v = tf.input([16, 16], tf.float32)
+    u = tf.input([8, 8], tf.float32)
+    v = tf.input([8, 8], tf.float32)
 
     i,j = u.indices
 
@@ -99,12 +99,12 @@ def WaveEq():
     return [u_new, v_new]
 
 def WaveEq1D():
-    u = tf.input([16], tf.float32)
-    v = tf.input([16], tf.float32)
+    u = tf.input([-1], tf.float32)
+    v = tf.input([-1], tf.float32)
 
     i = u.indices[0]
 
-    laplacian = u[tf.clamp(i-1, 0, 15)] + u[tf.clamp(i+1, 0, 15)] - u * 2.0
+    laplacian = u[i-1] + u[i+1] - u * 2.0
 
     dt = 0.1
     v_new = v + dt*laplacian
@@ -132,11 +132,11 @@ def TEST():
     return [c]
 
 tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
-test = tf.program(WaveEq1D)
-#test.list_operations(compact=True)
+test = tf.program(WaveEq)
+test.list_operations(compact=True)
 #test.kernel_c()
-Anp = np.random.rand(16)
-Bnp = np.random.rand(16)
+Anp = np.random.rand(8, 8)
+Bnp = np.random.rand(8, 8)
 print(Anp)
 print(Bnp)
 A = tf.memory(Anp)
@@ -146,7 +146,7 @@ print(C)
 print(C[1].numpy)
 
 #compare with numpy
-Cnp = WaveEq1Dnp(Anp, Bnp)[0]
-print(Cnp)
+#Cnp = WaveEq1Dnp(Anp, Bnp)[0]
+#print(Cnp)
 
 print("Used memory: " + str(tf.used_memory()))
