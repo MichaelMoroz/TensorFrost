@@ -11,6 +11,8 @@
 #include "TensorMemory.h"
 #include "KernelExecutor.h"
 
+#include "CodeGen\Generators.h"
+
 #include "Backends\CPU\CPU.h"
 
 namespace TensorFrost {

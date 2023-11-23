@@ -460,11 +460,14 @@ void IR::TransformToLinearIndex()
 
 					//function to get index for given dimension, if not found then return default dim index
 					std::function<Tensor*(int)> get_index = [&](int dim) {
+						Tensor* out = nullptr;
 						if (idx.find(dim) != idx.end()) {
-							return idx[dim];
+							out = idx[dim];
 						} else {
-							return const_cast<Tensor*> (indices[dim]);
+							out = const_cast<Tensor*> (indices[dim]);
 						}
+						return out;
+						//return Tensor::clamp(*out, out->Constant(0), *kernel_shape[dim] - 1);
 					};
 
 					// compute the flat index
@@ -509,6 +512,8 @@ Program* GenerateProgram(IR* ir) {
 
 		// get the cluster type
 		KernelType type;
+		vector<Node*> variables;
+		vector<Node*> memory_nodes;
 		if (begin->name == "memory") {
 			if (begin->memory_type_ == MemoryType::Input) {
 				continue;
@@ -519,10 +524,25 @@ Program* GenerateProgram(IR* ir) {
 			bool has_output = false;
 			for (auto node = IR::iterator(begin); !node.is_cluster_end(begin->cluster_head_);
 			     ++node) {
-				if (node->op->GetOpType() == OpType::Store ||
-				    node->op->GetOpType() == OpType::Scatter) {
+				OpType op_type = node->op->GetOpType();
+				if (op_type == OpType::Store || op_type == OpType::Scatter) {
 					has_output = true;
-					break;
+				}
+				if(op_type == OpType::Load || op_type == OpType::Store || op_type == OpType::Scatter)
+				{
+					//get the memory node
+					const Tensor* memory = node->GetArgumentTensors(Argument::Type::Memory)[0];
+					memory_nodes.push_back(memory->node);
+				}
+
+				//get all input arguments
+				map<int, Tensor*> inputs = node->GetArgumentTensors(Argument::Type::Input);
+				for(auto& input : inputs)
+				{
+					if(input.second->node->name == "memory")
+					{
+						variables.push_back(input.second->node);
+					}
 				}
 			}
 
@@ -530,7 +550,7 @@ Program* GenerateProgram(IR* ir) {
 		}
 
 		// add the cluster to the program
-		program->AddKernel(type, begin);
+		program->AddKernel(type, begin, variables, memory_nodes);
 	}
 
 	return program;

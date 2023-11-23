@@ -1,6 +1,6 @@
 #pragma once
 
-#include "IR/CodeGen/Generators.h"
+#include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
 using namespace std;

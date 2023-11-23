@@ -74,6 +74,14 @@ def PoissonSolver2():
    
     return [x]
 
+def TEST():
+    a = tf.input([-1], tf.float32)
+    b = tf.input([-1], tf.float32)
+
+    c = (a + b) * 2.0
+   
+    return [c]
+
 def WaveEq():
     u = tf.input([16, 16], tf.float32)
     v = tf.input([16, 16], tf.float32)
@@ -90,48 +98,55 @@ def WaveEq():
 
     return [u_new, v_new]
 
+def WaveEq1D():
+    u = tf.input([16], tf.float32)
+    v = tf.input([16], tf.float32)
+
+    i = u.indices[0]
+
+    laplacian = u[tf.clamp(i-1, 0, 15)] + u[tf.clamp(i+1, 0, 15)] - u * 2.0
+
+    dt = 0.1
+    v_new = v + dt*laplacian
+    u_new = u + dt*v_new
+
+    return [u_new, v_new]
+
+def WaveEq1Dnp(u, v):
+	laplacian = np.zeros(16)
+	for i in range(16):
+		laplacian[i] = u[max(i-1, 0)] + u[min(i+1, 15)] - u[i] * 2.0
+
+	dt = 0.1
+	v_new = v + dt*laplacian
+	u_new = u + dt*v_new
+
+	return [u_new, v_new]
+
+def TEST():
+    a = tf.input([-1], tf.float32)
+    b = tf.input([-1], tf.float32)
+
+    c = tf.sin((a + b) / 2.0)
+   
+    return [c]
+
 tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
-
-test = tf.program(WaveEq)
-test.list_operations(compact=True)
-
-X = tf.memory(np.zeros([16, 16]))
-B = tf.memory(np.zeros([16, 16]))
-
-X1 = test(X, B)
-
-print(X1)
-print(X1[0].numpy)
-print("Used memory: " + str(tf.used_memory()))
-
-#
-test.kernel_hlsl()
-
-Anp0 = np.random.rand(4, 2)
-Bnp0 = np.random.rand(16)
-
-print(Anp0)
-print(Bnp0)
-
-A = tf.memory(Anp0)
-B = tf.memory(Bnp0)
-A = tf.memory(np.zeros([4, 16]))
-
-print(A)
-print(B)
-
-Anp = A.numpy
-Bnp = B.numpy
-
+test = tf.program(WaveEq1D)
+#test.list_operations(compact=True)
+#test.kernel_c()
+Anp = np.random.rand(16)
+Bnp = np.random.rand(16)
 print(Anp)
 print(Bnp)
+A = tf.memory(Anp)
+B = tf.memory(Bnp)
+C = test(A, B)
+print(C)
+print(C[1].numpy)
 
+#compare with numpy
+Cnp = WaveEq1Dnp(Anp, Bnp)[0]
+print(Cnp)
 
-v = tf.memory(np.zeros([2, 3]))
-for i in range(32):
-    vnp = v.numpy
-    vnp = 1 + vnp
-    v = tf.memory(vnp)
-    print("Used memory: " + str(tf.used_memory()))
-	
-print(v.numpy)
+print("Used memory: " + str(tf.used_memory()))

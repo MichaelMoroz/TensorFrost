@@ -61,7 +61,7 @@ vector<Operation> operations = {
     Operation("atan2", {"ff_f"}, 32),
     Operation("mod", {"ff_f"}, 2),
     Operation("step", {"ff_f"}, 2),
-    Operation("clamp", {"fff_f"}, 2),
+    Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
     Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4),
@@ -78,7 +78,7 @@ vector<Operation> operations = {
     Operation("variable", {"_f", "_u", "_i"}, 2),
     Operation("const", {"_f", "_u", "_i"}, 0),
     Operation("dim_id", {"_i", "_u"}, 4),
-    Operation("thread_id", {"_i", "_u"}, 1),
+    Operation("thread_id", {"_i", "_u"}, 1, "", OpType::Variable),
     Operation("group_thread_id", {"_i", "_u"}, 1),
     Operation("group_id", {"_i", "_u"}, 1),
     Operation("group_count", {"_i", "_u"}, 1),
@@ -134,6 +134,10 @@ string Operation::GenerateOpString(const vector<string>& arguments) const
     {
 		line += code_;
 	}
+    else if (op_type_ == OpType::Variable)
+    {
+        line += code_;
+    }
     else
     {
 		line += "";//throw runtime_error("Invalid op type");
@@ -168,11 +172,36 @@ string Operation::GenerateLine(const string& var_name, const vector<string>& arg
     else if (name_ == "load")
     {
         line += TypeNames[output_type] + " " + var_name + " = ";
-        line += arguments[0] + "[" + arguments[1] + "];";
+        if(output_type == DataType::Float)
+        {
+            line += "asfloat(";
+        }
+        if(output_type == DataType::Int)
+        {
+            line += "asint(";
+        }
+        line += arguments[0] + "[" + arguments[1] + "]";
+        if(output_type == DataType::Float || output_type == DataType::Int)
+        {
+            line += ")";
+        }
+        line += ";";
     }
     else if (name_ == "store")
     {
-	    line += arguments[0] + "[" + arguments[2] + "] = " + arguments[1] + ";";      
+	    line += arguments[0] + "[" + arguments[1] + "] = ";
+		    if (input_types[0] == DataType::Float ||
+		        input_types[0] == DataType::Int)
+        {
+            line += "asuint(";
+        }
+        line += arguments[2];
+		    if (input_types[0] == DataType::Float ||
+		        input_types[0] == DataType::Int)
+        {
+            line += ")";
+        }    
+        line += ";";
     }
     else
     {

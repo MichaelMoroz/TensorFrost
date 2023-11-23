@@ -51,6 +51,13 @@ return py_outputs;
 		py::str result = py::str(hlsl);
 		py::print(result);
 	});
+
+	tensor_program.def("kernel_c", [](TensorProgram& program) {
+		pair<string, vector<string>> source = GenerateC(program.ir);
+		string c = source.first;
+		py::str result = py::str(c);
+		py::print(result);
+	});
 }
 
 }  // namespace TensorFrost

@@ -11,4 +11,7 @@ namespace TensorFrost {
 
     string GenerateHLSL(const IR&);
     string GenerateKernelHLSL(const IR&, const Lable*);
+
+    pair<string, vector<string>> GenerateC(const IR&);
+    string GenerateKernelC(const IR&, const Lable*);
 }   // namespace TensorFrost

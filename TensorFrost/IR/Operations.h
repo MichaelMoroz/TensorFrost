@@ -30,6 +30,7 @@ enum class OpType {
 	Loop,
 	Conditional,
 	Special,
+	Variable,
 	Memory,
 };
 

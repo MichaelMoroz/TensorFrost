@@ -16,5 +16,4 @@ namespace TensorFrost {
 using namespace std;
 
 
-
 }  // namespace TensorFrost

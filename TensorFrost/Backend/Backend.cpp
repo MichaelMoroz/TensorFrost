@@ -90,7 +90,28 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(Program* program, vector<Tenso
 					for (int j = 0; j < args.size(); j++) {
 						thread_count *= shape_constants[args[j]->node];
 					}
-					
+
+					vector<uint> memory_offsets;
+					vector<uint> variables;
+					for (int j = 0; j < kernel->memory.size(); j++) {
+					  memory_offsets.push_back(
+					      memory_map[kernel->memory[j]]->frame->start);
+					}
+					for (int j = 0; j < kernel->variables.size(); j++) {
+						//if variable is a constant, add constant value to variable offsets
+						if (kernel->variables[j]->name == "const") {
+							variables.push_back(kernel->variables[j]->tensor_->data[0]);
+						}
+						else 
+						{
+							//otherwise, load variable from memory
+							uint offset = memory_map[kernel->variables[j]]->frame->start;
+							uint variable = ((CPU_MemoryManager*)GlobalMemoryManager)->memory[offset];
+							variables.push_back(variable);
+						}
+					}
+
+					kernel->execute_callback(GlobalMemoryManager, variables, memory_offsets, thread_count);
 				}
 				break;
 		}

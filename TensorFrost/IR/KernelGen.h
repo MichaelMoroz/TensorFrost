@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Tensor/Tensor.h"
+#include "Backend/TensorMemory.h"
 
 namespace TensorFrost {
 
@@ -17,16 +18,21 @@ class Kernel
 public:
     KernelType type_;
     Node* begin_;
+    vector<Node*> variables;
+    vector<Node*> memory;
+	function<void(TensorMemoryManager*, vector<uint>, vector<uint>, uint)> execute_callback;
 };
 
 class Program {
 public:
 	IR* ir_;
 	vector<Kernel> kernels_;
+	function<void()> unload_callback;
+
     Program(IR* ir) : ir_(ir) {}
 
-	void AddKernel(KernelType type, Node* begin) {
-		kernels_.push_back({ type, begin });
+	void AddKernel(KernelType type, Node* begin, vector<Node*> variables, vector<Node*> memory) {
+		kernels_.push_back({ type, begin, variables, memory });
 	}
 };
 
