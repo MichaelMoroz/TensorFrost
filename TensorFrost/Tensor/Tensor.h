@@ -85,7 +85,17 @@ class Tensor {
 		Arguments arguments = Arguments();
 
 		AddArguments(arguments, tensors, Argument::Type::Input);
-		AddArguments(arguments, tensors[0]->node->GetArguments(Argument::Type::Shape));
+
+		//get an input node that has shape arguments
+		Arguments shape_arguments;
+		for (const Tensor* tensor : tensors) {
+			shape_arguments = tensor->node->GetArguments(Argument::Type::Shape);
+			if (shape_arguments.size() > 0) {
+				break;
+			}
+		}
+
+		AddArguments(arguments, shape_arguments);
 
 		return CreateNode(output_type, arguments, op);
 	}
@@ -547,6 +557,10 @@ class Tensor {
 	static Tensor& round(const Tensor& x) { return Op("round", &x); }
 	static Tensor& trunc(const Tensor& x) { return Op("trunc", &x); }
 	static Tensor& frac(const Tensor& x) { return Op("frac", &x); }
+
+	static Tensor& tofloat(const Tensor& x) { return Op("float", &x); }
+	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
+	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
 		return Op("clamp", &x, &min, &max);

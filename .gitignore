@@ -38,3 +38,4 @@ python_module/
 dist/
 temp/
 .vscode/settings.json
+vc140.pdb

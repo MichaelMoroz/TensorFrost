@@ -32,6 +32,9 @@ enum class OpType {
 	Special,
 	Variable,
 	Memory,
+	UnaryOperator,
+	TypeCast,
+	TypeReinterpret,
 };
 
 using DataTypeList = vector<DataType>;

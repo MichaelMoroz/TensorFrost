@@ -473,13 +473,17 @@ void IR::TransformToLinearIndex()
 
 					// compute the flat index
 					Tensor* flat_index = get_index(memory_dim - 1);
+					//Tensor* t_size = const_cast<Tensor*>(kernel_shape[memory_dim - 1]);
 					for (int i = memory_dim - 2; i >= 0; i--) {
+						//*t_size = *t_size * *kernel_shape[i];
 						*flat_index = *flat_index * *kernel_shape[i];
 						*flat_index = *flat_index + *get_index(i);
 					}
+					
+					//clamp the final index
+					flat_index = &Tensor::clamp(*flat_index, flat_index->Constant(0),
+					                            flat_index->Constant(256*256 - 1));
 
-					// TODO clamp each dimension index individually instead of the flat
-					// index
 					// TODO add different modes for clamping (e.g. clamp, wrap, mirror,
 					// zero)
 

@@ -14,7 +14,8 @@ bool RunCompiler(TCHAR* tempPath, TCHAR* dllName)
          compilerPath.c_str());
 
 	std::basic_stringstream<TCHAR> ss;
-	ss << compilerPath << " -shared " << tempPath << "generated_lib.c -o " << dllName;
+	//ss << compilerPath << " -g -shared " << tempPath << "generated_lib.c -o " << dllName;
+	ss << compilerPath << " /LD /Zi " << tempPath << "generated_lib.c /Fe:" << dllName; // MSVC
 	std::basic_string<TCHAR> command = ss.str();
 
 	cout << "Command: " << command << endl;
@@ -68,6 +69,8 @@ void CompileKernelLibrary(string sourceCode, TCHAR* tempPath, TCHAR* dllName)
 	std::basic_string<TCHAR> fullFilePath = ss.str();
 
 	std::string filePath(fullFilePath);
+
+	cout << "Source path: " << filePath << endl;
 
 	// Write the generated source code to a file
 	std::ofstream outFile(filePath);

@@ -44,6 +44,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(rsqrt);
 	UNARY_FUNCTION(rcp);
 
+	m.def("float", [](const PyTensor& t) { return PT(Tensor::tofloat(T(t))); });
+	m.def("uint", [](const PyTensor& t) { return PT(Tensor::touint(T(t))); });
+	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });
+
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);

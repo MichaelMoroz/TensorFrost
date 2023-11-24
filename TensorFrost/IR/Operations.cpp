@@ -28,9 +28,15 @@ vector<Operation> operations = {
     Operation("lte", {"ff_b", "uu_b" "ii_b"}, 1, "<=", OpType::Operator),
     Operation("gt", {"ff_b", "uu_b", "ii_b"}, 1, ">", OpType::Operator),
     Operation("gte", {"ff_b", "uu_b","ii_b"}, 1, ">=", OpType::Operator),
-    Operation("uint", {"f_u", "u_u", "i_u"}, 1),
-    Operation("int", {"f_i", "u_i", "i_i"}, 1),
-    Operation("float", {"f_f", "u_f", "i_f"}, 1),
+    Operation("not", {"b_b"}, 1, "!", OpType::UnaryOperator),
+    Operation("neg", {"f_f", "u_u", "i_i"}, 1, "-", OpType::UnaryOperator),
+    Operation("uint", {"f_u", "u_u", "i_u"}, 1, "uint", OpType::TypeCast),
+    Operation("int", {"f_i", "u_i", "i_i"}, 1, "int", OpType::TypeCast),
+    Operation("float", {"f_f", "u_f", "i_f"}, 1, "float", OpType::TypeCast),
+    Operation("bool", {"f_b", "u_b", "i_b"}, 1, "bool", OpType::TypeCast),
+    Operation("asuint", {"f_u", "u_u", "i_u"}, 0, "asuint", OpType::TypeReinterpret),
+    Operation("asint", {"f_i", "u_i", "i_i"}, 0, "asint", OpType::TypeReinterpret),
+    Operation("asfloat", {"f_f", "u_f", "i_f"}, 0, "asfloat", OpType::TypeReinterpret),
     Operation("min", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("max", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("abs", {"f_f", "u_u", "i_i"}, 1),
@@ -117,6 +123,10 @@ string Operation::GenerateOpString(const vector<string>& arguments) const
     {
         line += arguments[0] + " " + code_ + " " + arguments[1];
     }
+    else if (op_type_ == OpType::UnaryOperator)
+    {
+        line += code_ + arguments[0];
+    }
     else if(op_type_ == OpType::Function)
     {
         line += code_ + "(";
@@ -138,6 +148,14 @@ string Operation::GenerateOpString(const vector<string>& arguments) const
     {
         line += code_;
     }
+    else if (op_type_ == OpType::TypeCast)
+    {
+		line += "(" + code_ + ")" + arguments[0];
+    } 
+    else if (op_type_ == OpType::TypeReinterpret) 
+    {
+		line += "*(" + code_ + "*)&" + arguments[0];
+	}
     else
     {
 		line += "";//throw runtime_error("Invalid op type");

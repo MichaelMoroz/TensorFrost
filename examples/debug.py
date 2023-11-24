@@ -1,6 +1,7 @@
 import TensorFrost as tf
 import numpy as np
 import matplotlib.pyplot as plt
+import time
 
 def SomeFunction2():
     A = tf.input([-1, -1], tf.float32)
@@ -142,33 +143,104 @@ def TEST():
    
     return [c]
 
-tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
-test = tf.program(WaveEq)
-poisson = tf.program(PoissonSolver2)
-#test.list_operations(compact=True)
-#test.kernel_c()
-Anp = np.random.rand(16, 16)
-Bnp = np.random.rand(16, 16)
-#print(Anp)
-#print(Bnp)
-A = tf.memory(Anp)
-B = tf.memory(Bnp)
-A, B = test(A, B)
-#print(C1)
-#print(C1.numpy)
+N = 256
 
-#compare with numpy
-#Cnp = WaveEq1Dnp(Anp, Bnp)[0]
-#print(Cnp)
+def Bilinear(tex, x, y):
+    xi = tf.floor(x)
+    yi = tf.floor(y)
+    xf = x - xi
+    yf = y - yi
+    xi = tf.int(xi)
+    yi = tf.int(yi)
+    return (1.0-xf)*(1.0-yf)*tex[xi, yi] + xf*(1.0-yf)*tex[xi+1, yi] + (1.0-xf)*yf*tex[xi, yi+1] + xf*yf*tex[xi+1, yi+1]
 
-print("Used memory: " + str(tf.used_memory()))
+def FluidTest():
+    vx = tf.input([N, N], tf.float32)
+    vy = tf.input([N, N], tf.float32)
+    density = tf.input([N, N], tf.float32)
+    pressure = tf.input([N, N], tf.float32)
 
-import time
+    dt = 0.1
+
+    # advect velocity
+    i,j = vx.indices
+    x, y = tf.float(i), tf.float(j)
+    x1, y1 = x - vx*dt, y - vy*dt
+    #
+    vx = Bilinear(vx, x1, y1)
+    vy = Bilinear(vy, x1, y1)
+    density = Bilinear(density, x1, y1)
+    
+    # add source
+    source = tf.exp(-((x-N/3.0)**2.0 + (y-N/3.0)**2.0)/10.0)
+    density = density + source
+    vx = vx + source
+
+    # compute divergence
+    div = vx[i+1, j] - vx[i-1, j] + vy[i, j+1] - vy[i, j-1]
+
+    # pressure solve
+    for i in range(1):
+        pressure = (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
+    
+    # subtract pressure gradient
+    vx = vx - (pressure[i+1, j] - pressure[i-1, j]) / 2.0
+    vy = vy - (pressure[i, j+1] - pressure[i, j-1]) / 2.0
+
+    return [vx, vy, density, pressure]
+
+#tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
+#tf.initialize(tf.cpu, "C:/msys64/mingw64/bin/gcc.exe")
+tf.initialize(tf.cpu,
+"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe /I \"C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/ucrt\" ") 
+fluid = tf.program(FluidTest)
+#test = tf.program(WaveEq)
+#poisson = tf.program(PoissonSolver2)
+##test.list_operations(compact=True)
+##test.kernel_c()
+#Anp = np.random.rand(16, 16)
+#Bnp = np.random.rand(16, 16)
+##print(Anp)
+##print(Bnp)
+#A = tf.memory(Anp)
+#B = tf.memory(Bnp)
+#A, B = test(A, B)
+##print(C1)
+##print(C1.numpy)
+#
+##compare with numpy
+##Cnp = WaveEq1Dnp(Anp, Bnp)[0]
+##print(Cnp)
+#
+#print("Used memory: " + str(tf.used_memory()))
+#
+#start = time.time()
+#
+#for i in range(200):
+#    A, B  = test(A, B)
+#    if i % 100 == 0:
+#        print("Used memory: " + str(tf.used_memory()))
+#        print("Time: " + str(time.time() - start))
+#        start = time.time()
+
+
+VX = tf.memory(np.zeros((N, N)))
+VY = tf.memory(np.zeros((N, N)))
+DENSITY = tf.memory(np.zeros((N, N)))
+PRESSURE = tf.memory(np.zeros((N, N)))
+
+fluid.list_operations(compact=True)
+
+VX,VY, DENSITY, PRESSURE = fluid(VX,VY,DENSITY,PRESSURE)
+
+#VX,VY,DENSITY,PRESSURE = fluid(VX,VY,DENSITY,PRESSURE)
+
+#do a few steps and measure performance by timing every 100 steps
 start = time.time()
 
-for i in range(200):
-    A, B  = test(A, B)
-    if i % 100 == 0:
-        print("Used memory: " + str(tf.used_memory()))
-        print("Time: " + str(time.time() - start))
-        start = time.time()
+#for i in range(1000):
+#    VX, = fluid(VX)
+#    if i % 100 == 99:
+#        print("Iterations per second: " + str(100/(time.time()-start)))
+#        start = time.time()
+
