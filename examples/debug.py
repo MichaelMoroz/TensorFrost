@@ -74,6 +74,17 @@ def PoissonSolver2():
    
     return [x]
 
+def PoissonStep():
+    u = tf.input([-1, -1], tf.float32)
+    f = tf.input([-1, -1], tf.float32)
+
+    i,j = u.indices
+
+    u = (u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - f) / 4.0
+    u = (u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - f) / 4.0
+
+    return [u]
+
 def TEST():
     a = tf.input([-1], tf.float32)
     b = tf.input([-1], tf.float32)
@@ -133,6 +144,7 @@ def TEST():
 
 tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
 test = tf.program(WaveEq)
+poisson = tf.program(PoissonSolver2)
 #test.list_operations(compact=True)
 #test.kernel_c()
 Anp = np.random.rand(16, 16)
