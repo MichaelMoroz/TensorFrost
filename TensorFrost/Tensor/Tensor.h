@@ -170,8 +170,8 @@ class Tensor {
 		return copy;
 	}
 
-	void SetMemoryType(MemoryType memory_type) const {
-		node->SetMemoryType(memory_type);
+	void SetMemoryType(MemoryType memory_type, int index = 0) const {
+		node->SetMemoryType(memory_type, index);
 	}
 
 	[[nodiscard]] int GetDimension() const {

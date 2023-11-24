@@ -56,7 +56,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(Program* program, vector<Tenso
 	}
 
 	unordered_set<TensorMemory*> temp_memory;
-	vector<TensorMemory*> outputs;
+	map<int, TensorMemory*> output_memory;
 	//go over the kernels and execute them
 	for (int i = 0; i < program->kernels_.size(); i++) {
 		Kernel* kernel = &program->kernels_[i];
@@ -74,10 +74,11 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(Program* program, vector<Tenso
 						shape.push_back(shape_constants[shape_node]);
 					}
 					TensorMemory* memory = GlobalMemoryManager->Allocate(shape);
-					if (node->memory_type_ == MemoryType::Output) {
-						outputs.push_back(memory);
-					} else {
+					if (node->memory_type_ != MemoryType::Output) {
 						temp_memory.insert(memory);
+					}
+					else {
+						output_memory[node->memory_index_] = memory;
 					}
 					memory_map[node] = memory;
 				}
@@ -129,6 +130,10 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(Program* program, vector<Tenso
 		delete *it;
 	}
 
+	vector<TensorMemory*> outputs;
+	for (int i = 0; i < output_memory.size(); i++) {
+		outputs.push_back(output_memory[i]);
+	}
 	return outputs;
 }
 

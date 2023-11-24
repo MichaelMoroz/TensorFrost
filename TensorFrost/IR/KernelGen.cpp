@@ -314,6 +314,7 @@ void IR::PostProcessClusters() {
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;
+					mem->memory_index_ = output->memory_index_;
 					output->memory_type_ = MemoryType::None;
 				}
 			}, false);

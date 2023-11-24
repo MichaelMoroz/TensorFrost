@@ -26,15 +26,28 @@ void TensorProgramDefinition(py::module& m,
 	tensor_program.def(
 	    "__call__",
 	    [](TensorProgram& program, py::args py_inputs) {
-		   //vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
-			vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
+		    vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
 		    vector<TensorMemory*> outputs = program.Evaluate(inputs);
-			//output a tuple of tensor memories
-py::tuple py_outputs = py::tuple(outputs.size());
+		    // output a tuple of tensor memories
+		    py::tuple py_outputs = py::tuple(outputs.size());
 		    for (size_t i = 0; i < outputs.size(); i++) {
-			    py_outputs[i] = outputs[i];
+				py_outputs[i] = py::cast(*outputs[i]);
 		    }
-return py_outputs;
+		    return py_outputs;
+	    },
+	    "Evaluate the TensorProgram with the given inputs");
+
+	tensor_program.def(
+	    "__call__",
+	    [](TensorProgram& program, py::tuple py_inputs) {
+		    vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
+		    vector<TensorMemory*> outputs = program.Evaluate(inputs);
+		    // output a tuple of tensor memories
+		    py::tuple py_outputs = py::tuple(outputs.size());
+		    for (size_t i = 0; i < outputs.size(); i++) {
+			    py_outputs[i] = py::cast(*outputs[i]);
+		    }
+		    return py_outputs;
 	    },
 	    "Evaluate the TensorProgram with the given inputs");
 

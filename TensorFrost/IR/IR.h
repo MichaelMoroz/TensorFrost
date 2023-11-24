@@ -76,6 +76,7 @@ public:
 	Arguments inputs_;
 	vector<Argument*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
+	int memory_index_ = 0;
 
 	Node(Tensor* tensor, Arguments args, string name)
 	    : tensor_(tensor),
@@ -98,8 +99,9 @@ public:
 		}
 	}
 
-	void SetMemoryType(MemoryType memory_type) {
+	void SetMemoryType(MemoryType memory_type, int index = 0) {
 		memory_type_ = memory_type;
+		memory_index_ = index;
 	}
 	
 	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {

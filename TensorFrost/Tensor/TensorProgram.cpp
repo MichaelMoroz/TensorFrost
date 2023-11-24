@@ -8,8 +8,8 @@ void TensorProgram::CreateProgram()
 	Tensor::SetEvaluationContext(&ir);
 	Tensors outputs = evaluate_callback();
 	// set outputs
-	for (const Tensor* output : outputs) {
-		output->SetMemoryType(MemoryType::Output);
+	for (int i = 0; i < outputs.size(); i++) {
+		outputs[i]->SetMemoryType(MemoryType::Output, i);
 	}
 
 	ir.Clusterize();

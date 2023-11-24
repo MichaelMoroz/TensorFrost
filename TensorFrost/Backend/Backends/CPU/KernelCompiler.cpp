@@ -5,7 +5,7 @@ namespace TensorFrost {
 
 std::string C_COMPILER_PATH = "";
 
-bool RunCompiler(TCHAR* tempPath)
+bool RunCompiler(TCHAR* tempPath, TCHAR* dllName)
 {
 	std::string compilerPath = C_COMPILER_PATH;
 	cout << "CompilerPath: " << compilerPath << endl;
@@ -14,7 +14,7 @@ bool RunCompiler(TCHAR* tempPath)
          compilerPath.c_str());
 
 	std::basic_stringstream<TCHAR> ss;
-	ss << compilerPath << " -shared " << tempPath << "generated_lib.c -o " << tempPath << "generated_lib.dll";
+	ss << compilerPath << " -shared " << tempPath << "generated_lib.c -o " << dllName;
 	std::basic_string<TCHAR> command = ss.str();
 
 	cout << "Command: " << command << endl;
@@ -42,6 +42,16 @@ bool RunCompiler(TCHAR* tempPath)
 
 	// Wait until child process exits
 	WaitForSingleObject(pi.hProcess, INFINITE);
+	
+	// Check for compiler errors
+	DWORD exitCode;
+	GetExitCodeProcess(pi.hProcess, &exitCode);
+	if (exitCode != 0) {
+		throw std::runtime_error(
+		    "Compiler error: compiler exited with non-zero exit code (Error "
+		    "code: " +
+		    to_string(exitCode) + ")");
+	}
 
 	// Close process and thread handles
 	CloseHandle(pi.hProcess);
@@ -50,8 +60,8 @@ bool RunCompiler(TCHAR* tempPath)
 	return true;
 }
 
-void CompileKernelLibrary(string sourceCode, TCHAR* tempPath) {
-
+void CompileKernelLibrary(string sourceCode, TCHAR* tempPath, TCHAR* dllName) 
+{
 	// Append a file name to the tempPath
 	std::basic_stringstream<TCHAR> ss;
 	ss << tempPath << "generated_lib.c";  // Choose an appropriate file name
@@ -68,7 +78,7 @@ void CompileKernelLibrary(string sourceCode, TCHAR* tempPath) {
 	outFile << sourceCode;
 	outFile.close();
 
-	RunCompiler(tempPath);
+	RunCompiler(tempPath, dllName);
 }
 
 typedef unsigned int uint;
@@ -83,18 +93,24 @@ void CompileAndLoadKernel(Program* program)
 		throw std::runtime_error("Compiler error: cannot get temp path");
 	}
 
+	// Create a temporary library name
+	TCHAR tempFileName[MAX_PATH];
+	if (!GetTempFileName(tempPath, TEXT("lib"), 0, tempFileName)) {
+		throw std::runtime_error("Compiler error: cannot create temp file");
+	}
+
+	cout << "Temp file: " << tempFileName << endl;
+
 	// Generate C code
 	pair<string, vector<string>> source_names = GenerateC(*program->ir_);
 	string sourceCode = source_names.first;
 	vector<string> kernel_names = source_names.second;
 
 	// Compile the library
-    CompileKernelLibrary(sourceCode, tempPath);
+    CompileKernelLibrary(sourceCode, tempPath, tempFileName);
 
 	// Load the library
-	TCHAR libPath[MAX_PATH];
-	sprintf(libPath, "%sgenerated_lib.dll", tempPath);
-	HMODULE lib_handle = LoadLibrary(libPath);
+	HMODULE lib_handle = LoadLibrary(tempFileName);
 	if (!lib_handle) {
 		throw std::runtime_error("Compiler error: cannot load generated library");
 	}

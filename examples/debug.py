@@ -83,8 +83,8 @@ def TEST():
     return [c]
 
 def WaveEq():
-    u = tf.input([8, 8], tf.float32)
-    v = tf.input([8, 8], tf.float32)
+    u = tf.input([16, 16], tf.float32)
+    v = tf.input([16, 16], tf.float32)
 
     i,j = u.indices
 
@@ -133,20 +133,30 @@ def TEST():
 
 tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
 test = tf.program(WaveEq)
-test.list_operations(compact=True)
+#test.list_operations(compact=True)
 #test.kernel_c()
-Anp = np.random.rand(8, 8)
-Bnp = np.random.rand(8, 8)
-print(Anp)
-print(Bnp)
+Anp = np.random.rand(16, 16)
+Bnp = np.random.rand(16, 16)
+#print(Anp)
+#print(Bnp)
 A = tf.memory(Anp)
 B = tf.memory(Bnp)
-C = test(A, B)
-print(C)
-print(C[1].numpy)
+A, B = test(A, B)
+#print(C1)
+#print(C1.numpy)
 
 #compare with numpy
 #Cnp = WaveEq1Dnp(Anp, Bnp)[0]
 #print(Cnp)
 
 print("Used memory: " + str(tf.used_memory()))
+
+import time
+start = time.time()
+
+for i in range(200):
+    A, B  = test(A, B)
+    if i % 100 == 0:
+        print("Used memory: " + str(tf.used_memory()))
+        print("Time: " + str(time.time() - start))
+        start = time.time()
