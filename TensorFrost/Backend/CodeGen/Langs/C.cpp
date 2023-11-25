@@ -97,6 +97,8 @@ string GenerateKernelC(const IR& ir, const Lable* cluster, const string kernel_n
 pair<string, vector<string>> GenerateC(const IR& ir) {
 	string allKernels =
 	      "#include <math.h> \n"
+	      //"extern \"C\" \n"
+		//"{ \n"
 	      "typedef unsigned int uint; \n"
 	      "\n"
 	      "float asfloat(uint x) \n"
@@ -150,6 +152,8 @@ pair<string, vector<string>> GenerateC(const IR& ir) {
 		allKernels += "\n";
 	}
 	
+
+	//allKernels += "}\n";
 	return pair<string, vector<string>>(allKernels, kernel_names);
 
 }

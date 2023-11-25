@@ -167,14 +167,14 @@ void CopyLable(Node* target, Node* copy);
 class ClusterProp
 {
 public:
-	unordered_set<Lable*> cluster_heads;
+	vector<Lable*> cluster_heads;
 	map<Lable*, vector<Node*>> output;
 	map<Node*, vector<Argument*>> node_output;
 	map<Node*, float> node_cost;
 
 	ClusterProp(map<Lable*, vector<Node*>> cluster_outputs,
 	            map<Node*, vector<Argument*>> output, map<Node*, float> cost,
-	            unordered_set<Lable*> cluster_heads)
+	            vector<Lable*> cluster_heads)
 		: output(cluster_outputs), node_output(output), node_cost(cost), cluster_heads(cluster_heads) {}
 };
 

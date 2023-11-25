@@ -15,7 +15,8 @@ bool RunCompiler(TCHAR* tempPath, TCHAR* dllName)
 
 	std::basic_stringstream<TCHAR> ss;
 	//ss << compilerPath << " -g -shared " << tempPath << "generated_lib.c -o " << dllName;
-	ss << compilerPath << " /LD /Zi " << tempPath << "generated_lib.c /Fe:" << dllName; // MSVC
+	//ss << compilerPath << " /LD /Zi " << tempPath << "generated_lib.c /Fe:" << dllName; // MSVC
+	ss << compilerPath << " /LD " << tempPath << "generated_lib.c /Fe:" << dllName;  // MSVC
 	std::basic_string<TCHAR> command = ss.str();
 
 	cout << "Command: " << command << endl;

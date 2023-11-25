@@ -247,7 +247,8 @@ ClusterProp IR::GetClusterProperties() const
     map<Lable*, vector<Node*>> cluster_outputs;
 	map<Node*, vector<Argument*>> node_output;
 	map<Node*, float> node_cost;
-	unordered_set<Lable*> cluster_heads;
+	vector<Lable*> cluster_heads;
+	unordered_set<Lable*> added_clusters;
 
 	UpdateNodeOutputs();
 	//find all nodes that are outputs of a cluster (i.e. point to a node outside the cluster)
@@ -287,7 +288,8 @@ ClusterProp IR::GetClusterProperties() const
 			node_output[*node] = outputs;
 		}
 
-		cluster_heads.insert(node->cluster_head_);
+		if (!added_clusters.contains(node->cluster_head_)) cluster_heads.push_back(node->cluster_head_);
+		added_clusters.insert(node->cluster_head_);
 	}
 
     return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
@@ -473,17 +475,11 @@ void IR::TransformToLinearIndex()
 
 					// compute the flat index
 					Tensor* flat_index = get_index(memory_dim - 1);
-					//Tensor* t_size = const_cast<Tensor*>(kernel_shape[memory_dim - 1]);
 					for (int i = memory_dim - 2; i >= 0; i--) {
-						//*t_size = *t_size * *kernel_shape[i];
 						*flat_index = *flat_index * *kernel_shape[i];
 						*flat_index = *flat_index + *get_index(i);
 					}
 					
-					//clamp the final index
-					flat_index = &Tensor::clamp(*flat_index, flat_index->Constant(0),
-					                            flat_index->Constant(256*256 - 1));
-
 					// TODO add different modes for clamping (e.g. clamp, wrap, mirror,
 					// zero)
 

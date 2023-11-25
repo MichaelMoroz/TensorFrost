@@ -191,8 +191,7 @@ def FluidTest():
 
 #tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
 #tf.initialize(tf.cpu, "C:/msys64/mingw64/bin/gcc.exe")
-tf.initialize(tf.cpu,
-"C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.37.32822/bin/Hostx64/x64/cl.exe /I \"C:/Program Files (x86)/Windows Kits/10/Include/10.0.22621.0/ucrt\" ") 
+tf.initialize(tf.cpu, "H:/cl_compile.bat") 
 fluid = tf.program(FluidTest)
 #test = tf.program(WaveEq)
 #poisson = tf.program(PoissonSolver2)
