@@ -80,7 +80,7 @@ class Node {
 	    : tensor_(tensor),
 	      inputs_(std::move(args)),
 	      name(std::move(name)),
-	      op(&FindOperation(name)) {
+	      op(&FindOperation(this->name)) {
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 		CheckIfValid();
