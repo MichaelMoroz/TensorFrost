@@ -1,6 +1,3 @@
 #include "KernelExecutor.h"
 
-namespace TensorFrost {
-
-
-}  // namespace TensorFrost
+namespace TensorFrost {}  // namespace TensorFrost

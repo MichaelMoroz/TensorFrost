@@ -6,23 +6,20 @@ namespace TensorFrost {
 
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
                 Argument::Type arg_type, bool is_identity) {
-
-	if (arg_index >= 0) 
-	{
+	if (arg_index >= 0) {
 		OpType input_type = input->op->GetOpType();
 		OpType output_type = output->op->GetOpType();
 
-		bool isFromScatter = input_type == OpType::Scatter;
-		bool isToScatter = output_type == OpType::Scatter;
-		bool isFromStore = input_type == OpType::Store;
-		bool isFromOutput = input->memory_type_ == MemoryType::Output;
+		bool is_from_scatter = input_type == OpType::Scatter;
+		bool is_to_scatter = output_type == OpType::Scatter;
+		bool is_from_store = input_type == OpType::Store;
+		bool is_from_output = input->memory_type_ == MemoryType::Output;
 
-		if (isFromScatter || isFromStore) {
-			if (isFromScatter && isToScatter) {
+		if (is_from_scatter || is_from_store) {
+			if (is_from_scatter && is_to_scatter) {
 				return false;  // multiple scatters can be merged
-			} else {
-				return true;
 			}
+			return true;
 		}
 
 		if (output_type == OpType::Load || output_type == OpType::Store) {
@@ -34,7 +31,7 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 		}
 	}
 
-	// TODO write shape comparison function
+	// TODO(Moroz): write shape comparison function
 	// if(input.tensor_.shape_ != output.tensor_.shape_)
 	//{
 	//     if(!isToScatter)
@@ -44,14 +41,16 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 	// }
 
 	// memory should not be inside work clusters
-	if ((input->name == "memory" || output->name == "memory") && (input->name != output->name)) {
+	if ((input->name == "memory" || output->name == "memory") &&
+	    (input->name != output->name)) {
 		return true;
 	}
 
 	return false;
 }
 
-map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
+map<Node*, Node*> IR::CopyComputation(
+    const unordered_set<Node*>& targets) const {
 	// do a depth first search to copy all the nodes required for the targets
 	unordered_set<Node*> nodes_to_copy;
 	std::function<void(Node*)> dfs = [&](Node* node) {
@@ -60,7 +59,8 @@ map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
 		}
 		nodes_to_copy.insert(node);
 		for (auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape)
+			if (input.type_ == Argument::Type::Memory ||
+			    input.type_ == Argument::Type::Shape)
 				continue;
 
 			dfs(input.from_->get());
@@ -81,8 +81,9 @@ map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
 		// create new arguments
 		Arguments new_args;
 		for (Argument& arg : node->inputs_) {
-			//if shape or memory argument, then no need to use copied node
-			if (arg.type_ == Argument::Type::Memory || arg.type_ == Argument::Type::Shape) {
+			// if shape or memory argument, then no need to use copied node
+			if (arg.type_ == Argument::Type::Memory ||
+			    arg.type_ == Argument::Type::Shape) {
 				new_args.push_back(arg);
 				continue;
 			}
@@ -94,8 +95,8 @@ map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
 			}
 
 			// create new argument
-			new_args.push_back(
-			    Argument(arg.type_, copied_node_map[from]->GetLable(), arg.index_));
+			new_args.emplace_back(arg.type_, copied_node_map[from]->GetLable(),
+			                      arg.index_);
 		}
 
 		// create new node
@@ -107,14 +108,13 @@ map<Node*, Node*> IR::CopyComputation(unordered_set<Node*> targets) {
 	return copied_node_map;
 }
 
-void IR::OptimizeClusters()
-{
-	//get cluster data
+void IR::OptimizeClusters() {
+	// get cluster data
 	ClusterProp clusters = GetClusterProperties();
 
-	//go over each cluster and copy computations outside the cluster if they are cheap enough
-	for (auto cluster_begin : clusters.cluster_heads)
-	{
+	// go over each cluster and copy computations outside the cluster if they are
+	// cheap enough
+	for (auto* cluster_begin : clusters.cluster_heads) {
 		Node* begin = cluster_begin->node_;
 
 		if (begin->name == "memory") {
@@ -122,21 +122,22 @@ void IR::OptimizeClusters()
 		}
 
 		unordered_set<Argument*> args_to_copy;
-		//go over all nodes in the cluster and check if their inputs can be copied
-		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		// go over all nodes in the cluster and check if their inputs can be copied
+		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
-			//go over all inputs
+			// go over all inputs
 			for (auto& input : node->inputs_) {
-				//if input is memory or shape, then skip
-				if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape || input.from_->get()->name == "memory")
-				{
+				// if input is memory or shape, then skip
+				if (input.type_ == Argument::Type::Memory ||
+				    input.type_ == Argument::Type::Shape ||
+				    input.from_->get()->name == "memory") {
 					continue;
 				}
 
-				//if input is outside the cluster, then it can be copied
+				// if input is outside the cluster, then it can be copied
 				if (input.from_->get()->cluster_head_ != node->cluster_head_) {
-					//check if input is cheap enough to copy
-					if (clusters.node_cost[input.from_->get()] < 256.0f) {
+					// check if input is cheap enough to copy
+					if (clusters.node_cost[input.from_->get()] < 256.0F) {
 						args_to_copy.insert(&input);
 					}
 				}
@@ -144,27 +145,27 @@ void IR::OptimizeClusters()
 		}
 
 		unordered_set<Node*> nodes_to_copy;
-		for (auto arg : args_to_copy) {
+		for (auto* arg : args_to_copy) {
 			nodes_to_copy.insert(arg->from_->get());
 		}
 
-		//copy all the nodes at the beginning of the cluster
+		// copy all the nodes at the beginning of the cluster
 		map<Node*, Node*> copied_node_map;
-		ExecuteExpressionBefore(begin, [&]() { copied_node_map = CopyComputation(nodes_to_copy); });
+		ExecuteExpressionBefore(
+		    begin, [&]() { copied_node_map = CopyComputation(nodes_to_copy); });
 
-		//replace all the arguments that use the copied nodes
-		for (auto arg : args_to_copy) {
+		// replace all the arguments that use the copied nodes
+		for (auto* arg : args_to_copy) {
 			arg->from_ = copied_node_map[arg->from_->get()]->GetLable();
 		}
 	}
 }
 
-void IR::RemoveUnusedNodes()
-{
-	//use depth first search to find all nodes that are used for the output nodes
+void IR::RemoveUnusedNodes() {
+	// use depth first search to find all nodes that are used for the output nodes
 	unordered_set<Node*> used_nodes;
-	
-	//go over all inputs of the output nodes
+
+	// go over all inputs of the output nodes
 	std::function<void(Node*)> dfs = [&](Node* node) {
 		if (used_nodes.contains(node)) {
 			return;
@@ -181,7 +182,7 @@ void IR::RemoveUnusedNodes()
 		}
 	}
 
-	//remove all nodes that are not used
+	// remove all nodes that are not used
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.is_end(); ++node) {
 		if (node->name == "memory") {
@@ -192,18 +193,19 @@ void IR::RemoveUnusedNodes()
 		}
 	}
 
-	for (auto node : nodes_to_remove) {
+	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
 }
 
-void IR::Clusterize() {
+void IR::Clusterize() const {
 	Lable* current_cluster = nullptr;
 	for (auto node = begin(); !node.is_end(); ++node) {
 		// remove old cluster head
 		if (node->cluster_head_ != nullptr) {
-			//if last cluster node, delete lable
-			if (node->next_ == nullptr || node->next_->cluster_head_ != node->cluster_head_) {
+			// if last cluster node, delete lable
+			if (node->next_ == nullptr ||
+			    node->next_->cluster_head_ != node->cluster_head_) {
 				delete node->cluster_head_;
 			}
 			node->cluster_head_ = nullptr;
@@ -211,9 +213,9 @@ void IR::Clusterize() {
 
 		// check if node is a cluster edge
 		Tensor* tensor = node->tensor_;
-		
+
 		Arguments indices = node->GetArguments(Argument::Type::Index);
-		bool identity = indices.size() == 0;
+		bool identity = indices.empty();
 
 		bool is_boundary = false;
 		Node* prev = node.get_prev();
@@ -228,7 +230,8 @@ void IR::Clusterize() {
 		for (auto& input : tensor->node->inputs_) {
 			// check if input is the boundary of this cluster
 			if (input.from_->get()->cluster_head_ == current_cluster &&
-			    IsBoundary(input.from_->get(), *node, input.index_, input.type_, identity)) {
+			    IsBoundary(input.from_->get(), *node, input.index_, input.type_,
+			               identity)) {
 				is_boundary = true;
 				break;
 			}
@@ -242,16 +245,16 @@ void IR::Clusterize() {
 	}
 }
 
-ClusterProp IR::GetClusterProperties() const
-{
-    map<Lable*, vector<Node*>> cluster_outputs;
+ClusterProp IR::GetClusterProperties() const {
+	map<Lable*, vector<Node*>> cluster_outputs;
 	map<Node*, vector<Argument*>> node_output;
 	map<Node*, float> node_cost;
 	vector<Lable*> cluster_heads;
 	unordered_set<Lable*> added_clusters;
 
 	UpdateNodeOutputs();
-	//find all nodes that are outputs of a cluster (i.e. point to a node outside the cluster)
+	// find all nodes that are outputs of a cluster (i.e. point to a node outside
+	// the cluster)
 	for (auto node = begin(); !node.is_end(); ++node) {
 		if (node->name == "memory" || node->cluster_head_ == nullptr) {
 			continue;
@@ -260,7 +263,8 @@ ClusterProp IR::GetClusterProperties() const
 		float input_cost = node->op->GetCost();
 		for (auto& input : node->inputs_) {
 			if (input.from_->get()->cluster_head_ == node->cluster_head_ &&
-			    input.type_ != Argument::Type::Memory && input.type_ != Argument::Type::Shape) {
+			    input.type_ != Argument::Type::Memory &&
+			    input.type_ != Argument::Type::Shape) {
 				input_cost += node_cost[input.from_->get()];
 			}
 		}
@@ -271,7 +275,7 @@ ClusterProp IR::GetClusterProperties() const
 		vector<Argument*> outputs;
 		for (auto& output : node->outputs_) {
 			if (output->to_ == nullptr) continue;
-			//if is a shape or memory argument, then skip (shape is loaded on CPU)
+			// if is a shape or memory argument, then skip (shape is loaded on CPU)
 			if (output->type_ == Argument::Type::Shape) {
 				continue;
 			}
@@ -282,69 +286,68 @@ ClusterProp IR::GetClusterProperties() const
 			}
 		}
 
-		if (is_output)
-		{
+		if (is_output) {
 			cluster_outputs[node->cluster_head_].push_back(*node);
 			node_output[*node] = outputs;
 		}
 
-		if (!added_clusters.contains(node->cluster_head_)) cluster_heads.push_back(node->cluster_head_);
+		if (!added_clusters.contains(node->cluster_head_))
+			cluster_heads.push_back(node->cluster_head_);
 		added_clusters.insert(node->cluster_head_);
 	}
 
-    return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
+	return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
 }
 
 void IR::PostProcessClusters() {
-	//get cluster data
+	// get cluster data
 	ClusterProp clusters = GetClusterProperties();
 
-	//go over all outputs of each cluster and create memory nodes to store the output
-	for (auto cluster_out : clusters.output)
-	{
+	// go over all outputs of each cluster and create memory nodes to store the
+	// output
+	for (const auto& cluster_out : clusters.output) {
 		vector<Node*> cluster_outs = cluster_out.second;
 		Lable* cluster_head = cluster_out.first;
 
-		for (auto output : cluster_outs)
-		{
+		for (auto* output : cluster_outs) {
 			Node* mem;
 			// add memory node before this cluster
-			ExecuteExpressionBefore(cluster_head->node_,[&]() 
-			{
-				mem = Tensor::Memory(output->GetArguments(Argument::Type::Shape),
-										output->tensor_->type).node;
+			ExecuteExpressionBefore(
+			    cluster_head->node_,
+			    [&]() {
+				    mem = Tensor::Memory(output->GetArguments(Argument::Type::Shape),
+				                         output->tensor_->type)
+				              .node;
 
-				if (output->memory_type_ == MemoryType::Output) {
-					mem->memory_type_ = MemoryType::Output;
-					mem->memory_index_ = output->memory_index_;
-					output->memory_type_ = MemoryType::None;
-				}
-			}, false);
+				    if (output->memory_type_ == MemoryType::Output) {
+					    mem->memory_type_ = MemoryType::Output;
+					    mem->memory_index_ = output->memory_index_;
+					    output->memory_type_ = MemoryType::None;
+				    }
+			    },
+			    false);
 
-			// go over all outputs of this node and replace their input with the memory node
-			for (auto& arg_out : clusters.node_output[output])
-			{
-				if(arg_out->type_ != Argument::Type::Shape && arg_out->type_ != Argument::Type::Memory)
-				{	
-					// if not a memory or shape argument, then the memory needs to be loaded before the node
-					ExecuteExpressionBefore(arg_out->to_->get(), [&]()
-					{
+			// go over all outputs of this node and replace their input with the
+			// memory node
+			for (auto& arg_out : clusters.node_output[output]) {
+				if (arg_out->type_ != Argument::Type::Shape &&
+				    arg_out->type_ != Argument::Type::Memory) {
+					// if not a memory or shape argument, then the memory needs to be
+					// loaded before the node
+					ExecuteExpressionBefore(arg_out->to_->get(), [&]() {
 						Tensor& loaded = Tensor::Load(*mem->tensor_);
-						//loaded.node->cluster_id_ = arg_out->to_->get()->cluster_id_;
-						// the node must now use the loaded value
+						// loaded.node->cluster_id_ = arg_out->to_->get()->cluster_id_;
+						//  the node must now use the loaded value
 						arg_out->from_ = loaded.node->GetLable();
 					});
-				}
-				else
-				{
+				} else {
 					// otherwise the memory can be used directly
 					arg_out->from_ = mem->GetLable();
 				}
 			}
 
 			// add store node after this node
-			ExecuteExpressionAfter(output, [&]()
-			{
+			ExecuteExpressionAfter(output, [&]() {
 				// add store node after this node
 				Tensor* store = &Tensor::Store(*mem->tensor_, *output->tensor_);
 				store->node->cluster_head_ = cluster_head;
@@ -352,22 +355,18 @@ void IR::PostProcessClusters() {
 		}
 	}
 
+	// replace all inputs pointing to memory nodes with the memory node
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (node->name == "memory") continue;
 
-	//replace all inputs pointing to memory nodes with the memory node
-	for(auto node = begin(); !node.is_end(); ++node)
-	{
-		if(node->name == "memory") continue;
-
-		for(auto& input : node->inputs_)
-		{
-			if (input.type_ == Argument::Type::Memory || input.type_ == Argument::Type::Shape)
+		for (auto& input : node->inputs_) {
+			if (input.type_ == Argument::Type::Memory ||
+			    input.type_ == Argument::Type::Shape)
 				continue;
 
-			if(input.from_->get()->name == "memory")
-			{
-				//load the memory node before this node
-				ExecuteExpressionBefore(node.get(), [&]()
-				{
+			if (input.from_->get()->name == "memory") {
+				// load the memory node before this node
+				ExecuteExpressionBefore(node.get(), [&]() {
 					Tensor& loaded = Tensor::Load(*input.from_->get()->tensor_);
 					input.from_ = loaded.node->GetLable();
 				});
@@ -376,44 +375,40 @@ void IR::PostProcessClusters() {
 	}
 }
 
-void IR::TransformToLinearIndex()
-{
+void IR::TransformToLinearIndex() {
 	ClusterProp clusters = GetClusterProperties();
 
-	//replace all dim_id nodes with the corresponding index computed from thread_id
-	for (auto cluster_begin : clusters.cluster_heads)
-	{
+	// replace all dim_id nodes with the corresponding index computed from
+	// thread_id
+	for (auto* cluster_begin : clusters.cluster_heads) {
 		Node* begin = cluster_begin->node_;
 
 		// add thread node
 		Tensor* thread_index;
-		ExecuteExpressionBefore(begin, [&]()
-		{ 
-			thread_index = &begin->tensor_->ThreadIndex();
-		});
+		ExecuteExpressionBefore(
+		    begin, [&]() { thread_index = &begin->tensor_->ThreadIndex(); });
 
 		// load kernel shape
-		map<int, Tensor*> kernel_shape_map = begin->GetArgumentTensors(Argument::Type::Shape);
+		map<int, Tensor*> kernel_shape_map =
+		    begin->GetArgumentTensors(Argument::Type::Shape);
 		Tensors kernel_shape;
 		for (auto& shape : kernel_shape_map) {
 			kernel_shape.push_back(shape.second);
 		}
 
-		if (kernel_shape.size() == 0)
-		{
-			//can skip if no kernel shape - no index
+		if (kernel_shape.empty()) {
+			// can skip if no kernel shape - no index
 			continue;
 		}
 
 		// compute the index for each dimension
-		int dims = kernel_shape.size();
+		size_t dims = kernel_shape.size();
 		Tensors indices = Tensors(dims);
-		ExecuteExpressionBefore(begin, [&]()
-		{
-			for (int i = 0; i < dims; i++) {
+		ExecuteExpressionBefore(begin, [&]() {
+			for (size_t i = 0; i < dims; i++) {
 				Tensor* div = &Tensor::Constant(kernel_shape, 1);
-				
-				for (int j = i + 1; j < dims; j++) {
+
+				for (size_t j = i + 1; j < dims; j++) {
 					div = &(*div * *kernel_shape[dims - j - 1]);
 				}
 
@@ -429,48 +424,54 @@ void IR::TransformToLinearIndex()
 
 		// replace all dim nodes with the corresponding index node
 		unordered_set<Node*> nodes_to_remove;
-		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			if (node->name == "dim_id") {
 				int dim = node->tensor_->data[0];
 				if (dim >= dims) {
 					throw runtime_error("Invalid dimension index " + to_string(dim) +
-										                    " for kernel of size " + to_string(dims));
+					                    " for kernel of size " + to_string(dims));
 				}
 
-				//swap the dim node with the corresponding index node
+				// swap the dim node with the corresponding index node
 				CopyLable(node.get(), indices[dim]->node);
 
-				//remove the dim node
+				// remove the dim node
 				nodes_to_remove.insert(node.get());
 			}
 		}
 
-		 // go over all nodes that take an index as input (e.g. load, store, atomic)
-		for (auto node = iterator(begin); !node.is_cluster_end(cluster_begin);
+		// go over all nodes that take an index as input (e.g. load, store, atomic)
+		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			auto op_type = node->op->GetOpType();
-			if ( op_type == OpType::Load || op_type == OpType::Store || op_type == OpType::Scatter) {
-				ExecuteExpressionBefore(*node, [&]()
-				{
+			if (op_type == OpType::Load || op_type == OpType::Store ||
+			    op_type == OpType::Scatter) {
+				ExecuteExpressionBefore(*node, [&]() {
 					// get the input memory node
 					const Tensor* memory =
 					    node.get()->GetArgumentTensors(Argument::Type::Memory)[0];
-					int memory_dim = kernel_shape.size(); //TODO get memory dim from memory tensor instead of kernel shape
+					int memory_dim = static_cast<int>(
+					    kernel_shape.size());  // TODO(Moroz): get memory dim from memory
+					                           // tensor instead of kernel shape
 
 					// get the index nodes
-					map<int, Tensor*> idx = node->GetArgumentTensors(Argument::Type::Index);
+					map<int, Tensor*> idx =
+					    node->GetArgumentTensors(Argument::Type::Index);
 
-					//function to get index for given dimension, if not found then return default dim index
+					// function to get index for given dimension, if not found then return
+					// default dim index
 					std::function<Tensor*(int)> get_index = [&](int dim) {
 						Tensor* out = nullptr;
 						if (idx.find(dim) != idx.end()) {
 							out = idx[dim];
 						} else {
-							out = const_cast<Tensor*> (indices[dim]);
+							out = const_cast<Tensor*>(indices[dim]);
 						}
-						//return out;
-						return &Tensor::clamp(*out, out->Constant(0), *kernel_shape[dim] - out->Constant(1));
+						// return out;
+						return &Tensor::clamp(
+						    *out, TensorFrost::Tensor::Constant(0),
+						    *kernel_shape[dim] - TensorFrost::Tensor::Constant(1));
 					};
 
 					// compute the flat index
@@ -479,9 +480,9 @@ void IR::TransformToLinearIndex()
 						*flat_index = *flat_index * *kernel_shape[i];
 						*flat_index = *flat_index + *get_index(i);
 					}
-					
-					// TODO add different modes for clamping (e.g. clamp, wrap, mirror,
-					// zero)
+
+					// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
+					// mirror, zero)
 
 					// remove the index node edges
 					node->RemoveArguments(Argument::Type::Index);
@@ -493,14 +494,14 @@ void IR::TransformToLinearIndex()
 		}
 
 		// remove all dim nodes
-		for (auto node : nodes_to_remove) {
+		for (auto* node : nodes_to_remove) {
 			RemoveNode(node);
 		}
 	}
 }
 
 Program* GenerateProgram(IR* ir) {
-	Program* program = new Program(ir);
+	auto* program = new Program(ir);
 
 	// go over all clusters, find their type, and add them to the program if they
 	// are used
@@ -523,25 +524,25 @@ Program* GenerateProgram(IR* ir) {
 		} else {
 			type = KernelType::Compute;
 			bool has_output = false;
-			for (auto node = IR::iterator(begin); !node.is_cluster_end(begin->cluster_head_);
-			     ++node) {
+			for (auto node = IR::Iterator(begin);
+			     !node.is_cluster_end(begin->cluster_head_); ++node) {
 				OpType op_type = node->op->GetOpType();
 				if (op_type == OpType::Store || op_type == OpType::Scatter) {
 					has_output = true;
 				}
-				if(op_type == OpType::Load || op_type == OpType::Store || op_type == OpType::Scatter)
-				{
-					//get the memory node
-					const Tensor* memory = node->GetArgumentTensors(Argument::Type::Memory)[0];
+				if (op_type == OpType::Load || op_type == OpType::Store ||
+				    op_type == OpType::Scatter) {
+					// get the memory node
+					const Tensor* memory =
+					    node->GetArgumentTensors(Argument::Type::Memory)[0];
 					memory_nodes.push_back(memory->node);
 				}
 
-				//get all input arguments
-				map<int, Tensor*> inputs = node->GetArgumentTensors(Argument::Type::Input);
-				for(auto& input : inputs)
-				{
-					if(input.second->node->name == "memory")
-					{
+				// get all input arguments
+				map<int, Tensor*> inputs =
+				    node->GetArgumentTensors(Argument::Type::Input);
+				for (auto& input : inputs) {
+					if (input.second->node->name == "memory") {
 						variables.push_back(input.second->node);
 					}
 				}

@@ -5,8 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetOperationListing(const IR& ir, bool compact) 
-{
+string GetOperationListing(const IR& ir, bool compact) {
 	// first give unique names to all the tensors
 	NodeNames names = GenerateNodeNames(ir);
 	ClusterProp clusters = ir.GetClusterProperties();
@@ -23,7 +22,6 @@ string GetOperationListing(const IR& ir, bool compact)
 		if (node->name == "loop_end") {
 			indent--;
 		}
-
 
 		if (node->cluster_head_ != prev_cluster_head) {
 			listing += "\n";
@@ -90,7 +88,7 @@ string GetOperationListing(const IR& ir, bool compact)
 			}
 			listing += "], ";
 		}
-		
+
 		switch (node->memory_type_) {
 			case MemoryType::Input:
 				listing += "memory_type=input, ";
@@ -114,7 +112,8 @@ string GetOperationListing(const IR& ir, bool compact)
 		}
 
 		if (!compact && node->cluster_head_ != nullptr) {
-			listing += ", cluster=" + GetNodeName(node->cluster_head_->node_, names, compact);
+			listing += ", cluster=" +
+			           GetNodeName(node->cluster_head_->node_, names, compact);
 		}
 
 		listing += ")\n";
@@ -129,4 +128,4 @@ string GetOperationListing(const IR& ir, bool compact)
 	return listing;
 }
 
-}
+}  // namespace TensorFrost

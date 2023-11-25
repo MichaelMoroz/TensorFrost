@@ -8,12 +8,11 @@
 #include <utility>
 #include <vector>
 
-#include "TensorMemory.h"
 #include "IR/KernelGen.h"
+#include "TensorMemory.h"
 
 namespace TensorFrost {
 
 using namespace std;
-
 
 }  // namespace TensorFrost

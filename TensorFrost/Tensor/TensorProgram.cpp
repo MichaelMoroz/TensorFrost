@@ -2,8 +2,7 @@
 
 namespace TensorFrost {
 
-void TensorProgram::CreateProgram()
-{
+void TensorProgram::CreateProgram() {
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
 	Tensors outputs = evaluate_callback();
@@ -21,15 +20,14 @@ void TensorProgram::CreateProgram()
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);
-	
+
 	// compile and load kernel
 	CompileAndLoadKernel(program);
 }
 
 vector<TensorMemory*> TensorProgram::Evaluate(
-    const vector<TensorMemory*> input) {
-
+    const vector<TensorMemory*>& input) const {
 	return ExecuteProgram(program, input);
 }
 
-}
+}  // namespace TensorFrost

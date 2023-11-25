@@ -10,4 +10,4 @@ int GetLinearSize(const vector<int>& shape) {
 	return size;
 }
 
-}// namespace TensorFrost
+}  // namespace TensorFrost

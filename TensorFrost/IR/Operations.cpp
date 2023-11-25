@@ -3,12 +3,9 @@
 namespace TensorFrost {
 #define dtype(x) DataType::x
 
-map<DataType, string> TypeNames = {
-    {dtype(None), "void"},
-    {dtype(Bool), "bool"},
-    {dtype(Float), "float"},
-    {dtype(Uint), "uint"},
-    {dtype(Int), "int"},
+map<DataType, string> type_names = {
+    {dtype(None), "void"}, {dtype(Bool), "bool"}, {dtype(Float), "float"},
+    {dtype(Uint), "uint"}, {dtype(Int), "int"},
 };
 
 vector<Operation> operations = {
@@ -25,18 +22,25 @@ vector<Operation> operations = {
     Operation("eq", {"ff_b", "uu_b", "ii_b"}, 1, "==", OpType::Operator),
     Operation("neq", {"ff_b", "uu_b", "ii_b"}, 1, "!=", OpType::Operator),
     Operation("lt", {"ff_b", "uu_b", "ii_b"}, 1, "<", OpType::Operator),
-    Operation("lte", {"ff_b", "uu_b" "ii_b"}, 1, "<=", OpType::Operator),
+    Operation("lte",
+              {"ff_b",
+               "uu_b"
+               "ii_b"},
+              1, "<=", OpType::Operator),
     Operation("gt", {"ff_b", "uu_b", "ii_b"}, 1, ">", OpType::Operator),
-    Operation("gte", {"ff_b", "uu_b","ii_b"}, 1, ">=", OpType::Operator),
+    Operation("gte", {"ff_b", "uu_b", "ii_b"}, 1, ">=", OpType::Operator),
     Operation("not", {"b_b"}, 1, "!", OpType::UnaryOperator),
     Operation("neg", {"f_f", "u_u", "i_i"}, 1, "-", OpType::UnaryOperator),
     Operation("uint", {"f_u", "u_u", "i_u"}, 1, "uint", OpType::TypeCast),
     Operation("int", {"f_i", "u_i", "i_i"}, 1, "int", OpType::TypeCast),
     Operation("float", {"f_f", "u_f", "i_f"}, 1, "float", OpType::TypeCast),
     Operation("bool", {"f_b", "u_b", "i_b"}, 1, "bool", OpType::TypeCast),
-    Operation("asuint", {"f_u", "u_u", "i_u"}, 0, "asuint", OpType::TypeReinterpret),
-    Operation("asint", {"f_i", "u_i", "i_i"}, 0, "asint", OpType::TypeReinterpret),
-    Operation("asfloat", {"f_f", "u_f", "i_f"}, 0, "asfloat", OpType::TypeReinterpret),
+    Operation("asuint", {"f_u", "u_u", "i_u"}, 0, "asuint",
+              OpType::TypeReinterpret),
+    Operation("asint", {"f_i", "u_i", "i_i"}, 0, "asint",
+              OpType::TypeReinterpret),
+    Operation("asfloat", {"f_f", "u_f", "i_f"}, 0, "asfloat",
+              OpType::TypeReinterpret),
     Operation("min", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("max", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("abs", {"f_f", "u_u", "i_i"}, 1),
@@ -105,132 +109,94 @@ DataTypeList Types(initializer_list<DataType> elements) {
 
 const Operation& FindOperation(const string& name) {
 	for (const auto& op : operations) {
-        if (op.GetName() == name) {
-            return op;
-        }
-    }
+		if (op.GetName() == name) {
+			return op;
+		}
+	}
 	throw runtime_error("Operation not found: " + name);
 }
 
-string DataTypeToString(DataType type) {
-    return TypeNames[type];
-}
+string DataTypeToString(DataType type) { return type_names[type]; }
 
-string Operation::GenerateOpString(const vector<string>& arguments) const
-{
-    string line = "";
-    if(op_type_ == OpType::Operator)
-    {
-        line += arguments[0] + " " + code_ + " " + arguments[1];
-    }
-    else if (op_type_ == OpType::UnaryOperator)
-    {
-        line += code_ + arguments[0];
-    }
-    else if(op_type_ == OpType::Function)
-    {
-        line += code_ + "(";
-        for(int i = 0; i < arguments.size(); i++)
-        {
-            if(i != 0)
-            {
-                line += ", ";
-            }
-            line += arguments[i];
-        }
-        line += ")";
-    }
-    else if (op_type_ == OpType::Keyword)
-    {
+string Operation::GenerateOpString(const vector<string>& arguments) const {
+	string line;
+	if (op_type_ == OpType::Operator) {
+		line += arguments[0] + " " + code_ + " " + arguments[1];
+	} else if (op_type_ == OpType::UnaryOperator) {
+		line += code_ + arguments[0];
+	} else if (op_type_ == OpType::Function) {
+		line += code_ + "(";
+		for (int i = 0; i < arguments.size(); i++) {
+			if (i != 0) {
+				line += ", ";
+			}
+			line += arguments[i];
+		}
+		line += ")";
+	} else if (op_type_ == OpType::Keyword) {
 		line += code_;
-	}
-    else if (op_type_ == OpType::Variable)
-    {
-        line += code_;
-    }
-    else if (op_type_ == OpType::TypeCast)
-    {
+	} else if (op_type_ == OpType::Variable) {
+		line += code_;
+	} else if (op_type_ == OpType::TypeCast) {
 		line += "(" + code_ + ")" + arguments[0];
-    } 
-    else if (op_type_ == OpType::TypeReinterpret) 
-    {
+	} else if (op_type_ == OpType::TypeReinterpret) {
 		line += "*(" + code_ + "*)&" + arguments[0];
+	} else {
+		line += "";  // throw runtime_error("Invalid op type");
 	}
-    else
-    {
-		line += "";//throw runtime_error("Invalid op type");
-	}
-    return line;
+	return line;
 }
 
-string Operation::GenerateLine(const string& var_name, const vector<string>& arguments, const vector<DataType>& input_types) const
-{
-    //get output type
-    DataType output_type = GetOutputType(input_types);
+string Operation::GenerateLine(const string& var_name,
+                               const vector<string>& arguments,
+                               const vector<DataType>& input_types) const {
+	// get output type
+	DataType output_type = GetOutputType(input_types);
 
-    // generate line
-    string line = "";
+	// generate line
+	string line;
 
-    if (name_ == "loop_begin")
-	{
-        line += "for (int " + var_name + " = " + arguments[0] + "; " + var_name + " < " + arguments[1] + "; " + var_name + " += " + arguments[2] + ") {";
-	} 
-    else if (name_ == "loop_end") 
-    {
-	    line += "}";
-	} 
-    else if (name_ == "if_begin") 
-    {
-	    line += "if (" + arguments[0] + ") {";
-    } 
-    else if (name_ == "if_end") 
-    {
-	    line += "}";
-    } 
-    else if (name_ == "load")
-    {
-        line += TypeNames[output_type] + " " + var_name + " = ";
-        if(output_type == DataType::Float)
-        {
-            line += "asfloat(";
-        }
-        if(output_type == DataType::Int)
-        {
-            line += "asint(";
-        }
-        line += arguments[0] + "[" + arguments[1] + "]";
-        if(output_type == DataType::Float || output_type == DataType::Int)
-        {
-            line += ")";
-        }
-        line += ";";
-    }
-    else if (name_ == "store")
-    {
-	    line += arguments[0] + "[" + arguments[1] + "] = ";
-		    if (input_types[0] == DataType::Float ||
-		        input_types[0] == DataType::Int)
-        {
-            line += "asuint(";
-        }
-        line += arguments[2];
-		    if (input_types[0] == DataType::Float ||
-		        input_types[0] == DataType::Int)
-        {
-            line += ")";
-        }    
-        line += ";";
-    }
-    else
-    {
-        if (output_type != DataType::None) 
-        {
-            line += TypeNames[output_type] + " " + var_name + " = ";
-        }
-        line += GenerateOpString(arguments) + ";";
-    }
+	if (name_ == "loop_begin") {
+		line += "for (int " + var_name + " = " + arguments[0] + "; " + var_name +
+		        " < " + arguments[1] + "; " + var_name + " += " + arguments[2] +
+		        ") {";
+	} else if (name_ == "loop_end") {
+		line += "}";
+	} else if (name_ == "if_begin") {
+		line += "if (" + arguments[0] + ") {";
+	} else if (name_ == "if_end") {
+		line += "}";
+	} else if (name_ == "load") {
+		line += type_names[output_type] + " " + var_name + " = ";
+		if (output_type == DataType::Float) {
+			line += "asfloat(";
+		}
+		if (output_type == DataType::Int) {
+			line += "asint(";
+		}
+		line += arguments[0] + "[" + arguments[1] + "]";
+		if (output_type == DataType::Float || output_type == DataType::Int) {
+			line += ")";
+		}
+		line += ";";
+	} else if (name_ == "store") {
+		line += arguments[0] + "[" + arguments[1] + "] = ";
+		if (input_types[0] == DataType::Float || input_types[0] == DataType::Int) {
+			line += "asuint(";
+		}
+		line += arguments[2];
+		if (input_types[0] == DataType::Float || input_types[0] == DataType::Int) {
+			line += ")";
+		}
+		line += ";";
+	} else {
+		if (output_type != DataType::None) {
+			line += type_names[output_type] + " " + var_name + " = ";
+		}
+		line += GenerateOpString(arguments) + ";";
+	}
 
-    return line;
+	return line;
 }
 
 }  // namespace TensorFrost
