@@ -15,13 +15,13 @@ You need to have CMake installed, as well as a C++ compiler that supports C++17 
 
 First clone the repository:
 ```bash
-git clone https://github.com/MichaelMoroz/TensorFrost.git
+git clone --recurse-submodules https://github.com/MichaelMoroz/TensorFrost.git
 cd TensorFrost
 ```
 
-Then run cmake to generate the build files into the build directory:
+Then run cmake to build the library:
 ```bash
-cmake -S . -B build
+cmake -S . -B build && cmake --build build
 ```
 
 The cmake script will automatically install the compiled python module into your python environment.
@@ -37,7 +37,7 @@ Then you need to initialize the library with the device you want to use:
 tf.initialize(tf.cpu, "cl_compile.bat /O2 /fp:fast /openmp") # Windows + MSVC (currently the only working compiler out of the box)
 ```
 You must yourself provide a compiler path here. Currently only MSVC is supported out of the box.
-The cl_compile.bat script is as follows:
+The cl_compile.bat script looks like this for example:
 
 ```bat
 @echo off
@@ -63,7 +63,6 @@ wave_eq = tf.program(WaveEq)
 
 The tensor programs take and output tensor memory buffers, which can be created from numpy arrays:
 ```python
-
 A = tf.memory(np.zeros([100, 100], dtype=np.float32))
 B = tf.memory(np.zeros([100, 100], dtype=np.float32))
 ```
@@ -77,6 +76,8 @@ To get the result back into a numpy array, you can use the `numpy` property:
 ```python
 Anp = A.numpy
 ```
+
+TODO: advanded usage and debugging
 
 ## Contributing
 Contributions are welcome! If you want to contribute, please open an issue first to discuss the changes you want to make.
