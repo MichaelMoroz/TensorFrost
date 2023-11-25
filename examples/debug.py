@@ -180,7 +180,7 @@ def FluidTest():
     div = vx[i+1, j] - vx[i-1, j] + vy[i, j+1] - vy[i, j-1]
 
     # pressure solve
-    for i in range(1):
+    for it in range(2):
         pressure = (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
     
     # subtract pressure gradient
@@ -191,11 +191,11 @@ def FluidTest():
 
 #tf.initialize(tf.cpu, "H:/tinycc/win32/tcc.exe")
 #tf.initialize(tf.cpu, "C:/msys64/mingw64/bin/gcc.exe")
-tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental") 
+tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
 fluid = tf.program(FluidTest)
+fluid.list_operations(compact=True)
 #test = tf.program(WaveEq)
 #poisson = tf.program(PoissonSolver2)
-##test.list_operations(compact=True)
 ##test.kernel_c()
 #Anp = np.random.rand(16, 16)
 #Bnp = np.random.rand(16, 16)
@@ -228,11 +228,7 @@ VY = tf.memory(np.zeros((N, N)))
 DENSITY = tf.memory(np.zeros((N, N)))
 PRESSURE = tf.memory(np.zeros((N, N)))
 
-fluid.list_operations(compact=True)
-
 VX,VY, DENSITY, PRESSURE = fluid(VX,VY,DENSITY,PRESSURE)
-
-#VX,VY,DENSITY,PRESSURE = fluid(VX,VY,DENSITY,PRESSURE)
 
 #do a few steps and measure performance by timing every 100 steps
 start = time.time()
