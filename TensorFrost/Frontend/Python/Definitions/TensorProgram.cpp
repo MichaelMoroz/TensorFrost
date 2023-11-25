@@ -31,7 +31,7 @@ void TensorProgramDefinition(py::module& m,
 		    // output a tuple of tensor memories
 		    py::tuple py_outputs = py::tuple(outputs.size());
 		    for (size_t i = 0; i < outputs.size(); i++) {
-				py_outputs[i] = py::cast(*outputs[i]);
+			    py_outputs[i] = py::cast(*outputs[i]);
 		    }
 		    return py_outputs;
 	    },
@@ -51,13 +51,15 @@ void TensorProgramDefinition(py::module& m,
 	    },
 	    "Evaluate the TensorProgram with the given inputs");
 
-	tensor_program.def("list_operations",
-	                   [](TensorProgram& program, bool compact) {
-		std::string listing = "List of operations:\n";
-		listing += GetOperationListing(program.ir, compact);
-		py::str result = py::str(listing);
-		py::print(result);
-	}, py::arg("compact") = true);
+	tensor_program.def(
+	    "list_operations",
+	    [](TensorProgram& program, bool compact) {
+		    std::string listing = "List of operations:\n";
+		    listing += GetOperationListing(program.ir, compact);
+		    py::str result = py::str(listing);
+		    py::print(result);
+	    },
+	    py::arg("compact") = true);
 
 	tensor_program.def("kernel_hlsl", [](TensorProgram& program) {
 		std::string hlsl = GenerateHLSL(program.ir);

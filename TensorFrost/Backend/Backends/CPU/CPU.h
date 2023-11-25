@@ -1,4 +1,4 @@
 #pragma once
 
-#include "Memory.h"
 #include "KernelCompiler.h"
+#include "Memory.h"

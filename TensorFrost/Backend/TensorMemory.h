@@ -1,12 +1,12 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <iostream>
+#include <map>
 #include <unordered_map>
 #include <utility>
 #include <vector>
-#include <map>
-#include <algorithm>
 
 #include "../Tensor/Tensor.h"
 #include "FrameAllocator.h"
@@ -30,43 +30,28 @@ class TensorMemoryManager {
 	virtual vector<uint> Readback(const TensorMemory* memory) = 0;
 	virtual void Free(TensorMemory* memory) = 0;
 
-    uint32_t GetAllocatedSize() const
-	{   
-        return allocator.GetRequiredAllocatedStorage();
+	[[nodiscard]] uint32_t GetAllocatedSize() const {
+		return allocator.GetRequiredAllocatedStorage();
 	}
 
 	virtual ~TensorMemoryManager() = default;
 };
 
-class TensorMemory
-{
-public:
-    vector<int> shape;
-    TensorMemoryManager* manager;
-    Frame* frame;
-    
-    TensorMemory(const vector<int>& shape, Frame* frame,
-	               TensorMemoryManager* used_manager)
-	      : shape(shape), frame(frame), manager(used_manager)
-    {
-    }
+class TensorMemory {
+ public:
+	vector<int> shape;
+	TensorMemoryManager* manager;
+	Frame* frame;
 
-    int GetSize() const
-    {
-        return GetLinearSize(shape);
-    }
+	TensorMemory(const vector<int>& shape, Frame* frame,
+	             TensorMemoryManager* used_manager)
+	    : shape(shape), frame(frame), manager(used_manager) {}
 
-    vector<int> GetShape() const
-	{
-		return shape;
-	}
+	[[nodiscard]] int GetSize() const { return GetLinearSize(shape); }
 
-    ~TensorMemory()
-    { 
-        manager->Free(this);
-    }
+	[[nodiscard]] vector<int> GetShape() const { return shape; }
+
+	~TensorMemory() { manager->Free(this); }
 };
-
-
 
 }  // namespace TensorFrost

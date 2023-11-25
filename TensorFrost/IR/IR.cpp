@@ -8,7 +8,7 @@ void IR::UpdateNodeOutputs() const {
 	}
 
 	for (auto node = begin(); !node.is_end(); ++node) {
-		for (auto &input : node->inputs_) {
+		for (auto& input : node->inputs_) {
 			input.from_->get()->outputs_.push_back(&input);
 		}
 	}
@@ -32,4 +32,4 @@ void CopyLable(Node* target, Node* copy) {
 	target->lable_ = new Lable(target);
 }
 
-}
+}  // namespace TensorFrost

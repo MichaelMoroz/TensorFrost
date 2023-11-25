@@ -1,12 +1,12 @@
 #pragma once
 
+#include <initializer_list>
+#include <map>
+#include <stdexcept>
 #include <string>
 #include <tuple>
 #include <utility>
 #include <vector>
-#include <map>
-#include <initializer_list>
-#include <stdexcept>
 
 namespace TensorFrost {
 
@@ -44,18 +44,16 @@ DataTypeList Types(initializer_list<DataType> elements);
 class Operation {
  private:
 	string name_;
-	float cost_ = 0.0f;
+	float cost_ = 0.0F;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
 	OpType op_type_;
 
  public:
-	Operation(string name, initializer_list<string> oloads, float cost, string code = "",
-	          OpType op_type = OpType::Function)
-	    : name_(std::move(name)), op_type_(op_type) 
-	{
-		if(code.empty())
-		{
+	Operation(string name, initializer_list<string> oloads, float cost,
+	          string code = "", OpType op_type = OpType::Function)
+	    : name_(std::move(name)), op_type_(op_type) {
+		if (code.empty()) {
 			code = name_;
 		}
 
@@ -63,7 +61,8 @@ class Operation {
 		cost_ = cost;
 
 		// parse the overloads
-		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool, uint, float in, float out
+		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool,
+		// uint, float in, float out
 		for (const auto& oload : oloads) {
 			vector<DataType> inputs;
 			DataType output = DataType::None;
@@ -99,7 +98,7 @@ class Operation {
 				}
 			}
 
-			overloads_.push_back({inputs, output});
+			overloads_.emplace_back(inputs, output);
 		}
 	}
 
@@ -147,7 +146,8 @@ class Operation {
 		return false;
 	}
 
-	[[nodiscard]] DataType GetOutputType(const vector<DataType>& input_types) const {
+	[[nodiscard]] DataType GetOutputType(
+	    const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;
@@ -168,14 +168,14 @@ class Operation {
 		throw std::runtime_error("Invalid input types for operation");
 	}
 
-	[[nodiscard]] bool IsOperator() const {
-		return op_type_ == OpType::Operator;
-	}
+	[[nodiscard]] bool IsOperator() const { return op_type_ == OpType::Operator; }
 
 	[[nodiscard]] string GetCode() const { return code_; }
 
-	string GenerateOpString(const vector<string>& arguments) const;
-	string GenerateLine(const string& var_name, const vector<string>& arguments, const vector<DataType>& input_types) const;
+	[[nodiscard]] string GenerateOpString(const vector<string>& arguments) const;
+	[[nodiscard]] string GenerateLine(const string& var_name,
+	                                  const vector<string>& arguments,
+	                                  const vector<DataType>& input_types) const;
 };
 
 const Operation& FindOperation(const string& name);

@@ -6,9 +6,9 @@
 #include <utility>
 #include <vector>
 
-#include "Tensor.h"
-#include "IR/KernelGen.h"
 #include "Backend/Backend.h"
+#include "IR/KernelGen.h"
+#include "Tensor.h"
 
 namespace TensorFrost {
 
@@ -29,12 +29,10 @@ class TensorProgram {
 
 	void CreateProgram();
 
-	vector<TensorMemory*> Evaluate(const vector<TensorMemory*> input);
+	[[nodiscard]] vector<TensorMemory*> Evaluate(
+	    const vector<TensorMemory*>& input) const;
 
-	~TensorProgram()
-	{
-		delete program;
-	}
+	~TensorProgram() { delete program; }
 };
 
 }  // namespace TensorFrost

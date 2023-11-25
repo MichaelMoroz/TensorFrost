@@ -5,43 +5,35 @@
 
 namespace TensorFrost {
 
-std::string r_op(std::string name)
-{
-	return "__r" + name + "__";
-}
+std::string r_op(const std::string& name) { return "__r" + name + "__"; }
 
-std::string l_op(std::string name)
-{
-	return "__" + name + "__";
-}
+std::string l_op(const std::string& name) { return "__" + name + "__"; }
 
-void DefineOperator(std::string pyname, py::class_<PyTensor>& py_tensor, std::function<Tensor&(const Tensor&, const Tensor&)> op) {
-	py_tensor.def(l_op(pyname).c_str(), 
-	[op](const PyTensor& t, const PyTensor& t2) {
-		return PT(op(T(t), T(t2)));
-	});
-	py_tensor.def(l_op(pyname).c_str(), 
-	[op](const PyTensor& t, const float f) {
+void DefineOperator(
+    const std::string& pyname, py::class_<PyTensor>& py_tensor,
+    const std::function<Tensor&(const Tensor&, const Tensor&)>& op) {
+	py_tensor.def(l_op(pyname).c_str(),
+	              [op](const PyTensor& t, const PyTensor& t2) {
+		              return PT(op(T(t), T(t2)));
+	              });
+	py_tensor.def(l_op(pyname).c_str(), [op](const PyTensor& t, const float f) {
 		return PT(op(T(t), Tensor::Constant(f)));
 	});
-	py_tensor.def(l_op(pyname).c_str(), 
-	[op](const PyTensor& t, const int i) {
+	py_tensor.def(l_op(pyname).c_str(), [op](const PyTensor& t, const int i) {
 		return PT(op(T(t), Tensor::Constant(i)));
 	});
-	py_tensor.def(r_op(pyname).c_str(),
-	[op](const PyTensor& t, const float f) {
+	py_tensor.def(r_op(pyname).c_str(), [op](const PyTensor& t, const float f) {
 		return PT(op(Tensor::Constant(f), T(t)));
 	});
-	py_tensor.def(r_op(pyname).c_str(),
-	[op](const PyTensor& t, const int i) {
-		 return PT(op(Tensor::Constant(i), T(t)));
+	py_tensor.def(r_op(pyname).c_str(), [op](const PyTensor& t, const int i) {
+		return PT(op(Tensor::Constant(i), T(t)));
 	});
 }
 
-#define LAMBDA_OP(op) [](const Tensor& t1, const Tensor& t2) -> Tensor& { return t1 op t2; }
+#define LAMBDA_OP(op) \
+	[](const Tensor& t1, const Tensor& t2) -> Tensor& { return t1 op t2; }
 
-void DefineOperators(py::class_<PyTensor>& py_tensor)
-{
+void DefineOperators(py::class_<PyTensor>& py_tensor) {
 	DefineOperator("add", py_tensor, LAMBDA_OP(+));
 	DefineOperator("sub", py_tensor, LAMBDA_OP(-));
 	DefineOperator("mul", py_tensor, LAMBDA_OP(*));
@@ -100,7 +92,6 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	});
 	py_tensor.def("index",
 	              [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
-	
 
 	// operators
 	DefineOperators(py_tensor);
@@ -116,14 +107,13 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return TensorView(&t.Get(), indices);
 	});
 	py_tensor.def("__setitem__",
-	              [](const PyTensor& t, const PyTensor& t1,
-	                                const PyTensor& t2) {
-		Tensors indices;
-		indices.push_back(&t1.Get());
-		Tensor::Store(t.Get(), T(t2), indices);
-	});
+	              [](const PyTensor& t, const PyTensor& t1, const PyTensor& t2) {
+		              Tensors indices;
+		              indices.push_back(&t1.Get());
+		              Tensor::Store(t.Get(), T(t2), indices);
+	              });
 	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
-		const PyTensor& t2) {
+	                                const PyTensor& t2) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		Tensor::Store(t.Get(), T(t2), indices);
 	});

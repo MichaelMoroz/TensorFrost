@@ -1,12 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <iostream>
 #include <list>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
-#include <algorithm>
 
 #include "Operations.h"
 #include "Utility/Utility.h"
@@ -18,11 +19,11 @@ class Node;
 class Lable {
  public:
 	Node* node_;
-	Lable(Node* node) : node_(node) {}
+	explicit Lable(Node* node) : node_(node) {}
 
 	Node* operator*() const { return node_; }
-	Node* operator->() { return node_; }
-	Node* get() { return node_; }
+	Node* operator->() const { return node_; }
+	[[nodiscard]] Node* get() const { return node_; }
 };
 
 class Argument {
@@ -37,15 +38,13 @@ class Argument {
 
 	Type type_;
 	Lable* from_;
-	Lable* to_;
+	Lable* to_{nullptr};
 	int index_;
 
 	Argument(Type type, Lable* node, int index)
-	    : type_(type), from_(node), index_(index), to_(nullptr) {}
+	    : type_(type), from_(node), index_(index) {}
 
-	void SetOutput(Lable* output) {
-		to_ = output;
-	}
+	void SetOutput(Lable* output) { to_ = output; }
 };
 
 using Arguments = vector<Argument>;
@@ -59,9 +58,8 @@ enum class MemoryType {
 	Constant,
 };
 
-class Node
-{
-public:
+class Node {
+ public:
 	const string name;
 	const Operation* op;
 	Tensor* tensor_;
@@ -78,20 +76,17 @@ public:
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
 
-	Node(Tensor* tensor, Arguments args, string name)
+	Node(Tensor* tensor, Arguments&& args, string&& name)
 	    : tensor_(tensor),
-	      inputs_(args),
-	      name(name),
-	      op(&FindOperation(name)) 
-	{
+	      inputs_(std::move(args)),
+	      name(std::move(name)),
+	      op(&FindOperation(name)) {
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 		CheckIfValid();
 	}
 
-	Lable* GetLable() {
-		return lable_;
-	}
+	[[nodiscard]] Lable* GetLable() const { return lable_; }
 
 	void UpdateArgumentOutputs() {
 		for (Argument& input : inputs_) {
@@ -103,7 +98,7 @@ public:
 		memory_type_ = memory_type;
 		memory_index_ = index;
 	}
-	
+
 	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs_) {
@@ -112,15 +107,15 @@ public:
 			}
 		}
 		// sort by index
-		std::sort(
-		    result.begin(), result.end(),
+		std::sort(result.begin(), result.end(),
 		          [](const Argument& a, const Argument& b) {
 			          return a.index_ < b.index_;
 		          });
 		return result;
 	}
 
-	[[nodiscard]] map<int, Tensor*> GetArgumentTensors(Argument::Type type) {
+	[[nodiscard]] map<int, Tensor*> GetArgumentTensors(
+	    Argument::Type type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
@@ -142,17 +137,16 @@ public:
 	}
 
 	void AddArgument(Node* node, Argument::Type type, int index = 0) {
-		inputs_.push_back(Argument(type, node->GetLable(), index));
+		inputs_.emplace_back(type, node->GetLable(), index);
 	}
 
-	void CheckIfValid()
-	{
-		//must have operation
+	void CheckIfValid() const {
+		// must have operation
 		if (op == nullptr) {
 			throw std::runtime_error("Operation not found");
 		}
 
-		//must have tensor
+		// must have tensor
 		if (tensor_ == nullptr) {
 			throw std::runtime_error("Tensor not found");
 		}
@@ -164,9 +158,8 @@ public:
 void SwapLables(Node* a, Node* b);
 void CopyLable(Node* target, Node* copy);
 
-class ClusterProp
-{
-public:
+class ClusterProp {
+ public:
 	vector<Lable*> cluster_heads;
 	map<Lable*, vector<Node*>> output;
 	map<Node*, vector<Argument*>> node_output;
@@ -175,46 +168,54 @@ public:
 	ClusterProp(map<Lable*, vector<Node*>> cluster_outputs,
 	            map<Node*, vector<Argument*>> output, map<Node*, float> cost,
 	            vector<Lable*> cluster_heads)
-		: output(cluster_outputs), node_output(output), node_cost(cost), cluster_heads(cluster_heads) {}
+	    : output(std::move(cluster_outputs)),
+	      node_output(std::move(output)),
+	      node_cost(std::move(cost)),
+	      cluster_heads(std::move(cluster_heads)) {}
 };
 
 class IR {
-public:
-	class iterator {
+ public:
+	class Iterator {
 		Node* node_ = nullptr;
 
 	 public:
-		iterator(Node* node) : node_(node) {}
+		explicit Iterator(Node* node) : node_(node) {}
 
 		Node* operator*() const { return node_; }
 
 		Node* operator->() { return node_; }
 
-		iterator& operator++() {
+		Iterator& operator++() {
 			node_ = get_next();
 			return *this;
 		}
 
-		iterator& operator--() {
+		Iterator& operator--() {
 			node_ = get_prev();
 			return *this;
 		}
 
-		bool operator!=(const iterator& other) const {
+		bool operator!=(const Iterator& other) const {
 			return node_ != other.node_;
 		}
 
-		bool operator==(const iterator& other) const {
+		bool operator==(const Iterator& other) const {
 			return node_ == other.node_;
 		}
 
-		bool is_end() const { return node_ == nullptr; }
+		[[nodiscard]] bool is_end() const { return node_ == nullptr; }
 
-		bool is_begin() const { return node_->prev_ == nullptr; }
+		[[nodiscard]] bool is_begin() const { return node_->prev_ == nullptr; }
 
-		bool is_cluster_begin() const { return node_ == nullptr || node_->cluster_head_ == nullptr || node_->cluster_head_->node_ == node_; }
+		[[nodiscard]] bool is_cluster_begin() const {
+			return node_ == nullptr || node_->cluster_head_ == nullptr ||
+			       node_->cluster_head_->node_ == node_;
+		}
 
-		bool is_cluster_end(const Lable* cluster) const { return node_ == nullptr || node_->cluster_head_ != cluster; }
+		bool is_cluster_end(const Lable* cluster) const {
+			return node_ == nullptr || node_->cluster_head_ != cluster;
+		}
 
 		Node* get() { return node_; }
 
@@ -223,8 +224,8 @@ public:
 		Node* get_prev() { return node_->prev_; }
 	};
 
-	Node* AddNode(Tensor* tensor, Arguments args, string name) {
-		Node* new_node = new Node(tensor, args, name);
+	Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
+		Node* new_node = new Node(tensor, std::move(args), std::move(name));
 		InsertAfterCursor(new_node);
 		return new_node;
 	}
@@ -237,18 +238,19 @@ public:
 			node->next_->prev_ = node->prev_;
 		}
 		if (node == *cursor_) {
-			cursor_ = iterator(node->prev_);
+			cursor_ = Iterator(node->prev_);
 		}
 		if (node == *begin_) {
-			begin_ = iterator(node->next_);
+			begin_ = Iterator(node->next_);
 		}
 		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
 		delete node;
 	}
 
-	void ExecuteExpressionAfter(Node* node, function<void()> expression, bool in_cluster = true) {
-		//TODO check if no future nodes are used
-		iterator old_cursor = cursor_;
+	void ExecuteExpressionAfter(Node* node, const function<void()>&& expression,
+	                            bool in_cluster = true) {
+		// TODO(Moroz): check if no future nodes are used
+		Iterator old_cursor = cursor_;
 		Lable* old_cluster_head = current_cluster_head_;
 		if (!in_cluster) {
 			current_cluster_head_ = nullptr;
@@ -261,8 +263,9 @@ public:
 		current_cluster_head_ = old_cluster_head;
 	}
 
-	void ExecuteExpressionBefore(Node* node, function<void()> expression, bool in_cluster = true) {
-		iterator old_cursor = cursor_;
+	void ExecuteExpressionBefore(Node* node, const function<void()>&& expression,
+	                             bool in_cluster = true) {
+		Iterator old_cursor = cursor_;
 		Lable* old_cluster_head = current_cluster_head_;
 		if (!in_cluster) {
 			current_cluster_head_ = nullptr;
@@ -275,20 +278,21 @@ public:
 		current_cluster_head_ = old_cluster_head;
 	}
 
-	//reexecute nodes and get map from old to copied nodes
-	map<Node*, Node*> CopyComputation(unordered_set<Node*> targets);
+	// reexecute nodes and get map from old to copied nodes
+	[[nodiscard]] map<Node*, Node*> CopyComputation(
+	    const unordered_set<Node*>& targets) const;
 
 	void OptimizeClusters();
 
 	void RemoveUnusedNodes();
 
-	iterator begin() const { return begin_; }
+	[[nodiscard]] Iterator begin() const { return begin_; }
 
-	void Clusterize();
+	void Clusterize() const;
 
 	void UpdateNodeOutputs() const;
 
-	ClusterProp GetClusterProperties() const;
+	[[nodiscard]] ClusterProp GetClusterProperties() const;
 
 	void PostProcessClusters();
 
@@ -299,8 +303,8 @@ public:
  private:
 	vector<Node*> nodes_;
 	vector<Node*> cluster_nodes_;
-	iterator cursor_ = iterator(nullptr);
-	iterator begin_ = iterator(nullptr);
+	Iterator cursor_ = Iterator(nullptr);
+	Iterator begin_ = Iterator(nullptr);
 	Lable* current_cluster_head_ = nullptr;
 
 	void InsertAfterCursor(Node* node) {
@@ -309,8 +313,10 @@ public:
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
-				if (current_cluster_head_ != nullptr && current_cluster_head_->node_ == prev_next) {
-					// if the next node is a cluster head, then we need to update the cluster head
+				if (current_cluster_head_ != nullptr &&
+				    current_cluster_head_->node_ == prev_next) {
+					// if the next node is a cluster head, then we need to update the
+					// cluster head
 					current_cluster_head_->node_ = node;
 				}
 				node->next_ = prev_next;
@@ -319,14 +325,14 @@ public:
 			node->prev_ = *cursor_;
 			cursor_->next_ = node;
 		} else {
-			begin_ = iterator(node);
+			begin_ = Iterator(node);
 		}
 		SetCursor(node);
 	}
 
 	void SetCursor(Node* node) {
 		if (node != nullptr) {
-			cursor_ = iterator(node);
+			cursor_ = Iterator(node);
 		} else {
 			throw std::runtime_error("Cursor cannot be set to nullptr");
 		}
@@ -334,7 +340,7 @@ public:
 
 	void SetCursorBefore(Node* node) {
 		if (node != nullptr) {
-			cursor_ = iterator(node->prev_);
+			cursor_ = Iterator(node->prev_);
 		} else {
 			throw std::runtime_error("Node is nullptr");
 		}
