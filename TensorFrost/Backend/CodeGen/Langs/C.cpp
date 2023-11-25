@@ -96,9 +96,9 @@ string GenerateKernelC(const IR& ir, const Lable* cluster, const string kernel_n
 
 pair<string, vector<string>> GenerateC(const IR& ir) {
 	string allKernels =
-	      "#include <math.h> \n"
-	      //"extern \"C\" \n"
-		//"{ \n"
+	      "#include <cmath> \n"
+	      "extern \"C\" \n"
+		  "{ \n"
 	      "typedef unsigned int uint; \n"
 	      "\n"
 	      "float asfloat(uint x) \n"
@@ -144,7 +144,8 @@ pair<string, vector<string>> GenerateC(const IR& ir) {
 		allKernels += "uint threads";
 		allKernels += ")\n";
 		allKernels += "{\n";
-		allKernels += "  for(uint i = 0; i < threads; i++)\n";
+		allKernels += "  #pragma omp parallel for\n";
+		allKernels += "  for(int i = 0; i < threads; i++)\n";
 		allKernels += "  {\n";
 		allKernels += "    " + kernel_name + "(variables, offsets, memory, i);\n";
 		allKernels += "  }\n";
@@ -153,7 +154,7 @@ pair<string, vector<string>> GenerateC(const IR& ir) {
 	}
 	
 
-	//allKernels += "}\n";
+	allKernels += "}\n";
 	return pair<string, vector<string>>(allKernels, kernel_names);
 
 }
