@@ -79,11 +79,11 @@ class Node {
 	Node(Tensor* tensor, Arguments&& args, string&& name)
 	    : tensor_(tensor),
 	      inputs_(std::move(args)),
-	      name(std::move(name)),
-	      op(&FindOperation(this->name)) {
+	      name(std::move(name)) {
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 		CheckIfValid();
+		op = &FindOperation(this->name);
 	}
 
 	[[nodiscard]] Lable* GetLable() const { return lable_; }

@@ -146,13 +146,11 @@ def TEST():
 N = 256
 
 def Bilinear(tex, x, y):
-    xi = tf.floor(x)
-    yi = tf.floor(y)
-    xf = x - xi
-    yf = y - yi
-    xi = tf.int(xi)
-    yi = tf.int(yi)
-    return (1.0-xf)*(1.0-yf)*tex[xi, yi] + xf*(1.0-yf)*tex[xi+1, yi] + (1.0-xf)*yf*tex[xi, yi+1] + xf*yf*tex[xi+1, yi+1]
+    xi, yi = tf.floor(x), tf.floor(y)
+    xf, yf = x-xi, y-yi
+    xi, yi = tf.int(xi), tf.int(yi)
+    oxf, oyf = 1.0-xf, 1.0-yf
+    return tex[xi, yi]*oxf*oyf + tex[xi+1, yi]*xf*oyf + tex[xi, yi+1]*oxf*yf + tex[xi+1, yi+1]*xf*yf
 
 def FluidTest():
     vx = tf.input([N, N], tf.float32)
@@ -160,32 +158,40 @@ def FluidTest():
     density = tf.input([N, N], tf.float32)
     pressure = tf.input([N, N], tf.float32)
 
-    dt = 0.1
+    dt = 1.0
 
     # advect velocity
     i,j = vx.indices
     x, y = tf.float(i), tf.float(j)
     x1, y1 = x - vx*dt, y - vy*dt
-    #
+
     vx = Bilinear(vx, x1, y1)
     vy = Bilinear(vy, x1, y1)
     density = Bilinear(density, x1, y1)
     
     # add source
-    source = tf.exp(-((x-N/3.0)**2.0 + (y-N/3.0)**2.0)/10.0)
+    source = 0.042*tf.exp(-((x-N/5.0)**2.0 + (y-2.0*N/3.0)**2.0)/100.0)
+    source = source + 0.04*tf.exp(-((x-N/5.0)**2.0 + (y-N/3.0)**2.0)/100.0)
     density = density + source
     vx = vx + source
 
+    edge = 1.0 - tf.float((i < 2) | (i > N-3) | (j < 2) | (j > N-3))
+    vx = vx * edge
+    vy = vy * edge
+    density = density * edge
+
     # compute divergence
-    div = vx[i+1, j] - vx[i-1, j] + vy[i, j+1] - vy[i, j-1]
+    div = (vx[i+1, j] - vx[i-1, j] + vy[i, j+1] - vy[i, j-1]) / 2.0
 
     # pressure solve
     for it in range(2):
         pressure = (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
     
     # subtract pressure gradient
-    vx = vx - (pressure[i+1, j] - pressure[i-1, j]) / 2.0
-    vy = vy - (pressure[i, j+1] - pressure[i, j-1]) / 2.0
+    gradx = (pressure[i+1, j] - pressure[i-1, j])*1.5
+    grady = (pressure[i, j+1] - pressure[i, j-1])*1.5
+    vx = vx - gradx
+    vy = vy - grady
 
     return [vx, vy, density, pressure]
 
@@ -193,7 +199,8 @@ def FluidTest():
 #tf.initialize(tf.cpu, "C:/msys64/mingw64/bin/gcc.exe")
 tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
 fluid = tf.program(FluidTest)
-fluid.list_operations(compact=True)
+#fluid.list_operations(compact=True)
+fluid.kernel_c()
 #test = tf.program(WaveEq)
 #poisson = tf.program(PoissonSolver2)
 ##test.kernel_c()
