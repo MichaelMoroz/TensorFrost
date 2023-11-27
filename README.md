@@ -9,6 +9,14 @@ Currently working platforms:
 | Windows    | 🚧   | ⛔    | ⛔      |
 | Linux      | ⛔   | ⛔    | ⛔      |
 
+## Examples
+
+![Sin-Gordon simulation](examples/sin_gordon.gif)
+- [2D sin-Gordon equation simulation](examples/wave_simulation.ipynb)
+
+![Fluid simulation](examples/fluid.gif)
+- [2D stable fluids simulation](examples/fluid_simulation.ipynb)
+
 ## Installation
 TensorFrost is currently not available on PyPI, so you'll have to install it from source. 
 You need to have CMake installed, as well as a C++ compiler that supports C++17 and Python 3.7 or higher.
@@ -90,7 +98,7 @@ The core operation is the indexing operation, which is used to specify indices f
 
 ```python
 #can be created either from a provided shape or from a tensor
-i,j = tf.indices([128, 128]) 
+i,j = tf.indices([8, 8]) 
 i,j = A.indices
 ```
 
@@ -100,21 +108,19 @@ For example i contains:
 [[0, 0, 0, ..., 0, 0, 0],
  [1, 1, 1, ..., 1, 1, 1],
  [2, 2, 2, ..., 2, 2, 2],
- ...,
- [125, 125, 125, ..., 125, 125, 125],
- [126, 126, 126, ..., 126, 126, 126],
- [127, 127, 127, ..., 127, 127, 127]]
+    ...,
+ [7, 7, 7, ..., 7, 7, 7]]
 ```
 
 And analogously for j.
 
 These indices can then be used to index into the tensor data, to either read or write data:
 ```python
-#set all elements [16:32, 16:32] to 1.0
+#set elements [16:32, 16:32] to 1.0
 i,j = tf.indices([16, 16]) 
 B[i+16, j+16] = 1.0
 
-#read all elements [8:24, 8:24]
+#read elements [8:24, 8:24]
 i,j = tf.indices([16, 16])
 C = B[i+8, j+8]
 ```
@@ -195,11 +201,6 @@ Backends:
 - [ ] ISPC (?, for better CPU utilization)
 
 (hopefully im not going to abandon this project before finishing lol)
-
-## Examples
-
-- [2D wave simulation](examples/wave_simulation.ipynb)
-- [2D fluid simulation](examples/fluid_simulation.ipynb)
 
 ## Contributing
 Contributions are welcome! If you want to contribute, please open an issue first to discuss the changes you want to make.
