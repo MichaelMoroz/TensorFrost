@@ -59,10 +59,10 @@ map<Node*, Node*> IR::CopyComputation(
 		}
 		nodes_to_copy.insert(node);
 		for (auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Memory ||
-			    input.type_ == Argument::Type::Shape)
+			if (input.type_ == Argument::Type::Shape)
 				continue;
-
+			if (input.from_->get()->name == "memory")
+				continue;
 			dfs(input.from_->get());
 		}
 	};
@@ -82,7 +82,7 @@ map<Node*, Node*> IR::CopyComputation(
 		Arguments new_args;
 		for (Argument& arg : node->inputs_) {
 			// if shape or memory argument, then no need to use copied node
-			if (arg.type_ == Argument::Type::Memory ||
+			if (arg.from_->get()->name == "memory" ||
 			    arg.type_ == Argument::Type::Shape) {
 				new_args.push_back(arg);
 				continue;
@@ -514,8 +514,8 @@ Program* GenerateProgram(IR* ir) {
 
 		// get the cluster type
 		KernelType type;
-		vector<Node*> variables;
-		vector<Node*> memory_nodes;
+		map<Node*, int> variables;
+		map<Node*, int> memory_nodes;
 		if (begin->name == "memory") {
 			if (begin->memory_type_ == MemoryType::Input) {
 				continue;
@@ -524,6 +524,10 @@ Program* GenerateProgram(IR* ir) {
 		} else {
 			type = KernelType::Compute;
 			bool has_output = false;
+
+			int variable_index = 0;
+			int memory_index = 0;
+
 			for (auto node = IR::Iterator(begin);
 			     !node.is_cluster_end(begin->cluster_head_); ++node) {
 				OpType op_type = node->op->GetOpType();
@@ -535,7 +539,11 @@ Program* GenerateProgram(IR* ir) {
 					// get the memory node
 					const Tensor* memory =
 					    node->GetArgumentTensors(Argument::Type::Memory)[0];
-					memory_nodes.push_back(memory->node);
+
+					if (!memory_nodes.contains(memory->node))
+					{
+						memory_nodes[memory->node] = memory_index++;
+					}
 				}
 
 				// get all input arguments
@@ -543,7 +551,10 @@ Program* GenerateProgram(IR* ir) {
 				    node->GetArgumentTensors(Argument::Type::Input);
 				for (auto& input : inputs) {
 					if (input.second->node->name == "memory") {
-						variables.push_back(input.second->node);
+						if (!variables.contains(input.second->node))
+						{
+							variables[input.second->node] = variable_index++;
+						}
 					}
 				}
 			}

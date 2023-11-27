@@ -68,7 +68,7 @@ void TensorProgramDefinition(py::module& m,
 	});
 
 	tensor_program.def("kernel_c", [](TensorProgram& program) {
-		pair<string, vector<string>> source = GenerateC(program.ir);
+		pair<string, vector<string>> source = GenerateC(program.program);
 		string c = source.first;
 		py::str result = py::str(c);
 		py::print(result);

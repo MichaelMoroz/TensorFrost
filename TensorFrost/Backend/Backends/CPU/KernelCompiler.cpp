@@ -108,7 +108,7 @@ void CompileAndLoadKernel(Program* program) {
 	cout << "Temp file: " << temp_file_name << endl;
 
 	// Generate C code
-	pair<string, vector<string>> source_names = GenerateC(*program->ir_);
+	pair<string, vector<string>> source_names = GenerateC(program);
 	string source_code = source_names.first;
 	vector<string> kernel_names = source_names.second;
 

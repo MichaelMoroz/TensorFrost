@@ -21,7 +21,6 @@ void TensorProgram::CreateProgram() {
 
 	Tensor::SetEvaluationContext(nullptr);
 
-	// compile and load kernel
 	CompileAndLoadKernel(program);
 }
 

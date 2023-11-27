@@ -27,6 +27,10 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "\n";
 		}
 
+		if (!compact && node->cluster_head_ != nullptr) {
+			listing += GetNodeName(node->cluster_head_->node_, names, compact) + ": ";
+		}
+
 		// indent
 		for (int i = 0; i < indent; i++) {
 			listing += "  ";
@@ -109,11 +113,6 @@ string GetOperationListing(const IR& ir, bool compact) {
 
 		if (node->tensor_->type != DataType::None) {
 			listing += "type=" + DataTypeToString(node->tensor_->type);
-		}
-
-		if (!compact && node->cluster_head_ != nullptr) {
-			listing += ", cluster=" +
-			           GetNodeName(node->cluster_head_->node_, names, compact);
 		}
 
 		listing += ")\n";

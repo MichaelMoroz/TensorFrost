@@ -92,24 +92,25 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 				}
 
 				vector<uint> memory_offsets;
+				memory_offsets.resize(kernel->memory.size());
 				vector<uint> variables;
-				memory_offsets.reserve(kernel->memory.size());
-				for (auto* j : kernel->memory) {
-					memory_offsets.push_back(memory_map[j]->frame->start);
+				variables.resize(kernel->variables.size());
+				for (auto& j : kernel->memory) {
+					memory_offsets[j.second] = memory_map[j.first]->frame->start;
 				}
 				for (auto& j : kernel->variables) {
 					// if variable is a constant, add constant value to variable offsets
-					if (j->name == "const") {
-						variables.push_back(j->tensor_->data[0]);
+					if (j.first->name == "const") {
+						variables[j.second] = j.first->tensor_->data[0];
 					} else {
-						if (shape_constants.contains(j)) {
-							variables.push_back(shape_constants[j]);
+						if (shape_constants.contains(j.first)) {
+							variables[j.second] = shape_constants[j.first];
 						} else {
 							// otherwise, load variable from memory
-							uint offset = memory_map[j]->frame->start;
+							uint offset = memory_map[j.first]->frame->start;
 							uint variable =
 							    ((CpuMemoryManager*)global_memory_manager)->memory[offset];
-							variables.push_back(variable);
+							variables[j.second] = variable;
 						}
 					}
 				}

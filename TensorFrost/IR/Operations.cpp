@@ -1,11 +1,10 @@
 #include "Operations.h"
 
 namespace TensorFrost {
-#define dtype(x) DataType::x
 
 map<DataType, string> type_names = {
-    {dtype(None), "void"}, {dtype(Bool), "bool"}, {dtype(Float), "float"},
-    {dtype(Uint), "uint"}, {dtype(Int), "int"},
+    {DataType::None, "void"}, {DataType::Bool, "bool"}, {DataType::Float, "float"},
+    {DataType::Uint, "uint"}, {DataType::Int, "int"},
 };
 
 vector<Operation> operations = {
@@ -90,7 +89,7 @@ vector<Operation> operations = {
     Operation("InterlockedOr", {"u_", "i_"}, 256, "", OpType::Scatter),
     Operation("InterlockedXor", {"u_", "i_"}, 256, "", OpType::Scatter),
     Operation("variable", {"_f", "_u", "_i"}, 2),
-    Operation("const", {"_f", "_u", "_i"}, 0),
+    Operation("const", {"_f", "_u", "_i"}, 0, "", OpType::Constant),
     Operation("dim_id", {"_i", "_u"}, 4),
     Operation("thread_id", {"_i", "_u"}, 1, "", OpType::Variable),
     Operation("group_thread_id", {"_i", "_u"}, 1),

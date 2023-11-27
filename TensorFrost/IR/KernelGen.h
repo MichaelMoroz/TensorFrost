@@ -19,10 +19,12 @@ class Kernel {
  public:
 	KernelType type_;
 	Node* begin_;
-	vector<Node*> variables;
-	vector<Node*> memory;
+	map<Node*, int> variables;
+	map<Node*, int> memory;
 	function<void(TensorMemoryManager*, vector<uint>, vector<uint>, uint)>
 	    execute_callback;
+
+	string generate_code_;
 };
 
 class Program {
@@ -30,11 +32,12 @@ class Program {
 	IR* ir_;
 	vector<Kernel> kernels_;
 	function<void()> unload_callback;
+	string generate_code_;
 
 	explicit Program(IR* ir) : ir_(ir) {}
 
-	void AddKernel(KernelType type, Node* begin, vector<Node*> variables,
-	               vector<Node*> memory) {
+	void AddKernel(KernelType type, Node* begin, map<Node*, int> variables,
+	               map<Node*, int> memory) {
 		kernels_.push_back({type, begin, std::move(variables), std::move(memory)});
 	}
 };

@@ -243,6 +243,10 @@ class IR {
 		if (node == *begin_) {
 			begin_ = Iterator(node->next_);
 		}
+		if (node->cluster_head_ != nullptr && node->cluster_head_->node_ == node) {
+			//assuming the next node is also in the cluster
+			node->cluster_head_->node_ = node->next_;
+		}
 		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
 		delete node;
 	}

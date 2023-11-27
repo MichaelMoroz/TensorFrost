@@ -35,6 +35,7 @@ enum class OpType {
 	UnaryOperator,
 	TypeCast,
 	TypeReinterpret,
+	Constant,
 };
 
 using DataTypeList = vector<DataType>;
@@ -42,14 +43,14 @@ using DataTypeList = vector<DataType>;
 DataTypeList Types(initializer_list<DataType> elements);
 
 class Operation {
- private:
+public:
 	string name_;
 	float cost_ = 0.0F;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
 	OpType op_type_;
 
- public:
+
 	Operation(string name, initializer_list<string> oloads, float cost,
 	          string code = "", OpType op_type = OpType::Function)
 	    : name_(std::move(name)), op_type_(op_type) {
