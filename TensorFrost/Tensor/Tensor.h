@@ -76,7 +76,13 @@ class Tensor {
 	}
 
 	template <typename... Args>
-	static Tensor& Op(const std::string& op, const Args*... args) {
+	static Tensor& Op(std::string op, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Operation name cannot be empty");
+		}
+
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -104,8 +110,14 @@ class Tensor {
 	}
 
 	template <typename... Args>
-	static Tensor& MemoryOp(const string op, const Tensor* memory,
+	static Tensor& MemoryOp(string op, const Tensor* memory,
 	                        const Tensors indices, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Memory operation name cannot be empty");
+		}
+
 		// check if indices are all integers
 		for (const Tensor* index : indices) {
 			if (index->type != DataType::Int) {
@@ -134,8 +146,14 @@ class Tensor {
 		return CreateNode(output_type, arguments, op);
 	}
 
-	static Tensor& Static(const string& op, const Arguments& shape,
+	static Tensor& Static(string op, const Arguments& shape,
 	                      const DataType type) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Static operation name cannot be empty");
+		}
+
 		const Operation& operation = FindOperation(op);
 		// check if output is valid
 		if (!operation.IsOutputValid(type)) {

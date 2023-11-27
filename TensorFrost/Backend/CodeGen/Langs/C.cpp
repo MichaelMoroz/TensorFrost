@@ -91,7 +91,7 @@ string GenerateKernelC(const IR* ir, const Lable* cluster,
 
 	C_CodeGenerator generator;
 	generator.GenerateKernelLines(ir, cluster, kernel);
-	//generator.Compactify();
+	generator.Compactify();
 
 	hlsl_code += generator.GetFinalCode();
 

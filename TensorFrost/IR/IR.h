@@ -82,8 +82,8 @@ class Node {
 	      name(std::move(name)) {
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
-		CheckIfValid();
 		op = &FindOperation(this->name);
+		CheckIfValid();
 	}
 
 	[[nodiscard]] Lable* GetLable() const { return lable_; }
@@ -143,7 +143,7 @@ class Node {
 	void CheckIfValid() const {
 		// must have operation
 		if (op == nullptr) {
-			throw std::runtime_error("Operation not found");
+			throw std::runtime_error("Operation object not found");
 		}
 
 		// must have tensor

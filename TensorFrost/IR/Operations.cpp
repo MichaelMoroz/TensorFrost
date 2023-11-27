@@ -1,4 +1,5 @@
 #include "Operations.h"
+#include <iostream>
 
 namespace TensorFrost {
 
@@ -7,7 +8,7 @@ map<DataType, string> type_names = {
     {DataType::Uint, "uint"}, {DataType::Int, "int"},
 };
 
-vector<Operation> operations = {
+const vector<Operation> operations = {
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", OpType::Operator),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", OpType::Operator),
     Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", OpType::Operator),
@@ -88,10 +89,10 @@ vector<Operation> operations = {
     Operation("InterlockedAnd", {"u_", "i_"}, 256, "", OpType::Scatter),
     Operation("InterlockedOr", {"u_", "i_"}, 256, "", OpType::Scatter),
     Operation("InterlockedXor", {"u_", "i_"}, 256, "", OpType::Scatter),
-    Operation("variable", {"_f", "_u", "_i"}, 2),
+    Operation("variable", {"_f", "_u", "_i"}, 1),
     Operation("const", {"_f", "_u", "_i"}, 0, "", OpType::Constant),
     Operation("dim_id", {"_i", "_u"}, 4),
-    Operation("thread_id", {"_i", "_u"}, 1, "", OpType::Variable),
+    Operation("thread_id", {"_i", "_u"}, 0, "", OpType::Variable),
     Operation("group_thread_id", {"_i", "_u"}, 1),
     Operation("group_id", {"_i", "_u"}, 1),
     Operation("group_count", {"_i", "_u"}, 1),
@@ -111,15 +112,24 @@ DataTypeList Types(initializer_list<DataType> elements) {
 }
 
 const Operation& FindOperation(const string& name) {
-	for (const auto& op : operations) {
-		if (op.GetName() == name) {
-			return op;
+	if (name == "") {
+		throw runtime_error("Operation name is empty");
+	}
+
+	for (int i = 0; i < operations.size(); i++) {
+		if (operations[i].name_ == name) {
+			return operations[i];
 		}
 	}
 	throw runtime_error("Operation not found: " + name);
 }
 
 string DataTypeToString(DataType type) { return type_names[type]; }
+
+string RemoveSpaces(string str) {
+	str.erase(remove(str.begin(), str.end(), ' '), str.end());
+	return str;
+}
 
 string Operation::GenerateOpString(const vector<string>& arguments) const {
 	string line;

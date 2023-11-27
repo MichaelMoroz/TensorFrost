@@ -24,26 +24,21 @@ class Line {
 	string name;
 	vector<string> arguments;
 	int indent;
+	bool needs_parenthesis = false;
+	float cost = 0;
 
 	Line(string left, string expression, string right, string name,
-	     vector<string> args,
-	     int indent = 0)
-	    : left(left), right(right), name(name), arguments(args), indent(indent), expression(expression) {}
-
-	bool operator==(const Line& other) const {
-		return this->name == other.name && this->left == other.left &&
-		       this->right == other.right && this->arguments == other.arguments &&
-		       this->indent == other.indent && this->expression == other.expression;
-	}
+	     vector<string> args, bool needs_parenthesis = false, float cost = 0, int indent = 0)
+	    : left(left), right(right), name(name), arguments(args), indent(indent), expression(expression), needs_parenthesis(needs_parenthesis), cost(cost) {}
 };
 
 class CodeGenerator {
  public:
-	list<Line> lines;
+	list<Line*> lines;
 
 	CodeGenerator() = default;
 
-	virtual Line GenerateLine(NodeNames* names, const Operation* op, Node* node,
+	virtual Line* GenerateLine(NodeNames* names, const Operation* op, Node* node,
 	                          Arguments inputs, Arguments indices,
 	                          Arguments shape, Arguments memory,
 	                          map<Node*, int> offsets,
@@ -77,9 +72,9 @@ class CodeGenerator {
 
 			string name = names[*node];
 
-			Line line = GenerateLine(&names, op, node.get(), inputs, indices, shape,
+			Line* line = GenerateLine(&names, op, node.get(), inputs, indices, shape,
 			                         memory, kernel->memory, kernel->variables);
-			line.indent = indent;
+			line->indent = indent;
 			lines.push_back(line);
 
 			if (node->name == "loop_begin" || node->name == "if_begin") {
@@ -97,66 +92,103 @@ class CodeGenerator {
 	
 		for (auto& line : lines) {
 			// get inputs
-			for (auto& arg : line.arguments) {
-				line_inputs[line.name].push_back(arg);
+			line_inputs[line->name] = vector<string>();
+			line_outputs[line->name] = vector<string>();
+			
+			for (auto& arg : line->arguments) {
+				line_inputs[line->name].push_back(arg);
 			}
 	
-			// set output
-			line_outputs[line.name].push_back(line.left);
-	
 			// add line to map
-			line_map[line.name] = &line;
+			line_map[line->name] = line;
 		}
-	
-		// merge lines
-		const int max_line_length = 100;
+
 		for (auto& line : lines) {
-			int line_size = (int)line.right.size();
-			for (auto& arg : line.arguments) {
-				int input_size = (int)line_map[arg]->right.size();
+			// get outputs
+			for (auto& arg : line->arguments) {
+				line_outputs[arg].push_back(line->name);
+			}
+		}
+			
+		unordered_set<Line*> toRemove;
+
+		// merge lines
+		const int max_line_length = 110;
+		for (auto& line : lines) {
+			int line_size = (int)line->expression.size();
+			for (int i = 0; i < line->arguments.size(); i++) {
+				string arg = line->arguments[i];
+				Line* line2 = line_map[arg];
+				int input_size = (int)line_map[arg]->expression.size();
 				int output_count = (int)line_outputs[arg].size();
-				if (input_size + line_size < max_line_length && output_count == 1) {
-					// count the number of instances of arg in line.right
+				if ((input_size + line_size < max_line_length && output_count == 1) ||
+				    line2->cost < 1.0f) {
+					// count the number of instances of arg in line->right
 					std::regex arg_regex("\\b" + arg +
 					                     "\\b");  // regex for whole word match
-					auto words_begin = std::sregex_iterator(line.right.begin(),
-					                                        line.right.end(), arg_regex);
+					auto words_begin = std::sregex_iterator(line->expression.begin(), line->expression.end(), arg_regex);
 					auto words_end = std::sregex_iterator();
 	
 					int instances = (int)std::distance(words_begin, words_end);
 	
-					if (instances < 2) {
+					if (instances < 2 || line2->cost < 1.0f) {
 						// merge lines
-						line.right =
-						    std::regex_replace(line.right, arg_regex, "(" + line_map[arg]->right + ")");
+						string replace = line2->expression;
+
+						if (line2->needs_parenthesis) {
+							replace = "(" + replace + ")";
+						}
+
+						line->expression =
+						    std::regex_replace(line->expression, arg_regex, replace);
 	
 						// add inputs
 						for (auto& input : line_inputs[arg]) {
 							if (input != arg) {
-								line.arguments.push_back(input);
+								line->arguments.push_back(input);
+								line->cost += line_map[input]->cost;
 							}
 						}
 	
-						// now remove input line
-						lines.remove(*line_map[arg]);
+						toRemove.insert(line2);  // Add the line to the removal set
 					}
 				}
 			}
 		}
+
+		// remove lines
+		for (auto& line : toRemove) {
+			lines.remove(line);
+			delete line;
+		}
 	}
+
 
 	string GetFinalCode() {
 		string code;
 		int indent = 0;
 		for (auto& line : lines) {
-			for (int i = 0; i < line.indent; i++) {
+			for (int i = 0; i < line->indent; i++) {
 				code += "  ";
 			}
-			code += line.left;
-			code += line.expression;
-			code += line.right;
+			code += line->left;
+			code += line->expression;
+			code += line->right;
 			code += "\n";
 		}
+
+		// update names
+		int i = 0;
+		for (auto& line : lines) {
+			string old_name = line->name;
+			string new_name = "v" + to_string(i);
+			i++;
+			std::regex name_regex("\\b" + old_name +
+			                      "\\b");  // regex for whole word match
+			code = std::regex_replace(code, name_regex, new_name);
+			line->name = new_name;
+		}
+
 		return code;
 	}
 };
@@ -164,7 +196,7 @@ class CodeGenerator {
 class C_CodeGenerator : public CodeGenerator
 {
 public:
-	Line GenerateLine(NodeNames* names, const Operation* op, Node* node,
+	Line* GenerateLine(NodeNames* names, const Operation* op, Node* node,
 		Arguments inputs, Arguments indices,
 		Arguments shape, Arguments memory, map<Node*, int> offsets, map<Node*, int> variables) override
 	{
@@ -175,7 +207,7 @@ public:
 		for (const Argument& arg : memory) {
 			string var_name = GetNodeName(arg.from_->get(), *names, true);
 			arguments.push_back(var_name);
-			if (arg.from_->get()->name != "const")
+			if (arg.from_->get()->name != "const" && arg.from_->get()->name != "memory")
 			{
 				input_variables.push_back(var_name);
 			}
@@ -183,7 +215,8 @@ public:
 		for (const Argument& arg : indices) {
 			string var_name = GetNodeName(arg.from_->get(), *names, true);
 			arguments.push_back(var_name);
-			if (arg.from_->get()->name != "const")
+			if (arg.from_->get()->name != "const" &&
+			    arg.from_->get()->name != "memory")
 			{
 				input_variables.push_back(var_name);
 			}
@@ -196,7 +229,7 @@ public:
 			}
 			arguments.push_back(name);
 			input_types.push_back(arg.from_->get()->tensor_->type);
-			if (input->name != "const")
+			if (input->name != "const" && input->name != "memory")
 			{
 				input_variables.push_back(name);
 			}
@@ -216,7 +249,7 @@ public:
 		string left = "";
 		string expression = "";
 		string right = "";
-
+		bool needs_parenthesis = true;
 		if (op->name_ == "loop_begin") {
 			left += "for (int " + name + " = " + arguments[0] + "; " + name + " < " +
 			        arguments[1] + "; " + name + " += " + arguments[2] +
@@ -244,8 +277,9 @@ public:
 					expression += ")";
 				}
 				right += ";";
+				needs_parenthesis = false;
 			} else if (op->name_ == "store") {
-				left += memory_expression + " = ";
+				expression += memory_expression + " = ";
 				if (input_types[0] != DataType::Uint) {
 					expression += "asuint(";
 				}
@@ -277,12 +311,14 @@ public:
 					line += arguments[i];
 				}
 				line += ")";
+				needs_parenthesis = false;
 				break;
 			case OpType::Keyword:
 				line += op->code_;
 				break;
 			case OpType::Variable:
 				line += op->code_;
+				needs_parenthesis = false;
 				break;
 			case OpType::TypeCast:
 				line += "(" + op->code_ + ")" + arguments[0];
@@ -292,6 +328,7 @@ public:
 				break;
 			case OpType::Constant:
 				line += node->tensor_->GetConstantString();
+				needs_parenthesis = false;
 				break;
 			default:
 				line += "";
@@ -301,7 +338,7 @@ public:
 			right += ";";
 		}
 
-		return Line(left, expression, right, name, input_variables);
+		return new Line(left, expression, right, name, input_variables, needs_parenthesis, op->cost_);
 	}
 };
 

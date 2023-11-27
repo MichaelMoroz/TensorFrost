@@ -183,4 +183,6 @@ const Operation& FindOperation(const string& name);
 
 string DataTypeToString(DataType type);
 
+string RemoveSpaces(string str);
+
 }  // namespace TensorFrost
