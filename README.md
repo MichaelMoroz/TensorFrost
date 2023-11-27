@@ -27,6 +27,8 @@ cmake -S . -B build && cmake --build build
 The cmake script will automatically install the compiled python module into your python environment.
 
 ## Usage
+
+### Setup
 First you need to import the library:
 ```python
 import TensorFrost as tf
@@ -45,7 +47,9 @@ call "Path\To\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsal
 cl %*
 ```
 
-Then you can create and compile functions:
+### Basic usage
+
+Now you can create and compile functions, for example here is a very simple function does a wave simulation:
 ```python
 def WaveEq():
     u = tf.input([-1, -1], tf.float32)
@@ -77,7 +81,125 @@ To get the result back into a numpy array, you can use the `numpy` property:
 Anp = A.numpy
 ```
 
-TODO: advanded usage and debugging
+TensorFrost does not support JIT compilation (currently no plans either), so you must create the program before running it. Therefore the tensor operations must only be used inside a tensor program. Operations outside the function will throw an error, so if you want to do operations outside you must read the data into a numpy array first.
+
+### Operations
+
+TensorFrost supports most of the basic numpy operations, including indexing, arithmetic, and broadcasting (only partially for now).
+The core operation is the indexing operation, which is used to specify indices for accessing the tensor data. Depending on the dimensinality of the tensor there can be N indices. This operation is similar to numpy's `np.ogrid` and `np.mgrid` functions, but it is basically free due to fusion.
+
+```python
+#can be created either from a provided shape or from a tensor
+i,j = tf.indices([128, 128]) 
+i,j = A.indices
+```
+
+For example i contains:
+
+```
+[[0, 0, 0, ..., 0, 0, 0],
+ [1, 1, 1, ..., 1, 1, 1],
+ [2, 2, 2, ..., 2, 2, 2],
+ ...,
+ [125, 125, 125, ..., 125, 125, 125],
+ [126, 126, 126, ..., 126, 126, 126],
+ [127, 127, 127, ..., 127, 127, 127]]
+```
+
+And analogously for j.
+
+These indices can then be used to index into the tensor data, to either read or write data:
+```python
+#set all elements [16:32, 16:32] to 1.0
+i,j = tf.indices([16, 16]) 
+B[i+16, j+16] = 1.0
+
+#read all elements [8:24, 8:24]
+i,j = tf.indices([16, 16])
+C = B[i+8, j+8]
+```
+
+Here we can see that the shape of the "computation" is not the same as the shape of the tensor, and one thread is spawned for each given index. This is the main idea of TensorFrost. Then all sequential computations of the same shape are fused into a single kernel, if they are not dependent on each other in a non-trivial way.
+
+When doing out-of-bounds indexing, the index is currently clamped to the tensor shape. This is not ideal, but it is the simplest way to handle this. In the future there will be a way to specify the boundary conditions.
+
+### Scatter operations
+
+These operations allow implementing non-trivial reduction operations, including, for example, matrix multiplication:
+
+```python
+def MatrixMultiplication():
+    A = tf.input([-1, -1], tf.float32)
+    B = tf.input([-1, -1], tf.float32)
+
+    N, M = A.shape
+    K = B.shape[1]
+
+    i, j, k = tf.indices([N, K, M])
+
+    C = tf.zeros([N, K])
+    tf.scatterAdd(C[i, j], A[i, k] * B[k, j])
+
+    return [C]
+
+matmul = tf.program(MatrixMultiplication)
+```
+
+Here the 3D nature of the matrix multiplication is apparent. The scatter operation is used to accumulate the results of the row-column dot products into the elements of the resulting matrix.
+
+(This is not the most efficient way to implement matrix multiplication, but it is the simplest way to show how scatter operations work. In the future though, scatters will have the ability to optimize into loops if possible.)
+
+### Loops and conditionals
+
+TODO
+
+### Autodifferentiation
+
+TODO
+
+### Advanced usage
+
+TODO
+
+
+## Roadmap 
+
+Core features:
+- [x] Basic operations (memory, indexing, arithmetic, etc.)
+- [x] Basic kernel fusion and compilation
+- [ ] Advanced built-in functions (random, special functions, etc.)
+- [ ] Advanced operations (loops, conditionals, etc.)
+- [ ] Autodifferentiation
+- [ ] Kernel code and execution graph export and editing
+- [ ] Advanced data types and quantization
+- [ ] Advanced IR optimizations
+- [ ] Kernel shape and cache optimization
+  
+Algorithm library:
+- [ ] Sort, scan, reduction, etc.
+- [ ] Matrix operations (matrix multiplication, etc.)
+- [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.)
+- [ ] Fast Fourier Transform
+- [ ] High-level neural network layers (convolution, etc.)
+
+Platforms:
+- [x] Windows
+- [ ] Linux
+- [ ] MacOS
+
+Backends:
+- [x] CPU (using user-provided compiler)
+- [ ] Vulkan
+- [ ] CUDA
+- [ ] WGSL (for web)
+- [ ] ISPC (?, for better CPU utilization)
+
+(hopefully im not going to abandon this project before finishing lol)
+
+## Examples
+
+- [2D wave simulation](examples/wave_simulation.ipynb)
+- [2D fluid simulation](examples/fluid_simulation.ipynb)
 
 ## Contributing
 Contributions are welcome! If you want to contribute, please open an issue first to discuss the changes you want to make.
