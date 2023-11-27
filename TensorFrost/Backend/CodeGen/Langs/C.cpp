@@ -104,8 +104,6 @@ string GenerateKernelC(const IR* ir, const Lable* cluster,
 pair<string, vector<string>> GenerateC(Program* program) {
 	string all_kernels =
 	    "#include <cmath> \n"
-	    "extern \"C\" \n"
-	    "{ \n"
 	    "typedef unsigned int uint; \n"
 	    "\n"
 	    "float asfloat(uint x) \n"
@@ -123,7 +121,18 @@ pair<string, vector<string>> GenerateC(Program* program) {
 	    "  if(x < min) return min; \n"
 	    "  if(x > max) return max; \n"
 	    "  return x; \n"
-	    "} \n";
+	    "} \n"
+	    "\n"
+	    "float clamp(float x, float min, float max) \n"
+	    "{ \n"
+	    "  return fmin(fmax(x, min), max); \n"
+	    "} \n"
+	    "\n"
+	    "double clamp(double x, double min, double max) \n"
+	    "{ \n"
+	    "  return fmin(fmax(x, min), max); \n"
+	    "} \n"
+	    "\n";
 
 	// Generate HLSL code for each cluster
 	int kernel_count = 0;
@@ -144,24 +153,21 @@ pair<string, vector<string>> GenerateC(Program* program) {
 		string kernel_code = GenerateKernelC(program->ir_, cluster, kernel, kernel_name);
 		kernel->generate_code_ = kernel_code;
 		all_kernels += kernel_code;
-		all_kernels += "\n";
-		all_kernels += "__declspec(dllexport) void " + function_name + "(";
-		all_kernels += "uint* variables, ";
-		all_kernels += "uint* offsets, ";
-		all_kernels += "uint* memory, ";
-		all_kernels += "uint threads";
-		all_kernels += ")\n";
-		all_kernels += "{\n";
-		all_kernels += "  #pragma omp parallel for\n";
-		all_kernels += "  for(int i = 0; i < threads; i++)\n";
-		all_kernels += "  {\n";
-		all_kernels += "    " + kernel_name + "(variables, offsets, memory, i);\n";
-		all_kernels += "  }\n";
-		all_kernels += "}\n";
-		all_kernels += "\n";
+		all_kernels +=
+		    "\n"
+		    "extern \"C\" \n"
+		    "{ \n"
+		    "  __declspec(dllexport) void " + function_name +
+		    "(uint* variables, uint* offsets, uint* memory, uint threads)\n"
+		    "  {\n"
+		    "    #pragma omp parallel for\n"
+		    "    for(int i = 0; i < threads; i++)\n"
+		    "    {\n"
+		    "      " + kernel_name + "(variables, offsets, memory, i);\n"
+		    "    }\n"
+		    "  }\n"
+		    "}\n";
 	}
-
-	all_kernels += "}\n";
 
 	program->generate_code_ = all_kernels;
 	return pair<string, vector<string>>(all_kernels, kernel_names);

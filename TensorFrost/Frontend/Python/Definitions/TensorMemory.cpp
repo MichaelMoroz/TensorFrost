@@ -23,9 +23,11 @@ void TensorMemoryDefinition(py::module& m,
 		    std::vector<int> shape;
 		    py::buffer_info info = arr.request();
 		    int size = 1;
-		    for (int dim : info.shape) {
-			    shape.push_back(dim);
-			    size *= dim;
+		    shape.resize(info.ndim);
+		    for (int i = 0; i < info.ndim; i++) 
+			{
+			    shape[i] = info.shape[i];
+			    size *= shape[i];
 		    }
 
 		    // create the data vector
@@ -55,9 +57,16 @@ void TensorMemoryDefinition(py::module& m,
 	    [](const TensorMemory& t) {
 		    // get the shape
 		    std::vector<int> shape = t.GetShape();
+			
+			std::vector<int> shape2;
+			shape2.resize(shape.size());
+			for (int i = 0; i < shape.size(); i++)
+			{
+				shape2[i] = shape[shape.size() - i - 1];
+			}
 
 		    // create the numpy array
-		    py::array_t<float> arr(shape);
+			py::array_t<float> arr(shape2);
 
 		    // copy the data
 		    std::vector<uint> data = global_memory_manager->Readback(&t);
