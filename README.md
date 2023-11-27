@@ -12,9 +12,9 @@ Currently working platforms:
 ## Examples
 
 ![Sin-Gordon simulation](examples/sin_gordon.gif)
-- [2D sin-Gordon equation simulation](examples/wave_simulation.ipynb)
-
 ![Fluid simulation](examples/fluid.gif)
+
+- [2D sin-Gordon equation simulation](examples/wave_simulation.ipynb)
 - [2D stable fluids simulation](examples/fluid_simulation.ipynb)
 
 ## Installation
