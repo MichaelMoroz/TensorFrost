@@ -44,7 +44,7 @@ inline string Tensor::GetConstantString() const {
 	if (node->name == "const" || node->name == "dim_id") {
 		switch (type) {
 			case DataType::Float:
-				return to_string(AsFloat(data[0]));
+				return to_string(AsFloat(data[0])) + "f";
 			case DataType::Int:
 				return to_string(AsInt(data[0]));
 			case DataType::Uint:
