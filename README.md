@@ -99,7 +99,7 @@ i,j = tf.indices([8, 8])
 i,j = A.indices
 ```
 
-For example i contains:
+For example `i` contains:
 
 ```
 [[0, 0, 0, ..., 0, 0, 0],
@@ -109,7 +109,7 @@ For example i contains:
  [7, 7, 7, ..., 7, 7, 7]]
 ```
 
-And analogously for j.
+And analogously for `j`.
 
 These indices can then be used to index into the tensor data, to either read or write data:
 ```python
@@ -192,10 +192,10 @@ Platforms:
 
 Backends:
 - [x] CPU (using user-provided compiler)
+- [ ] ISPC (for better CPU utilization)
 - [ ] Vulkan
 - [ ] CUDA
 - [ ] WGSL (for web)
-- [ ] ISPC (?, for better CPU utilization)
 
 (hopefully im not going to abandon this project before finishing lol)
 
