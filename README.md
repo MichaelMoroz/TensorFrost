@@ -11,11 +11,8 @@ Currently working platforms:
 
 ## Examples
 
-![Sin-Gordon simulation](examples/sin_gordon.gif)
-![Fluid simulation](examples/fluid.gif)
-
-- [2D sin-Gordon equation simulation](examples/wave_simulation.ipynb)
-- [2D stable fluids simulation](examples/fluid_simulation.ipynb)
+<a href="examples/wave_simulation.ipynb"><img src="examples/sin_gordon.gif" height="192px"></a>
+<a href="examples/fluid_simulation.ipynb"><img src="examples/fluid.gif" height="192px"></a>
 
 ## Installation
 TensorFrost is currently not available on PyPI, so you'll have to install it from source. 
