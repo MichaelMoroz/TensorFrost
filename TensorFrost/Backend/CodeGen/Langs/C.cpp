@@ -233,37 +233,37 @@ void atomic_add(float* address, float value)
 
 void atomic_and(int* address, int value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address &= value;
 }
 
 void atomic_and(uint* address, uint value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address &= value;
 }
 
 void atomic_or(int* address, int value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address |= value;
 }
 
 void atomic_or(uint* address, uint value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address |= value;
 }
 
 void atomic_xor(int* address, int value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address ^= value;
 }
 
 void atomic_xor(uint* address, uint value)
 {
-  #pragma omp critical
+  #pragma omp atomic
   *address ^= value;
 }
 

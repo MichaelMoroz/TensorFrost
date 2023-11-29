@@ -195,7 +195,7 @@ Backends:
 - [ ] ISPC (for better CPU utilization)
 - [ ] Vulkan
 - [ ] CUDA
-- [ ] WGSL (for web)
+- [ ] WGPU (for web)
 
 (hopefully im not going to abandon this project before finishing lol)
 

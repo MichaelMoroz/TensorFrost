@@ -48,7 +48,7 @@ inline string Tensor::GetConstantString() const {
 			case DataType::Int:
 				return to_string(AsInt(data[0]));
 			case DataType::Uint:
-				return to_string(data[0]);
+				return to_string(data[0]) + "u";
 			default:
 				return "";
 		}

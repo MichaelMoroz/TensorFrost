@@ -26,7 +26,7 @@ void TensorMemoryDefinition(py::module& m,
 		    shape.resize(info.ndim);
 		    for (int i = 0; i < info.ndim; i++) 
 			{
-			    shape[i] = info.shape[i];
+			    shape[i] = (int)info.shape[i];
 			    size *= shape[i];
 		    }
 

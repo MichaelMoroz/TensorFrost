@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 project(TensorFrost)
 
+set(PYBIND11_FINDPYTHON ON)
 set(CMAKE_CXX_STANDARD 20)
 
 # Set the output directory for the .pyd file
