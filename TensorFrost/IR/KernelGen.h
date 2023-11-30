@@ -8,7 +8,7 @@
 namespace TensorFrost {
 
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
-                Argument::Type arg_type);
+                Arg::Type arg_type);
 
 enum KernelType {
 	Memory,

@@ -34,12 +34,12 @@ class Tensor {
 	}
 
 	static void AddArgument(Arguments& arguments, const Tensor* tensor,
-	                        Argument::Type type, int index = 0) {
+	                        Arg::Type type, int index = 0) {
 		arguments.emplace_back(type, tensor->node->GetLable(), index);
 	}
 
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
-	                         Argument::Type type) {
+	                         Arg::Type type) {
 		for (int i = 0; i < tensors.size(); i++) {
 			AddArgument(arguments, tensors[i], type, i);
 		}
@@ -93,12 +93,12 @@ class Tensor {
 		// create argument list
 		Arguments arguments = Arguments();
 
-		AddArguments(arguments, tensors, Argument::Type::Input);
+		AddArguments(arguments, tensors, Arg::Type::Input);
 
 		// get an input node that has shape arguments
 		Arguments shape_arguments;
 		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node->GetArguments(Argument::Type::Shape);
+			shape_arguments = tensor->node->GetArguments(Arg::Type::Shape);
 			if (!shape_arguments.empty()) {
 				break;
 			}
@@ -135,11 +135,11 @@ class Tensor {
 		// create argument list
 		Arguments arguments = Arguments();
 
-		AddArgument(arguments, memory, Argument::Type::Memory);
-		AddArguments(arguments, tensors, Argument::Type::Input);
-		AddArguments(arguments, indices, Argument::Type::Index);
+		AddArgument(arguments, memory, Arg::Type::Memory);
+		AddArguments(arguments, tensors, Arg::Type::Input);
+		AddArguments(arguments, indices, Arg::Type::Index);
 		Node* shape_source = (!indices.empty()) ? indices[0]->node : memory->node;
-		AddArguments(arguments, shape_source->GetArguments(Argument::Type::Shape));
+		AddArguments(arguments, shape_source->GetArguments(Arg::Type::Shape));
 
 		if (op == "load") output_type = memory->type;
 
@@ -168,7 +168,7 @@ class Tensor {
 	static Tensor& Static(const string& op, const Tensors& shape,
 	                      const DataType type) {
 		Arguments arguments = Arguments();
-		AddArguments(arguments, shape, Argument::Type::Shape);
+		AddArguments(arguments, shape, Arg::Type::Shape);
 		return Static(op, arguments, type);
 	}
 
@@ -208,7 +208,7 @@ class Tensor {
 		int max_dim = -1;
 
 		for (const auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Shape) {
+			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
 		}
@@ -221,7 +221,7 @@ class Tensor {
 		// get max dimension
 		int max_dim = -1;
 		for (const auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Shape) {
+			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
 		}
@@ -237,7 +237,7 @@ class Tensor {
 		}
 		// fill result
 		for (const auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Shape) {
+			if (input.type_ == Arg::Type::Shape) {
 				result[input.index_] = input.from_->get()->tensor_;
 			}
 		}
@@ -256,7 +256,7 @@ class Tensor {
 		// get max dimension
 		int max_dim = -1;
 		for (const auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Shape) {
+			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
 		}
@@ -272,7 +272,7 @@ class Tensor {
 		}
 		// fill result
 		for (const auto& input : node->inputs_) {
-			if (input.type_ == Argument::Type::Shape) {
+			if (input.type_ == Arg::Type::Shape) {
 				result[input.index_] = AsInt(input.from_->get()->tensor_->data[0]);
 			}
 		}
@@ -316,7 +316,7 @@ class Tensor {
 
 	static Tensor& Constant(const Tensors& shape, float value) {
 		Arguments arguments = Arguments();
-		AddArguments(arguments, shape, Argument::Type::Shape);
+		AddArguments(arguments, shape, Arg::Type::Shape);
 		Tensor& output = Static("const", arguments, DataType::Float);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
@@ -326,7 +326,7 @@ class Tensor {
 	}
 	static Tensor& Constant(const Tensors& shape, int value) {
 		Arguments arguments = Arguments();
-		AddArguments(arguments, shape, Argument::Type::Shape);
+		AddArguments(arguments, shape, Arg::Type::Shape);
 		Tensor& output = Static("const", arguments, DataType::Int);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
@@ -336,7 +336,7 @@ class Tensor {
 	}
 	static Tensor& Constant(const Tensors& shape, uint value) {
 		Arguments arguments = Arguments();
-		AddArguments(arguments, shape, Argument::Type::Shape);
+		AddArguments(arguments, shape, Arg::Type::Shape);
 		Tensor& output = Static("const", arguments, DataType::Uint);
 		output.data = std::vector<uint>(1, value);
 		return output;
@@ -396,7 +396,7 @@ class Tensor {
 
 	[[nodiscard]] Tensor& ThreadIndex() const {
 		Tensor& output = Static(
-		    "thread_id", node->GetArguments(Argument::Type::Shape), DataType::Int);
+		    "thread_id", node->GetArguments(Arg::Type::Shape), DataType::Int);
 		output.type = DataType::Int;
 		return output;
 	}
@@ -407,7 +407,7 @@ class Tensor {
 	}
 
 	[[nodiscard]] Tensor& Index(int dim) const {
-		Tensor& output = Static("dim_id", node->GetArguments(Argument::Type::Shape),
+		Tensor& output = Static("dim_id", node->GetArguments(Arg::Type::Shape),
 		                        DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;

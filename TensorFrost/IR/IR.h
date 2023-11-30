@@ -26,7 +26,7 @@ class Lable {
 	[[nodiscard]] Node* get() const { return node_; }
 };
 
-class Argument {
+class Arg {
  public:
 	enum Type {
 		Input,
@@ -41,14 +41,14 @@ class Argument {
 	Lable* to_{nullptr};
 	int index_;
 
-	Argument(Type type, Lable* node, int index)
+	Arg(Type type, Lable* node, int index)
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
 };
 
-using Arguments = vector<Argument>;
-using ArgumentRefs = vector<const Argument*>;
+using Arguments = vector<Arg>;
+using ArgumentRefs = vector<const Arg*>;
 using Tensors = vector<const Tensor*>;
 
 enum class MemoryType {
@@ -72,7 +72,7 @@ class Node {
 	Node* next_ = nullptr;
 
 	Arguments inputs_;
-	vector<Argument*> outputs_;
+	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
 
@@ -89,7 +89,7 @@ class Node {
 	[[nodiscard]] Lable* GetLable() const { return lable_; }
 
 	void UpdateArgumentOutputs() {
-		for (Argument& input : inputs_) {
+		for (Arg& input : inputs_) {
 			input.SetOutput(lable_);
 		}
 	}
@@ -99,7 +99,7 @@ class Node {
 		memory_index_ = index;
 	}
 
-	[[nodiscard]] Arguments GetArguments(Argument::Type type) const {
+	[[nodiscard]] Arguments GetArguments(Arg::Type type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs_) {
 			if (input.type_ == type) {
@@ -108,14 +108,14 @@ class Node {
 		}
 		// sort by index
 		std::sort(result.begin(), result.end(),
-		          [](const Argument& a, const Argument& b) {
+		          [](const Arg& a, const Arg& b) {
 			          return a.index_ < b.index_;
 		          });
 		return result;
 	}
 
 	[[nodiscard]] map<int, Tensor*> GetArgumentTensors(
-	    Argument::Type type) const {
+	    Arg::Type type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
@@ -126,7 +126,7 @@ class Node {
 		return result;
 	}
 
-	void RemoveArguments(Argument::Type type) {
+	void RemoveArguments(Arg::Type type) {
 		for (auto it = inputs_.begin(); it != inputs_.end();) {
 			if (it->type_ == type) {
 				it = inputs_.erase(it);
@@ -136,7 +136,7 @@ class Node {
 		}
 	}
 
-	void AddArgument(Node* node, Argument::Type type, int index = 0) {
+	void AddArgument(Node* node, Arg::Type type, int index = 0) {
 		inputs_.emplace_back(type, node->GetLable(), index);
 	}
 
@@ -162,11 +162,11 @@ class ClusterProp {
  public:
 	vector<Lable*> cluster_heads;
 	map<Lable*, vector<Node*>> output;
-	map<Node*, vector<Argument*>> node_output;
+	map<Node*, vector<Arg*>> node_output;
 	map<Node*, float> node_cost;
 
 	ClusterProp(map<Lable*, vector<Node*>> cluster_outputs,
-	            map<Node*, vector<Argument*>> output, map<Node*, float> cost,
+	            map<Node*, vector<Arg*>> output, map<Node*, float> cost,
 	            vector<Lable*> cluster_heads)
 	    : output(std::move(cluster_outputs)),
 	      node_output(std::move(output)),
@@ -206,7 +206,7 @@ class IR {
 
 		[[nodiscard]] bool is_end() const { return node_ == nullptr; }
 
-		[[nodiscard]] bool is_begin() const { return node_->prev_ == nullptr; }
+		[[nodiscard]] bool is_begin() const { return node_ == nullptr; }
 
 		[[nodiscard]] bool is_cluster_begin() const {
 			return node_ == nullptr || node_->cluster_head_ == nullptr ||
@@ -292,6 +292,8 @@ class IR {
 
 	[[nodiscard]] Iterator begin() const { return begin_; }
 
+	[[nodiscard]] Iterator end() const { return end_; }
+
 	void Clusterize() const;
 
 	void UpdateNodeOutputs() const;
@@ -309,6 +311,7 @@ class IR {
 	vector<Node*> cluster_nodes_;
 	Iterator cursor_ = Iterator(nullptr);
 	Iterator begin_ = Iterator(nullptr);
+	Iterator end_ = Iterator(nullptr);
 	Lable* current_cluster_head_ = nullptr;
 
 	void InsertAfterCursor(Node* node) {
@@ -330,6 +333,9 @@ class IR {
 			cursor_->next_ = node;
 		} else {
 			begin_ = Iterator(node);
+		}
+		if (node->next_ == nullptr) {
+			end_ = Iterator(node);
 		}
 		SetCursor(node);
 	}

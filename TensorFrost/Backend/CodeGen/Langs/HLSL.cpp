@@ -31,10 +31,10 @@ string GenerateKernelHLSL(const IR& ir, const Lable* cluster) {
 		const Operation& op = FindOperation(node->name);
 
 		// get node arguments
-		Arguments inputs = node->GetArguments(Argument::Type::Input);
-		Arguments indices = node->GetArguments(Argument::Type::Index);
-		Arguments shape = node->GetArguments(Argument::Type::Shape);
-		Arguments memory = node->GetArguments(Argument::Type::Memory);
+		Arguments inputs = node->GetArguments(Arg::Type::Input);
+		Arguments indices = node->GetArguments(Arg::Type::Index);
+		Arguments shape = node->GetArguments(Arg::Type::Shape);
+		Arguments memory = node->GetArguments(Arg::Type::Memory);
 
 		// check number of indices
 		if (indices.size() > 1) {
@@ -45,14 +45,14 @@ string GenerateKernelHLSL(const IR& ir, const Lable* cluster) {
 		// get node names
 		vector<string> arguments;
 		vector<DataType> input_types;
-		for (const Argument& arg : memory) {
+		for (const Arg& arg : memory) {
 			arguments.push_back(GetNodeName(arg.from_->get(), names, true));
 		}
-		for (const Argument& arg : inputs) {
+		for (const Arg& arg : inputs) {
 			arguments.push_back(GetNodeName(arg.from_->get(), names, true));
 			input_types.push_back(arg.from_->get()->tensor_->type);
 		}
-		for (const Argument& arg : indices) {
+		for (const Arg& arg : indices) {
 			arguments.push_back(GetNodeName(arg.from_->get(), names, true));
 		}
 
@@ -80,7 +80,7 @@ string GenerateHLSL(const IR& ir) {
 		if (cluster->node_->name == "memory") continue;
 
 		// Check if cluster has shape
-		if (cluster->node_->GetArguments(Argument::Type::Shape).empty()) continue;
+		if (cluster->node_->GetArguments(Arg::Type::Shape).empty()) continue;
 
 		// Generate kernel
 		all_kernels += "Kernel ID: " + to_string(kernel_count++) + "\n";

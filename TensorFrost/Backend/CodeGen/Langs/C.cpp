@@ -15,7 +15,7 @@ class C_CodeGenerator : public CodeGenerator {
 		vector<string> arguments;
 		vector<string> input_variables;
 		vector<DataType> input_types;
-		for (const Argument& arg : memory) {
+		for (const Arg& arg : memory) {
 			string var_name = GetNodeName(arg.from_->get(), *names, true);
 			arguments.push_back(var_name);
 			if (arg.from_->get()->name != "const" &&
@@ -23,7 +23,7 @@ class C_CodeGenerator : public CodeGenerator {
 				input_variables.push_back(var_name);
 			}
 		}
-		for (const Argument& arg : indices) {
+		for (const Arg& arg : indices) {
 			string var_name = GetNodeName(arg.from_->get(), *names, true);
 			arguments.push_back(var_name);
 			if (arg.from_->get()->name != "const" &&
@@ -31,7 +31,7 @@ class C_CodeGenerator : public CodeGenerator {
 				input_variables.push_back(var_name);
 			}
 		}
-		for (const Argument& arg : inputs) {
+		for (const Arg& arg : inputs) {
 			Node* input = arg.from_->get();
 			string name = GetNodeName(input, *names, true);
 			if (input->name == "memory") {

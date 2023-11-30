@@ -43,10 +43,10 @@ string GetOperationListing(const IR& ir, bool compact) {
 
 		listing += node->name + "(";
 
-		Arguments inputs = node->GetArguments(Argument::Type::Input);
-		Arguments indices = node->GetArguments(Argument::Type::Index);
-		Arguments shape = node->GetArguments(Argument::Type::Shape);
-		Arguments memory = node->GetArguments(Argument::Type::Memory);
+		Arguments inputs = node->GetArguments(Arg::Type::Input);
+		Arguments indices = node->GetArguments(Arg::Type::Index);
+		Arguments shape = node->GetArguments(Arg::Type::Shape);
+		Arguments memory = node->GetArguments(Arg::Type::Memory);
 
 		if (!memory.empty()) {
 			listing += "memory=[";

@@ -39,7 +39,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 	for (int i = 0; i < memory_inputs.size(); i++) {
 		memory_map[memory_inputs[i]] = inputs[i];
 		// get shape arguments
-		Arguments args = memory_inputs[i]->GetArguments(Argument::Shape);
+		Arguments args = memory_inputs[i]->GetArguments(Arg::Shape);
 		vector<int> shape = inputs[i]->GetShape();
 		for (int j = 0; j < args.size(); j++) {
 			Node* shape_node = args[j].from_->get();
@@ -68,7 +68,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			case KernelType::Memory: {
 				Node* node = kernel->begin_;
 				// get shape arguments
-				Arguments args = node->GetArguments(Argument::Shape);
+				Arguments args = node->GetArguments(Arg::Shape);
 				// get shape from shape constants
 				vector<int> shape;
 				for (auto& arg : args) {
@@ -85,7 +85,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			} break;
 			case KernelType::Compute: {
 				Node* begin = kernel->begin_;
-				map<int, Tensor*> args = begin->GetArgumentTensors(Argument::Shape);
+				map<int, Tensor*> args = begin->GetArgumentTensors(Arg::Shape);
 				int thread_count = 1;
 				for (auto& arg : args) {
 					thread_count *= shape_constants[arg.second->node];

@@ -15,13 +15,13 @@ void TensorProgram::CreateProgram() {
 	ir.OptimizeClusters();
 	ir.RemoveUnusedNodes();
 	ir.PostProcessClusters();
-	ir.TransformToLinearIndex();
+	//ir.TransformToLinearIndex();
 
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);
 
-	CompileAndLoadKernel(program);
+	//CompileAndLoadKernel(program);
 }
 
 vector<TensorMemory*> TensorProgram::Evaluate(
