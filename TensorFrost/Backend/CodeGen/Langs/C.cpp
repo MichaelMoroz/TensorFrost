@@ -71,9 +71,9 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "}";
 		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
 		           op->op_type_ == OpType::Scatter) {
-			string memory_expression = "memory[offsets[" +
-			                           to_string(offsets[memory[0].from_->get()]) +
-			                           "] + " + arguments[1] + "]";
+			string address = "offsets[" + to_string(offsets[memory[0].from_->get()]) +
+			                 "] + " + arguments[1];
+			string memory_expression = "memory[" + address + "]";
 			if (op->name_ == "load") {
 				left += type_names[output_type] + " " + name + " = ";
 				if (output_type == DataType::Float) {
@@ -102,7 +102,8 @@ class C_CodeGenerator : public CodeGenerator {
 			else if (op->op_type_ == OpType::Scatter)
 			{
 				string input_type_name = type_names[input_types[0]];
-				expression += op->code_ + "((" + input_type_name + "*)" + memory_expression + ", " + arguments[2] + ")";
+				expression += op->code_ + "((" + input_type_name + "*)memory, " +
+				              address + ", " + arguments[2] + ")";
 				right += ";";
 			}
 		} else {
@@ -192,58 +193,58 @@ double clamp(double x, double min, double max)
   return fmin(fmax(x, min), max);
 }
 
-void InterlockedAdd(int* address, int value)
+void InterlockedAdd(int* memory, int address, int value)
 {
   #pragma omp atomic
-  *address += value;
+  memory[address] += value;
 }
 
-void InterlockedAdd(uint* address, uint value)
+void InterlockedAdd(uint* memory, int address, uint value)
 {
   #pragma omp atomic
-  *address += value;
+  memory[address] += value;
 }
 
-void InterlockedAdd(float* address, float value)
+void InterlockedAdd(float* memory, int address, float value)
 {
   #pragma omp atomic
-  *address += value;
+  memory[address] += value;
 }
 
-void InterlockedAnd(int* address, int value)
+void InterlockedAnd(int* memory, int address, int value)
 {
   #pragma omp atomic
-  *address &= value;
+  memory[address] &= value;
 }
 
-void InterlockedAnd(uint* address, uint value)
+void InterlockedAnd(uint* memory, int address, uint value)
 {
   #pragma omp atomic
-  *address &= value;
+  memory[address] &= value;
 }
 
-void InterlockedOr(int* address, int value)
+void InterlockedOr(int* memory, int address, int value)
 {
   #pragma omp atomic
-  *address |= value;
+  memory[address] |= value;
 }
 
-void InterlockedOr(uint* address, uint value)
+void InterlockedOr(uint* memory, int address, uint value)
 {
   #pragma omp atomic
-  *address |= value;
+  memory[address] |= value;
 }
 
-void InterlockedXor(int* address, int value)
+void InterlockedXor(int* memory, int address, int value)
 {
   #pragma omp atomic
-  *address ^= value;
+  memory[address] ^= value;
 }
 
-void InterlockedXor(uint* address, uint value)
+void InterlockedXor(uint* memory, int address, uint value)
 {
   #pragma omp atomic
-  *address ^= value;
+  memory[address] ^= value;
 }
 
 )";

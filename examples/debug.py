@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /Zi")
-#tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
+#tf.initialize(tf.cpu, "H:/cl_compile.bat /Zi")
+tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
 
 def matmul():
     A = tf.input([8, 8], tf.float32)
@@ -203,8 +203,8 @@ def FluidTest():
     return [vx, vy, pressure, r, g, b]
 
 
-fluid = tf.program(FluidTest)
-fluid.list_operations(compact=False)
+#fluid = tf.program(FluidTest)
+#fluid.list_operations(compact=False)
 
 mmul = tf.program(matmul)
 mmul.list_operations(compact=False)
@@ -215,7 +215,7 @@ Bnp = np.random.rand(8, 8).astype(np.float32)
 
 A = tf.memory(Anp)
 B = tf.memory(Bnp)
-C = mmul(A, B)
+C, = mmul(A, B)
 
 Cnp = C.numpy
 
@@ -224,4 +224,6 @@ print(Cnp)
 #compare to numpy
 Cnp2 = np.dot(Anp, Bnp)
 print(Cnp2)
+
+print(Cnp - Cnp2)
 
