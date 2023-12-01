@@ -4,9 +4,31 @@
 
 namespace TensorFrost {
 
-bool CompareShape(const Tensor* a, const Tensor* b) {
-	Arguments a_shape = a->node->GetArguments(Arg::Type::Shape);
-	Arguments b_shape = b->node->GetArguments(Arg::Type::Shape);
+bool CompareShape(const Node* a, const Node* b) {
+	ArgMap a_shape = a->GetArgumentMap(Arg::Type::Shape);
+	ArgMap b_shape = b->GetArgumentMap(Arg::Type::Shape);
+	int a_dim = MaxIndexCount(a_shape);
+	int b_dim = MaxIndexCount(b_shape);
+	
+	if (a_dim != b_dim) {
+		return false;
+	}
+
+	for (int i = 0; i < a_dim; i++) {
+		Node* a_node = a_shape[i]->from_->get();
+		Node* b_node = b_shape[i]->from_->get();
+		//if a and b are constants, then compare their values
+		if (a_node->name == "const" && b_node->name == "const") {
+			if (a_node->tensor_->data[0] != b_node->tensor_->data[0]) {
+				return false;
+			}
+		}
+		//otherwise, if a and b are not the same node
+		//then they are not the same shape (possibly)
+		else if (a_node != b_node) {
+			return false;
+		}
+	}
 
 	return true;
 }
@@ -38,14 +60,9 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 		}
 	}
 
-	// TODO(Moroz): write shape comparison function
-	// if(input.tensor_.shape_ != output.tensor_.shape_)
-	//{
-	//     if(!isToScatter)
-	//     {
-	//         return true;
-	//     }
-	// }
+	if (!CompareShape(input, output)) {
+		return true;
+	}
 
 	// memory should not be inside work clusters
 	if ((input->name == "memory" || output->name == "memory") &&

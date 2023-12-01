@@ -47,9 +47,12 @@ class Arg {
 	void SetOutput(Lable* output) { to_ = output; }
 };
 
+using ArgMap = map<int, const Arg*>;
 using Arguments = vector<Arg>;
 using ArgumentRefs = vector<const Arg*>;
 using Tensors = vector<const Tensor*>;
+
+int MaxIndexCount(ArgMap& map);
 
 enum class MemoryType {
 	None,
@@ -99,6 +102,16 @@ class Node {
 		memory_index_ = index;
 	}
 
+	int MaxIndex(Arg::Type type) const {
+		int max_index = 0;
+		for (const auto& input : inputs_) {
+			if (input.type_ == type) {
+				max_index = std::max(max_index, input.index_);
+			}
+		}
+		return max_index;
+	}
+
 	[[nodiscard]] Arguments GetArguments(Arg::Type type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs_) {
@@ -111,6 +124,16 @@ class Node {
 		          [](const Arg& a, const Arg& b) {
 			          return a.index_ < b.index_;
 		          });
+		return result;
+	}
+
+	ArgMap GetArgumentMap(Arg::Type type) const {
+		ArgMap result = ArgMap();
+		for (auto& input : inputs_) {
+			if (input.type_ == type) {
+				result[input.index_] = &input;
+			}
+		}
 		return result;
 	}
 

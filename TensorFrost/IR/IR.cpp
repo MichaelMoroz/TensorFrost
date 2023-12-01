@@ -14,6 +14,12 @@ void IR::UpdateNodeOutputs() const {
 	}
 }
 
+int MaxIndexCount(ArgMap& map) {
+	if (map.empty()) return 0;
+	// maps are sorted by index, so the last element has the highest index
+	return map.rbegin()->first + 1;
+}
+
 void SwapLables(Node* a, Node* b) {
 	// first swap the node addresses
 	a->lable_->node_ = b;

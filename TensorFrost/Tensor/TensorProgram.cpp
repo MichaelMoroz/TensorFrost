@@ -14,7 +14,7 @@ void TensorProgram::CreateProgram() {
 	ir.Clusterize();
 	ir.OptimizeClusters();
 	ir.RemoveUnusedNodes();
-	ir.PostProcessClusters();
+	//ir.PostProcessClusters();
 	//ir.TransformToLinearIndex();
 
 	program = GenerateProgram(&ir);
