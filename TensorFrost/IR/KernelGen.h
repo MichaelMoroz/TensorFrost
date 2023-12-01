@@ -24,7 +24,7 @@ class Kernel {
 	function<void(TensorMemoryManager*, vector<uint>, vector<uint>, uint)>
 	    execute_callback;
 
-	string generate_code_;
+	string generated_code_;
 };
 
 class Program {
@@ -32,7 +32,7 @@ class Program {
 	IR* ir_;
 	vector<Kernel> kernels_;
 	function<void()> unload_callback;
-	string generate_code_;
+	string generated_code_;
 
 	explicit Program(IR* ir) : ir_(ir) {}
 

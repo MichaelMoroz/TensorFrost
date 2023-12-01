@@ -69,7 +69,8 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "if (" + arguments[0] + ") {";
 		} else if (op->name_ == "if_end") {
 			left += "}";
-		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load) {
+		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
+		           op->op_type_ == OpType::Scatter) {
 			string memory_expression = "memory[offsets[" +
 			                           to_string(offsets[memory[0].from_->get()]) +
 			                           "] + " + arguments[1] + "]";
@@ -96,6 +97,12 @@ class C_CodeGenerator : public CodeGenerator {
 				if (input_types[0] != DataType::Uint) {
 					expression += ")";
 				}
+				right += ";";
+			}
+			else if (op->op_type_ == OpType::Scatter)
+			{
+				string input_type_name = type_names[input_types[0]];
+				expression += op->code_ + "((" + input_type_name + "*)" + memory_expression + ", " + arguments[2] + ")";
 				right += ";";
 			}
 		} else {
@@ -152,34 +159,6 @@ class C_CodeGenerator : public CodeGenerator {
 	}
 };
 
-string GenerateKernelC(const IR* ir, const Lable* cluster,
-                       const Kernel* kernel,
-                       const string& kernel_name) {
-	//NodeNames names = GenerateNodeNames(*ir);
-
-	string hlsl_code;
-
-	// Begin HLSL function
-	hlsl_code += "void " + kernel_name + "(";
-	hlsl_code += "uint* variables, ";
-	hlsl_code += "uint* offsets, ";
-	hlsl_code += "uint* memory, ";
-	hlsl_code += "uint thread_id";
-	hlsl_code += ")\n";
-	hlsl_code += "{\n";
-
-	C_CodeGenerator generator;
-	generator.GenerateKernelLines(ir, cluster, kernel);
-	generator.Compactify();
-
-	hlsl_code += generator.GetFinalCode();
-
-	// End HLSL function
-	hlsl_code += "}\n";
-
-	return hlsl_code;
-}
-
 pair<string, vector<string>> GenerateC(Program* program) {
 	string all_kernels = R"(
 #include <cmath>
@@ -213,55 +192,55 @@ double clamp(double x, double min, double max)
   return fmin(fmax(x, min), max);
 }
 
-void atomic_add(int* address, int value)
+void InterlockedAdd(int* address, int value)
 {
   #pragma omp atomic
   *address += value;
 }
 
-void atomic_add(uint* address, uint value)
+void InterlockedAdd(uint* address, uint value)
 {
   #pragma omp atomic
   *address += value;
 }
 
-void atomic_add(float* address, float value)
+void InterlockedAdd(float* address, float value)
 {
   #pragma omp atomic
   *address += value;
 }
 
-void atomic_and(int* address, int value)
+void InterlockedAnd(int* address, int value)
 {
   #pragma omp atomic
   *address &= value;
 }
 
-void atomic_and(uint* address, uint value)
+void InterlockedAnd(uint* address, uint value)
 {
   #pragma omp atomic
   *address &= value;
 }
 
-void atomic_or(int* address, int value)
+void InterlockedOr(int* address, int value)
 {
   #pragma omp atomic
   *address |= value;
 }
 
-void atomic_or(uint* address, uint value)
+void InterlockedOr(uint* address, uint value)
 {
   #pragma omp atomic
   *address |= value;
 }
 
-void atomic_xor(int* address, int value)
+void InterlockedXor(int* address, int value)
 {
   #pragma omp atomic
   *address ^= value;
 }
 
-void atomic_xor(uint* address, uint value)
+void InterlockedXor(uint* address, uint value)
 {
   #pragma omp atomic
   *address ^= value;
@@ -280,31 +259,30 @@ void atomic_xor(uint* address, uint value)
 		}
 
 		string kernel_name = "kernel_" + to_string(kernel_count++);
-		string function_name = kernel_name + "_execute";
-		kernel_names.push_back(function_name);
+		kernel_names.push_back(kernel_name);
 
 		// Generate kernel
-		all_kernels += "\n";
-		string kernel_code = GenerateKernelC(program->ir_, cluster, kernel, kernel_name);
-		kernel->generate_code_ = kernel_code;
-		all_kernels += kernel_code;
+		C_CodeGenerator generator;
+		generator.GenerateKernelLines(program->ir_, cluster, kernel);
+		generator.Compactify();
+
+		string kernel_code = generator.GetFinalCode();
+		kernel->generated_code_ = kernel_code;
 		all_kernels +=
 		    "\n"
-		    "extern \"C\" \n"
-		    "{ \n"
-		    "  __declspec(dllexport) void " + function_name +
+		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
 		    "(uint* variables, uint* offsets, uint* memory, uint threads)\n"
-		    "  {\n"
-		    "    #pragma omp parallel for\n"
-		    "    for(int i = 0; i < threads; i++)\n"
-		    "    {\n"
-		    "      " + kernel_name + "(variables, offsets, memory, i);\n"
-		    "    }\n"
+		    "{\n"
+		    "  #pragma omp parallel num_threads(32) \n"
+			"  #pragma omp for \n"
+		    "  for(int thread_id = 0; thread_id < threads; thread_id++)\n"
+		    "  {\n" +
+			AddIndent(kernel_code, "    ") +
 		    "  }\n"
 		    "}\n";
 	}
 
-	program->generate_code_ = all_kernels;
+	program->generated_code_ = all_kernels;
 	return pair<string, vector<string>>(all_kernels, kernel_names);
 }
 }  // namespace TensorFrost

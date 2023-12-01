@@ -14,14 +14,14 @@ void TensorProgram::CreateProgram() {
 	ir.Clusterize();
 	ir.OptimizeClusters();
 	ir.RemoveUnusedNodes();
-	//ir.PostProcessClusters();
-	//ir.TransformToLinearIndex();
+	ir.PostProcessClusters();
+	ir.TransformToLinearIndex();
 
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);
 
-	//CompileAndLoadKernel(program);
+	CompileAndLoadKernel(program);
 }
 
 vector<TensorMemory*> TensorProgram::Evaluate(

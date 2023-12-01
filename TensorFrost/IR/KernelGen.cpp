@@ -10,6 +10,12 @@ bool CompareShape(const Node* a, const Node* b) {
 	int a_dim = MaxIndexCount(a_shape);
 	int b_dim = MaxIndexCount(b_shape);
 	
+	int min_dim = min(a_dim, b_dim);
+
+	if (min_dim == 0) {
+		return true;
+	}
+
 	if (a_dim != b_dim) {
 		return false;
 	}
@@ -33,6 +39,7 @@ bool CompareShape(const Node* a, const Node* b) {
 	return true;
 }
 
+// returns true if the edge between given nodes is a boundary between clusters (pre-kernels)
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
                 Arg::Type arg_type, bool is_identity) {
 	if (arg_index >= 0) {
@@ -503,13 +510,17 @@ void IR::TransformToLinearIndex() {
 					// get the input memory node
 					const Tensor* memory =
 					    node.get()->GetArgumentTensors(Arg::Type::Memory)[0];
-					int memory_dim = static_cast<int>(
-					    kernel_shape.size());  // TODO(Moroz): get memory dim from memory
-					                           // tensor instead of kernel shape
+
+					ArgMap memory_shape = memory->node->GetArgumentMap(Arg::Type::Shape);
+					int memory_dim = MaxIndexCount(memory_shape);
 
 					// get the index nodes
 					map<int, Tensor*> idx =
 					    node->GetArgumentTensors(Arg::Type::Index);
+
+					std::function<Tensor* (int)> get_shape = [&](int dim) {
+						return memory_shape[dim]->from_->get()->tensor_;
+					};
 
 					// function to get index for given dimension, if not found then return
 					// default dim index
@@ -523,13 +534,13 @@ void IR::TransformToLinearIndex() {
 						// return out;
 						return &Tensor::clamp(
 						    *out, TensorFrost::Tensor::Constant(0),
-						    *kernel_shape[dim] - TensorFrost::Tensor::Constant(1));
+						   *get_shape(dim) - TensorFrost::Tensor::Constant(1));
 					};
 
 					// compute the flat index
 					Tensor* flat_index = get_index(memory_dim - 1);
 					for (int i = memory_dim - 2; i >= 0; i--) {
-						*flat_index = *flat_index * *kernel_shape[i];
+						*flat_index = *flat_index * *get_shape(i);
 						*flat_index = *flat_index + *get_index(i);
 					}
 
