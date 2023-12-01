@@ -37,7 +37,8 @@ string GetOperationListing(const IR& ir, bool compact) {
 		}
 
 		if (node->tensor_->type != DataType::None) {
-			// print the tensor name
+			// 
+			//  the tensor name
 			listing += names[*node] + " = ";
 		}
 

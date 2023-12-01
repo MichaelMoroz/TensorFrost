@@ -274,7 +274,7 @@ void InterlockedXor(uint* memory, int address, uint value)
 		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
 		    "(uint* variables, uint* offsets, uint* memory, uint threads)\n"
 		    "{\n"
-		    "  #pragma omp parallel num_threads(32) \n"
+		    "  #pragma omp parallel num_threads(64) \n"
 			"  #pragma omp for \n"
 		    "  for(int thread_id = 0; thread_id < threads; thread_id++)\n"
 		    "  {\n" +

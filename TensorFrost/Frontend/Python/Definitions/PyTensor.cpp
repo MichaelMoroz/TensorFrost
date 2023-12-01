@@ -83,7 +83,6 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	    "type", [](const PyTensor& t) { return t.Get().type; });
 	py_tensor.def_property_readonly("indices", [](const PyTensor& t) {
 		int dim = T(t).GetDimension();
-		py::print("dim = ", dim);
 		py::tuple indices(dim);
 		for (int i = 0; i < dim; i++) {
 			indices[i] = PT(T(t).Index(i));

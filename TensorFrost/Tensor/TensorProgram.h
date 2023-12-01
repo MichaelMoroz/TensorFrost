@@ -32,6 +32,8 @@ class TensorProgram {
 	[[nodiscard]] vector<TensorMemory*> Evaluate(
 	    const vector<TensorMemory*>& input) const;
 
+	string PrintProperties() const;
+
 	~TensorProgram() { delete program; }
 };
 

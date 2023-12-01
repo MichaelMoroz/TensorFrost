@@ -329,8 +329,8 @@ class IR {
 
 	~IR();
 
- private:
 	vector<Node*> nodes_;
+ private:
 	vector<Node*> cluster_nodes_;
 	Iterator cursor_ = Iterator(nullptr);
 	Iterator begin_ = Iterator(nullptr);
