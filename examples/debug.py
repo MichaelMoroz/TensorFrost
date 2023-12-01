@@ -7,8 +7,8 @@ import time
 tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
 
 def matmul():
-    A = tf.input([8, 8], tf.float32)
-    B = tf.input([8, 8], tf.float32)
+    A = tf.input([-1, -1], tf.float32)
+    B = tf.input([-1, -1], tf.float32)
 
     N, M = A.shape
     K = B.shape[1]
@@ -210,11 +210,11 @@ mmul = tf.program(matmul)
 mmul.list_operations(compact=False)
 mmul.kernel_c()
 
-Anp = np.random.rand(8, 8).astype(np.float32)
-Bnp = np.random.rand(8, 8).astype(np.float32)
+Anp = np.random.rand(64, 64).astype(np.float32)
+Bnp = np.random.rand(64, 64).astype(np.float32)
 
-A = tf.memory(Anp)
-B = tf.memory(Bnp)
+A = tf.memory(np.transpose(Anp))
+B = tf.memory(np.transpose(Bnp))
 C, = mmul(A, B)
 
 Cnp = C.numpy
@@ -222,7 +222,7 @@ Cnp = C.numpy
 print(Cnp)
 
 #compare to numpy
-Cnp2 = np.dot(Anp, Bnp)
+Cnp2 = np.dot(Bnp, Anp)
 print(Cnp2)
 
 print(Cnp - Cnp2)
