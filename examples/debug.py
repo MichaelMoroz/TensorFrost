@@ -227,24 +227,79 @@ def FluidTest():
 #
 #print(Cnp - Cnp2)
 
-S = 128
+#S = 128
+#
+#def mandelbrot():
+#    canvas = tf.zeros([3, S, S], tf.float32)
+#    i, j = tf.indices([S, S])
+#    x, y = tf.float(i), tf.float(j)
+#
+#    canvas[0, i, j] = tf.sin(x / (S * 2 * np.pi))
+#    canvas[1, i, j] = tf.cos(y / (S * 2 * np.pi))
+#    canvas[2, i, j] = tf.sin(x / (S * 2 * np.pi)) * tf.cos(y / (S * 2 * np.pi))
+#
+#    return [canvas]
+#
+#mand = tf.program(mandelbrot)
+#
+#mand.list_operations(compact=False)
+#res = mand()
+#
+#resnp = res[0].numpy
+#
+#print(resnp.shape)
 
-def mandelbrot():
-    canvas = tf.zeros([3, S, S], tf.float32)
-    i, j = tf.indices([S, S])
-    x, y = tf.float(i), tf.float(j)
+def Boundary(i, j):
+    N1, M1 = i.shape
+    return 1.0 - tf.float((i < 2) | (i > N1-3) | (j < 2) | (j > M1-3))
 
-    canvas[0, i, j] = tf.sin(x / (S * 2 * np.pi))
-    canvas[1, i, j] = tf.cos(y / (S * 2 * np.pi))
-    canvas[2, i, j] = tf.sin(x / (S * 2 * np.pi)) * tf.cos(y / (S * 2 * np.pi))
+def Jacobi(pressure, div, iterations):
+    i, j = pressure.indices
 
-    return [canvas]
+    edge = Boundary(i, j)
 
-mand = tf.program(mandelbrot)
+    # pressure solve
+    for it in range(iterations):
+        pressure = edge * (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
 
-mand.list_operations(compact=False)
-res = mand()
+    return pressure
 
-resnp = res[0].numpy
+def Restrict(field):
+    N1, M1 = field.shape
+    N2, M2 = N1/2, M1/2
+    i, j = tf.indices([N2, M2])
+    i, j = 2*i, 2*j
+    return field[i, j] + field[i+1, j] + field[i, j+1] + field[i+1, j+1]
 
-print(resnp.shape)
+def Prolong(field, orig):
+    i, j = orig.indices
+    i, j = i/2, j/2
+    return orig + field[i, j]
+
+def Residual(pressure, div):
+    i, j = pressure.indices
+    return pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - 4.0*pressure - div
+
+def PressureSolve(pressure, div):
+    pressure = Jacobi(pressure, div, 1)
+
+    res = Residual(pressure, div)
+    res = Restrict(res)
+    pressure0 = Jacobi(0.0001*res, res, 4)
+    pressure = Prolong(pressure0, pressure)
+
+    pressure = Jacobi(pressure, div, 1)
+
+    return pressure
+
+
+def Solver():
+    pressure = tf.input([N, M], tf.float32)
+    div = tf.input([N, M], tf.float32)
+
+    pressure = PressureSolve(pressure, div)
+
+    return [pressure]
+
+solver = tf.program(Solver)
+solver.list_operations(compact=True)

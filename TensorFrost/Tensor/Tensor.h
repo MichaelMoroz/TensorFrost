@@ -557,6 +557,16 @@ class Tensor {
 		if (other.isConstantEqualTo(1.0)) {
 			return const_cast<Tensor&>(*this);
 		}
+		if (this->node->name == "const" && other.node->name == "const") {
+			switch (type) {
+				case DataType::Float:
+					return Constant(AsFloat(this->data[0]) * AsFloat(other.data[0]));
+				case DataType::Int:
+					return Constant(AsInt(this->data[0]) * AsInt(other.data[0]));
+				case DataType::Uint:
+					return Constant(this->data[0] * other.data[0]);
+			}
+		}
 		return Op("mul", this, &other);
 	}
 
@@ -575,6 +585,17 @@ class Tensor {
 		// if other is a one constant, return this
 		if (other.isConstantEqualTo(1.0)) {
 			return const_cast<Tensor&>(*this);
+		}
+		// if both are constants, return the ratio
+		if (this->node->name == "const" && other.node->name == "const") {
+			switch (type) {
+				case DataType::Float:
+					return Constant(AsFloat(this->data[0]) / AsFloat(other.data[0]));
+				case DataType::Int:
+					return Constant(AsInt(this->data[0]) / AsInt(other.data[0]));
+				case DataType::Uint:
+					return Constant(this->data[0] / other.data[0]);
+			}
 		}
 		return Op("div", this, &other);
 	}

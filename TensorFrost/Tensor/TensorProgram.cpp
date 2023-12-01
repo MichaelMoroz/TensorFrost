@@ -15,6 +15,8 @@ void TensorProgram::CreateProgram() {
 		outputs[i]->SetMemoryType(MemoryType::Output, i);
 	}
 
+	//TODO (Moroz): Make sure that shape works with non-const tensors
+
 	ir.Clusterize();
 	ir.OptimizeClusters();
 	ir.RemoveUnusedNodes();
