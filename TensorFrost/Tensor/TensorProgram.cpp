@@ -5,6 +5,8 @@
 namespace TensorFrost {
 
 void TensorProgram::CreateProgram() {
+	Tensor::SetEvaluationContext(nullptr);
+
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
 	Tensors outputs = evaluate_callback();

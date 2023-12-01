@@ -69,17 +69,25 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
 	});
 
-	m.def("zeros", [](py::list shape) {
-		return PT(Tensor::Constant(TensorsFromList(shape), 0));
-	});
+	m.def("zeros", [](py::list shape, DataType type) {
+		return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+	}, py::arg("shape"), py::arg("type") = DataType::Float);
+
+	m.def("zeros", [](std::vector<int> shape, DataType type) {
+		return PT(Tensor::Constant(shape, 0.0f));
+	}, py::arg("shape"), py::arg("type") = DataType::Float);
 
 	m.def("const", [](py::list shape, float value) {
 		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
 
+	m.def("const", [](std::vector<int> shape, float value) {
+		return PT(Tensor::Constant(shape, value));
+	});
+
 	m.def("input", [](std::vector<int> shape, DataType type) {
 		return PT(Tensor::Input(shape, type));
-	});
+	}, py::arg("shape"), py::arg("type") = DataType::Float);
 
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
@@ -90,6 +98,15 @@ void TensorFunctionsDefinition(py::module& m) {
 		py::tuple indices = py::tuple(shape_tensors.size());
 		for (int i = 0; i < shape_tensors.size(); i++) {
 			auto t = PT(Tensor::Index(shape_tensors, i));
+			indices[i] = t;
+		}
+		return indices;
+	});
+
+	m.def("indices", [](std::vector<int> shape) {
+		py::tuple indices = py::tuple(shape.size());
+		for (int i = 0; i < shape.size(); i++) {
+			auto t = PT(Tensor::Index(shape, i));
 			indices[i] = t;
 		}
 		return indices;

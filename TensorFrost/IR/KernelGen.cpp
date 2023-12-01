@@ -65,6 +65,9 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 		if (output_type == OpType::Scatter) {
 			return arg_type == Arg::Type::Memory;
 		}
+
+		if (arg_type == Arg::Type::Shape) // shape must be outside cluster
+			return true;
 	}
 
 	if (!CompareShape(input, output)) {
@@ -79,6 +82,57 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 
 	return false;
 }
+
+
+void IR::Clusterize() const {
+	Lable* current_cluster = nullptr;
+	for (auto node = begin(); !node.is_end(); ++node) {
+		// remove old cluster head
+		if (node->cluster_head_ != nullptr) {
+			// if last cluster node, delete lable
+			if (node->next_ == nullptr ||
+			    node->next_->cluster_head_ != node->cluster_head_) {
+				delete node->cluster_head_;
+			}
+			node->cluster_head_ = nullptr;
+		}
+
+		// check if node is a cluster edge
+		Tensor* tensor = node->tensor_;
+
+		Arguments indices = node->GetArguments(Arg::Type::Index);
+		bool identity = indices.empty();
+
+		bool is_boundary = false;
+		Node* prev = node.get_prev();
+		if (prev != nullptr) {
+			if (prev->cluster_head_ == current_cluster &&
+			    IsBoundary(prev, *node, -1, Arg::Type::None, identity)) {
+				is_boundary = true;
+			}
+		} else {
+			is_boundary = true;
+		}
+
+		// go over all inputs
+		for (auto& input : tensor->node->inputs_) {
+			// check if input is the boundary of this cluster
+			if (input.from_->get()->cluster_head_ == current_cluster &&
+			    IsBoundary(input.from_->get(), *node, input.index_, input.type_,
+			               identity)) {
+				is_boundary = true;
+				break;
+			}
+		}
+
+		if (is_boundary) {
+			current_cluster = new Lable(*node);
+		}
+
+		node->cluster_head_ = current_cluster;
+	}
+}
+
 
 map<Node*, Node*> IR::CopyComputation(
     const unordered_set<Node*>& targets) const {
@@ -207,6 +261,21 @@ void IR::RemoveUnusedNodes() {
 
 	// TODO (Moroz): this might not work, beware
 
+	// forwards pass (only for memory operations)
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (used_nodes.contains(node.get())) {
+			continue;
+		}
+		// if any of the memory inputs of this node is used, then this node is used
+		for (auto& input : node->inputs_) {
+			if (input.type_ == Arg::Type::Memory &&
+			    used_nodes.contains(input.from_->get())) {
+				used_nodes.insert(node.get());
+				break;
+			}
+		}
+	}
+
 	//backwards pass to find all nodes that are used by the output nodes
 	for (auto node = end(); !node.is_begin(); --node) {
 		//if any of the outputs of this node is used, then this node is used
@@ -254,53 +323,6 @@ void IR::RemoveUnusedNodes() {
 
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
-	}
-}
-
-void IR::Clusterize() const {
-	Lable* current_cluster = nullptr;
-	for (auto node = begin(); !node.is_end(); ++node) {
-		// remove old cluster head
-		if (node->cluster_head_ != nullptr) {
-			// if last cluster node, delete lable
-			if (node->next_ == nullptr ||
-			    node->next_->cluster_head_ != node->cluster_head_) {
-				delete node->cluster_head_;
-			}
-			node->cluster_head_ = nullptr;
-		}
-
-		// check if node is a cluster edge
-		Tensor* tensor = node->tensor_;
-
-		Arguments indices = node->GetArguments(Arg::Type::Index);
-		bool identity = indices.empty();
-
-		bool is_boundary = false;
-		Node* prev = node.get_prev();
-		if (prev != nullptr) {
-			if (prev->cluster_head_ == current_cluster &&
-			    IsBoundary(prev, *node, -1, Arg::Type::None, identity)) {
-				is_boundary = true;
-			}
-		}
-
-		// go over all inputs
-		for (auto& input : tensor->node->inputs_) {
-			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_head_ == current_cluster &&
-			    IsBoundary(input.from_->get(), *node, input.index_, input.type_,
-			               identity)) {
-				is_boundary = true;
-				break;
-			}
-		}
-
-		if (is_boundary) {
-			current_cluster = new Lable(*node);
-		}
-
-		node->cluster_head_ = current_cluster;
 	}
 }
 

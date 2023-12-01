@@ -249,7 +249,7 @@ class IR {
 
 	Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
 		Node* new_node = new Node(tensor, std::move(args), std::move(name));
-		InsertAfterCursor(new_node);
+		InsertAtCursor(new_node);
 		return new_node;
 	}
 
@@ -333,11 +333,12 @@ class IR {
  private:
 	vector<Node*> cluster_nodes_;
 	Iterator cursor_ = Iterator(nullptr);
+	Iterator cursor_next_ = Iterator(nullptr);
 	Iterator begin_ = Iterator(nullptr);
 	Iterator end_ = Iterator(nullptr);
 	Lable* current_cluster_head_ = nullptr;
 
-	void InsertAfterCursor(Node* node) {
+	void InsertAtCursor(Node* node) {
 		nodes_.push_back(node);
 		node->cluster_head_ = current_cluster_head_;
 		if (*cursor_ != nullptr) {
@@ -354,7 +355,13 @@ class IR {
 			}
 			node->prev_ = *cursor_;
 			cursor_->next_ = node;
-		} else {
+		} 
+		else
+		{
+			if (*cursor_next_ != nullptr) {
+				cursor_next_->prev_ = node;
+				node->next_ = *cursor_next_;
+			}
 			begin_ = Iterator(node);
 		}
 		if (node->next_ == nullptr) {
@@ -366,6 +373,7 @@ class IR {
 	void SetCursor(Node* node) {
 		if (node != nullptr) {
 			cursor_ = Iterator(node);
+			cursor_next_ = Iterator(node->next_);
 		} else {
 			throw std::runtime_error("Cursor cannot be set to nullptr");
 		}
@@ -374,6 +382,7 @@ class IR {
 	void SetCursorBefore(Node* node) {
 		if (node != nullptr) {
 			cursor_ = Iterator(node->prev_);
+			cursor_next_ = Iterator(node);
 		} else {
 			throw std::runtime_error("Node is nullptr");
 		}

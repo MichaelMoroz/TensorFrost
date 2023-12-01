@@ -206,24 +206,45 @@ def FluidTest():
 #fluid = tf.program(FluidTest)
 #fluid.list_operations(compact=False)
 
-mmul = tf.program(matmul)
-mmul.list_operations(compact=False)
-mmul.kernel_c()
+#mmul = tf.program(matmul)
+#mmul.list_operations(compact=False)
+#mmul.kernel_c()
+#
+#Anp = np.random.rand(64, 64).astype(np.float32)
+#Bnp = np.random.rand(64, 64).astype(np.float32)
+#
+#A = tf.memory(np.transpose(Anp))
+#B = tf.memory(np.transpose(Bnp))
+#C, = mmul(A, B)
+#
+#Cnp = C.numpy
+#
+#print(Cnp)
+#
+##compare to numpy
+#Cnp2 = np.dot(Bnp, Anp)
+#print(Cnp2)
+#
+#print(Cnp - Cnp2)
 
-Anp = np.random.rand(64, 64).astype(np.float32)
-Bnp = np.random.rand(64, 64).astype(np.float32)
+S = 128
 
-A = tf.memory(np.transpose(Anp))
-B = tf.memory(np.transpose(Bnp))
-C, = mmul(A, B)
+def mandelbrot():
+    canvas = tf.zeros([3, S, S], tf.float32)
+    i, j = tf.indices([S, S])
+    x, y = tf.float(i), tf.float(j)
 
-Cnp = C.numpy
+    canvas[0, i, j] = tf.sin(x / (S * 2 * np.pi))
+    canvas[1, i, j] = tf.cos(y / (S * 2 * np.pi))
+    canvas[2, i, j] = tf.sin(x / (S * 2 * np.pi)) * tf.cos(y / (S * 2 * np.pi))
 
-print(Cnp)
+    return [canvas]
 
-#compare to numpy
-Cnp2 = np.dot(Bnp, Anp)
-print(Cnp2)
+mand = tf.program(mandelbrot)
 
-print(Cnp - Cnp2)
+mand.list_operations(compact=False)
+res = mand()
 
+resnp = res[0].numpy
+
+print(resnp.shape)

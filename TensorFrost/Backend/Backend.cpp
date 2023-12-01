@@ -68,11 +68,16 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			case KernelType::Memory: {
 				Node* node = kernel->begin_;
 				// get shape arguments
-				Arguments args = node->GetArguments(Arg::Shape);
+				ArgMap args = node->GetArgumentMap(Arg::Shape);
+				uint dims = MaxIndexCount(args);
 				// get shape from shape constants
 				vector<int> shape;
-				for (auto& arg : args) {
-					Node* shape_node = arg.from_->get();
+				for (int i = 0; i < dims; i++) {
+					Node* shape_node = args[i]->from_->get();
+					if (shape_node->name == "const") {
+						shape.push_back(shape_node->tensor_->data[0]);
+						continue;
+					}
 					shape.push_back(shape_constants[shape_node]);
 				}
 				TensorMemory* memory = global_memory_manager->Allocate(shape);
@@ -88,6 +93,10 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 				map<int, Tensor*> args = begin->GetArgumentTensors(Arg::Shape);
 				int thread_count = 1;
 				for (auto& arg : args) {
+					if (arg.second->node->name == "const") {
+						thread_count *= arg.second->node->tensor_->data[0];
+						continue;
+					}
 					thread_count *= shape_constants[arg.second->node];
 				}
 

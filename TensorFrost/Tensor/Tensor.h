@@ -388,6 +388,10 @@ class Tensor {
 		return output;
 	}
 
+	static Tensor& Index(const vector<int>& shape, int dim) {
+		return Index(GetConstantShape(shape), dim);
+	}
+
 	static Tensor& ThreadIndex(const Tensors& shape) {
 		Tensor& output = Static("thread_id", shape, DataType::Int);
 		output.type = DataType::Int;
@@ -669,9 +673,6 @@ class Tensor {
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
-		if (x.node->name == "const") {
-			throw std::runtime_error("clamp does not support constant input");
-		}
 		return Op("clamp", &x, &min, &max);
 	}
 
