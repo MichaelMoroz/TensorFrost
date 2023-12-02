@@ -166,82 +166,82 @@ pair<string, vector<string>> GenerateC(Program* program) {
 #include <omp.h>
 typedef unsigned int uint;
 
-float asfloat(uint x)
+inline float asfloat(uint x)
 {
   return *(float*)&x;
 }
 
-uint asuint(float x)
+inline uint asuint(float x)
 {
   return *(uint*)&x;
 }
 
-int clamp(int x, int min, int max)
+inline int clamp(int x, int min, int max)
 {
   if(x < min) return min;
   if(x > max) return max;
   return x;
 }
 
-float clamp(float x, float min, float max)
+inline float clamp(float x, float min, float max)
 {
   return fmin(fmax(x, min), max);
 }
 
-double clamp(double x, double min, double max)
+inline double clamp(double x, double min, double max)
 {
   return fmin(fmax(x, min), max);
 }
 
-void InterlockedAdd(int* memory, int address, int value)
+inline void InterlockedAdd(int* memory, int address, int value)
 {
   #pragma omp atomic
   memory[address] += value;
 }
 
-void InterlockedAdd(uint* memory, int address, uint value)
+inline void InterlockedAdd(uint* memory, int address, uint value)
 {
   #pragma omp atomic
   memory[address] += value;
 }
 
-void InterlockedAdd(float* memory, int address, float value)
+inline void InterlockedAdd(float* memory, int address, float value)
 {
   #pragma omp atomic
   memory[address] += value;
 }
 
-void InterlockedAnd(int* memory, int address, int value)
+inline void InterlockedAnd(int* memory, int address, int value)
 {
   #pragma omp atomic
   memory[address] &= value;
 }
 
-void InterlockedAnd(uint* memory, int address, uint value)
+inline void InterlockedAnd(uint* memory, int address, uint value)
 {
   #pragma omp atomic
   memory[address] &= value;
 }
 
-void InterlockedOr(int* memory, int address, int value)
+inline void InterlockedOr(int* memory, int address, int value)
 {
   #pragma omp atomic
   memory[address] |= value;
 }
 
-void InterlockedOr(uint* memory, int address, uint value)
+inline void InterlockedOr(uint* memory, int address, uint value)
 {
   #pragma omp atomic
   memory[address] |= value;
 }
 
-void InterlockedXor(int* memory, int address, int value)
+inline void InterlockedXor(int* memory, int address, int value)
 {
   #pragma omp atomic
   memory[address] ^= value;
 }
 
-void InterlockedXor(uint* memory, int address, uint value)
+inline void InterlockedXor(uint* memory, int address, uint value)
 {
   #pragma omp atomic
   memory[address] ^= value;
