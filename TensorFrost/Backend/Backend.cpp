@@ -45,7 +45,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			Node* shape_node = args[j].from_->get();
 			// if shape node is a constant, compare constant value to input shape
 			if (shape_node->name == "const") {
-				int val = shape_node->tensor_->data[0];
+				int val = shape_node->GetTensor()->data[0];
 				if (val != shape[j]) {
 					throw std::runtime_error("Invalid input shape " + to_string(j) +
 					                         " for input " + to_string(i) +
@@ -75,7 +75,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 				for (int i = 0; i < dims; i++) {
 					Node* shape_node = args[i]->from_->get();
 					if (shape_node->name == "const") {
-						shape.push_back(shape_node->tensor_->data[0]);
+						shape.push_back(shape_node->GetTensor()->data[0]);
 						continue;
 					}
 					shape.push_back(shape_constants[shape_node]);
@@ -90,14 +90,14 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			} break;
 			case KernelType::Compute: {
 				Node* begin = kernel->begin_;
-				map<int, Tensor*> args = begin->GetArgumentTensors(Arg::Shape);
+				map<int, const Tensor*> args = begin->GetArgumentTensors(Arg::Shape);
 				int thread_count = 1;
 				for (auto& arg : args) {
-					if (arg.second->node->name == "const") {
-						thread_count *= arg.second->node->tensor_->data[0];
+					if (arg.second->node_->name == "const") {
+						thread_count *= arg.second->node_->GetTensor()->data[0];
 						continue;
 					}
-					thread_count *= shape_constants[arg.second->node];
+					thread_count *= shape_constants[arg.second->node_];
 				}
 
 				vector<uint> memory_offsets;
@@ -110,7 +110,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 				for (auto& j : kernel->variables) {
 					// if variable is a constant, add constant value to variable offsets
 					if (j.first->name == "const") {
-						variables[j.second] = j.first->tensor_->data[0];
+						variables[j.second] = j.first->GetTensor()->data[0];
 					} else {
 						if (shape_constants.contains(j.first)) {
 							variables[j.second] = shape_constants[j.first];

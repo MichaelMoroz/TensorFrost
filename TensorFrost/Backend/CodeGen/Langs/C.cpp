@@ -38,7 +38,7 @@ class C_CodeGenerator : public CodeGenerator {
 				name = "variables[" + to_string(variables[input]) + "]";
 			}
 			arguments.push_back(name);
-			input_types.push_back(arg.from_->get()->tensor_->type);
+			input_types.push_back(arg.from_->get()->GetTensor()->type);
 			if (input->name != "const" && input->name != "memory") {
 				input_variables.push_back(name);
 			}
@@ -144,7 +144,7 @@ class C_CodeGenerator : public CodeGenerator {
 					line += "*(" + op->code_ + "*)&" + arguments[0];
 					break;
 				case OpType::Constant:
-					line += node->tensor_->GetConstantString();
+					line += node->GetTensor()->GetConstantString();
 					needs_parenthesis = false;
 					break;
 				default:

@@ -50,7 +50,7 @@ string GenerateKernelHLSL(const IR& ir, const Lable* cluster) {
 		}
 		for (const Arg& arg : inputs) {
 			arguments.push_back(GetNodeName(arg.from_->get(), names, true));
-			input_types.push_back(arg.from_->get()->tensor_->type);
+			input_types.push_back(arg.from_->get()->GetTensor()->type);
 		}
 		for (const Arg& arg : indices) {
 			arguments.push_back(GetNodeName(arg.from_->get(), names, true));

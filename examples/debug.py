@@ -3,12 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-#tf.initialize(tf.cpu, "H:/cl_compile.bat /Zi")
-tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
+tf.initialize(tf.cpu, "H:/cl_compile.bat /Zi")
+#tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
+
+n0 = 8
+m0 = 16
+k0 = 12
 
 def matmul():
-    A = tf.input([-1, -1], tf.float32)
-    B = tf.input([-1, -1], tf.float32)
+    A = tf.input([n0, m0], tf.float32)
+    B = tf.input([m0, k0], tf.float32)
 
     N, M = A.shape
     K = B.shape[1]
@@ -202,30 +206,49 @@ def FluidTest():
 
     return [vx, vy, pressure, r, g, b]
 
+def WaveIteration(u, v, dt):
+    i,j = u.indices
+    laplacian = u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - u * 4.0
+    force = laplacian - 0.1 * tf.sin(2.0*np.pi*u)
+    v_new = v + dt*force
+    u_new = u + dt*v_new
+    return u_new, v_new
+
+def WaveEq():
+    u = tf.input([-1, -1], tf.float32)
+    v = tf.input([-1, -1], tf.float32)
+
+    u,v = WaveIteration(u, v, 0.2)
+
+    return [u, v]
+
+wave = tf.program(WaveEq)
+wave.list_operations(compact=False)
+
 
 #fluid = tf.program(FluidTest)
 #fluid.list_operations(compact=False)
 
-#mmul = tf.program(matmul)
-#mmul.list_operations(compact=False)
-#mmul.kernel_c()
-#
-#Anp = np.random.rand(64, 64).astype(np.float32)
-#Bnp = np.random.rand(64, 64).astype(np.float32)
-#
-#A = tf.memory(np.transpose(Anp))
-#B = tf.memory(np.transpose(Bnp))
-#C, = mmul(A, B)
-#
-#Cnp = C.numpy
-#
-#print(Cnp)
-#
-##compare to numpy
-#Cnp2 = np.dot(Bnp, Anp)
-#print(Cnp2)
-#
-#print(Cnp - Cnp2)
+mmul = tf.program(matmul)
+mmul.list_operations(compact=False)
+mmul.kernel_c()
+
+Anp = np.random.rand(n0, m0).astype(np.float32)
+Bnp = np.random.rand(m0, k0).astype(np.float32)
+
+A = tf.memory(Anp)
+B = tf.memory(Bnp)
+C, = mmul(A, B)
+
+Cnp = C.numpy
+
+print(Cnp)
+
+#compare to numpy
+Cnp2 = np.dot(Anp, Bnp)
+print(Cnp2)
+
+print(Cnp - Cnp2)
 
 #S = 128
 #
@@ -249,57 +272,57 @@ def FluidTest():
 #
 #print(resnp.shape)
 
-def Boundary(i, j):
-    N1, M1 = i.shape
-    return 1.0 - tf.float((i < 2) | (i > N1-3) | (j < 2) | (j > M1-3))
-
-def Jacobi(pressure, div, iterations):
-    i, j = pressure.indices
-
-    edge = Boundary(i, j)
-
-    # pressure solve
-    for it in range(iterations):
-        pressure = edge * (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
-
-    return pressure
-
-def Restrict(field):
-    N1, M1 = field.shape
-    N2, M2 = N1/2, M1/2
-    i, j = tf.indices([N2, M2])
-    i, j = 2*i, 2*j
-    return field[i, j] + field[i+1, j] + field[i, j+1] + field[i+1, j+1]
-
-def Prolong(field, orig):
-    i, j = orig.indices
-    i, j = i/2, j/2
-    return orig + field[i, j]
-
-def Residual(pressure, div):
-    i, j = pressure.indices
-    return pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - 4.0*pressure - div
-
-def PressureSolve(pressure, div):
-    pressure = Jacobi(pressure, div, 1)
-
-    res = Residual(pressure, div)
-    res = Restrict(res)
-    pressure0 = Jacobi(0.0001*res, res, 4)
-    pressure = Prolong(pressure0, pressure)
-
-    pressure = Jacobi(pressure, div, 1)
-
-    return pressure
-
-
-def Solver():
-    pressure = tf.input([N, M], tf.float32)
-    div = tf.input([N, M], tf.float32)
-
-    pressure = PressureSolve(pressure, div)
-
-    return [pressure]
-
-solver = tf.program(Solver)
-solver.list_operations(compact=True)
+#def Boundary(i, j):
+#    N1, M1 = i.shape
+#    return 1.0 - tf.float((i < 2) | (i > N1-3) | (j < 2) | (j > M1-3))
+#
+#def Jacobi(pressure, div, iterations):
+#    i, j = pressure.indices
+#
+#    edge = Boundary(i, j)
+#
+#    # pressure solve
+#    for it in range(iterations):
+#        pressure = edge * (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
+#
+#    return pressure
+#
+#def Restrict(field):
+#    N1, M1 = field.shape
+#    N2, M2 = N1/2, M1/2
+#    i, j = tf.indices([N2, M2])
+#    i, j = 2*i, 2*j
+#    return field[i, j] + field[i+1, j] + field[i, j+1] + field[i+1, j+1]
+#
+#def Prolong(field, orig):
+#    i, j = orig.indices
+#    i, j = i/2, j/2
+#    return orig + field[i, j]
+#
+#def Residual(pressure, div):
+#    i, j = pressure.indices
+#    return pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - 4.0*pressure - div
+#
+#def PressureSolve(pressure, div):
+#    pressure = Jacobi(pressure, div, 1)
+#
+#    res = Residual(pressure, div)
+#    res = Restrict(res)
+#    pressure0 = Jacobi(0.0001*res, res, 4)
+#    pressure = Prolong(pressure0, pressure)
+#
+#    pressure = Jacobi(pressure, div, 1)
+#
+#    return pressure
+#
+#
+#def Solver():
+#    pressure = tf.input([N, M], tf.float32)
+#    div = tf.input([N, M], tf.float32)
+#
+#    pressure = PressureSolve(pressure, div)
+#
+#    return [pressure]
+#
+#solver = tf.program(Solver)
+#solver.list_operations(compact=True)

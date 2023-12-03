@@ -28,14 +28,14 @@ class Tensor {
 		}
 
 		auto* tensor = new Tensor(type);
-		tensor->node = evaluation_context_ir_->AddNode(tensor, std::move(args),
+		tensor->node_ = evaluation_context_ir_->AddNode(tensor, std::move(args),
 		                                               std::move(name));
 		return *tensor;
 	}
 
 	static void AddArgument(Arguments& arguments, const Tensor* tensor,
 	                        Arg::Type type, int index = 0) {
-		arguments.emplace_back(type, tensor->node->GetLable(), index);
+		arguments.emplace_back(type, tensor->node_->GetLable(), index);
 	}
 
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
@@ -98,7 +98,7 @@ class Tensor {
 		// get an input node that has shape arguments
 		Arguments shape_arguments;
 		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node->GetArguments(Arg::Type::Shape);
+			shape_arguments = tensor->node_->GetArguments(Arg::Type::Shape);
 			if (!shape_arguments.empty()) {
 				break;
 			}
@@ -138,7 +138,7 @@ class Tensor {
 		AddArgument(arguments, memory, Arg::Type::Memory);
 		AddArguments(arguments, tensors, Arg::Type::Input);
 		AddArguments(arguments, indices, Arg::Type::Index);
-		Node* shape_source = (!indices.empty()) ? indices[0]->node : memory->node;
+		Node* shape_source = (!indices.empty()) ? indices[0]->node_ : memory->node_;
 		AddArguments(arguments, shape_source->GetArguments(Arg::Type::Shape));
 
 		if (op == "load") output_type = memory->type;
@@ -186,7 +186,7 @@ class Tensor {
 
 	[[nodiscard]] string GetConstantString() const;
 
-	Node* node = nullptr;
+	Node* node_ = nullptr;
 	DataType type = DataType::Float;
 	std::vector<uint> data;
 
@@ -194,20 +194,20 @@ class Tensor {
 	explicit Tensor(DataType type) { this->type = type; }
 
 	static Tensor* GetCopy(const Tensor& other, Arguments args) {
-		Tensor* copy = &CreateNode(other.type, std::move(args), other.node->name);
+		Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
 		copy->data = other.data;
 		return copy;
 	}
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) const {
-		node->SetMemoryType(memory_type, index);
+		node_->SetMemoryType(memory_type, index);
 	}
 
 	[[nodiscard]] int GetDimension() const {
 		// find max dimension
 		int max_dim = -1;
 
-		for (const auto& input : node->inputs_) {
+		for (const auto& input : node_->inputs_) {
 			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -220,7 +220,7 @@ class Tensor {
 		Tensors result = Tensors();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto& input : node->inputs_) {
+		for (const auto& input : node_->inputs_) {
 			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -236,9 +236,9 @@ class Tensor {
 			result[i] = nullptr;
 		}
 		// fill result
-		for (const auto& input : node->inputs_) {
+		for (const auto& input : node_->inputs_) {
 			if (input.type_ == Arg::Type::Shape) {
-				result[input.index_] = input.from_->get()->tensor_;
+				result[input.index_] = input.from_->get()->GetTensor();
 			}
 		}
 		// if there are any missing dimensions, fill them with 1
@@ -255,7 +255,7 @@ class Tensor {
 		vector<int> result = vector<int>();
 		// get max dimension
 		int max_dim = -1;
-		for (const auto& input : node->inputs_) {
+		for (const auto& input : node_->inputs_) {
 			if (input.type_ == Arg::Type::Shape) {
 				max_dim = std::max(max_dim, input.index_);
 			}
@@ -271,9 +271,9 @@ class Tensor {
 			result[i] = 1;
 		}
 		// fill result
-		for (const auto& input : node->inputs_) {
+		for (const auto& input : node_->inputs_) {
 			if (input.type_ == Arg::Type::Shape) {
-				result[input.index_] = AsInt(input.from_->get()->tensor_->data[0]);
+				result[input.index_] = AsInt(input.from_->get()->GetTensor()->data[0]);
 			}
 		}
 		return result;
@@ -400,7 +400,7 @@ class Tensor {
 
 	[[nodiscard]] Tensor& ThreadIndex() const {
 		Tensor& output = Static(
-		    "thread_id", node->GetArguments(Arg::Type::Shape), DataType::Int);
+		    "thread_id", node_->GetArguments(Arg::Type::Shape), DataType::Int);
 		output.type = DataType::Int;
 		return output;
 	}
@@ -411,7 +411,7 @@ class Tensor {
 	}
 
 	[[nodiscard]] Tensor& Index(int dim) const {
-		Tensor& output = Static("dim_id", node->GetArguments(Arg::Type::Shape),
+		Tensor& output = Static("dim_id", node_->GetArguments(Arg::Type::Shape),
 		                        DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;
@@ -479,7 +479,7 @@ class Tensor {
 	Tensor& operator~() const { return Op("bnot", this); }
 
 	[[nodiscard]] bool isConstantEqualTo(float value) const {
-		if (node->name != "const") {
+		if (node_->name != "const") {
 			return false;
 		}
 		switch (type) {
@@ -503,7 +503,7 @@ class Tensor {
 			return const_cast<Tensor&>(*this);
 		}
 		// if both are constants, return the difference
-		if (this->node->name == "const" && other.node->name == "const") {
+		if (this->node_->name == "const" && other.node_->name == "const") {
 			switch (type) {
 				case DataType::Float:
 					return Constant(AsFloat(this->data[0]) + AsFloat(other.data[0]));
@@ -525,7 +525,7 @@ class Tensor {
 			return const_cast<Tensor&>(*this);
 		}
 		// if both are constants, return the difference
-		if (this->node->name == "const" && other.node->name == "const") {
+		if (this->node_->name == "const" && other.node_->name == "const") {
 			switch (type) {
 				case DataType::Float:
 					return Constant(AsFloat(this->data[0]) - AsFloat(other.data[0]));
@@ -557,7 +557,7 @@ class Tensor {
 		if (other.isConstantEqualTo(1.0)) {
 			return const_cast<Tensor&>(*this);
 		}
-		if (this->node->name == "const" && other.node->name == "const") {
+		if (this->node_->name == "const" && other.node_->name == "const") {
 			switch (type) {
 				case DataType::Float:
 					return Constant(AsFloat(this->data[0]) * AsFloat(other.data[0]));
@@ -587,7 +587,7 @@ class Tensor {
 			return const_cast<Tensor&>(*this);
 		}
 		// if both are constants, return the ratio
-		if (this->node->name == "const" && other.node->name == "const") {
+		if (this->node_->name == "const" && other.node_->name == "const") {
 			switch (type) {
 				case DataType::Float:
 					return Constant(AsFloat(this->data[0]) / AsFloat(other.data[0]));
@@ -656,6 +656,8 @@ class Tensor {
 		return Op("brshift", this, &other);
 	}
 
+	void operator=(const Tensor& other) = delete;
+	
 	static Tensor& ifcond(const Tensor& condition, const Tensor& ifTrue,
 	                      const Tensor& ifFalse) {
 		return Op("cond", &condition, &ifTrue, &ifFalse);

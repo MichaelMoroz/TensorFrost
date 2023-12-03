@@ -22,6 +22,7 @@ void TensorProgram::CreateProgram() {
 	ir.RemoveUnusedNodes();
 	ir.PostProcessClusters();
 	ir.TransformToLinearIndex();
+	//ir.RemoveUnusedNodes();
 
 	program = GenerateProgram(&ir);
 

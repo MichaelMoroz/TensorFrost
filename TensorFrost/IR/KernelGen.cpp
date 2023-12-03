@@ -4,6 +4,13 @@
 
 namespace TensorFrost {
 
+[[nodiscard]] const Tensor* Node::GetTensor() const {
+	if (tensor_->node_ != this) {
+		throw std::runtime_error("Fatal Error: Tensor node does not match");
+	}
+	return tensor_;
+}
+
 bool CompareShape(const Node* a, const Node* b) {
 	ArgMap a_shape = a->GetArgumentMap(Arg::Type::Shape);
 	ArgMap b_shape = b->GetArgumentMap(Arg::Type::Shape);
@@ -25,7 +32,7 @@ bool CompareShape(const Node* a, const Node* b) {
 		Node* b_node = b_shape[i]->from_->get();
 		//if a and b are constants, then compare their values
 		if (a_node->name == "const" && b_node->name == "const") {
-			if (a_node->tensor_->data[0] != b_node->tensor_->data[0]) {
+			if (a_node->GetTensor()->data[0] != b_node->GetTensor()->data[0]) {
 				return false;
 			}
 		}
@@ -98,7 +105,7 @@ void IR::Clusterize() const {
 		}
 
 		// check if node is a cluster edge
-		Tensor* tensor = node->tensor_;
+		const Tensor* tensor = node->GetTensor();
 
 		Arguments indices = node->GetArguments(Arg::Type::Index);
 		bool identity = indices.empty();
@@ -115,7 +122,7 @@ void IR::Clusterize() const {
 		}
 
 		// go over all inputs
-		for (auto& input : tensor->node->inputs_) {
+		for (auto& input : tensor->node_->inputs_) {
 			// check if input is the boundary of this cluster
 			if (input.from_->get()->cluster_head_ == current_cluster &&
 			    IsBoundary(input.from_->get(), *node, input.index_, input.type_,
@@ -185,8 +192,8 @@ map<Node*, Node*> IR::CopyComputation(
 		}
 
 		// create new node
-		Tensor* tensor = Tensor::GetCopy(*node->tensor_, new_args);
-		Node* new_node = tensor->node;
+		Tensor* tensor = Tensor::GetCopy(*node->GetTensor(), new_args);
+		Node* new_node = tensor->node_;
 		copied_node_map[node.get()] = new_node;
 	}
 
@@ -398,7 +405,7 @@ void IR::PostProcessClusters() {
 			    [&]() {
 				    mem = Tensor::Memory(output->GetArguments(Arg::Type::Shape),
 				                         output->tensor_->type)
-				              .node;
+				              .node_;
 
 				    if (output->memory_type_ == MemoryType::Output) {
 					    mem->memory_type_ = MemoryType::Output;
@@ -416,10 +423,10 @@ void IR::PostProcessClusters() {
 					// if not a memory or shape argument, then the memory needs to be
 					// loaded before the node
 					ExecuteExpressionBefore(arg_out->to_->get(), [&]() {
-						Tensor& loaded = Tensor::Load(*mem->tensor_);
+						Tensor& loaded = Tensor::Load(*mem->GetTensor());
 						// loaded.node->cluster_id_ = arg_out->to_->get()->cluster_id_;
 						//  the node must now use the loaded value
-						arg_out->from_ = loaded.node->GetLable();
+						arg_out->from_ = loaded.node_->GetLable();
 					});
 				} else {
 					// otherwise the memory can be used directly
@@ -430,8 +437,8 @@ void IR::PostProcessClusters() {
 			// add store node after this node
 			ExecuteExpressionAfter(output, [&]() {
 				// add store node after this node
-				Tensor* store = &Tensor::Store(*mem->tensor_, *output->tensor_);
-				store->node->cluster_head_ = cluster_head;
+				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor());
+				store->node_->cluster_head_ = cluster_head;
 			});
 		}
 	}
@@ -448,8 +455,8 @@ void IR::PostProcessClusters() {
 			if (input.from_->get()->name == "memory") {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
-					Tensor& loaded = Tensor::Load(*input.from_->get()->tensor_);
-					input.from_ = loaded.node->GetLable();
+					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor());
+					input.from_ = loaded.node_->GetLable();
 				});
 			}
 		}
@@ -467,10 +474,10 @@ void IR::TransformToLinearIndex() {
 		// add thread node
 		Tensor* thread_index;
 		ExecuteExpressionBefore(
-		    begin, [&]() { thread_index = &begin->tensor_->ThreadIndex(); });
+		    begin, [&]() { thread_index = &begin->GetTensor()->ThreadIndex(); });
 
 		// load kernel shape
-		map<int, Tensor*> kernel_shape_map =
+		map<int, const Tensor*> kernel_shape_map =
 		    begin->GetArgumentTensors(Arg::Type::Shape);
 		Tensors kernel_shape;
 		for (auto& shape : kernel_shape_map) {
@@ -484,22 +491,32 @@ void IR::TransformToLinearIndex() {
 
 		// compute the index for each dimension
 		size_t dims = kernel_shape.size();
-		Tensors indices = Tensors(dims);
+		vector<Tensor*> indices = vector<Tensor*>(dims);
 		ExecuteExpressionBefore(begin, [&]() {
+
+			Tensors sizes = Tensors(dims);
+			sizes[0] = kernel_shape[dims - 1];
+			for (size_t i = 1; i < dims-1; i++) {
+				sizes[i] = &(*sizes[i - 1] * *kernel_shape[dims - i - 1]);
+			}
+
+			Tensor* temp;
 			for (size_t i = 0; i < dims; i++) {
-				Tensor* div = &Tensor::Constant(kernel_shape, 1);
-
-				for (size_t j = i + 1; j < dims; j++) {
-					div = &(*div * *kernel_shape[dims - j - 1]);
+				Tensor* idx0 = thread_index;
+				if (i < dims - 1)
+				{
+					idx0 = &(*idx0 / *sizes[dims - i - 2]);
 				}
-
-				Tensor& dim = *thread_index / *div;
-
 				if (i > 0) {
-					dim = dim % *kernel_shape[dims - i - 1];
+					temp = &(*temp * *kernel_shape[i]);
+					idx0 = &(*idx0 - *temp);
+					if (i != dims - 1) temp = &(*temp + *idx0);
 				}
-
-				indices[dims - i - 1] = &dim;
+				else
+				{
+					temp = idx0;
+				}
+				indices[i] = idx0;
 			}
 		});
 
@@ -508,14 +525,14 @@ void IR::TransformToLinearIndex() {
 		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			if (node->name == "dim_id") {
-				int dim = node->tensor_->data[0];
+				int dim = node->GetTensor()->data[0];
 				if (dim >= dims) {
 					throw runtime_error("Invalid dimension index " + to_string(dim) +
 					                    " for kernel of size " + to_string(dims));
 				}
 
 				// swap the dim node with the corresponding index node
-				CopyLable(node.get(), indices[dim]->node);
+				CopyLable(node.get(), indices[dim]->node_);
 
 				// remove the dim node
 				nodes_to_remove.insert(node.get());
@@ -533,37 +550,44 @@ void IR::TransformToLinearIndex() {
 					const Tensor* memory =
 					    node.get()->GetArgumentTensors(Arg::Type::Memory)[0];
 
-					ArgMap memory_shape = memory->node->GetArgumentMap(Arg::Type::Shape);
+					ArgMap memory_shape = memory->node_->GetArgumentMap(Arg::Type::Shape);
 					int memory_dim = MaxIndexCount(memory_shape);
 
 					// get the index nodes
-					map<int, Tensor*> idx =
+					map<int, const Tensor*> idx =
 					    node->GetArgumentTensors(Arg::Type::Index);
 
-					std::function<Tensor* (int)> get_shape = [&](int dim) {
-						return memory_shape[dim]->from_->get()->tensor_;
+					//just use the thread index if no index is provided
+					if (idx.empty()) {
+						// add the thread index node edge
+						node->AddArgument(thread_index->node_, Arg::Type::Index, 0);
+						return;
+					}
+
+					std::function<const Tensor* (int)> get_shape = [&](int dim) {
+						return memory_shape[dim]->from_->get()->GetTensor();
 					};
 
 					// function to get index for given dimension, if not found then return
 					// default dim index
 					std::function<Tensor*(int)> get_index = [&](int dim) {
-						Tensor* out = nullptr;
+						Tensor* out;
 						if (idx.find(dim) != idx.end()) {
-							out = idx[dim];
+							out = const_cast<Tensor*>(idx[dim]);
 						} else {
-							out = const_cast<Tensor*>(indices[dim]);
+							out = indices[dim];
 						}
-						// return out;
+						//return out; //unsafe
 						return &Tensor::clamp(
-						    *out, TensorFrost::Tensor::Constant(0),
-						   *get_shape(dim) - TensorFrost::Tensor::Constant(1));
+						   *out, TensorFrost::Tensor::Constant(0),
+						  *get_shape(dim) - TensorFrost::Tensor::Constant(1));
 					};
 
-					// compute the flat index
-					Tensor* flat_index = get_index(memory_dim - 1);
-					for (int i = memory_dim - 2; i >= 0; i--) {
-						*flat_index = *flat_index * *get_shape(i);
-						*flat_index = *flat_index + *get_index(i);
+					// compute the flat index (C-order)
+					Tensor* flat_index = get_index(0);
+					for (int i = 1; i < memory_dim; i++) {
+						flat_index = &(*flat_index * *get_shape(i));
+						flat_index = &(*flat_index + *get_index(i));
 					}
 
 					// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
@@ -573,7 +597,7 @@ void IR::TransformToLinearIndex() {
 					node->RemoveArguments(Arg::Type::Index);
 
 					// add the flat index node edge
-					node->AddArgument(flat_index->node, Arg::Type::Index, 0);
+					node->AddArgument(flat_index->node_, Arg::Type::Index, 0);
 				});
 			}
 		}
@@ -625,20 +649,20 @@ Program* GenerateProgram(IR* ir) {
 					const Tensor* memory =
 					    node->GetArgumentTensors(Arg::Type::Memory)[0];
 
-					if (!memory_nodes.contains(memory->node))
+					if (!memory_nodes.contains(memory->node_))
 					{
-						memory_nodes[memory->node] = memory_index++;
+						memory_nodes[memory->node_] = memory_index++;
 					}
 				}
 
 				// get all input arguments
-				map<int, Tensor*> inputs =
+				map<int, const Tensor*> inputs =
 				    node->GetArgumentTensors(Arg::Type::Input);
 				for (auto& input : inputs) {
-					if (input.second->node->name == "memory") {
-						if (!variables.contains(input.second->node))
+					if (input.second->node_->name == "memory") {
+						if (!variables.contains(input.second->node_))
 						{
-							variables[input.second->node] = variable_index++;
+							variables[input.second->node_] = variable_index++;
 						}
 					}
 				}

@@ -65,7 +65,7 @@ class Node {
  public:
 	const string name;
 	const Operation* op;
-	Tensor* tensor_;
+	const Tensor* tensor_;
 
 	Lable* lable_ = nullptr;
 
@@ -89,11 +89,20 @@ class Node {
 		CheckIfValid();
 	}
 
+	[[nodiscard]] const Tensor* GetTensor() const;
+
 	[[nodiscard]] Lable* GetLable() const { return lable_; }
 
 	void UpdateArgumentOutputs() {
 		for (Arg& input : inputs_) {
 			input.SetOutput(lable_);
+		}
+	}
+
+	void UpdateOutputs() {
+		for (auto& input : inputs_) {
+			input.SetOutput(GetLable());
+			input.from_->get()->outputs_.push_back(&input);
 		}
 	}
 
@@ -137,14 +146,14 @@ class Node {
 		return result;
 	}
 
-	[[nodiscard]] map<int, Tensor*> GetArgumentTensors(
+	[[nodiscard]] map<int, const Tensor*> GetArgumentTensors(
 	    Arg::Type type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
-		map<int, Tensor*> result = map<int, Tensor*>();
+		map<int, const Tensor*> result = map<int, const Tensor*>();
 		for (auto& argument : arguments) {
-			result[argument.index_] = argument.from_->node_->tensor_;
+			result[argument.index_] = argument.from_->node_->GetTensor();
 		}
 		return result;
 	}

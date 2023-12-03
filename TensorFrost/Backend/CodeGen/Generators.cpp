@@ -34,14 +34,14 @@ NodeNames GenerateNodeNames(const IR& ir) {
 string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	if (compact) {
 		if (node->name == "const") {
-			return node->tensor_->GetConstantString();
+			return node->GetTensor()->GetConstantString();
 		}
 	}
 	return names[node];
 }
 
 inline string Tensor::GetConstantString() const {
-	if (node->name == "const" || node->name == "dim_id") {
+	if (node_->name == "const" || node_->name == "dim_id") {
 		switch (type) {
 			case DataType::Float:
 				return to_string(AsFloat(data[0])) + "f";
