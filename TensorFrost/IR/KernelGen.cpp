@@ -493,7 +493,7 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 
 
 // compute the flat index (in C-order)
-Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim) 
+Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, TensorIndexingMode mode = TensorIndexingMode::Clamp)
 {
 	std::function<const Tensor*(int)> get_shape = [&](int dim) {
 		return memory_shape[dim]->from_->get()->GetTensor();
@@ -508,9 +508,18 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 		} else {
 			out = indices[dim];
 		}
-		// return out; //unsafe
-		return &Tensor::clamp(*out, TensorFrost::Tensor::Constant(0),
-		                      *get_shape(dim) - TensorFrost::Tensor::Constant(1));
+
+		switch (mode)
+		{
+			case TensorIndexingMode::Clamp:
+				return &Tensor::clamp(
+				    *out, TensorFrost::Tensor::Constant(0),
+				    *get_shape(dim) - TensorFrost::Tensor::Constant(1));
+			case TensorIndexingMode::Unsafe:
+				return out;
+			default: //TODO (Moroz): add other modes
+				throw std::runtime_error("Invalid indexing mode");
+		}
 	};
 
 	// compute the flat index (C-order)
@@ -647,7 +656,7 @@ void IR::TransformToLinearIndex() {
 						return;
 					}
 
-					Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim);
+					Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, tensor_indexing_mode_);
 
 					// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
 					// mirror, zero)

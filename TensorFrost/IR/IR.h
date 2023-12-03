@@ -214,6 +214,13 @@ enum class KernelIndexingMode
 	MultiDimensionalBlocks,
 };
 
+enum class TensorIndexingMode {
+	Unsafe,
+	Clamp,
+	Repeat,
+	Zero,
+};
+
 class IR {
  public:
 	class Iterator {
@@ -354,13 +361,21 @@ class IR {
 
 	~IR();
 
-	void SetIndexingMode(KernelIndexingMode indexing_mode)
+	//TODO (Moroz): Make this per kernel
+	void SetKernelIndexingMode(KernelIndexingMode indexing_mode)
 	{
 		indexing_mode_ = indexing_mode; 
 	}
 
+	//TODO (Moroz): Make this per tensor
+	void SetTensorIndexingMode(TensorIndexingMode indexing_mode)
+	{
+		tensor_indexing_mode_ = indexing_mode;
+	}
+
 	vector<Node*> nodes_;
 	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
+	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
  private:
 	vector<Node*> cluster_nodes_;
 	Iterator cursor_ = Iterator(nullptr);

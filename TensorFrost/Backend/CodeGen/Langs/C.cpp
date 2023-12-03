@@ -310,8 +310,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
 		    "(uint* var, uint* off, uint* mem, uint* shape)\n"
 		    "{\n"
-		    "  #pragma omp parallel num_threads(64) \n"
-			"  #pragma omp for \n" + loop +
+			"  #pragma omp parallel for shared(mem) \n" + loop +
 		    "  {\n" +
 			AddIndent(kernel_code, "    ") +
 		    "  }\n"
