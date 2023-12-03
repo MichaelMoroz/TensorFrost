@@ -297,8 +297,8 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 				for (int d = 0; d < i.dim; d++)
 				{
 					loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) + " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
-					loop += "  {\n";
 				}
+				loop += "  {\n";
 				break;
 			case KernelIndexingMode::MultiDimensionalBlocks:
 				for (int d = 0; d < i.dim; d++)
