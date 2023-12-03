@@ -345,6 +345,11 @@ class IR {
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
 	                       Lable* cluster_head, int dims, Tensors kernel_shape);
 
+	void MultiDimensionalModeIndices(Tensor*& thread_index,
+	                                 vector<Tensor*>& indices,
+	                                 Lable* cluster_head, int dims,
+	                                 Tensors kernel_shape);
+
 	void TransformToLinearIndex();
 
 	~IR();
@@ -355,6 +360,7 @@ class IR {
 	}
 
 	vector<Node*> nodes_;
+	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
  private:
 	vector<Node*> cluster_nodes_;
 	Iterator cursor_ = Iterator(nullptr);
@@ -362,7 +368,6 @@ class IR {
 	Iterator begin_ = Iterator(nullptr);
 	Iterator end_ = Iterator(nullptr);
 	Lable* current_cluster_head_ = nullptr;
-	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
 
 	void InsertAtCursor(Node* node) {
 		nodes_.push_back(node);

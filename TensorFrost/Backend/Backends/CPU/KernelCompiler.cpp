@@ -89,7 +89,7 @@ void CompileKernelLibrary(const string& sourceCode, TCHAR* tempPath,
 }
 
 using uint = unsigned int;
-using kernel_func = void (*)(uint*, uint*, uint*, uint);
+using kernel_func = void (*)(uint*, uint*, uint*, uint*);
 
 void CompileAndLoadKernel(Program* program) {
 	TCHAR temp_path[MAX_PATH];
@@ -149,7 +149,7 @@ void CompileAndLoadKernel(Program* program) {
 		kernel->execute_callback = [kernel_callback](
 		                               TensorMemoryManager* memory_manager,
 		                               vector<uint> variables, vector<uint> offsets,
-		                               uint threads) {
+		                               vector<uint> shape) {
 			// get CPU memory manager
 			auto* cpu_memory_manager =
 			    dynamic_cast<CpuMemoryManager*>(memory_manager);
@@ -160,7 +160,7 @@ void CompileAndLoadKernel(Program* program) {
 			// get memory
 			uint* memory = cpu_memory_manager->memory.data();
 			// execute kernel
-			kernel_callback(variables.data(), offsets.data(), memory, threads);
+			kernel_callback(variables.data(), offsets.data(), memory, shape.data());
 		};
 
 		i++;

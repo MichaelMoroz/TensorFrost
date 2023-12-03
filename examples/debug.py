@@ -190,7 +190,7 @@ def FluidTest():
     div = (vx[i+1, j] - vx[i-1, j] + vy[i, j+1] - vy[i, j-1]) / 2.0
 
     # pressure solve
-    for it in range(12):
+    for it in range(2):
         pressure = pressure * edge
         pressure = Jacobi(pressure, div)
     
@@ -225,9 +225,8 @@ def WaveEq():
 wave = tf.program(WaveEq)
 wave.list_operations(compact=False)
 
-
-#fluid = tf.program(FluidTest)
-#fluid.list_operations(compact=False)
+fluid = tf.program(FluidTest)
+fluid.list_operations(compact=False)
 
 mmul = tf.program(matmul)
 mmul.list_operations(compact=False)
@@ -250,27 +249,27 @@ print(Cnp2)
 
 print(Cnp - Cnp2)
 
-#S = 128
-#
-#def mandelbrot():
-#    canvas = tf.zeros([3, S, S], tf.float32)
-#    i, j = tf.indices([S, S])
-#    x, y = tf.float(i), tf.float(j)
-#
-#    canvas[0, i, j] = tf.sin(x / (S * 2 * np.pi))
-#    canvas[1, i, j] = tf.cos(y / (S * 2 * np.pi))
-#    canvas[2, i, j] = tf.sin(x / (S * 2 * np.pi)) * tf.cos(y / (S * 2 * np.pi))
-#
-#    return [canvas]
-#
-#mand = tf.program(mandelbrot)
-#
-#mand.list_operations(compact=False)
-#res = mand()
-#
-#resnp = res[0].numpy
-#
-#print(resnp.shape)
+S = 128
+
+def mandelbrot():
+    canvas = tf.zeros([3, S, S], tf.float32)
+    i, j = tf.indices([S, S])
+    x, y = tf.float(i), tf.float(j)
+
+    canvas[0, i, j] = tf.sin(x / (S * 2 * np.pi))
+    canvas[1, i, j] = tf.cos(y / (S * 2 * np.pi))
+    canvas[2, i, j] = tf.sin(x / (S * 2 * np.pi)) * tf.cos(y / (S * 2 * np.pi))
+
+    return [canvas]
+
+mand = tf.program(mandelbrot)
+
+mand.list_operations(compact=False)
+res = mand()
+
+resnp = res[0].numpy
+
+print(resnp.shape)
 
 #def Boundary(i, j):
 #    N1, M1 = i.shape

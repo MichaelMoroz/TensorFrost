@@ -556,6 +556,33 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Labl
 	}
 }
 
+void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Lable* cluster_head, int dims, Tensors kernel_shape)
+{
+	// just use dim_id nodes as indices
+	for (auto node = Iterator(cluster_head->node_);
+		!node.is_cluster_end(cluster_head);
+		++node) {
+		if (node->name == "dim_id") {
+			int dim = node->GetTensor()->data[0];
+			if (dim >= dims) {
+				throw runtime_error("Invalid dimension index " + to_string(dim) +
+													" for kernel of size " + to_string(dims));
+			}
+
+			indices[dim] = const_cast<Tensor*>(node->GetTensor());
+		}
+	}
+
+	//add dim_id nodes if they are missing
+	for (int i = 0; i < dims; i++) {
+		if (indices[i] == nullptr) {
+			ExecuteExpressionBefore(cluster_head->node_, [&]() {
+				indices[i] = &cluster_head->node_->GetTensor()->Index(i);
+			});
+		}
+	}
+}
+
 void IR::TransformToLinearIndex() {
 	ClusterProp clusters = GetClusterProperties();
 
@@ -582,8 +609,17 @@ void IR::TransformToLinearIndex() {
 		Tensor* thread_index;
 		vector<Tensor*> indices = vector<Tensor*>(dims);
 
-		LinearModeIndices(thread_index, indices, cluster_begin, dims,
-		                  kernel_shape);
+		switch (indexing_mode_)
+		{ 
+		case KernelIndexingMode::Linear:
+			LinearModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
+			break;
+		case KernelIndexingMode::MultiDimensional:
+			MultiDimensionalModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
+			break;
+		default:
+			throw runtime_error("Invalid indexing mode");
+		}
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = Iterator(cluster_begin->node_);
@@ -605,7 +641,7 @@ void IR::TransformToLinearIndex() {
 					    node->GetArgumentTensors(Arg::Type::Index);
 
 					//just use the thread index if no index is provided
-					if (idx.empty()) {
+					if (idx.empty() && indexing_mode_ == KernelIndexingMode::Linear) {
 						// add the thread index node edge
 						node->AddArgument(thread_index->node_, Arg::Type::Index, 0);
 						return;
@@ -643,6 +679,8 @@ Program* GenerateProgram(IR* ir) {
 		KernelType type;
 		map<Node*, int> variables;
 		map<Node*, int> memory_nodes;
+		ArgMap shape;
+		int dim = 0;
 		if (begin->name == "memory") {
 			if (begin->memory_type_ == MemoryType::Input) {
 				continue;
@@ -650,7 +688,9 @@ Program* GenerateProgram(IR* ir) {
 			type = KernelType::Memory;
 		} else {
 			type = KernelType::Compute;
+		
 			bool has_output = false;
+			bool has_shape = false;
 
 			int variable_index = 0;
 			int memory_index = 0;
@@ -684,13 +724,29 @@ Program* GenerateProgram(IR* ir) {
 						}
 					}
 				}
+
+				if (!has_shape)
+				{
+					// get the shape argument (if exists)
+					shape = node->GetArgumentMap(Arg::Type::Shape);
+					dim = MaxIndexCount(shape);
+					if (dim != 0 && shape.size() == dim) {
+						has_shape = true;
+					}
+				}
 			}
 
 			if (!has_output) continue;
+
+			if (!has_shape)
+			{
+				throw runtime_error("Kernel does not have a shape");
+			}
 		}
 
 		// add the cluster to the program
-		program->AddKernel(type, begin, variables, memory_nodes);
+		program->AddKernel(type, ir->indexing_mode_, begin, variables, memory_nodes,
+		                   shape, dim);
 	}
 
 	return program;

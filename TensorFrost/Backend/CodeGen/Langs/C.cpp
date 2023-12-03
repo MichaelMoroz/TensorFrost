@@ -71,8 +71,7 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "}";
 		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
 		           op->op_type_ == OpType::Scatter) {
-			Node* memory_node = memory[0].from_->get();
-			string address = "off[" + to_string(offsets[memory_node]) +
+			string address = "off[" + to_string(offsets[memory[0].from_->get()]) +
 			                 "] + " + arguments[1];
 			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {
@@ -136,6 +135,10 @@ class C_CodeGenerator : public CodeGenerator {
 					break;
 				case OpType::Variable:
 					line += op->code_;
+					needs_parenthesis = false;
+					break;
+				case OpType::DimensionIndex:
+					line += op->code_ + to_string(node->GetTensor()->data[0]);
 					needs_parenthesis = false;
 					break;
 				case OpType::TypeCast:
@@ -282,16 +285,33 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		generator.GenerateKernelLines(program->ir_, cluster, kernel);
 		generator.Compactify();
 
+		string loop = "";
+		switch (kernel->indexing_mode_)
+		{
+			case KernelIndexingMode::Linear:
+				loop =
+				    "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+				break;
+			case KernelIndexingMode::MultiDimensional:
+				for (int d = 0; d < i.dim; d++)
+				{
+					loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) + " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
+				}
+				break;
+			default:
+				throw std::runtime_error("Invalid indexing mode");
+				break;
+		}
+
 		string kernel_code = generator.GetFinalCode();
 		kernel->generated_code_ = kernel_code;
 		all_kernels +=
 		    "\n"
 		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
-		    "(uint* var, uint* off, uint* mem, uint threads)\n"
+		    "(uint* var, uint* off, uint* mem, uint* shape)\n"
 		    "{\n"
 		    "  #pragma omp parallel num_threads(64) \n"
-			"  #pragma omp for \n"
-		    "  for(int thread_id = 0; thread_id < threads; thread_id++)\n"
+			"  #pragma omp for \n" + loop +
 		    "  {\n" +
 			AddIndent(kernel_code, "    ") +
 		    "  }\n"

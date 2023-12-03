@@ -90,14 +90,31 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 			} break;
 			case KernelType::Compute: {
 				Node* begin = kernel->begin_;
-				map<int, const Tensor*> args = begin->GetArgumentTensors(Arg::Shape);
+				ArgMap shape = kernel->shape;
+				int dim = kernel->dim;
+				vector<uint> shape_values(dim);
 				int thread_count = 1;
-				for (auto& arg : args) {
-					if (arg.second->node_->name == "const") {
-						thread_count *= arg.second->node_->GetTensor()->data[0];
-						continue;
+
+				for (int i = 0; i < dim; i++) 
+				{
+					const Arg* arg = shape[i];
+					int val = 0;
+					if (arg->from_->get()->name == "const") 
+					{
+						val = arg->from_->get()->GetTensor()->data[0];
 					}
-					thread_count *= shape_constants[arg.second->node_];
+					else
+					{
+						val = shape_constants[arg->from_->get()];
+					}
+
+					thread_count *= val;
+					shape_values[i] = val;
+				}
+
+				if (kernel->indexing_mode_ == KernelIndexingMode::Linear)
+				{
+					shape_values[0] = thread_count;
 				}
 
 				vector<uint> memory_offsets;
@@ -125,7 +142,7 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 				}
 
 				kernel->execute_callback(global_memory_manager, variables,
-				                         memory_offsets, thread_count);
+				                         memory_offsets, shape_values);
 			} break;
 		}
 	}
