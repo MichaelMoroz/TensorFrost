@@ -343,7 +343,7 @@ class IR {
 	void PostProcessClusters();
 
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Node* begin, int dims, Tensors kernel_shape);
+	                       Lable* cluster_head, int dims, Tensors kernel_shape);
 
 	void TransformToLinearIndex();
 

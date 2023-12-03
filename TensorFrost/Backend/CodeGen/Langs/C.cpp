@@ -71,7 +71,8 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "}";
 		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
 		           op->op_type_ == OpType::Scatter) {
-			string address = "off[" + to_string(offsets[memory[0].from_->get()]) +
+			Node* memory_node = memory[0].from_->get();
+			string address = "off[" + to_string(offsets[memory_node]) +
 			                 "] + " + arguments[1];
 			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {

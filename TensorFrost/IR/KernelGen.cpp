@@ -523,16 +523,17 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 	return flat_index;
 }
 
-void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* begin, int dims, Tensors kernel_shape)
+void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Lable* cluster_head, int dims, Tensors kernel_shape)
 {
-	ExecuteExpressionBefore(begin, [&]() {
-		thread_index = &begin->GetTensor()->ThreadIndex();
+	ExecuteExpressionBefore(cluster_head->node_, [&]() {
+		thread_index = &cluster_head->node_->GetTensor()->ThreadIndex();
 		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
 	});
 
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
-	for (auto node = Iterator(begin); !node.is_cluster_end(begin->cluster_head_);
+	for (auto node = Iterator(cluster_head->node_);
+	     !node.is_cluster_end(cluster_head);
 			++node) {
 		if (node->name == "dim_id") {
 			int dim = node->GetTensor()->data[0];
@@ -561,11 +562,9 @@ void IR::TransformToLinearIndex() {
 	// replace all dim_id nodes with the corresponding index computed from
 	// thread_id
 	for (auto* cluster_begin : clusters.cluster_heads) {
-		Node* begin = cluster_begin->node_;
-
 		// load kernel shape
 		map<int, const Tensor*> kernel_shape_map =
-		    begin->GetArgumentTensors(Arg::Type::Shape);
+		    cluster_begin->node_->GetArgumentTensors(Arg::Type::Shape);
 		Tensors kernel_shape;
 		for (auto& shape : kernel_shape_map) {
 			kernel_shape.push_back(shape.second);
@@ -583,10 +582,12 @@ void IR::TransformToLinearIndex() {
 		Tensor* thread_index;
 		vector<Tensor*> indices = vector<Tensor*>(dims);
 
-		LinearModeIndices(thread_index, indices, begin, dims, kernel_shape);
+		LinearModeIndices(thread_index, indices, cluster_begin, dims,
+		                  kernel_shape);
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
-		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
+		for (auto node = Iterator(cluster_begin->node_);
+		     !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			auto op_type = node->op->GetOpType();
 			if (op_type == OpType::Load || op_type == OpType::Store ||
