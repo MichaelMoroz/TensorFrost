@@ -286,16 +286,33 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		generator.Compactify();
 
 		string loop = "";
+		const int block_size = 8; //TODO chose automatically
 		switch (kernel->indexing_mode_)
 		{
 			case KernelIndexingMode::Linear:
-				loop =
-				    "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+				loop =  "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+				loop += "  {\n";
 				break;
 			case KernelIndexingMode::MultiDimensional:
 				for (int d = 0; d < i.dim; d++)
 				{
 					loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) + " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
+					loop += "  {\n";
+				}
+				break;
+			case KernelIndexingMode::MultiDimensionalBlocks:
+				for (int d = 0; d < i.dim; d++)
+				{
+					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) + " < shape[" + to_string(d) + "] / " + to_string(block_size) + "; wg" + to_string(d) + "++)\n";
+				}
+				for (int d = 0; d < i.dim; d++)
+				{
+					loop += "  for (int lt" + to_string(d) + " = 0; lt" + to_string(d) + " < " + to_string(block_size) + "; lt" + to_string(d) + "++)\n";
+				}
+				loop += "  {\n";
+				for (int d = 0; d < i.dim; d++)
+				{
+					loop += "    int dim" + to_string(d) + " = wg" + to_string(d) + " * " + to_string(block_size) + " + lt" + to_string(d) + ";\n";
 				}
 				break;
 			default:
@@ -311,7 +328,6 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		    "(uint* var, uint* off, uint* mem, uint* shape)\n"
 		    "{\n"
 			"  #pragma omp parallel for shared(mem) \n" + loop +
-		    "  {\n" +
 			AddIndent(kernel_code, "    ") +
 		    "  }\n"
 		    "}\n";

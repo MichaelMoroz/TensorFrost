@@ -518,7 +518,7 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 			case TensorIndexingMode::Unsafe:
 				return out;
 			default: //TODO (Moroz): add other modes
-				throw std::runtime_error("Invalid indexing mode");
+				throw std::runtime_error("Invalid tensor indexing mode");
 		}
 	};
 
@@ -624,10 +624,11 @@ void IR::TransformToLinearIndex() {
 			LinearModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
 			break;
 		case KernelIndexingMode::MultiDimensional:
+		case KernelIndexingMode::MultiDimensionalBlocks: //TODO (Moroz): add proper support for blocks
 			MultiDimensionalModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
 			break;
 		default:
-			throw runtime_error("Invalid indexing mode");
+			throw runtime_error("Invalid kernel indexing mode");
 		}
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)

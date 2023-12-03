@@ -6,9 +6,9 @@ import time
 tf.initialize(tf.cpu, "H:/cl_compile.bat /Zi")
 #tf.initialize(tf.cpu, "H:/cl_compile.bat /O2 /fp:fast /openmp:experimental /Zi")
 
-n0 = 8
-m0 = 16
-k0 = 12
+n0 = 32
+m0 = 64
+k0 = 32
 
 def matmul():
     A = tf.input([n0, m0], tf.float32)
