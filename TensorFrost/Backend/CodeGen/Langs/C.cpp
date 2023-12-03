@@ -35,7 +35,7 @@ class C_CodeGenerator : public CodeGenerator {
 			Node* input = arg.from_->get();
 			string name = GetNodeName(input, *names, true);
 			if (input->name == "memory") {
-				name = "variables[" + to_string(variables[input]) + "]";
+				name = "var[" + to_string(variables[input]) + "]";
 			}
 			arguments.push_back(name);
 			input_types.push_back(arg.from_->get()->GetTensor()->type);
@@ -71,9 +71,9 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "}";
 		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
 		           op->op_type_ == OpType::Scatter) {
-			string address = "offsets[" + to_string(offsets[memory[0].from_->get()]) +
+			string address = "off[" + to_string(offsets[memory[0].from_->get()]) +
 			                 "] + " + arguments[1];
-			string memory_expression = "memory[" + address + "]";
+			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {
 				left += type_names[output_type] + " " + name + " = ";
 				if (output_type == DataType::Float) {
@@ -102,7 +102,7 @@ class C_CodeGenerator : public CodeGenerator {
 			else if (op->op_type_ == OpType::Scatter)
 			{
 				string input_type_name = type_names[input_types[0]];
-				expression += op->code_ + "((" + input_type_name + "*)memory, " +
+				expression += op->code_ + "((" + input_type_name + "*)mem, " +
 				              address + ", " + arguments[2] + ")";
 				right += ";";
 			}
@@ -164,7 +164,28 @@ pair<string, vector<string>> GenerateC(Program* program) {
 	string all_kernels = R"(
 #include <cmath>
 #include <omp.h>
+
 typedef unsigned int uint;
+
+inline int min(int a, int b)
+{
+  return a < b ? a : b;
+}
+
+inline int max(int a, int b)
+{
+  return a > b ? a : b;
+}
+
+inline float min(float a, float b)
+{
+  return a < b ? a : b;
+}
+
+inline float max(float a, float b)
+{
+  return a > b ? a : b;
+}
 
 inline float asfloat(uint x)
 {
@@ -176,21 +197,14 @@ inline uint asuint(float x)
   return *(uint*)&x;
 }
 
-inline int clamp(int x, int min, int max)
+inline int clamp(int x, int a, int b)
 {
-  if(x < min) return min;
-  if(x > max) return max;
-  return x;
+  return min(max(x, a), b);
 }
 
-inline float clamp(float x, float min, float max)
+inline float clamp(float x, float a, float b)
 {
-  return fmin(fmax(x, min), max);
-}
-
-inline double clamp(double x, double min, double max)
-{
-  return fmin(fmax(x, min), max);
+  return min(max(x, a), b);
 }
 
 inline void InterlockedAdd(int* memory, int address, int value)
@@ -249,7 +263,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 
 )";
 
-	// Generate HLSL code for each cluster
+	// Generate HLSL code for each compute kernel
 	int kernel_count = 0;
 	vector<string> kernel_names;
 	for (auto& i : program->kernels_) {
@@ -272,7 +286,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		all_kernels +=
 		    "\n"
 		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
-		    "(uint* variables, uint* offsets, uint* memory, uint threads)\n"
+		    "(uint* var, uint* off, uint* mem, uint threads)\n"
 		    "{\n"
 		    "  #pragma omp parallel num_threads(64) \n"
 			"  #pragma omp for \n"

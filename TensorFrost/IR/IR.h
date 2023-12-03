@@ -206,6 +206,14 @@ class ClusterProp {
 	      cluster_heads(std::move(cluster_heads)) {}
 };
 
+enum class KernelIndexingMode
+{
+	Linear,
+	MultiDimensional,
+	LinearBlocks,
+	MultiDimensionalBlocks,
+};
+
 class IR {
  public:
 	class Iterator {
@@ -334,9 +342,17 @@ class IR {
 
 	void PostProcessClusters();
 
+	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
+	                       Node* begin, int dims, Tensors kernel_shape);
+
 	void TransformToLinearIndex();
 
 	~IR();
+
+	void SetIndexingMode(KernelIndexingMode indexing_mode)
+	{
+		indexing_mode_ = indexing_mode; 
+	}
 
 	vector<Node*> nodes_;
  private:
@@ -346,6 +362,7 @@ class IR {
 	Iterator begin_ = Iterator(nullptr);
 	Iterator end_ = Iterator(nullptr);
 	Lable* current_cluster_head_ = nullptr;
+	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
 
 	void InsertAtCursor(Node* node) {
 		nodes_.push_back(node);

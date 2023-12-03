@@ -463,6 +463,98 @@ void IR::PostProcessClusters() {
 	}
 }
 
+vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shape, int dims)
+{
+	vector<Tensor*> indices = vector<Tensor*>(dims);
+	Tensors sizes = Tensors(dims);
+	sizes[0] = kernel_shape[dims - 1];
+	for (size_t i = 1; i < dims - 1; i++) {
+		sizes[i] = &(*sizes[i - 1] * *kernel_shape[dims - i - 1]);
+	}
+
+	Tensor* temp;
+	for (size_t i = 0; i < dims; i++) {
+		Tensor* idx0 = index;
+		if (i < dims - 1) {
+			idx0 = &(*idx0 / *sizes[dims - i - 2]);
+		}
+		if (i > 0) {
+			temp = &(*temp * *kernel_shape[i]);
+			idx0 = &(*idx0 - *temp);
+			if (i != dims - 1) temp = &(*temp + *idx0);
+		} else {
+			temp = idx0;
+		}
+		indices[i] = idx0;
+	}
+
+	return indices;
+}
+
+
+// compute the flat index (in C-order)
+Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim) 
+{
+	std::function<const Tensor*(int)> get_shape = [&](int dim) {
+		return memory_shape[dim]->from_->get()->GetTensor();
+	};
+
+	// function to get index for given dimension, if not found then return
+	// default dim index
+	std::function<Tensor*(int)> get_index = [&](int dim) {
+		Tensor* out;
+		if (idx.find(dim) != idx.end()) {
+			out = const_cast<Tensor*>(idx[dim]);
+		} else {
+			out = indices[dim];
+		}
+		// return out; //unsafe
+		return &Tensor::clamp(*out, TensorFrost::Tensor::Constant(0),
+		                      *get_shape(dim) - TensorFrost::Tensor::Constant(1));
+	};
+
+	// compute the flat index (C-order)
+	Tensor* flat_index = get_index(0);
+	for (int i = 1; i < memory_dim; i++) {
+		flat_index = &(*flat_index * *get_shape(i));
+		flat_index = &(*flat_index + *get_index(i));
+	}
+
+	return flat_index;
+}
+
+void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* begin, int dims, Tensors kernel_shape)
+{
+	ExecuteExpressionBefore(begin, [&]() {
+		thread_index = &begin->GetTensor()->ThreadIndex();
+		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
+	});
+
+	// replace all dim nodes with the corresponding index node
+	unordered_set<Node*> nodes_to_remove;
+	for (auto node = Iterator(begin); !node.is_cluster_end(begin->cluster_head_);
+			++node) {
+		if (node->name == "dim_id") {
+			int dim = node->GetTensor()->data[0];
+			if (dim >= dims) {
+				throw runtime_error("Invalid dimension index " + to_string(dim) +
+									" for kernel of size " + to_string(dims));
+			}
+
+			// swap the dim node with the corresponding index node
+			CopyLable(node.get(), indices[dim]->node_);
+
+			// remove the dim node
+			nodes_to_remove.insert(node.get());
+		}
+	}
+
+	// remove all dim nodes
+	for (auto* node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
 void IR::TransformToLinearIndex() {
 	ClusterProp clusters = GetClusterProperties();
 
@@ -470,11 +562,6 @@ void IR::TransformToLinearIndex() {
 	// thread_id
 	for (auto* cluster_begin : clusters.cluster_heads) {
 		Node* begin = cluster_begin->node_;
-
-		// add thread node
-		Tensor* thread_index;
-		ExecuteExpressionBefore(
-		    begin, [&]() { thread_index = &begin->GetTensor()->ThreadIndex(); });
 
 		// load kernel shape
 		map<int, const Tensor*> kernel_shape_map =
@@ -489,55 +576,14 @@ void IR::TransformToLinearIndex() {
 			continue;
 		}
 
+		//TODO (Moroz): make cluster lables separate from node lables
+
 		// compute the index for each dimension
 		size_t dims = kernel_shape.size();
+		Tensor* thread_index;
 		vector<Tensor*> indices = vector<Tensor*>(dims);
-		ExecuteExpressionBefore(begin, [&]() {
 
-			Tensors sizes = Tensors(dims);
-			sizes[0] = kernel_shape[dims - 1];
-			for (size_t i = 1; i < dims-1; i++) {
-				sizes[i] = &(*sizes[i - 1] * *kernel_shape[dims - i - 1]);
-			}
-
-			Tensor* temp;
-			for (size_t i = 0; i < dims; i++) {
-				Tensor* idx0 = thread_index;
-				if (i < dims - 1)
-				{
-					idx0 = &(*idx0 / *sizes[dims - i - 2]);
-				}
-				if (i > 0) {
-					temp = &(*temp * *kernel_shape[i]);
-					idx0 = &(*idx0 - *temp);
-					if (i != dims - 1) temp = &(*temp + *idx0);
-				}
-				else
-				{
-					temp = idx0;
-				}
-				indices[i] = idx0;
-			}
-		});
-
-		// replace all dim nodes with the corresponding index node
-		unordered_set<Node*> nodes_to_remove;
-		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
-		     ++node) {
-			if (node->name == "dim_id") {
-				int dim = node->GetTensor()->data[0];
-				if (dim >= dims) {
-					throw runtime_error("Invalid dimension index " + to_string(dim) +
-					                    " for kernel of size " + to_string(dims));
-				}
-
-				// swap the dim node with the corresponding index node
-				CopyLable(node.get(), indices[dim]->node_);
-
-				// remove the dim node
-				nodes_to_remove.insert(node.get());
-			}
-		}
+		LinearModeIndices(thread_index, indices, begin, dims, kernel_shape);
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
@@ -564,31 +610,7 @@ void IR::TransformToLinearIndex() {
 						return;
 					}
 
-					std::function<const Tensor* (int)> get_shape = [&](int dim) {
-						return memory_shape[dim]->from_->get()->GetTensor();
-					};
-
-					// function to get index for given dimension, if not found then return
-					// default dim index
-					std::function<Tensor*(int)> get_index = [&](int dim) {
-						Tensor* out;
-						if (idx.find(dim) != idx.end()) {
-							out = const_cast<Tensor*>(idx[dim]);
-						} else {
-							out = indices[dim];
-						}
-						//return out; //unsafe
-						return &Tensor::clamp(
-						   *out, TensorFrost::Tensor::Constant(0),
-						  *get_shape(dim) - TensorFrost::Tensor::Constant(1));
-					};
-
-					// compute the flat index (C-order)
-					Tensor* flat_index = get_index(0);
-					for (int i = 1; i < memory_dim; i++) {
-						flat_index = &(*flat_index * *get_shape(i));
-						flat_index = &(*flat_index + *get_index(i));
-					}
+					Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim);
 
 					// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
 					// mirror, zero)
@@ -600,11 +622,6 @@ void IR::TransformToLinearIndex() {
 					node->AddArgument(flat_index->node_, Arg::Type::Index, 0);
 				});
 			}
-		}
-
-		// remove all dim nodes
-		for (auto* node : nodes_to_remove) {
-			RemoveNode(node);
 		}
 	}
 }

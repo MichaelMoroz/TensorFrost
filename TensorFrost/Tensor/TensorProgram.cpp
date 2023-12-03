@@ -17,6 +17,7 @@ void TensorProgram::CreateProgram() {
 
 	//TODO (Moroz): Make sure that shape works with non-const tensors
 
+	ir.SetIndexingMode(KernelIndexingMode::MultiDimensional);
 	ir.Clusterize();
 	ir.OptimizeClusters();
 	ir.RemoveUnusedNodes();
