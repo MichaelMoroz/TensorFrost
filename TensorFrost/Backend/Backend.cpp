@@ -6,7 +6,7 @@ TensorMemoryManager* global_memory_manager = nullptr;
 
 void InitializeBackend(BackendType backendType, const string& compilerPath) {
 	if (!compilerPath.empty()) {
-		c_compiler_path = compilerPath;
+		kernel_compile_options = compilerPath;
 	}
 	switch (backendType) {
 		case BackendType::CPU:
