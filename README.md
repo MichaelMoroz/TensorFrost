@@ -16,7 +16,7 @@ Currently working platforms:
 
 ## Installation
 TensorFrost is currently not available on PyPI, so you'll have to install it from source. 
-You need to have CMake installed, as well as a C++ compiler that supports C++17 and Python 3.7 or higher.
+You need to have CMake installed, as well as a C++ compiler that supports C++17 (Currently only Microsoft Visual Studio Compiler) and Python 3.7 or higher.
 
 First clone the repository:
 ```bash
@@ -39,18 +39,11 @@ First you need to import the library:
 import TensorFrost as tf
 ```
 
-Then you need to initialize the library with the device you want to use:
+Then you need to initialize the library with the device you want to use and the kernel compiler flags (different for each platform):
 ```python
-tf.initialize(tf.cpu, "cl_compile.bat /O2 /fp:fast /openmp") # Windows + MSVC (currently the only working compiler out of the box)
+tf.initialize(tf.cpu, "/O2 /fp:fast /openmp") # Windows + MSVC (currently the only working compiler out of the box)
 ```
-You must yourself provide a compiler path here. Currently only MSVC is supported out of the box.
-The cl_compile.bat script looks like this for example:
 
-```bat
-@echo off
-call "Path\To\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsall.bat" x64
-cl %*
-```
 
 ### Basic usage
 
