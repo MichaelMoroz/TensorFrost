@@ -4,22 +4,15 @@
 
 namespace TensorFrost {
 
-std::string c_compiler_path;
+std::string kernel_compile_options;
 
 bool RunCompiler(TCHAR* tempPath, TCHAR* dllName) {
-	std::string compiler_path = c_compiler_path;
-	cout << "CompilerPath: " << compiler_path << endl;
-	// char command[512];
-	// sprintf(command, "%s -shared temp/generated_lib.c -o
-	// temp/generated_lib.dll",
-	//     compilerPath.c_str());
-
+	cout << "Compile options: " << kernel_compile_options << endl;
 	std::basic_stringstream<TCHAR> ss;
-	// ss << compilerPath << " -g -shared " << tempPath << "generated_lib.c -o "
-	// << dllName; ss << compilerPath << " /LD /Zi " << tempPath <<
-	// "generated_lib.c /Fe:" << dllName; // MSVC
-	ss << compiler_path << " /LD " << tempPath
-	   << "generated_lib.cpp /Fe:" << dllName;  // MSVC
+	ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl " 
+	   << kernel_compile_options << " /LD " << tempPath
+	   << "generated_lib.cpp /Fe:" << dllName 
+	   << "\"\"\\\"\"";  // MSVC
 	std::basic_string<TCHAR> command = ss.str();
 
 	cout << "Command: " << command << endl;
@@ -42,7 +35,7 @@ bool RunCompiler(TCHAR* tempPath, TCHAR* dllName) {
 	                   &si,             // Pointer to STARTUPINFO structure
 	                   &pi  // Pointer to PROCESS_INFORMATION structure
 	                   )) {
-		throw std::runtime_error("Compiler error: cannot create compiler process");
+		throw std::runtime_error(std::string("Compiler error: cannot create compiler process. Command line: ") + command.data() + "\n");
 	}
 
 	// Wait until child process exits
