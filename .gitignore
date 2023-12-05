@@ -34,7 +34,8 @@
 # Build folder
 build/
 build_tidy/
-python_module/
+python_module/*
+!python_module/__init__.py
 dist/
 temp/
 .vscode/settings.json

@@ -31,6 +31,20 @@ cmake -S . -B build && cmake --build build
 
 The cmake script will automatically install the compiled python module into your python environment.
 
+### Building wheel packages (optional)
+
+If you want to build a wheel package, you can execute the following command:
+```bash
+python setup.py bdist_wheel
+````
+
+This will create a wheel package in the `dist` folder. You can then install it with pip:
+```bash
+pip install dist/TensorFrost-0.1-py3-none-any.whl
+```
+
+(Note that you will need to have the `wheel` package installed for this to work)
+
 ## Usage
 
 ### Setup
@@ -44,6 +58,7 @@ Then you need to initialize the library with the device you want to use and the 
 tf.initialize(tf.cpu, "/O2 /fp:fast /openmp") # Windows + MSVC (currently the only working compiler out of the box)
 ```
 
+TensorFrost will find any available MSVC installation and use it to compile the kernels. If you want to use a different compiler, you can specify the path to the compiler executable (TODO).
 
 ### Basic usage
 
