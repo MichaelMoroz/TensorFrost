@@ -1,5 +1,9 @@
+@echo off
+set PYTHON_VERSION=%1
+if "%PYTHON_VERSION%"=="" set PYTHON_VERSION=3.12
+
 git clean -d -x -f -e PythonBuild/dist
-cmake -DPYBIND11_PYTHON_VERSION=3.12 -S . -B build 
+cmake -DPYBIND11_PYTHON_VERSION=%PYTHON_VERSION% -S . -B build 
 cmake --build build
-py -3.12 -m pip install build
-py -3.12 -m build ./PythonBuild
+py -%PYTHON_VERSION% -m pip install build
+py -%PYTHON_VERSION% -m build -w ./PythonBuild
