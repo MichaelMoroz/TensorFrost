@@ -4,13 +4,13 @@ file(GLOB_RECURSE TENSORFROST_HEADER_LIST CONFIGURE_DEPENDS *.h *.hpp)
 pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_LIST})
 
 # Set a default Python version
-set(PYTHON_VERSION "3.8" CACHE STRING "Default Python version")
+set(PYTHON_VERSION "3.10" CACHE STRING "Default Python version")
 
 # Allow the user to override the default Python version
 # Example usage: cmake -DPYTHON_VERSION=3.7 ..
 message(STATUS "Using Python version: ${PYTHON_VERSION}")
 
-find_package (Python3 3.10 REQUIRED COMPONENTS Interpreter)
+find_package (Python3 ${PYTHON_VERSION} EXACT COMPONENTS Interpreter)
 
 target_include_directories(TensorFrost PRIVATE ${Python3_INCLUDE_DIRS})
 
