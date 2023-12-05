@@ -19,6 +19,9 @@ setup(
         "Topic :: Software Development :: Libraries :: Python Modules",
     ],
     python_requires='>=3.7',
-    package_dir={'TensorFrost': 'TensorFrost'},
-    package_data={'TensorFrost': ['*.pyd']}
+    packages=["TensorFrost"],
+
+    # Include pre-compiled extension
+    package_data={"TensorFrost": ["*.pyd"]},
+    has_ext_modules=lambda: True
 )

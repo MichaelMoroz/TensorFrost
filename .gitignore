@@ -37,7 +37,7 @@ build_tidy/
 PythonBuild/build/
 PythonBuild/dist/
 PythonBuild/TensorFrost.egg-info/
-PythonBuild/TensorFrost*
+PythonBuild/TensorFrost/*
 !PythonBuild/TensorFrost/__init__.py
 dist/
 temp/
