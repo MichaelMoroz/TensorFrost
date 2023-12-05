@@ -34,8 +34,11 @@
 # Build folder
 build/
 build_tidy/
-python_module/*
-!python_module/__init__.py
+PythonBuild/build/
+PythonBuild/dist/
+PythonBuild/TensorFrost.egg-info/
+PythonBuild/TensorFrost*
+!PythonBuild/TensorFrost/__init__.py
 dist/
 temp/
 .vscode/settings.json

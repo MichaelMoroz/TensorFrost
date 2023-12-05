@@ -15,8 +15,16 @@ Currently working platforms:
 <a href="examples/fluid_simulation.ipynb"><img src="examples/fluid.gif" height="192px"></a>
 
 ## Installation
-TensorFrost is currently not available on PyPI, so you'll have to install it from source. 
-You need to have CMake installed, as well as a C++ compiler that supports C++17 (Currently only Microsoft Visual Studio Compiler) and Python 3.7 or higher.
+
+## From PyPI
+
+```bash
+pip install TensorFrost
+```
+
+## From source
+
+You need to have CMake installed to build the library. 
 
 First clone the repository:
 ```bash
@@ -35,19 +43,21 @@ The cmake script will automatically install the compiled python module into your
 
 If you want to build a wheel package, you can execute the following command:
 ```bash
-python setup.py bdist_wheel
+cd PythonBuild && python -m build .
 ````
 
 This will create a wheel package in the `dist` folder. You can then install it with pip:
 ```bash
-pip install dist/TensorFrost-0.1-py3-none-any.whl
+pip install dist/TensorFrost-0.1.1-py3-none-any.whl
 ```
 
-(Note that you will need to have the `wheel` package installed for this to work)
+(Note that you will need to have the `build` module installed for this to work: `pip install build`)
 
 ## Usage
 
 ### Setup
+For the library to work you need a C++ compiler that supports C++17 (Currently only Microsoft Visual Studio Compiler).
+
 First you need to import the library:
 ```python
 import TensorFrost as tf

@@ -12,7 +12,7 @@ target_include_directories(TensorFrost PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 add_custom_command(
     TARGET TensorFrost
     POST_BUILD
-    COMMAND ${Python3_EXECUTABLE} -m pip install -e .
+    COMMAND ${Python3_EXECUTABLE} -m pip install -e PythonBuild/
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
