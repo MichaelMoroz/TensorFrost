@@ -46,7 +46,7 @@ def TEST():
     res1 = Restrict(res1)
     pressure1 = Jacobi(tf.zeros(res1.shape), 16.0*res1, 1)
 
-    return [pressure1]
+    return [pressure0]
 
 test = tf.program(TEST)
 test.list_operations(compact=True)

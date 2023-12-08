@@ -307,70 +307,37 @@ void IR::RemoveUnusedNodes() {
 
 	UpdateNodeOutputs();
 
+	std::function<void(Node*)> dfs = [&](Node* node) 
+	{
+		if (used_nodes.contains(node)) {
+			return;
+		}
+
+		used_nodes.insert(node);
+
+		//all inputs of this node are used
+		for (auto& input : node->inputs_) {
+			dfs(input.from_->get());
+		}
+
+		//if the node is a memory node or used as memory, then all outputs are used
+		for (auto& output : node->outputs_) {
+			if (output->type_ == Arg::Type::Memory)
+				dfs(output->to_->get());
+		}
+	};
+
 	//mark all output nodes as used
 	for (auto node = begin(); !node.is_end(); ++node) {
 		if (node->memory_type_ == MemoryType::Output) {
-			used_nodes.insert(node.get());
+			dfs(node.get());
 		}
 	}
 
-	// TODO (Moroz): this might not work, beware
-
-	// forwards pass (only for memory operations)
-	for (auto node = begin(); !node.is_end(); ++node) {
-		if (used_nodes.contains(node.get())) {
-			continue;
-		}
-		// if any of the memory inputs of this node is used, then this node is used
-		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Memory &&
-			    used_nodes.contains(input.from_->get())) {
-				used_nodes.insert(node.get());
-				break;
-			}
-		}
-	}
-
-	//backwards pass to find all nodes that are used by the output nodes
-	for (auto node = end(); !node.is_begin(); --node) {
-		//if any of the outputs of this node is used, then this node is used
-		for (auto& output : node->outputs_) {
-			if (used_nodes.contains(output->to_->get())) {
-				used_nodes.insert(node.get());
-				break;
-			}
-		}
-		// if any of the memory inputs of this node is used, then this node is used
-		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Memory &&
-				used_nodes.contains(input.from_->get())) {
-				used_nodes.insert(node.get());
-				break;
-			}
-		}
-	}
-
-	//forwards pass (only for memory operations)
-	for (auto node = begin(); !node.is_end(); ++node) {
-		if (used_nodes.contains(node.get())) {
-			continue;
-		}
-		//if any of the memory inputs of this node is used, then this node is used
-		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Memory &&
-				used_nodes.contains(input.from_->get())) {
-				used_nodes.insert(node.get());
-				break;
-			}
-		}
-	}
 
 	// remove all nodes that are not used
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->name == "memory") {
-			continue;
-		}
 		if (!used_nodes.contains(node.get())) {
 			nodes_to_remove.insert(node.get());
 		}

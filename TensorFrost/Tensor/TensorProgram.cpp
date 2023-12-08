@@ -20,6 +20,7 @@ void TensorProgram::CreateProgram() {
 
 	ir.SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
 	ir.SetTensorIndexingMode(TensorIndexingMode::Clamp);
+	ir.RemoveUnusedNodes();
 	ir.Clusterize();
 	ir.CheckIfValid("Clusterize");
 	ir.OptimizeClusters();
@@ -30,7 +31,7 @@ void TensorProgram::CreateProgram() {
 	ir.CheckIfValid("Post process clusters");
 	ir.TransformToLinearIndex();
 	ir.CheckIfValid("Transform to linear index");
-	//ir.RemoveUnusedNodes();
+	ir.RemoveUnusedNodes();
 
 	program = GenerateProgram(&ir);
 
