@@ -16,13 +16,13 @@ NodeNames GenerateNodeNames(const IR& ir) {
 			cluster_index++;
 		}
 		if (node->name == "memory") {
-			names[*node] = "mem" + to_string(mem_index);
+			names[*node] = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
 			Lable* cluster_id = node->cluster_head_;
 			int var_index = cluster_var_index[cluster_id];
 			names[*node] =
-			    "var" + to_string(cluster_index) + "_" + to_string(var_index);
+			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
 			cluster_var_index[cluster_id]++;
 		}
 		curent_cluster = node->cluster_head_;
@@ -35,6 +35,11 @@ string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	if (compact) {
 		if (node->name == "const") {
 			return node->GetTensor()->GetConstantString();
+		}
+	}
+	else {
+		if (node->name == "const") {
+			return names[node] + "(" + node->GetTensor()->GetConstantString() + ")";
 		}
 	}
 	return names[node];

@@ -343,6 +343,8 @@ class IR {
 
 	void Clusterize() const;
 
+	void CheckIfValid(string name) const;
+
 	void UpdateNodeOutputs() const;
 
 	[[nodiscard]] ClusterProp GetClusterProperties() const;

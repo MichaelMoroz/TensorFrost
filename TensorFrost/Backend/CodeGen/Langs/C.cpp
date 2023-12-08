@@ -286,7 +286,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		generator.Compactify();
 
 		string loop = "";
-		const int block_size = 8; //TODO chose automatically
+		const int block_size = 4; //TODO chose automatically
 		switch (kernel->indexing_mode_)
 		{
 			case KernelIndexingMode::Linear:
@@ -303,17 +303,13 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 			case KernelIndexingMode::MultiDimensionalBlocks:
 				for (int d = 0; d < i.dim; d++)
 				{
-					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) + " < shape[" + to_string(d) + "] / " + to_string(block_size) + "; wg" + to_string(d) + "++)\n";
+					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) + " < shape[" + to_string(d) + "]; wg" + to_string(d) + "+= " + to_string(block_size) + ")\n";
 				}
 				for (int d = 0; d < i.dim; d++)
 				{
-					loop += "  for (int lt" + to_string(d) + " = 0; lt" + to_string(d) + " < " + to_string(block_size) + "; lt" + to_string(d) + "++)\n";
+					loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) + "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" + to_string(block_size) + ", shape[" + to_string(d) + "]); dim" + to_string(d) + "++)\n";
 				}
 				loop += "  {\n";
-				for (int d = 0; d < i.dim; d++)
-				{
-					loop += "    int dim" + to_string(d) + " = wg" + to_string(d) + " * " + to_string(block_size) + " + lt" + to_string(d) + ";\n";
-				}
 				break;
 			default:
 				throw std::runtime_error("Invalid indexing mode");

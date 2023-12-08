@@ -47,8 +47,7 @@ bool CompareShape(const Node* a, const Node* b) {
 }
 
 // returns true if the edge between given nodes is a boundary between clusters (pre-kernels)
-bool IsBoundary(const Node* input, const Node* output, int arg_index,
-                Arg::Type arg_type, bool is_identity) {
+bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, int arg_index = -1, Arg::Type arg_type = Arg::Type::None) {
 	if (arg_index >= 0) {
 		OpType input_type = input->op->GetOpType();
 		OpType output_type = output->op->GetOpType();
@@ -114,7 +113,7 @@ void IR::Clusterize() const {
 		Node* prev = node.get_prev();
 		if (prev != nullptr) {
 			if (prev->cluster_head_ == current_cluster &&
-			    IsBoundary(prev, *node, -1, Arg::Type::None, identity)) {
+			    IsBoundary(prev, *node, identity)) {
 				is_boundary = true;
 			}
 		} else {
@@ -125,8 +124,7 @@ void IR::Clusterize() const {
 		for (auto& input : tensor->node_->inputs_) {
 			// check if input is the boundary of this cluster
 			if (input.from_->get()->cluster_head_ == current_cluster &&
-			    IsBoundary(input.from_->get(), *node, input.index_, input.type_,
-			               identity)) {
+			    IsBoundary(input.from_->get(), *node, identity, input.index_, input.type_)) {
 				is_boundary = true;
 				break;
 			}
@@ -140,6 +138,55 @@ void IR::Clusterize() const {
 	}
 }
 
+bool BoundaryValid(const Node* input, const Node* output,
+                   bool is_identity = true, int arg_index = -1,
+                   Arg::Type arg_type = Arg::Type::None) {
+	bool same_cluster = input->cluster_head_ == output->cluster_head_;
+	bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
+	if (!same_cluster) return true;
+	return !is_boundary;
+}
+
+void IR::CheckIfValid(string name) const {
+	#ifdef NDEBUG
+		return;
+	#endif
+
+	unordered_set<Node*> invalid_nodes;
+	//check if the IR is clusterized correctly
+	for (auto node = begin(); !node.is_end(); ++node) {
+		// check if node is a cluster edge
+		const Tensor* tensor = node->GetTensor();
+
+		Arguments indices = node->GetArguments(Arg::Type::Index);
+		bool identity = indices.empty();
+
+		Node* prev = node.get_prev();
+
+		if (prev == nullptr) continue;
+
+		if (!BoundaryValid(prev, *node, identity)) {
+			invalid_nodes.insert(node.get());
+		}
+
+		// go over all inputs
+		for (auto& input : tensor->node_->inputs_) {
+			// check if input is the boundary of this cluster
+			if (!BoundaryValid(input.from_->get(), *node, identity, input.index_,
+			                   input.type_)) {
+				invalid_nodes.insert(node.get());
+			}
+		}
+	}
+
+	if (!invalid_nodes.empty()) {
+		string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
+		error += name + ": IR is not clusterized correctly";
+		throw std::runtime_error(error);
+	}
+}
+
+
 
 map<Node*, Node*> IR::CopyComputation(
     const unordered_set<Node*>& targets) const {
@@ -151,9 +198,9 @@ map<Node*, Node*> IR::CopyComputation(
 		}
 		nodes_to_copy.insert(node);
 		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Shape)
-				continue;
-			if (input.from_->get()->name == "memory")
+			if (input.type_ == Arg::Type::Memory ||
+				input.type_ == Arg::Type::Shape ||
+				input.from_->get()->name == "memory")
 				continue;
 			dfs(input.from_->get());
 		}
@@ -174,8 +221,8 @@ map<Node*, Node*> IR::CopyComputation(
 		Arguments new_args;
 		for (Arg& arg : node->inputs_) {
 			// if shape or memory argument, then no need to use copied node
-			if (arg.from_->get()->name == "memory" ||
-			    arg.type_ == Arg::Type::Shape) {
+			if (arg.type_ == Arg::Type::Memory || arg.type_ == Arg::Type::Shape ||
+			    arg.from_->get()->name == "memory") {
 				new_args.push_back(arg);
 				continue;
 			}
@@ -226,8 +273,9 @@ void IR::OptimizeClusters() {
 					continue;
 				}
 
-				// if input is outside the cluster, then it can be copied
-				if (input.from_->get()->cluster_head_ != node->cluster_head_) {
+				// if input is outside the cluster and has the same shape as the node,
+				// then copy it
+				if (input.from_->get()->cluster_head_ != node->cluster_head_ /* && CompareShape(input.from_->get(), node.get())*/) {
 					// check if input is cheap enough to copy
 					if (clusters.node_cost[input.from_->get()] < 256.0F) {
 						args_to_copy.insert(&input);

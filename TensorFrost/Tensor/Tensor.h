@@ -407,6 +407,9 @@ class Tensor {
 
 	static Tensor& Load(const Tensor& tensor,
 	                    const Tensors& indices = Tensors()) {
+		if (tensor.node_->name == "const") {
+			return Constant(tensor.data[0]);
+		}
 		return MemoryOp("load", &tensor, indices);
 	}
 

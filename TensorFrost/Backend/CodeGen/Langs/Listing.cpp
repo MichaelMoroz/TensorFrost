@@ -1,11 +1,12 @@
 #pragma once
 
 #include "Backend/CodeGen/Generators.h"
+#include "IR/KernelGen.h"
 
 namespace TensorFrost {
 using namespace std;
 
-string GetOperationListing(const IR& ir, bool compact) {
+string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> invalid) {
 	// first give unique names to all the tensors
 	NodeNames names = GenerateNodeNames(ir);
 	ClusterProp clusters = ir.GetClusterProperties();
@@ -27,8 +28,12 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "\n";
 		}
 
+		if (invalid.contains(node.get())) {
+			listing += "[INVALID] ";
+		}
+
 		if (!compact && node->cluster_head_ != nullptr) {
-			listing += GetNodeName(node->cluster_head_->node_, names, compact) + ": ";
+			listing += GetNodeName(node->cluster_head_->node_, names, true) + ": ";
 		}
 
 		// indent
@@ -36,24 +41,35 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "  ";
 		}
 
-		if (node->tensor_->type != DataType::None) {
-			// 
-			//  the tensor name
-			listing += names[*node] + " = ";
-		}
-
-		listing += node->name + "(";
-
 		Arguments inputs = node->GetArguments(Arg::Type::Input);
 		Arguments indices = node->GetArguments(Arg::Type::Index);
 		Arguments shape = node->GetArguments(Arg::Type::Shape);
 		Arguments memory = node->GetArguments(Arg::Type::Memory);
+		
+		listing += "[";
+		for (int i = 0; i < shape.size(); i++) {
+			if (i != 0) listing += ",";
+			listing += GetNodeName(shape[i].from_->get(), names, true);
+		}
+		listing += "]";
+
+		if (node->tensor_->type != DataType::None) {
+			listing += " " + DataTypeToString(node->tensor_->type) + " ";
+		}
+
+		if (node->tensor_->type != DataType::None) {
+			// 
+			//  the tensor name
+			listing += names[*node] + " =";
+		}
+
+		listing += " " + node->name + "(";
 
 		if (!memory.empty()) {
 			listing += "memory=[";
 			for (int i = 0; i < memory.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(memory[i].from_->get(), names, compact);
+				listing += GetNodeName(memory[i].from_->get(), names, true);
 			}
 			listing += "], ";
 		}
@@ -62,7 +78,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "inputs=[";
 			for (int i = 0; i < inputs.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].from_->get(), names, compact);
+				listing += GetNodeName(inputs[i].from_->get(), names, true);
 			}
 			listing += "], ";
 		}
@@ -71,16 +87,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 			listing += "indices=[";
 			for (int i = 0; i < indices.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].from_->get(), names, compact);
-			}
-			listing += "], ";
-		}
-
-		if (!shape.empty()) {
-			listing += "shape=[";
-			for (int i = 0; i < shape.size(); i++) {
-				if (i != 0) listing += ",";
-				listing += GetNodeName(shape[i].from_->get(), names, compact);
+				listing += GetNodeName(indices[i].from_->get(), names, true);
 			}
 			listing += "], ";
 		}
@@ -109,11 +116,7 @@ string GetOperationListing(const IR& ir, bool compact) {
 		}
 
 		if (clusters.node_cost[node.get()] != 0) {
-			listing += "cost=" + to_string(clusters.node_cost[node.get()]) + ", ";
-		}
-
-		if (node->tensor_->type != DataType::None) {
-			listing += "type=" + DataTypeToString(node->tensor_->type);
+			listing += "cost=" + to_string(clusters.node_cost[node.get()]);
 		}
 
 		listing += ")\n";

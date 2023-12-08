@@ -21,10 +21,15 @@ void TensorProgram::CreateProgram() {
 	ir.SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
 	ir.SetTensorIndexingMode(TensorIndexingMode::Clamp);
 	ir.Clusterize();
+	ir.CheckIfValid("Clusterize");
 	ir.OptimizeClusters();
+	ir.CheckIfValid("Post cluster optimization");
 	ir.RemoveUnusedNodes();
+	ir.CheckIfValid("Remove unused nodes");
 	ir.PostProcessClusters();
+	ir.CheckIfValid("Post process clusters");
 	ir.TransformToLinearIndex();
+	ir.CheckIfValid("Transform to linear index");
 	//ir.RemoveUnusedNodes();
 
 	program = GenerateProgram(&ir);
