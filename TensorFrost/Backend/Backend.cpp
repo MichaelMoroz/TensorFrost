@@ -44,14 +44,23 @@ vector<TensorMemory*> TensorFrost::ExecuteProgram(
 		for (int j = 0; j < args.size(); j++) {
 			Node* shape_node = args[j].from_->get();
 			// if shape node is a constant, compare constant value to input shape
+			bool invalid_shape = false;
+			int expected = -1;
+
 			if (shape_node->name == "const") {
-				int val = shape_node->GetTensor()->data[0];
-				if (val != shape[j]) {
-					throw std::runtime_error("Invalid input shape " + to_string(j) +
-					                         " for input " + to_string(i) +
-					                         ". Expected " + to_string(val) + ", got " +
-					                         to_string(shape[j]));
-				}
+				expected = shape_node->GetTensor()->data[0];
+			}
+
+			if (shape_constants.contains(shape_node)) {
+				expected = shape_constants[shape_node];
+			}
+
+			if (expected != -1 && expected != shape[j])
+			{
+				throw std::runtime_error("Invalid input shape " + to_string(j) +
+				                         " for input " + to_string(i) + ". Expected " +
+				                         to_string(expected) + ", got " +
+				                         to_string(shape[j]));
 			}
 
 			shape_constants[shape_node] = shape[j];

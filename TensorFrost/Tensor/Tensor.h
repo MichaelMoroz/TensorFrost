@@ -51,6 +51,10 @@ class Tensor {
 		}
 	}
 
+	static bool CompareTensorShape(const Tensor* a, const Tensor* b) {
+		return CompareShape(a->node_, b->node_);
+	}
+
 	static pair<Operation, DataType> GetOperation(const string& name,
 	                                              const Tensors& tensors) {
 		vector<DataType> input_types = vector<DataType>();
@@ -68,6 +72,14 @@ class Tensor {
 			}
 			error += "are not valid for operation " + name;
 			throw std::runtime_error(error);
+		}
+
+		//check if shapes are compatible
+		for (int i = 1; i < tensors.size(); i++) {
+			if (!CompareTensorShape(tensors[0], tensors[i])) {
+				throw std::runtime_error("Cannot perform operation \"" + name +
+				                         "\" on tensors with potentially incompatible shapes");
+			}
 		}
 
 		DataType output_type = operation.GetOutputType(input_types);
@@ -138,8 +150,31 @@ class Tensor {
 		AddArgument(arguments, memory, Arg::Type::Memory);
 		AddArguments(arguments, tensors, Arg::Type::Input);
 		AddArguments(arguments, indices, Arg::Type::Index);
-		Node* shape_source = (!indices.empty()) ? indices[0]->node_ : memory->node_;
-		AddArguments(arguments, shape_source->GetArguments(Arg::Type::Shape));
+
+		// get an input node that has shape arguments
+		Arguments shape_arguments;
+		for (const Tensor* tensor : tensors) {
+			shape_arguments = tensor->node_->GetArguments(Arg::Type::Shape);
+			if (!shape_arguments.empty()) {
+				break;
+			}
+		}
+		if (shape_arguments.empty())
+		{
+			for (const Tensor* index : indices)
+			{
+				shape_arguments = index->node_->GetArguments(Arg::Type::Shape);
+				if (!shape_arguments.empty()) {
+					break;
+				}
+			}
+		}
+		if (shape_arguments.empty())
+		{
+			shape_arguments = memory->node_->GetArguments(Arg::Type::Shape);
+		}
+
+		AddArguments(arguments, shape_arguments);
 
 		if (op == "load") output_type = memory->type;
 
@@ -344,6 +379,14 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
+	
+	static Tensors GetShapeTensors(const vector<int>& shape) {
+		Tensors result = Tensors();
+		for (int i : shape) {
+			result.push_back(&Constant(i));
+		}
+		return result;
+	}
 
 	static Tensor& Memory(const DataType type) { return Static("memory", type); }
 	static Tensor& Memory(const Tensors& shape,
@@ -354,6 +397,27 @@ class Tensor {
 	                      const DataType type = DataType::Float) {
 		return Static("memory", shape, type);
 	}
+	static Tensor& Memory(const vector<int>& shape,
+		const DataType type = DataType::Float) {
+		return Memory(GetShapeTensors(shape), type);
+	}
+
+	static Tensors GetInputShapeTensors(Tensors shape) {
+		Tensors result = Tensors();
+		for (const Tensor* tensor : shape) {
+			//check if tensor is a negative constant
+			if (tensor->node_->name == "const" && (*(int*)&(tensor->data[0])) < 0)
+			{
+				result.push_back(&Memory(DataType::Int));
+			}
+			else 
+			{
+				result.push_back(tensor);
+			}
+		}
+		return result;
+	}
+	 
 	static Tensor& Input(const DataType type = DataType::Float) {
 		Tensor& output = Memory(type);
 		output.SetMemoryType(MemoryType::Input);
@@ -361,24 +425,13 @@ class Tensor {
 	}
 	static Tensor& Input(const Tensors& shape,
 	                     const DataType type = DataType::Float) {
-		Tensor& output = Memory(shape, type);
+		Tensor& output = Memory(GetInputShapeTensors(shape), type);
 		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
-	static Tensors GetInputShape(const vector<int>& shape) {
-		Tensors result = Tensors();
-		for (int i : shape) {
-			if (i < 0) {
-				result.push_back(&Memory(DataType::Int));
-			} else {
-				result.push_back(&Constant(i));
-			}
-		}
-		return result;
-	}
 	static Tensor& Input(const vector<int>& shape,
 	                     const DataType type = DataType::Float) {
-		return Input(GetInputShape(shape), type);
+		return Input(GetShapeTensors(shape), type);
 	}
 
 	static Tensor& Index(const Tensors& shape, int dim) {
@@ -387,7 +440,6 @@ class Tensor {
 		output.type = DataType::Int;
 		return output;
 	}
-
 	static Tensor& Index(const vector<int>& shape, int dim) {
 		return Index(GetConstantShape(shape), dim);
 	}
@@ -728,6 +780,34 @@ class Tensor {
 
 	static Tensor& fma(const Tensor& x, const Tensor& y, const Tensor& z) {
 		return Op("fma", &x, &y, &z);
+	}
+
+	static Tensors IndexGrid(const Tensors& begin, const Tensors& end) {
+		//compute shape	
+		Tensors shape = Tensors();
+		for (int i = 0; i < begin.size(); i++) {
+			shape.push_back(&(*end[i] - *begin[i]));
+		}
+		//compute indices
+		Tensors index_grid = Tensors();
+		for (int i = 0; i < begin.size(); i++) {
+			index_grid.push_back(&(Index(shape, i) + *begin[i]));
+		}
+		return index_grid;
+	}
+
+	static Tensors IndexGrid(const Tensors& begin, const Tensors& end, const Tensors& step)
+	{
+		Tensors shape = Tensors();
+		for (int i = 0; i < begin.size(); i++) {
+			shape.push_back(&((*end[i] - *begin[i]) / *step[i]));
+		}
+		//compute indices
+		Tensors index_grid = Tensors();
+		for (int i = 0; i < begin.size(); i++) {
+			index_grid.push_back(&(Index(shape, i) * *step[i] + *begin[i]));
+		}
+		return index_grid;
 	}
 };
 

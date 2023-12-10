@@ -7,25 +7,25 @@ using namespace std;
 
 NodeNames GenerateNodeNames(const IR& ir) {
 	NodeNames names = NodeNames();
-	map<Lable*, int> cluster_var_index = map<Lable*, int>();
+	map<Cluster*, int> cluster_var_index = map<Cluster*, int>();
 	int mem_index = 0;
 	int cluster_index = 0;
-	Lable* curent_cluster = nullptr;
+	Cluster* curent_cluster = nullptr;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		if (node->cluster_head_ != curent_cluster) {
+		if (node->cluster_ != curent_cluster) {
 			cluster_index++;
 		}
 		if (node->name == "memory") {
 			names[*node] = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
-			Lable* cluster_id = node->cluster_head_;
+			Cluster* cluster_id = node->cluster_;
 			int var_index = cluster_var_index[cluster_id];
 			names[*node] =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
 			cluster_var_index[cluster_id]++;
 		}
-		curent_cluster = node->cluster_head_;
+		curent_cluster = node->cluster_;
 	}
 
 	return names;
@@ -62,7 +62,7 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelLines(const IR* ir, const Lable* cluster,
+void CodeGenerator::GenerateKernelLines(const IR* ir, const Cluster* cluster,
                          const Kernel* kernel) {
 	NodeNames names = GenerateNodeNames(*ir);
 
@@ -70,7 +70,7 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Lable* cluster,
 	int variable_index = 0;
 	int memory_index = 0;
 	// Translate each operation into HLSL
-	for (auto node = IR::Iterator(cluster->node_); !node.is_cluster_end(cluster);
+	for (auto node = IR::Iterator(cluster->begin_); !node.is_cluster_end(cluster);
 	     ++node) {
 		if (node->name == "const") continue;
 

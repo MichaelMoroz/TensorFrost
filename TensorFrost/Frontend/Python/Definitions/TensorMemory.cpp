@@ -9,7 +9,7 @@ void TensorMemoryDefinition(py::module& m,
                             py::class_<TensorMemory>& py_tensor_mem) {
 	// "constructor"
 	m.def(
-	    "memory",
+	    "tensor",
 	    [](const std::vector<int>& shape, DataType /*type*/) {
 		    return global_memory_manager->Allocate(shape);
 	    },
@@ -17,7 +17,7 @@ void TensorMemoryDefinition(py::module& m,
 
 	// "constructor" from numpy array
 	m.def(
-	    "memory",
+	    "tensor",
 	    [](const py::array_t<float>& arr) {
 		    // get the shape
 		    std::vector<int> shape;

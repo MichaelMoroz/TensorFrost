@@ -8,7 +8,7 @@ namespace TensorFrost {
 void TensorProgramDefinition(py::module& m,
                              py::class_<TensorProgram>& tensor_program) {
 	m.def(
-	    "program",
+	    "compile",
 	    [](const py::function& py_evaluate) {
 		    TensorProgram& program = *new TensorProgram([py_evaluate]() -> Tensors {
 			    py::gil_scoped_acquire acquire;
@@ -58,22 +58,13 @@ void TensorProgramDefinition(py::module& m,
 	    [](TensorProgram& program, bool compact) {
 		    std::string listing = "List of operations:\n";
 		    listing += GetOperationListing(program.ir, compact);
-		    py::str result = py::str(listing);
-		    py::print(result);
+		    return py::str(listing);
 	    },
 	    py::arg("compact") = true);
 
-	tensor_program.def("kernel_hlsl", [](TensorProgram& program) {
-		std::string hlsl = GenerateHLSL(program.ir);
-		py::str result = py::str(hlsl);
-		py::print(result);
-	});
-
-	tensor_program.def("kernel_c", [](TensorProgram& program) {
-		pair<string, vector<string>> source = GenerateC(program.program);
-		string c = source.first;
-		py::str result = py::str(c);
-		py::print(result);
+	tensor_program.def("compiled_code", [](TensorProgram& program) {
+		string code = program.program->generated_code_;
+		return py::str(code);
 	});
 }
 

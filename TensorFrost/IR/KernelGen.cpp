@@ -16,7 +16,7 @@ bool CompareShape(const Node* a, const Node* b) {
 	ArgMap b_shape = b->GetArgumentMap(Arg::Type::Shape);
 	int a_dim = MaxIndexCount(a_shape);
 	int b_dim = MaxIndexCount(b_shape);
-	
+
 	int min_dim = min(a_dim, b_dim);
 
 	if (min_dim == 0) {
@@ -30,14 +30,14 @@ bool CompareShape(const Node* a, const Node* b) {
 	for (int i = 0; i < a_dim; i++) {
 		Node* a_node = a_shape[i]->from_->get();
 		Node* b_node = b_shape[i]->from_->get();
-		//if a and b are constants, then compare their values
+		// if a and b are constants, then compare their values
 		if (a_node->name == "const" && b_node->name == "const") {
 			if (a_node->GetTensor()->data[0] != b_node->GetTensor()->data[0]) {
 				return false;
 			}
 		}
-		//otherwise, if a and b are not the same node
-		//then they are not the same shape (possibly)
+		// otherwise, if a and b are not the same node
+		// then they are not the same shape (possibly)
 		else if (a_node != b_node) {
 			return false;
 		}
@@ -91,16 +91,17 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 
 
 void IR::Clusterize() const {
-	Lable* current_cluster = nullptr;
+	vector<Cluster*> clusters;
+	Cluster* current_cluster = nullptr;
 	for (auto node = begin(); !node.is_end(); ++node) {
 		// remove old cluster head
-		if (node->cluster_head_ != nullptr) {
+		if (node->cluster_ != nullptr) {
 			// if last cluster node, delete lable
 			if (node->next_ == nullptr ||
-			    node->next_->cluster_head_ != node->cluster_head_) {
-				delete node->cluster_head_;
+			    node->next_->cluster_ != node->cluster_) {
+				delete node->cluster_;
 			}
-			node->cluster_head_ = nullptr;
+			node->cluster_ = nullptr;
 		}
 
 		// check if node is a cluster edge
@@ -112,7 +113,7 @@ void IR::Clusterize() const {
 		bool is_boundary = false;
 		Node* prev = node.get_prev();
 		if (prev != nullptr) {
-			if (prev->cluster_head_ == current_cluster &&
+			if (prev->cluster_ == current_cluster &&
 			    IsBoundary(prev, *node, identity)) {
 				is_boundary = true;
 			}
@@ -123,7 +124,7 @@ void IR::Clusterize() const {
 		// go over all inputs
 		for (auto& input : tensor->node_->inputs_) {
 			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_head_ == current_cluster &&
+			if (input.from_->get()->cluster_ == current_cluster &&
 			    IsBoundary(input.from_->get(), *node, identity, input.index_, input.type_)) {
 				is_boundary = true;
 				break;
@@ -131,17 +132,41 @@ void IR::Clusterize() const {
 		}
 
 		if (is_boundary) {
-			current_cluster = new Lable(*node);
+			current_cluster = new Cluster(*node);
+			clusters.push_back(current_cluster);
 		}
 
-		node->cluster_head_ = current_cluster;
+		node->cluster_ = current_cluster;
+
+		if (current_cluster->shape_node_ == nullptr) {
+			OpType op_type = node->op->GetOpType();
+			// TODO (Moroz): do operation categories
+			if (op_type != OpType::Function && op_type != OpType::Operator &&
+			    op_type != OpType::Load && op_type != OpType::Store &&
+			    op_type != OpType::Scatter)
+				continue;
+
+			// get the shape argument (if exists)
+			ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
+			int dim = MaxIndexCount(shape);
+			if (dim != 0 && shape.size() == dim) {
+				current_cluster->shape_node_ = node->GetLable();
+			}
+		}
+	}
+
+	// update cluster shape node if absent
+	for (auto* cluster : clusters) {
+		if (cluster->shape_node_ == nullptr) {
+			cluster->shape_node_ = cluster->begin_->GetLable();
+		}
 	}
 }
 
 bool BoundaryValid(const Node* input, const Node* output,
                    bool is_identity = true, int arg_index = -1,
                    Arg::Type arg_type = Arg::Type::None) {
-	bool same_cluster = input->cluster_head_ == output->cluster_head_;
+	bool same_cluster = input->cluster_ == output->cluster_;
 	bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
 	if (!same_cluster) return true;
 	return !is_boundary;
@@ -179,10 +204,16 @@ void IR::CheckIfValid(string name) const {
 		}
 	}
 
+	string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
+
 	if (!invalid_nodes.empty()) {
-		string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
 		error += name + ": IR is not clusterized correctly";
 		throw std::runtime_error(error);
+	}
+	else
+	{
+		cout << "Step " << name << " completed successfully: \n" << endl;
+		cout << error << endl;
 	}
 }
 
@@ -253,8 +284,8 @@ void IR::OptimizeClusters() {
 
 	// go over each cluster and copy computations outside the cluster if they are
 	// cheap enough
-	for (auto* cluster_begin : clusters.cluster_heads) {
-		Node* begin = cluster_begin->node_;
+	for (auto* cluster_begin : clusters.clusters) {
+		Node* begin = cluster_begin->begin_;
 
 		if (begin->name == "memory") {
 			continue;
@@ -275,7 +306,7 @@ void IR::OptimizeClusters() {
 
 				// if input is outside the cluster and has the same shape as the node,
 				// then copy it
-				if (input.from_->get()->cluster_head_ != node->cluster_head_ /* && CompareShape(input.from_->get(), node.get())*/) {
+				if (input.from_->get()->cluster_ != node->cluster_/* && CompareShape(input.from_->get(), node.get())*/) {
 					// check if input is cheap enough to copy
 					if (clusters.node_cost[input.from_->get()] < 256.0F) {
 						args_to_copy.insert(&input);
@@ -349,23 +380,23 @@ void IR::RemoveUnusedNodes() {
 }
 
 ClusterProp IR::GetClusterProperties() const {
-	map<Lable*, vector<Node*>> cluster_outputs;
+	map<Cluster*, vector<Node*>> cluster_outputs;
 	map<Node*, vector<Arg*>> node_output;
 	map<Node*, float> node_cost;
-	vector<Lable*> cluster_heads;
-	unordered_set<Lable*> added_clusters;
+	vector<Cluster*> clusters;
+	unordered_set<Cluster*> added_clusters;
 
 	UpdateNodeOutputs();
 	// find all nodes that are outputs of a cluster (i.e. point to a node outside
 	// the cluster)
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->name == "memory" || node->cluster_head_ == nullptr) {
+		if (node->name == "memory" || node->cluster_ == nullptr || *node == nullptr) {
 			continue;
 		}
 
 		float input_cost = node->op->GetCost();
 		for (auto& input : node->inputs_) {
-			if (input.from_->get()->cluster_head_ == node->cluster_head_ &&
+			if (input.from_->get()->cluster_ == node->cluster_ &&
 			    input.type_ != Arg::Type::Memory &&
 			    input.type_ != Arg::Type::Shape) {
 				input_cost += node_cost[input.from_->get()];
@@ -383,23 +414,23 @@ ClusterProp IR::GetClusterProperties() const {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->cluster_head_ != node->cluster_head_) {
+			if (output_node->cluster_ != node->cluster_) {
 				outputs.push_back(output);
 				is_output = true;
 			}
 		}
 
 		if (is_output) {
-			cluster_outputs[node->cluster_head_].push_back(*node);
+			cluster_outputs[node->cluster_].push_back(*node);
 			node_output[*node] = outputs;
 		}
 
-		if (!added_clusters.contains(node->cluster_head_))
-			cluster_heads.push_back(node->cluster_head_);
-		added_clusters.insert(node->cluster_head_);
+		if (!added_clusters.contains(node->cluster_))
+			clusters.push_back(node->cluster_);
+		added_clusters.insert(node->cluster_);
 	}
 
-	return ClusterProp(cluster_outputs, node_output, node_cost, cluster_heads);
+	return ClusterProp(cluster_outputs, node_output, node_cost, clusters);
 }
 
 void IR::PostProcessClusters() {
@@ -410,13 +441,13 @@ void IR::PostProcessClusters() {
 	// output
 	for (const auto& cluster_out : clusters.output) {
 		vector<Node*> cluster_outs = cluster_out.second;
-		Lable* cluster_head = cluster_out.first;
+		Cluster* cluster_ = cluster_out.first;
 
 		for (auto* output : cluster_outs) {
 			Node* mem;
 			// add memory node before this cluster
 			ExecuteExpressionBefore(
-			    cluster_head->node_,
+			    cluster_->begin_,
 			    [&]() {
 				    mem = Tensor::Memory(output->GetArguments(Arg::Type::Shape),
 				                         output->tensor_->type)
@@ -453,7 +484,7 @@ void IR::PostProcessClusters() {
 			ExecuteExpressionAfter(output, [&]() {
 				// add store node after this node
 				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor());
-				store->node_->cluster_head_ = cluster_head;
+				store->node_->cluster_ = cluster_;
 			});
 		}
 	}
@@ -547,17 +578,17 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 	return flat_index;
 }
 
-void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Lable* cluster_head, int dims, Tensors kernel_shape)
+void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Cluster* cluster, int dims, Tensors kernel_shape)
 {
-	ExecuteExpressionBefore(cluster_head->node_, [&]() {
-		thread_index = &cluster_head->node_->GetTensor()->ThreadIndex();
+	ExecuteExpressionBefore(cluster->begin_, [&]() {
+		thread_index = &cluster->shape_node_->get()->GetTensor()->ThreadIndex();
 		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
 	});
 
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
-	for (auto node = Iterator(cluster_head->node_);
-	     !node.is_cluster_end(cluster_head);
+	for (auto node = Iterator(cluster->begin_);
+	     !node.is_cluster_end(cluster);
 			++node) {
 		if (node->name == "dim_id") {
 			int dim = node->GetTensor()->data[0];
@@ -580,11 +611,11 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Labl
 	}
 }
 
-void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Lable* cluster_head, int dims, Tensors kernel_shape)
+void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Cluster* cluster_, int dims, Tensors kernel_shape)
 {
 	// just use dim_id nodes as indices
-	for (auto node = Iterator(cluster_head->node_);
-		!node.is_cluster_end(cluster_head);
+	for (auto node = Iterator(cluster_->begin_);
+		!node.is_cluster_end(cluster_);
 		++node) {
 		if (node->name == "dim_id") {
 			int dim = node->GetTensor()->data[0];
@@ -600,8 +631,8 @@ void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& ind
 	//add dim_id nodes if they are missing
 	for (int i = 0; i < dims; i++) {
 		if (indices[i] == nullptr) {
-			ExecuteExpressionBefore(cluster_head->node_, [&]() {
-				indices[i] = &cluster_head->node_->GetTensor()->Index(i);
+			ExecuteExpressionBefore(cluster_->begin_, [&]() {
+				indices[i] = &cluster_->begin_->GetTensor()->Index(i);
 			});
 		}
 	}
@@ -612,10 +643,12 @@ void IR::TransformToLinearIndex() {
 
 	// replace all dim_id nodes with the corresponding index computed from
 	// thread_id
-	for (auto* cluster_begin : clusters.cluster_heads) {
+	for (auto* cluster : clusters.clusters) {
+		Node* shape_node = cluster->shape_node_->get();
+		if (shape_node == nullptr) continue;
 		// load kernel shape
 		map<int, const Tensor*> kernel_shape_map =
-		    cluster_begin->node_->GetArgumentTensors(Arg::Type::Shape);
+		    shape_node->GetArgumentTensors(Arg::Type::Shape);
 		Tensors kernel_shape;
 		for (auto& shape : kernel_shape_map) {
 			kernel_shape.push_back(shape.second);
@@ -636,19 +669,19 @@ void IR::TransformToLinearIndex() {
 		switch (indexing_mode_)
 		{ 
 		case KernelIndexingMode::Linear:
-			LinearModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
+			LinearModeIndices(thread_index, indices, cluster, dims, kernel_shape);
 			break;
 		case KernelIndexingMode::MultiDimensional:
 		case KernelIndexingMode::MultiDimensionalBlocks: //TODO (Moroz): add proper support for blocks
-			MultiDimensionalModeIndices(thread_index, indices, cluster_begin, dims, kernel_shape);
+			MultiDimensionalModeIndices(thread_index, indices, cluster, dims, kernel_shape);
 			break;
 		default:
 			throw runtime_error("Invalid kernel indexing mode");
 		}
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
-		for (auto node = Iterator(cluster_begin->node_);
-		     !node.is_cluster_end(cluster_begin);
+		for (auto node = Iterator(cluster->begin_);
+		     !node.is_cluster_end(cluster);
 		     ++node) {
 			auto op_type = node->op->GetOpType();
 			if (op_type == OpType::Load || op_type == OpType::Store ||
@@ -721,7 +754,7 @@ Program* GenerateProgram(IR* ir) {
 			int memory_index = 0;
 
 			for (auto node = IR::Iterator(begin);
-			     !node.is_cluster_end(begin->cluster_head_); ++node) {
+			     !node.is_cluster_end(begin->cluster_); ++node) {
 				OpType op_type = node->op->GetOpType();
 				if (op_type == OpType::Store || op_type == OpType::Scatter) {
 					has_output = true;

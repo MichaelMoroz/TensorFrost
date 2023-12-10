@@ -47,6 +47,14 @@ class Arg {
 	void SetOutput(Lable* output) { to_ = output; }
 };
 
+class Cluster {
+ public:
+	Node* begin_;
+	Lable* shape_node_;
+
+	Cluster(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {}
+};
+
 using ArgMap = map<int, const Arg*>;
 using Arguments = vector<Arg>;
 using ArgumentRefs = vector<const Arg*>;
@@ -69,7 +77,7 @@ class Node {
 
 	Lable* lable_ = nullptr;
 
-	Lable* cluster_head_ = nullptr;
+	Cluster* cluster_ = nullptr;
 
 	Node* prev_ = nullptr;
 	Node* next_ = nullptr;
@@ -192,18 +200,18 @@ void CopyLable(Node* target, Node* copy);
 
 class ClusterProp {
  public:
-	vector<Lable*> cluster_heads;
-	map<Lable*, vector<Node*>> output;
+	vector<Cluster*> clusters;
+	map<Cluster*, vector<Node*>> output;
 	map<Node*, vector<Arg*>> node_output;
 	map<Node*, float> node_cost;
 
-	ClusterProp(map<Lable*, vector<Node*>> cluster_outputs,
+	ClusterProp(map<Cluster*, vector<Node*>> cluster_outputs,
 	            map<Node*, vector<Arg*>> output, map<Node*, float> cost,
-	            vector<Lable*> cluster_heads)
+	            vector<Cluster*> clusters)
 	    : output(std::move(cluster_outputs)),
 	      node_output(std::move(output)),
 	      node_cost(std::move(cost)),
-	      cluster_heads(std::move(cluster_heads)) {}
+	      clusters(std::move(clusters)) {}
 };
 
 enum class KernelIndexingMode
@@ -256,12 +264,12 @@ class IR {
 		[[nodiscard]] bool is_begin() const { return node_ == nullptr; }
 
 		[[nodiscard]] bool is_cluster_begin() const {
-			return node_ == nullptr || node_->cluster_head_ == nullptr ||
-			       node_->cluster_head_->node_ == node_;
+			return node_ == nullptr || node_->cluster_ == nullptr ||
+			       node_->cluster_->begin_ == node_;
 		}
 
-		bool is_cluster_end(const Lable* cluster) const {
-			return node_ == nullptr || node_->cluster_head_ != cluster;
+		bool is_cluster_end(const Cluster* cluster) const {
+			return node_ == nullptr || node_->cluster_ != cluster;
 		}
 
 		Node* get() { return node_; }
@@ -290,9 +298,9 @@ class IR {
 		if (node == *begin_) {
 			begin_ = Iterator(node->next_);
 		}
-		if (node->cluster_head_ != nullptr && node->cluster_head_->node_ == node) {
+		if (node->cluster_ != nullptr && node->cluster_->begin_ == node) {
 			//assuming the next node is also in the cluster
-			node->cluster_head_->node_ = node->next_;
+			node->cluster_->begin_ = node->next_;
 		}
 		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
 		delete node;
@@ -302,31 +310,31 @@ class IR {
 	                            bool in_cluster = true) {
 		// TODO(Moroz): check if no future nodes are used
 		Iterator old_cursor = cursor_;
-		Lable* old_cluster_head = current_cluster_head_;
+		Cluster* old_cluster = current_cluster_;
 		if (!in_cluster) {
-			current_cluster_head_ = nullptr;
+			current_cluster_ = nullptr;
 		} else {
-			current_cluster_head_ = node->cluster_head_;
+			current_cluster_ = node->cluster_;
 		}
 		SetCursor(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_head_ = old_cluster_head;
+		current_cluster_ = old_cluster;
 	}
 
 	void ExecuteExpressionBefore(Node* node, const function<void()>&& expression,
 	                             bool in_cluster = true) {
 		Iterator old_cursor = cursor_;
-		Lable* old_cluster_head = current_cluster_head_;
+		Cluster* old_cluster_head = current_cluster_;
 		if (!in_cluster) {
-			current_cluster_head_ = nullptr;
+			current_cluster_ = nullptr;
 		} else {
-			current_cluster_head_ = node->cluster_head_;
+			current_cluster_= node->cluster_;
 		}
 		SetCursorBefore(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_head_ = old_cluster_head;
+		current_cluster_ = old_cluster_head;
 	}
 
 	// reexecute nodes and get map from old to copied nodes
@@ -352,12 +360,11 @@ class IR {
 	void PostProcessClusters();
 
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Lable* cluster_head, int dims, Tensors kernel_shape);
+	                       Cluster* cluster, int dims, Tensors kernel_shape);
 
 	void MultiDimensionalModeIndices(Tensor*& thread_index,
-	                                 vector<Tensor*>& indices,
-	                                 Lable* cluster_head, int dims,
-	                                 Tensors kernel_shape);
+	                                 vector<Tensor*>& indices, Cluster* cluster_,
+	                                 int dims, Tensors kernel_shape);
 
 	void TransformToLinearIndex();
 
@@ -384,19 +391,19 @@ class IR {
 	Iterator cursor_next_ = Iterator(nullptr);
 	Iterator begin_ = Iterator(nullptr);
 	Iterator end_ = Iterator(nullptr);
-	Lable* current_cluster_head_ = nullptr;
+	Cluster* current_cluster_ = nullptr;
 
 	void InsertAtCursor(Node* node) {
 		nodes_.push_back(node);
-		node->cluster_head_ = current_cluster_head_;
+		node->cluster_ = current_cluster_;
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
-				if (current_cluster_head_ != nullptr &&
-				    current_cluster_head_->node_ == prev_next) {
+				if (current_cluster_ != nullptr &&
+				    current_cluster_->begin_ == prev_next) {
 					// if the next node is a cluster head, then we need to update the
 					// cluster head
-					current_cluster_head_->node_ = node;
+					current_cluster_->begin_ = node;
 				}
 				node->next_ = prev_next;
 				prev_next->prev_ = node;
@@ -436,4 +443,7 @@ class IR {
 		}
 	}
 };
+
+bool CompareShape(const Node* a, const Node* b);
+
 }  // namespace TensorFrost

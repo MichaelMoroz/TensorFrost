@@ -6,55 +6,170 @@ import time
 tf.initialize(tf.cpu, "/Zi")
 #tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:experimental /Zi")
 
-N = 512 
+def test():
+    canvas = tf.buffer([32, 32, 3], tf.float32)
+
+    i,j = tf.indices([32, 32])
+    x, y = tf.float(i), tf.float(j)
+    x, y = x/32.0, y/32.0
+
+    vx = tf.sin(2.0*3.141592*x)
+    vy = tf.sin(2.0*3.141592*y)
+    mag = 0.5*tf.sqrt(vx*vx + vy*vy)
+
+    mag = tf.clamp(mag, 0.0, 1.0)
+    canvas[i, j, 0] = (0.277 + mag * (0.105 + mag * (-0.330 + mag * (-4.634 + mag * (6.228 + mag * (4.776 - 5.435 * mag))))))
+    canvas[i, j, 1] = (0.005 + mag * (1.404 + mag * (0.214 + mag * (-5.799 + mag * (14.179 + mag * (-13.745 + 4.645 * mag))))))
+    canvas[i, j, 2] = (0.334 + mag * (1.384 + mag * (0.095 + mag * (-19.332 + mag * (56.690 + mag * (-65.353 + 26.312 * mag))))))
+
+    a, = tf.indices([16])
+    canvas[a+8, 8, 0] = 1.0
+    canvas[8, a+8, 0] = 1.0
+    canvas[a+8, 24, 0] = 1.0
+    canvas[24, a+8, 0] = 1.0
+    return [canvas]
+
+
+t1 = tf.compile(test)
+
+res, = t1()
+resnp = res.numpy
+print(resnp.shape)
+print(resnp)
+
+N = 256
 M = 512
 
-def Jacobi(pressure, div, iterations):
-    i, j = pressure.indices
+def WaveEq():
+    u = tf.input([-1,-1], tf.float32)
+    v = tf.input(u.shape, tf.float32)
 
-    # pressure solve
-    for it in range(iterations):
-        pressure = (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - div) / 4.0
+    i,j = u.indices
+    laplacian = u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - u[i,j] * 4.0
+    force = laplacian - 0.1 * tf.sin(2.0*np.pi*u)
+    dt = 0.1
+    v_new = v + dt*force
+    u_new = u + dt*v_new
 
-    return pressure
+    return [u_new, v_new]
 
-def Restrict(field):
-    N1, M1 = field.shape
-    N2, M2 = N1/2, M1/2
-    i, j = tf.indices([N2, M2])
-    i, j = 2*i, 2*j
-    return (field[i, j] + field[i+1, j] + field[i, j+1] + field[i+1, j+1])
+wave = tf.compile(WaveEq)
 
-def Prolong(field, orig):
-    i, j = orig.indices
-    i, j = i/2, j/2
-    return orig + field[i, j]
+def transpose(A):
+    N, M = A.shape
+    i, j = tf.indices([M, N])
+    return A[j, i] * 1.0
 
-def Residual(pressure, div):
-    i, j = pressure.indices
-    return div - (pressure[i-1, j] + pressure[i+1, j] + pressure[i, j-1] + pressure[i, j+1] - 4.0*pressure)
+def matmul():
+    A = tf.input([-1, -1], tf.float32)
+    N, M = A.shape
+    B = tf.input([M, -1], tf.float32)
+    K = B.shape[1]
 
-def TEST():
-    pressure = tf.input([N, M], tf.float32)
-    div = tf.input([N, M], tf.float32)
+    Bt = transpose(B)
 
-    res = Residual(pressure, div)
-    res = Restrict(res)
-    pressure0 = Jacobi(tf.zeros(res.shape), 4.0*res, 2)
+    C = tf.zeros([N, K])
+    i, j, k = tf.indices([N, K, M])
+    tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
 
-    res1 = Residual(pressure0, 4.0*res)
-    res1 = Restrict(res1)
-    pressure1 = Jacobi(tf.zeros(res1.shape), 16.0*res1, 1)
+    return [C]
 
-    return [pressure0]
+mmul = tf.compile(matmul)
+print(mmul.list_operations())
 
-test = tf.program(TEST)
-test.list_operations(compact=True)
+def test():
+    canvas = tf.zeros([8, 8], tf.float32)
+    i, j = tf.index_grid([0, 0], [8, 8], [2, 2])
+    canvas[i, j] = 1.0
+    return [canvas]
 
-Anp = np.random.rand(N, M).astype(np.float32)
-Bnp = np.random.rand(N, M).astype(np.float32)
+t1 = tf.compile(test)
+print(t1.list_operations(compact=False))
 
-A = tf.memory(Anp)
-B = tf.memory(Bnp)
+res, = t1()
+resnp = res.numpy
+print(resnp)
 
-C = test(A, B)
+#def modified_gram_schmidt(A):
+#    """
+#    Implements the Modified Gram-Schmidt orthogonalization to get the QR decomposition of matrix A.
+#    A = QR
+#    """
+#    A = A.astype(float)  # Ensure A is of float type
+#    m, n = A.shape
+#    Q = np.zeros((m, n))
+#    R = np.zeros((n, n))
+#    
+#    for i in range(n-1):
+#        R[i, i] = np.linalg.norm(A[:, i])
+#        Q[:, i] = A[:, i] / R[i, i]
+#        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+#        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+#    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
+#    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
+#    return Q, R
+#
+#QRS = 4
+#
+#def summ(A, axis=0):
+#    old_shape = A.shape
+#    new_shape = list()
+#    for i in range(len(old_shape)):
+#        if i != axis:
+#            new_shape.append(old_shape[i])
+#
+#    sum_buf = tf.zeros(new_shape, tf.float32)
+#    ids = tf.indices(old_shape)
+#    ids1 = list()
+#    for i in range(len(old_shape)):
+#        if i != axis:
+#            ids1.append(ids[i])
+#    tf.scatterAdd(sum_buf[ids1], A[ids])
+#    return sum_buf
+#
+#def sum0(A):
+#    print(A.shape)
+#    n, m = A.shape
+#    sum_buf = tf.zeros([m], tf.float32)
+#    i, j = A.indices
+#    tf.scatterAdd(sum_buf[j], A[i, j])
+#    return sum_buf
+#
+#def norm(A):
+#    A = A * 1.0
+#    sum_buf = tf.buffer([1], tf.float32)
+#    sum_buf[0] = 0.0
+#    ids = tf.indices(A.shape)
+#    tf.scatterAdd(sum_buf[0], A[ids] ** 2)
+#    return tf.sqrt(sum_buf)
+#
+#def QRDecomposition():
+#    A = tf.input([QRS, QRS], tf.float32)
+#
+#    m, n = A.shape
+#    Q = tf.zeros([m, n])
+#    R = tf.zeros([n, n])
+#
+#    j = tf.index(0, [m])
+#
+#    #for i in range(QRS-1):
+#    i = 0
+#    R[i, i] = norm(A[j, i])
+#    Q[j, i] = A[j, i] * R[i, i]
+#
+#    #R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+#    #A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+#
+#    #t, = tf.index_grid([i+1], [n])
+#    #p, k = tf.index_grid([0, i+1], [m, n])
+#    #dot_prod = Q[p, i] * A[p, t]
+#    ##R[i, t] = sum0(dot_prod)
+#    ##A[p, k] -= Q[p, i] * R[i, k]
+#    #
+#    #R[n-1, n-1] = norm(A[j, n-1])
+#    #Q[j, n-1] = A[j, n-1] * R[n-1, n-1]
+#
+#    return [Q, R]
+#
+#qr = tf.compile(QRDecomposition)
+#print(qr.list_operations())

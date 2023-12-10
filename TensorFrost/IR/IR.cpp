@@ -33,4 +33,5 @@ void CopyLable(Node* target, Node* copy) {
 	target->lable_ = new Lable(target);
 }
 
+
 }  // namespace TensorFrost

@@ -14,7 +14,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 	// now create the listing
 	string listing;
 	int indent = 0;
-	Lable* prev_cluster_head = nullptr;
+	Cluster* prev_cluster = nullptr;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
 		if (compact) {
 			if (node->name == "const") continue;
@@ -24,7 +24,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			indent--;
 		}
 
-		if (node->cluster_head_ != prev_cluster_head) {
+		if (node->cluster_ != prev_cluster) {
 			listing += "\n";
 		}
 
@@ -32,8 +32,8 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			listing += "[INVALID] ";
 		}
 
-		if (!compact && node->cluster_head_ != nullptr) {
-			listing += GetNodeName(node->cluster_head_->node_, names, true) + ": ";
+		if (!compact && node->cluster_ != nullptr) {
+			listing += GetNodeName(node->cluster_->begin_, names, false) + ": ";
 		}
 
 		// indent
@@ -125,7 +125,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			indent++;
 		}
 
-		prev_cluster_head = node->cluster_head_;
+		prev_cluster = node->cluster_;
 	}
 
 	return listing;

@@ -69,18 +69,43 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
 	});
 
-	m.def("zeros", [](py::list shape, DataType type) {
-		return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+	m.def("buffer", [](py::list shape, DataType type) {
+		    return PT(Tensor::Memory(TensorsFromList(shape), type));
+	}, py::arg("shape"), py::arg("type") = DataType::Float);
+	m.def("buffer", [](std::vector<int> shape, DataType type) {
+		    return PT(Tensor::Memory(shape, type));
 	}, py::arg("shape"), py::arg("type") = DataType::Float);
 
+	m.def("zeros", [](py::list shape, DataType type) {
+		switch (type)
+		{
+			case DataType::Float:
+				return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+			case DataType::Uint:
+				return PT(Tensor::Constant(TensorsFromList(shape), 0u));
+			case DataType::Int:
+				return PT(Tensor::Constant(TensorsFromList(shape), 0));
+			default:
+				return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+		}
+	}, py::arg("shape"), py::arg("type") = DataType::Float);
 	m.def("zeros", [](std::vector<int> shape, DataType type) {
-		return PT(Tensor::Constant(shape, 0.0f));
+		switch (type)
+		{
+			case DataType::Float:
+				return PT(Tensor::Constant(shape, 0.0f));
+			case DataType::Uint:
+				return PT(Tensor::Constant(shape, 0u));
+			case DataType::Int:
+				return PT(Tensor::Constant(shape, 0));
+			default:
+				return PT(Tensor::Constant(shape, 0.0f));
+		}
 	}, py::arg("shape"), py::arg("type") = DataType::Float);
 
 	m.def("const", [](py::list shape, float value) {
 		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
-
 	m.def("const", [](std::vector<int> shape, float value) {
 		return PT(Tensor::Constant(shape, value));
 	});
@@ -88,6 +113,9 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("input", [](std::vector<int> shape, DataType type) {
 		return PT(Tensor::Input(shape, type));
 	}, py::arg("shape"), py::arg("type") = DataType::Float);
+	m.def("input", [](py::list shape, DataType type) {
+		return PT(Tensor::Input(TensorsFromList(shape), type));
+	}, py::arg("shape"), py::arg("type") = DataType::Float);	
 
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
@@ -108,6 +136,31 @@ void TensorFunctionsDefinition(py::module& m) {
 		for (int i = 0; i < shape.size(); i++) {
 			auto t = PT(Tensor::Index(shape, i));
 			indices[i] = t;
+		}
+		return indices;
+	});
+
+	m.def("index_grid", [](py::list begin, py::list end) {
+		Tensors begin_tensors = TensorsFromList(begin);
+		Tensors end_tensors = TensorsFromList(end);
+		Tensors index_grid = Tensor::IndexGrid(begin_tensors, end_tensors);
+
+		py::tuple indices = py::tuple(begin.size());
+		for (int i = 0; i < index_grid.size(); i++) {
+			indices[i] = PT(*index_grid[i]);
+		}
+		return indices;
+	});
+
+	m.def("index_grid", [](py::list begin, py::list end, py::list step) {
+		Tensors begin_tensors = TensorsFromList(begin);
+		Tensors end_tensors = TensorsFromList(end);
+		Tensors step_tensors = TensorsFromList(step);
+		Tensors index_grid = Tensor::IndexGrid(begin_tensors, end_tensors, step_tensors);
+
+		py::tuple indices = py::tuple(begin.size());
+		for (int i = 0; i < index_grid.size(); i++) {
+			indices[i] = PT(*index_grid[i]);
 		}
 		return indices;
 	});

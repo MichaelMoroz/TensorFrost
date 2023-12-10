@@ -272,7 +272,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 	vector<string> kernel_names;
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Lable* cluster = kernel->begin_->cluster_head_;
+		Cluster* cluster = kernel->begin_->cluster_;
 		if (kernel->type_ != KernelType::Compute) {
 			continue;
 		}

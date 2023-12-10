@@ -105,6 +105,8 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		return TensorView(&t.Get(), indices);
 	});
+
+
 	py_tensor.def("__setitem__",
 	              [](const PyTensor& t, const PyTensor& t1, const PyTensor& t2) {
 		              Tensors indices;
@@ -116,6 +118,31 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		Tensor::Store(t.Get(), T(t2), indices);
 	});
+	//py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
+	//                                const PyTensor& t2) {
+	//	// Handle multi-dimensional indices/slices
+	//	Tensors indices;
+	//
+	//	for (size_t i = 0; i < py::len(indices_tuple); ++i) {
+	//		if (py::isinstance<py::slice>(indices_tuple[i])) 
+	//		{
+	//			py::slice slice = py::cast<py::slice>(indices_tuple[i]);
+	//			//get the start, stop, and step objects
+	//			PySliceObject* pySlice = (PySliceObject*)slice.ptr();
+	//			py::object start = py::reinterpret_borrow<py::object>(pySlice->start);
+	//			py::object stop = py::reinterpret_borrow<py::object>(pySlice->stop);
+	//			py::object step = py::reinterpret_borrow<py::object>(pySlice->step);
+	//
+	//		} 
+	//		else 
+	//		if (py::isinstance<PyTensor>(indices_tuple[i]))
+	//		{
+	//			indices.push_back(&indices_tuple[i].cast<PyTensor&>().Get());
+	//		}
+	//	}
+	//
+	//	Tensor::Store(t.Get(), T(t2), indices);
+	//});
 }
 
 }  // namespace TensorFrost

@@ -45,7 +45,7 @@ class CodeGenerator {
 	                          map<Node*, int> offsets,
 	                          map<Node*, int> variables) = 0;
 
-	void GenerateKernelLines(const IR* ir, const Lable* cluster,
+	void GenerateKernelLines(const IR* ir, const Cluster* cluster,
 	                         const Kernel* kernel);
 	void Compactify();
 	string GetFinalCode();
