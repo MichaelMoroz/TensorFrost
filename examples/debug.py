@@ -90,7 +90,7 @@ tf.initialize(tf.cpu, "/Zi")
 #resnp = res.numpy
 #print(resnp)
 
-QRS = 6
+QRS = 64
 
 def modified_gram_schmidt(A):
     """
@@ -160,5 +160,10 @@ print(Rnp)
 
 A = tf.tensor(Anp)
 Qtf, Rtf = qr(A)
-print(Qtf.numpy)
-print(Rtf.numpy)
+Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
+Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
+print("Q error: ", Qerror)
+print("R error: ", Rerror)
+if Qerror > 1e-5 or Rerror > 1e-5:
+	print("QR decomposition failed")
+	exit(1)

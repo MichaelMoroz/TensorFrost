@@ -1,4 +1,4 @@
-# 🥶 TensorFrost 🥶
+# 🥶 TensorFrost (v0.1.2) 🥶
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 The main idea of this library is to compile optimal fused kernels for the GPU given a set of numpy-ish functions, including other more complex things like loops and conditionals (also TODO)
@@ -19,7 +19,7 @@ Currently working platforms:
 ## From PyPI
 
 ```bash
-pip install TensorFrost
+pip install tensorfrost
 ```
 
 ## From source
@@ -41,17 +41,7 @@ The cmake script will automatically install the compiled python module into your
 
 ### Building wheel packages (optional)
 
-If you want to build a wheel package, you can execute the following command:
-```bash
-cd PythonBuild && python -m build .
-````
-
-This will create a wheel package in the `dist` folder. You can then install it with pip:
-```bash
-pip install dist/TensorFrost-0.1.1-py3-none-any.whl
-```
-
-(Note that you will need to have the `build` module installed for this to work: `pip install build`)
+You can either call `clean_rebuild.bat %PYTHON_VERSION%` to build the wheel packages for the specified python version (the version needs to be installed beforehand), or you can build them for all versions by calling `build_all_python_versions.bat`. The scripts will automatically build and install the library for each python version, and then build the wheel packages to the `PythonBuild/dist` folder.
 
 ## Usage
 
@@ -75,8 +65,10 @@ TensorFrost will find any available MSVC installation and use it to compile the 
 Now you can create and compile functions, for example here is a very simple function does a wave simulation:
 ```python
 def WaveEq():
+    #shape is not specified -> shape is inferred from the input tensor (can result in slower execution)
     u = tf.input([-1, -1], tf.float32)
-    v = tf.input([-1, -1], tf.float32)
+    #shape must match 
+    v = tf.input(u.shape, tf.float32)
 
     i,j = u.indices
     laplacian = u[i-1, j] + u[i+1, j] + u[i, j-1] + u[i, j+1] - u * 4.0
@@ -85,13 +77,13 @@ def WaveEq():
 
     return [v_new, u_new]
 
-wave_eq = tf.program(WaveEq)
+wave_eq = tf.compile(WaveEq)
 ```
 
 The tensor programs take and output tensor memory buffers, which can be created from numpy arrays:
 ```python
-A = tf.memory(np.zeros([100, 100], dtype=np.float32))
-B = tf.memory(np.zeros([100, 100], dtype=np.float32))
+A = tf.tensor(np.zeros([100, 100], dtype=np.float32))
+B = tf.tensor(np.zeros([100, 100], dtype=np.float32))
 ```
 
 Then you can run the program:
@@ -151,24 +143,22 @@ These operations allow implementing non-trivial reduction operations, including,
 ```python
 def MatrixMultiplication():
     A = tf.input([-1, -1], tf.float32)
-    B = tf.input([-1, -1], tf.float32)
-
     N, M = A.shape
+    B = tf.input([M, -1], tf.float32) #M must match
     K = B.shape[1]
 
-    i, j, k = tf.indices([N, K, M])
-
     C = tf.zeros([N, K])
+    i, j, k = tf.indices([N, K, M])
     tf.scatterAdd(C[i, j], A[i, k] * B[k, j])
 
     return [C]
 
-matmul = tf.program(MatrixMultiplication)
+matmul = tf.compile(MatrixMultiplication)
 ```
 
 Here the 3D nature of the matrix multiplication is apparent. The scatter operation is used to accumulate the results of the row-column dot products into the elements of the resulting matrix.
 
-(This is not the most efficient way to implement matrix multiplication, but it is the simplest way to show how scatter operations work. In the future though, scatters will have the ability to optimize into loops if possible.)
+(This is not the most efficient way to implement matrix multiplication, but it is the simplest way to show how scatter operations work. In the future though, some dimensions will be converted into loop indices, and the scatter operation will be used to accumulate the results of the dot products into the resulting matrix.)
 
 ### Loops and conditionals
 
@@ -195,6 +185,7 @@ Core features:
 - [ ] Advanced data types and quantization
 - [ ] Advanced IR optimizations
 - [ ] Kernel shape and cache optimization
+- [ ] Compile from Python AST instead of tracing
   
 Algorithm library:
 - [ ] Sort, scan, reduction, etc.
