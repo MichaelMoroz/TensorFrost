@@ -58,4 +58,8 @@ PyTensors PyTensorsFromTensors(const Tensors& tensors) {
 	return py_tensors;
 }
 
+std::string r_op(const std::string& name) { return "__r" + name + "__"; }
+
+std::string l_op(const std::string& name) { return "__" + name + "__"; }
+
 }  // namespace TensorFrost

@@ -5,10 +5,6 @@
 
 namespace TensorFrost {
 
-std::string r_op(const std::string& name) { return "__r" + name + "__"; }
-
-std::string l_op(const std::string& name) { return "__" + name + "__"; }
-
 void DefineOperator(
     const std::string& pyname, py::class_<PyTensor>& py_tensor,
     const std::function<Tensor&(const Tensor&, const Tensor&)>& op) {

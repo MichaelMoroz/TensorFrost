@@ -15,24 +15,6 @@ void TensorProgram::CreateProgram() {
 		outputs[i]->SetMemoryType(MemoryType::Output, i);
 	}
 
-	//TODO (Moroz): Make sure that shape works with non-const tensors
-	//TODO (Moroz): Add auto tests into build system
-
-	ir.SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
-	ir.SetTensorIndexingMode(TensorIndexingMode::Clamp);
-	ir.RemoveUnusedNodes();
-	ir.Clusterize();
-	ir.CheckIfValid("Clusterize");
-	ir.OptimizeClusters();
-	ir.CheckIfValid("Post cluster optimization");
-	ir.RemoveUnusedNodes();
-	ir.CheckIfValid("Remove unused nodes");
-	ir.PostProcessClusters();
-	ir.CheckIfValid("Post process clusters");
-	ir.TransformToLinearIndex();
-	ir.CheckIfValid("Transform to linear index");
-	ir.RemoveUnusedNodes();
-
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);

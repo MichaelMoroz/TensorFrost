@@ -87,6 +87,8 @@ class Node {
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
 
+	bool has_been_modified_ = false;
+
 	Node(Tensor* tensor, Arguments&& args, string&& name)
 	    : tensor_(tensor),
 	      inputs_(std::move(args)),
@@ -94,12 +96,22 @@ class Node {
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 		op = &FindOperation(this->name);
-		CheckIfValid();
+		CheckClustering();
 	}
 
 	[[nodiscard]] const Tensor* GetTensor() const;
 
 	[[nodiscard]] Lable* GetLable() const { return lable_; }
+
+	[[nodiscard]] void SetAsModified()
+	{
+		has_been_modified_ = true;
+	}
+
+	[[nodiscard]] bool HasBeenModified() const
+	{
+		return has_been_modified_;
+	}
 
 	void UpdateArgumentOutputs() {
 		for (Arg& input : inputs_) {
@@ -180,7 +192,7 @@ class Node {
 		inputs_.emplace_back(type, node->GetLable(), index);
 	}
 
-	void CheckIfValid() const {
+	void CheckClustering() const {
 		// must have operation
 		if (op == nullptr) {
 			throw std::runtime_error("Operation object not found");
@@ -351,7 +363,7 @@ class IR {
 
 	void Clusterize() const;
 
-	void CheckIfValid(string name) const;
+	void CheckClustering(string name) const;
 
 	void UpdateNodeOutputs() const;
 
@@ -367,6 +379,8 @@ class IR {
 	                                 int dims, Tensors kernel_shape);
 
 	void TransformToLinearIndex();
+
+	void CompileIR();
 
 	~IR();
 

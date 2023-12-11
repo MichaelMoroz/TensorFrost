@@ -121,6 +121,13 @@ void IR::Clusterize() const {
 			is_boundary = true;
 		}
 
+		//TODO (Moroz): do separately on all nodes after clusterization
+		if (current_cluster != nullptr && current_cluster->shape_node_ != nullptr) {
+			if (!CompareShape(current_cluster->shape_node_->get(), node.get())) {
+				is_boundary = true;
+			}
+		}
+
 		// go over all inputs
 		for (auto& input : tensor->node_->inputs_) {
 			// check if input is the boundary of this cluster
@@ -172,7 +179,7 @@ bool BoundaryValid(const Node* input, const Node* output,
 	return !is_boundary;
 }
 
-void IR::CheckIfValid(string name) const {
+void IR::CheckClustering(string name) const {
 	#ifdef NDEBUG
 		return;
 	#endif
@@ -217,7 +224,12 @@ void IR::CheckIfValid(string name) const {
 	}
 }
 
-
+bool CannotCopyArgument(Arg& arg) {
+	return  arg.type_ == Arg::Type::Memory ||
+			arg.type_ == Arg::Type::Shape ||
+			arg.from_->get()->name == "memory" ||
+			arg.from_->get()->HasBeenModified();
+}
 
 map<Node*, Node*> IR::CopyComputation(
     const unordered_set<Node*>& targets) const {
@@ -229,10 +241,7 @@ map<Node*, Node*> IR::CopyComputation(
 		}
 		nodes_to_copy.insert(node);
 		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Memory ||
-				input.type_ == Arg::Type::Shape ||
-				input.from_->get()->name == "memory")
-				continue;
+			if (CannotCopyArgument(input)) continue;
 			dfs(input.from_->get());
 		}
 	};
@@ -252,8 +261,7 @@ map<Node*, Node*> IR::CopyComputation(
 		Arguments new_args;
 		for (Arg& arg : node->inputs_) {
 			// if shape or memory argument, then no need to use copied node
-			if (arg.type_ == Arg::Type::Memory || arg.type_ == Arg::Type::Shape ||
-			    arg.from_->get()->name == "memory") {
+			if (CannotCopyArgument(arg)) {
 				new_args.push_back(arg);
 				continue;
 			}
@@ -297,12 +305,7 @@ void IR::OptimizeClusters() {
 		     ++node) {
 			// go over all inputs
 			for (auto& input : node->inputs_) {
-				// if input is memory or shape, then skip
-				if (input.type_ == Arg::Type::Memory ||
-				    input.type_ == Arg::Type::Shape ||
-				    input.from_->get()->name == "memory") {
-					continue;
-				}
+				if (CannotCopyArgument(input)) continue;
 
 				// if input is outside the cluster and has the same shape as the node,
 				// then copy it
@@ -721,7 +724,32 @@ void IR::TransformToLinearIndex() {
 	}
 }
 
-Program* GenerateProgram(IR* ir) {
+void IR::CompileIR() 
+{
+	// TODO (Moroz): Make sure that shape works with non-const tensors
+	// TODO (Moroz): Add auto tests into build system
+
+	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
+	SetTensorIndexingMode(TensorIndexingMode::Clamp);
+	RemoveUnusedNodes();
+	Clusterize();
+	CheckClustering("Clusterize");
+	OptimizeClusters();
+	CheckClustering("Post cluster optimization");
+	RemoveUnusedNodes();
+	CheckClustering("Remove unused nodes 1");
+	PostProcessClusters();
+	CheckClustering("Post process clusters");
+	TransformToLinearIndex();
+	CheckClustering("Transform to linear index");
+	RemoveUnusedNodes();
+	CheckClustering("Remove unused nodes 2");
+}
+
+Program* GenerateProgram(IR* ir) 
+{
+	ir->CompileIR();
+
 	auto* program = new Program(ir);
 
 	// go over all clusters, find their type, and add them to the program if they

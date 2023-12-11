@@ -49,7 +49,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 		listing += "[";
 		for (int i = 0; i < shape.size(); i++) {
 			if (i != 0) listing += ",";
-			listing += GetNodeName(shape[i].from_->get(), names, true);
+			listing += GetNodeName(shape[i].from_->get(), names, false);
 		}
 		listing += "]";
 
@@ -69,7 +69,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			listing += "memory=[";
 			for (int i = 0; i < memory.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(memory[i].from_->get(), names, true);
+				listing += GetNodeName(memory[i].from_->get(), names, false);
 			}
 			listing += "], ";
 		}
@@ -78,7 +78,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			listing += "inputs=[";
 			for (int i = 0; i < inputs.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].from_->get(), names, true);
+				listing += GetNodeName(inputs[i].from_->get(), names, false);
 			}
 			listing += "], ";
 		}
@@ -87,7 +87,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 			listing += "indices=[";
 			for (int i = 0; i < indices.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].from_->get(), names, true);
+				listing += GetNodeName(indices[i].from_->get(), names, false);
 			}
 			listing += "], ";
 		}

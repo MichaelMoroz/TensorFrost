@@ -35,6 +35,7 @@ void TensorViewDefinition(py::module& /*m*/,
 	DEFINE_OPERATOR(sub, -);
 	DEFINE_OPERATOR(mul, *);
 	DEFINE_OPERATOR(div, /);
+	DEFINE_OPERATOR(truediv, /);
 	DEFINE_OPERATOR(mod, %);
 	DEFINE_OPERATOR(eq, ==);
 	DEFINE_OPERATOR(ne, !=);
@@ -48,7 +49,7 @@ void TensorViewDefinition(py::module& /*m*/,
 	DEFINE_OPERATOR(lshift, <<);
 	DEFINE_OPERATOR(rshift, >>);
 	DEFINE_OPERATOR(and_, &);
-	DEFINE_OPERATOR(or_, |);
+	DEFINE_OPERATOR(or_, |);                                                    
 
 	tensor_view.def("__neg__",
 	                [](const TensorView& t) { return PT(-T(PyTensor(t))); });

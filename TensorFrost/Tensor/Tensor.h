@@ -169,10 +169,10 @@ class Tensor {
 				}
 			}
 		}
-		if (shape_arguments.empty())
-		{
-			shape_arguments = memory->node_->GetArguments(Arg::Type::Shape);
-		}
+		//if (shape_arguments.empty())
+		//{
+		//	shape_arguments = memory->node_->GetArguments(Arg::Type::Shape);
+		//}
 
 		AddArguments(arguments, shape_arguments);
 
@@ -459,7 +459,8 @@ class Tensor {
 
 	static Tensor& Load(const Tensor& tensor,
 	                    const Tensors& indices = Tensors()) {
-		if (tensor.node_->name == "const") {
+		//Not valid if a store/scatter node wrote to the constant
+		if (tensor.node_->name == "const" && !tensor.node_->HasBeenModified()) {
 			return Constant(tensor.data[0]);
 		}
 		return MemoryOp("load", &tensor, indices);
@@ -475,36 +476,43 @@ class Tensor {
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
 	                     const Tensors& indices = Tensors()) {
+		tensor.node_->SetAsModified();
 		return MemoryOp("store", &tensor, indices, &value);
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedMax", &tensor, indices, &value);
 	}
 
 	static void ScatterMin(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedMin", &tensor, indices, &value);
 	}
 
 	static void ScatterOr(const Tensor& tensor, const Tensor& value,
 	                      const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedOr", &tensor, indices, &value);
 	}
 
 	static void ScatterAnd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedAnd", &tensor, indices, &value);
 	}
 
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
+		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
