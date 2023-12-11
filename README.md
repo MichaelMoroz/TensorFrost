@@ -18,6 +18,8 @@ Currently working platforms:
 
 ## From PyPI
 
+Current version is [0.1.3](https://pypi.org/project/tensorfrost/0.1.3/)
+
 ```bash
 pip install tensorfrost
 ```
