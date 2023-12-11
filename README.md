@@ -1,4 +1,4 @@
-# 🥶 TensorFrost (v0.1.2) 🥶
+# 🥶 TensorFrost (v0.1.3) 🥶
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 The main idea of this library is to compile optimal fused kernels for the GPU given a set of numpy-ish functions, including other more complex things like loops and conditionals (also TODO)
@@ -11,8 +11,8 @@ Currently working platforms:
 
 ## Examples
 
-<a href="examples/wave_simulation.ipynb"><img src="examples/sin_gordon.gif" height="192px"></a>
-<a href="examples/fluid_simulation.ipynb"><img src="examples/fluid.gif" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/wave_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/sin_gordon.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/fluid_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/fluid.gif?raw=true" height="192px"></a>
 
 ## Installation
 

@@ -1,12 +1,12 @@
 from setuptools import setup
 
 #load readme
-with open("README.md", "r") as fh:
+with open("../README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name='TensorFrost',
-    version='0.1.2',
+    version='0.1.3',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
     description="Tensor library with automatic kernel fusion",
