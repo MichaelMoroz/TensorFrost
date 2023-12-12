@@ -320,7 +320,11 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		kernel->generated_code_ = kernel_code;
 		all_kernels +=
 		    "\n"
-		    "extern \"C\" __declspec(dllexport) void " + kernel_name +
+		    "extern \"C\" "
+		#ifdef _WIN32
+			"__declspec(dllexport)"
+		#endif
+			" void " + kernel_name +
 		    "(uint* var, uint* off, uint* mem, uint* shape)\n"
 		    "{\n"
 			"  #pragma omp parallel for shared(mem) \n" + loop +

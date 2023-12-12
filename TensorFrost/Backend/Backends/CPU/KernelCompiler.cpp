@@ -11,6 +11,7 @@ bool RunCompiler(char* tempPath, char* dllName) {
 	std::basic_stringstream<char> ss;
 
 #if defined(_WIN32)
+	//what the fu..
 	ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl " 
 	   << kernel_compile_options << " /LD " << tempPath
 	   << "generated_lib.cpp /Fe:" << dllName 
