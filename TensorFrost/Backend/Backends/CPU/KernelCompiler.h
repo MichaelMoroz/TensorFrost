@@ -8,9 +8,14 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
 #define NOMINMAX
+
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <dlfcn.h>
+#include <unistd.h>
+#endif
 
 #include "Backend/Backends/CPU/Memory.h"
 #include "Backend/CodeGen/Generators.h"
