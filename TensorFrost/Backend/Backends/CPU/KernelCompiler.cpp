@@ -6,7 +6,7 @@ namespace TensorFrost {
 
 std::string kernel_compile_options;
 
-bool RunCompiler(TCHAR* tempPath, char* dllName) {
+bool RunCompiler(char* tempPath, char* dllName) {
 	cout << "Compile options: " << kernel_compile_options << endl;
 	std::basic_stringstream<char> ss;
 

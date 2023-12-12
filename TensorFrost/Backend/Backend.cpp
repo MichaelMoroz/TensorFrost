@@ -18,7 +18,7 @@ void InitializeBackend(BackendType backendType, const string& compilerPath) {
 	}
 }
 
-vector<TensorMemory*> TensorFrost::ExecuteProgram(
+vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs) {
 	vector<Node*> memory_inputs;
 

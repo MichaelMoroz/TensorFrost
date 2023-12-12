@@ -15,6 +15,7 @@
 #else
 #include <dlfcn.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #endif
 
 #include "Backend/Backends/CPU/Memory.h"

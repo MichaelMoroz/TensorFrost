@@ -103,7 +103,7 @@ class Node {
 
 	[[nodiscard]] Lable* GetLable() const { return lable_; }
 
-	[[nodiscard]] void SetAsModified()
+	void SetAsModified()
 	{
 		has_been_modified_ = true;
 	}

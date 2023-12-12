@@ -2,8 +2,6 @@
 
 #include <vector>
 
-#include <intrin.h>
-
 namespace TensorFrost {
 using namespace std;
 using uint = unsigned int;

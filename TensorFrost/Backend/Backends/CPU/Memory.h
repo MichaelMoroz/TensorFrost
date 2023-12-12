@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <cstring>
 
 #include "../../TensorMemory.h"
 

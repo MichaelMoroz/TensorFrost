@@ -8,8 +8,8 @@
 #include <utility>
 #include <vector>
 
-#include "Backends\CPU\CPU.h"
-#include "CodeGen\Generators.h"
+#include "Backends/CPU/CPU.h"
+#include "CodeGen/Generators.h"
 #include "KernelExecutor.h"
 #include "TensorMemory.h"
 
@@ -24,8 +24,8 @@ enum class BackendType {
 	WGPU,
 };
 
-vector<TensorMemory*> ExecuteProgram(Program* program,
-                                     vector<TensorMemory*> inputs);
+vector<TensorMemory*> ExecuteProgram(
+    Program* program, vector<TensorMemory*> inputs);
 
 void InitializeBackend(BackendType backendType,
                        const string& compilerPath = "");
