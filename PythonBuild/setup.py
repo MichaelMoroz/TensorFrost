@@ -26,6 +26,6 @@ setup(
     packages=["TensorFrost"],
 
     # Include pre-compiled extension
-    package_data={"TensorFrost": ["*.pyd"]},
+    package_data={"TensorFrost": ["*.so", "*.pyd"]},
     has_ext_modules=lambda: True
 )
