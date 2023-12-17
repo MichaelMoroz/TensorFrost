@@ -81,6 +81,7 @@ const vector<Operation> operations = {
     Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4),
     Operation("load", {"_f", "_u", "_i"}, 128, "", OpType::Load),
     Operation("store", {"f_", "u_", "i_"}, 128, "", OpType::Store),
+    Operation("set", {"ff_", "uu_", "ii_"}, 1, "", OpType::Set),
     Operation("const_memory", {"_f", "_i", "_u"}, 0, "", OpType::Memory),
     Operation("memory", {"_f", "_i", "_u"}, 0, "", OpType::Memory),
     Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "", OpType::Scatter),

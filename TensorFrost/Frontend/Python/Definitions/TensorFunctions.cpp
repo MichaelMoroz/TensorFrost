@@ -172,8 +172,8 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def(
 	    "loop",
-	    [](const PyTensor& begin, const PyTensor& end, const PyTensor& step,
-	       const py::function& body) {
+	    [](const py::function& body, const PyTensor& begin, const PyTensor& end,
+	       const PyTensor& step) {
 		    // wrap the function to convert the PyTensor to Tensor
 		    std::function<void(const Tensor&)> f2 = [&body](const Tensor& t) {
 			    py::gil_scoped_acquire acquire;

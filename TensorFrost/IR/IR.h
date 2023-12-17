@@ -363,6 +363,9 @@ class IR {
 
 	void Clusterize() const;
 
+	void PrintListing(string name, bool compact = false,
+	                  unordered_set<Node*> invalid_nodes = {}) const;
+
 	void CheckClustering(string name) const;
 
 	void UpdateNodeOutputs() const;

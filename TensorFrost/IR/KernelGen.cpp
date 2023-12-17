@@ -170,6 +170,22 @@ void IR::Clusterize() const {
 	}
 }
 
+void IR::PrintListing(string name, bool compact,
+                      unordered_set<Node*> invalid_nodes) const {
+#ifdef NDEBUG
+	return;
+#endif
+	string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
+
+	if (!invalid_nodes.empty()) {
+		error += name + ": IR is not clusterized correctly";
+		throw std::runtime_error(error);
+	} else {
+		cout << "Step " << name << " completed successfully: \n" << endl;
+		cout << error << endl;
+	}
+}
+
 bool BoundaryValid(const Node* input, const Node* output,
                    bool is_identity = true, int arg_index = -1,
                    Arg::Type arg_type = Arg::Type::None) {
@@ -180,9 +196,9 @@ bool BoundaryValid(const Node* input, const Node* output,
 }
 
 void IR::CheckClustering(string name) const {
-	#ifdef NDEBUG
-		return;
-	#endif
+#ifdef NDEBUG
+	return;
+#endif
 
 	unordered_set<Node*> invalid_nodes;
 	//check if the IR is clusterized correctly
@@ -211,17 +227,7 @@ void IR::CheckClustering(string name) const {
 		}
 	}
 
-	string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
-
-	if (!invalid_nodes.empty()) {
-		error += name + ": IR is not clusterized correctly";
-		throw std::runtime_error(error);
-	}
-	else
-	{
-		cout << "Step " << name << " completed successfully: \n" << endl;
-		cout << error << endl;
-	}
+	PrintListing(name, false, invalid_nodes);
 }
 
 bool CannotCopyArgument(Arg& arg) {
@@ -335,6 +341,12 @@ void IR::OptimizeClusters() {
 	}
 }
 
+bool IsChangingInput(Arg* arg) {
+	return arg->type_ == Arg::Type::Memory ||
+	       (arg->to_->get()->name == "set" && arg->index_ == 0) ||
+		   (arg->to_->get()->name == "loop_end"); //okay, this is stupid
+}
+
 void IR::RemoveUnusedNodes() {
 	// use depth first search to find all nodes that are used for the output nodes
 	unordered_set<Node*> used_nodes;
@@ -350,14 +362,15 @@ void IR::RemoveUnusedNodes() {
 		used_nodes.insert(node);
 
 		//all inputs of this node are used
-		for (auto& input : node->inputs_) {
-			dfs(input.from_->get());
+		for (auto& argument : node->inputs_) {
+			dfs(argument.from_->get());
 		}
 
 		//if the node is a memory node or used as memory, then all outputs are used
-		for (auto& output : node->outputs_) {
-			if (output->type_ == Arg::Type::Memory)
-				dfs(output->to_->get());
+		for (auto& argument : node->outputs_) {
+			if (IsChangingInput(argument)) {
+				dfs(argument->to_->get());
+			}
 		}
 	};
 
@@ -731,6 +744,8 @@ void IR::CompileIR()
 
 	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
+
+	PrintListing("Input");
 	RemoveUnusedNodes();
 	Clusterize();
 	CheckClustering("Clusterize");

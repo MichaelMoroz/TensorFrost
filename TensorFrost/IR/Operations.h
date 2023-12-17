@@ -26,6 +26,7 @@ enum class OpType {
 	Keyword,
 	Load,
 	Store,
+	Set,
 	Scatter,
 	Loop,
 	Conditional,

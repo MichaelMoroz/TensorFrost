@@ -480,6 +480,11 @@ class Tensor {
 		return MemoryOp("store", &tensor, indices, &value);
 	}
 
+	void Set(const Tensor& value) const  {
+		node_->SetAsModified();
+		Op("set", this, &value);
+	}
+
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
 		tensor.node_->SetAsModified();
@@ -542,7 +547,7 @@ class Tensor {
 	Tensor& operator~() const { return Op("bnot", this); }
 
 	[[nodiscard]] bool isConstantEqualTo(float value) const {
-		if (node_->name != "const") {
+		if (node_->name != "const" || node_->has_been_modified_) {
 			return false;
 		}
 		switch (type) {
@@ -559,107 +564,108 @@ class Tensor {
 
 	Tensor& operator+(const Tensor& other) const {
 		// if this or other is a zero constant, return the other
-		if (isConstantEqualTo(0.0)) {
-			return const_cast<Tensor&>(other);
-		}
-		if (other.isConstantEqualTo(0.0)) {
-			return const_cast<Tensor&>(*this);
-		}
-		// if both are constants, return the difference
-		if (this->node_->name == "const" && other.node_->name == "const") {
-			switch (type) {
-				case DataType::Float:
-					return Constant(AsFloat(this->data[0]) + AsFloat(other.data[0]));
-				case DataType::Int:
-					return Constant(AsInt(this->data[0]) + AsInt(other.data[0]));
-				case DataType::Uint:
-					return Constant(this->data[0] + other.data[0]);
-			}
-		}
+		// TODO: NEEDS TO BE A SEPARATE OPTIMIZATION PASS
+		//if (isConstantEqualTo(0.0)) {
+		//	return const_cast<Tensor&>(other);
+		//}
+		//if (other.isConstantEqualTo(0.0)) {
+		//	return const_cast<Tensor&>(*this);
+		//}
+		//// if both are constants, return the difference
+		//if (this->node_->name == "const" && other.node_->name == "const") {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(AsFloat(this->data[0]) + AsFloat(other.data[0]));
+		//		case DataType::Int:
+		//			return Constant(AsInt(this->data[0]) + AsInt(other.data[0]));
+		//		case DataType::Uint:
+		//			return Constant(this->data[0] + other.data[0]);
+		//	}
+		//}
 		return Op("add", this, &other);
 	}
 
 	Tensor& operator-(const Tensor& other) const {
 		// if this or other is a zero constant, return the other
-		if (isConstantEqualTo(0.0)) {
-			return -const_cast<Tensor&>(other);
-		}
-		if (other.isConstantEqualTo(0.0)) {
-			return const_cast<Tensor&>(*this);
-		}
-		// if both are constants, return the difference
-		if (this->node_->name == "const" && other.node_->name == "const") {
-			switch (type) {
-				case DataType::Float:
-					return Constant(AsFloat(this->data[0]) - AsFloat(other.data[0]));
-				case DataType::Int:
-					return Constant(AsInt(this->data[0]) - AsInt(other.data[0]));
-				case DataType::Uint:
-					return Constant(this->data[0] - other.data[0]);
-			}
-		}
+		//if (isConstantEqualTo(0.0)) {
+		//	return -const_cast<Tensor&>(other);
+		//}
+		//if (other.isConstantEqualTo(0.0)) {
+		//	return const_cast<Tensor&>(*this);
+		//}
+		//// if both are constants, return the difference
+		//if (this->node_->name == "const" && other.node_->name == "const") {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(AsFloat(this->data[0]) - AsFloat(other.data[0]));
+		//		case DataType::Int:
+		//			return Constant(AsInt(this->data[0]) - AsInt(other.data[0]));
+		//		case DataType::Uint:
+		//			return Constant(this->data[0] - other.data[0]);
+		//	}
+		//}
 		return Op("sub", this, &other);
 	}
 
 	Tensor& operator*(const Tensor& other) const {
 		// if this or other is a zero constant, return zero
-		if (isConstantEqualTo(0.0) || other.isConstantEqualTo(0.0)) {
-			switch (type) {
-				case DataType::Float:
-					return Constant(0.0F);
-				case DataType::Int:
-					return Constant(0);
-				case DataType::Uint:
-					return Constant(0U);
-			}
-		}
-		// if this or other is a one constant, return the other
-		if (isConstantEqualTo(1.0)) {
-			return const_cast<Tensor&>(other);
-		}
-		if (other.isConstantEqualTo(1.0)) {
-			return const_cast<Tensor&>(*this);
-		}
-		if (this->node_->name == "const" && other.node_->name == "const") {
-			switch (type) {
-				case DataType::Float:
-					return Constant(AsFloat(this->data[0]) * AsFloat(other.data[0]));
-				case DataType::Int:
-					return Constant(AsInt(this->data[0]) * AsInt(other.data[0]));
-				case DataType::Uint:
-					return Constant(this->data[0] * other.data[0]);
-			}
-		}
+		//if (isConstantEqualTo(0.0) || other.isConstantEqualTo(0.0)) {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(0.0F);
+		//		case DataType::Int:
+		//			return Constant(0);
+		//		case DataType::Uint:
+		//			return Constant(0U);
+		//	}
+		//}
+		//// if this or other is a one constant, return the other
+		//if (isConstantEqualTo(1.0)) {
+		//	return const_cast<Tensor&>(other);
+		//}
+		//if (other.isConstantEqualTo(1.0)) {
+		//	return const_cast<Tensor&>(*this);
+		//}
+		//if (this->node_->name == "const" && other.node_->name == "const") {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(AsFloat(this->data[0]) * AsFloat(other.data[0]));
+		//		case DataType::Int:
+		//			return Constant(AsInt(this->data[0]) * AsInt(other.data[0]));
+		//		case DataType::Uint:
+		//			return Constant(this->data[0] * other.data[0]);
+		//	}
+		//}
 		return Op("mul", this, &other);
 	}
 
 	Tensor& operator/(const Tensor& other) const {
 		// if this is a zero constant, return zero
-		if (isConstantEqualTo(0.0)) {
-			switch (type) {
-				case DataType::Float:
-					return Constant(0.0F);
-				case DataType::Int:
-					return Constant(0);
-				case DataType::Uint:
-					return Constant(0U);
-			}
-		}
-		// if other is a one constant, return this
-		if (other.isConstantEqualTo(1.0)) {
-			return const_cast<Tensor&>(*this);
-		}
-		// if both are constants, return the ratio
-		if (this->node_->name == "const" && other.node_->name == "const") {
-			switch (type) {
-				case DataType::Float:
-					return Constant(AsFloat(this->data[0]) / AsFloat(other.data[0]));
-				case DataType::Int:
-					return Constant(AsInt(this->data[0]) / AsInt(other.data[0]));
-				case DataType::Uint:
-					return Constant(this->data[0] / other.data[0]);
-			}
-		}
+		//if (isConstantEqualTo(0.0)) {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(0.0F);
+		//		case DataType::Int:
+		//			return Constant(0);
+		//		case DataType::Uint:
+		//			return Constant(0U);
+		//	}
+		//}
+		//// if other is a one constant, return this
+		//if (other.isConstantEqualTo(1.0)) {
+		//	return const_cast<Tensor&>(*this);
+		//}
+		//// if both are constants, return the ratio
+		//if (this->node_->name == "const" && other.node_->name == "const") {
+		//	switch (type) {
+		//		case DataType::Float:
+		//			return Constant(AsFloat(this->data[0]) / AsFloat(other.data[0]));
+		//		case DataType::Int:
+		//			return Constant(AsInt(this->data[0]) / AsInt(other.data[0]));
+		//		case DataType::Uint:
+		//			return Constant(this->data[0] / other.data[0]);
+		//	}
+		//}
 		return Op("div", this, &other);
 	}
 

@@ -90,80 +90,130 @@ tf.initialize(tf.cpu, "/Zi")
 #resnp = res.numpy
 #print(resnp)
 
-QRS = 64
+#QRS = 64
+#
+#def modified_gram_schmidt(A):
+#    """
+#    Implements the Modified Gram-Schmidt orthogonalization to get the QR decomposition of matrix A.
+#    A = QR
+#    """
+#    A = A.astype(float)  # Ensure A is of float type
+#    m, n = A.shape
+#    Q = np.zeros((m, n))
+#    R = np.zeros((n, n))
+#    
+#    for i in range(n-1):
+#        R[i, i] = np.linalg.norm(A[:, i])
+#        Q[:, i] = A[:, i] / R[i, i]
+#        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+#        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+#    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
+#    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
+#    return Q, R
+#
+#def sum(A):
+#    n, m = A.shape
+#    sum_buf = tf.zeros([m], tf.float32)
+#    i, j = A.indices
+#    tf.scatterAdd(sum_buf[j], A[i, j])
+#    return sum_buf
+#
+#def norm(A):
+#    A = A * 1.0
+#    sum_buf = tf.zeros([1], tf.float32)
+#    ids = tf.indices(A.shape)
+#    tf.scatterAdd(sum_buf[0], A[ids] ** 2)
+#    return tf.sqrt(sum_buf)
+#
+#def QRDecomposition():
+#    A = tf.input([QRS, QRS], tf.float32)
+#
+#    m, n = A.shape
+#    Q = tf.zeros([m, n])
+#    R = tf.zeros([n, n])
+#
+#    j = tf.index(0, [m])
+#    for i in range(QRS-1):
+#        R[i, i] = norm(A[j, i])
+#        Q[j, i] = A[j, i] / R[i, i]
+#
+#        #R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+#        #A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+#
+#        t, = tf.index_grid([i+1], [n])
+#        p, k = tf.index_grid([0, i+1], [m, n])
+#        R[i, t] = sum(Q[p, i] * A[p, k])
+#        A[p, k] -= Q[p, i] * R[i, k]
+#
+#    R[n-1, n-1] = norm(A[j, n-1])
+#    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+#
+#    return [Q, R]
+#
+#qr = tf.compile(QRDecomposition)
+##print(qr.list_operations())
+#
+#Anp = np.random.rand(QRS, QRS).astype(np.float32)
+#Qnp, Rnp = modified_gram_schmidt(Anp)
+#print(Qnp)
+#print(Rnp)
+#
+#A = tf.tensor(Anp)
+#Qtf, Rtf = qr(A)
+#Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
+#Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
+#print("Q error: ", Qerror)
+#print("R error: ", Rerror)
+#if Qerror > 1e-5 or Rerror > 1e-5:
+#	print("QR decomposition failed")
+#	exit(1)
 
-def modified_gram_schmidt(A):
-    """
-    Implements the Modified Gram-Schmidt orthogonalization to get the QR decomposition of matrix A.
-    A = QR
-    """
-    A = A.astype(float)  # Ensure A is of float type
-    m, n = A.shape
-    Q = np.zeros((m, n))
-    R = np.zeros((n, n))
-    
-    for i in range(n-1):
-        R[i, i] = np.linalg.norm(A[:, i])
-        Q[:, i] = A[:, i] / R[i, i]
-        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
-        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
-    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
-    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
-    return Q, R
+#blur_d = 16
+#blur_r = blur_d * 0.25
+#
+#def kernel(r):
+#    return np.exp(-r*r/(2*blur_r*blur_r)) / (2*np.pi*blur_r*blur_r)
+#
+#def blur():
+#    img = tf.input([-1, -1], tf.float32)
+#    
+#    blur_h = tf.zeros(img.shape, tf.float32)
+#    blur_v = tf.zeros(img.shape, tf.float32)
+#    i, j = img.indices
+#
+#    #horizontal blur
+#    for k in range(-blur_d, blur_d+1):
+#        blur_h += img[i+k, j] * kernel(k)
+#
+#    #vertical blur
+#    for k in range(-blur_d, blur_d+1):
+#        blur_v += blur_h[i, j+k] * kernel(k)
+#
+#    return [blur_v]
+#
+#tf_blur = tf.compile(blur)
+#
+#input_img = np.array(plt.imread("test.png"), dtype=np.float32)[:,:,0]
+#
+#tf_img = tf.tensor(input_img)
+#output_img, = tf_blur(tf_img)
+#
+#plt.imshow(output_img.numpy)
 
-def sum(A):
-    n, m = A.shape
-    sum_buf = tf.zeros([m], tf.float32)
-    i, j = A.indices
-    tf.scatterAdd(sum_buf[j], A[i, j])
-    return sum_buf
 
-def norm(A):
-    A = A * 1.0
-    sum_buf = tf.zeros([1], tf.float32)
-    ids = tf.indices(A.shape)
-    tf.scatterAdd(sum_buf[0], A[ids] ** 2)
-    return tf.sqrt(sum_buf)
+def loop_test():
+	A = tf.input([16, 16], tf.float32)
+	B = tf.input([16, 16], tf.float32)
+	C = tf.zeros([16, 16], tf.float32)
 
-def QRDecomposition():
-    A = tf.input([QRS, QRS], tf.float32)
+	i, j = C.indices
+	
+	s = tf.zeros([16, 16], tf.float32)
+	def loop_body(k):
+		s.set(s + A[i, k] * B[k, j])
+	tf.loop(loop_body, 0, 16, 1)
 
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
+	C[i, j] = s
+	return [C]
 
-    j = tf.index(0, [m])
-    for i in range(QRS-1):
-        R[i, i] = norm(A[j, i])
-        Q[j, i] = A[j, i] / R[i, i]
-
-        #R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
-        #A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
-
-        t, = tf.index_grid([i+1], [n])
-        p, k = tf.index_grid([0, i+1], [m, n])
-        R[i, t] = sum(Q[p, i] * A[p, k])
-        A[p, k] -= Q[p, i] * R[i, k]
-
-    R[n-1, n-1] = norm(A[j, n-1])
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-
-    return [Q, R]
-
-qr = tf.compile(QRDecomposition)
-#print(qr.list_operations())
-
-Anp = np.random.rand(QRS, QRS).astype(np.float32)
-Qnp, Rnp = modified_gram_schmidt(Anp)
-print(Qnp)
-print(Rnp)
-
-A = tf.tensor(Anp)
-Qtf, Rtf = qr(A)
-Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
-Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
-print("Q error: ", Qerror)
-print("R error: ", Rerror)
-if Qerror > 1e-5 or Rerror > 1e-5:
-	print("QR decomposition failed")
-	exit(1)
+loop = tf.compile(loop_test)

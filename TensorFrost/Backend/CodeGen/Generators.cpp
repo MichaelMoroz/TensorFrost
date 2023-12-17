@@ -33,7 +33,7 @@ NodeNames GenerateNodeNames(const IR& ir) {
 
 string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	if (compact) {
-		if (node->name == "const") {
+		if (node->name == "const" && !node->has_been_modified_) {
 			return node->GetTensor()->GetConstantString();
 		}
 	}
@@ -72,7 +72,9 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Cluster* cluster,
 	// Translate each operation into HLSL
 	for (auto node = IR::Iterator(cluster->begin_); !node.is_cluster_end(cluster);
 	     ++node) {
-		if (node->name == "const") continue;
+		if (node->name == "const" && !node->has_been_modified_) {
+			continue;
+		}
 
 		if (node->name == "loop_end" || node->name == "if_end") {
 			indent--;

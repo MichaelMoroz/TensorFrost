@@ -91,6 +91,11 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	// operators
 	DefineOperators(py_tensor);
 
+	//no way to overload normal setter
+	//TODO use python AST to generate these functions
+	py_tensor.def("set",
+	              [](const PyTensor& t, const PyTensor& t2) { T(t).Set(T(t2)); });
+
 	// indexing
 	py_tensor.def("__getitem__", [](const PyTensor& t, const PyTensor& t1) {
 		Tensors indices;

@@ -106,6 +106,10 @@ class C_CodeGenerator : public CodeGenerator {
 				              address + ", " + arguments[2] + ")";
 				right += ";";
 			}
+		} else if (op->op_type_ == OpType::Set) {
+			left += arguments[0] + " = ";
+			expression += arguments[1];
+			right += ";";
 		} else {
 			if (output_type != DataType::None) {
 				left += type_names[output_type] + " " + name + " = ";
