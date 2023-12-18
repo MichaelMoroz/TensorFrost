@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-tf.initialize(tf.cpu, "/Zi")
-#tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:experimental /Zi")
+#tf.initialize(tf.cpu, "/Zi")
+tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:experimental")
 
 #def test():
 #    canvas = tf.buffer([32, 32, 3], tf.float32)
@@ -200,20 +200,60 @@ tf.initialize(tf.cpu, "/Zi")
 #
 #plt.imshow(output_img.numpy)
 
+n, m, k = 128, 128, 128
 
-def loop_test():
-	A = tf.input([16, 16], tf.float32)
-	B = tf.input([16, 16], tf.float32)
-	C = tf.zeros([16, 16], tf.float32)
+def transpose(A):
+    N, M = A.shape
+    i, j = tf.indices([M, N])
+    return A[j, i] * 1.0
 
-	i, j = C.indices
-	
-	s = tf.zeros([16, 16], tf.float32)
-	def loop_body(k):
-		s.set(s + A[i, k] * B[k, j])
-	tf.loop(loop_body, 0, 16, 1)
+def matmul():
+    A = tf.input([n, m], tf.float32)
+    N, M = A.shape
+    B = tf.input([m, k], tf.float32)
+    K = B.shape[1]
+        
+    Bt = transpose(B)
+        
+    #C = tf.zeros([N, K])
+    #i, j, k = tf.indices([N, K, M])
+    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
+        
+    C = tf.buffer([N, K], tf.float32)
 
-	C[i, j] = s
-	return [C]
+    s = tf.zeros([N, K], tf.float32)
+    i, j = s.indices
+    def loop_body(k):
+        s.set(s + A[i, k] * Bt[j, k])
+         
+    tf.loop(loop_body, 0, m, 1)
+        
+    i, j = C.indices
+    C[i, j] = s
+        
+    return [C]
 
-loop = tf.compile(loop_test)
+loop = tf.compile(matmul)
+
+A = np.random.rand(n, m).astype(np.float32)
+B = np.random.rand(m, k).astype(np.float32)
+
+tf_A = tf.tensor(A)
+tf_B = tf.tensor(B)
+
+t1 = time.time()
+
+for i in range(100):
+    tf_C, = loop(tf_A, tf_B)
+
+t2 = time.time()
+
+for i in range(100):
+	C = np.dot(A, B)
+
+t3 = time.time()
+
+dC = np.linalg.norm(C - tf_C.numpy)
+print("Error: ", dC)
+print("Numpy time: ", t3 - t2)
+print("TensorFrost time: ", t2 - t1)
