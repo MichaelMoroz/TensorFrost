@@ -6,7 +6,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> invalid) {
+string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invalid) {
 	// first give unique names to all the tensors
 	NodeNames names = GenerateNodeNames(ir);
 	ClusterProp clusters = ir.GetClusterProperties();
@@ -29,7 +29,7 @@ string GetOperationListing(const IR& ir, bool compact, unordered_set<Node*> inva
 		}
 
 		if (invalid.contains(node.get())) {
-			listing += "[INVALID] ";
+			listing += "[!!!] " + invalid[node.get()] + ": \n";
 		}
 
 		if (!compact && node->cluster_ != nullptr) {

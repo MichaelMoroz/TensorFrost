@@ -36,6 +36,13 @@ class Arg {
 		None,
 	};
 
+	static inline const map<Type, string> type_names = {
+	    {Type::Input, "Input"}, {Type::Index, "Index"}, {Type::Shape, "Shape"},
+		{Type::Memory, "Memory"}, {Type::None, "None"},
+	};
+
+	static string TypeToString(Type type) { return type_names.at(type); }
+
 	Type type_;
 	Lable* from_;
 	Lable* to_{nullptr};
@@ -46,6 +53,8 @@ class Arg {
 
 	void SetOutput(Lable* output) { to_ = output; }
 };
+
+
 
 class Cluster {
  public:
@@ -349,6 +358,8 @@ class IR {
 		current_cluster_ = old_cluster_head;
 	}
 
+	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
+
 	// reexecute nodes and get map from old to copied nodes
 	[[nodiscard]] map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
@@ -363,10 +374,8 @@ class IR {
 
 	void Clusterize() const;
 
-	void PrintListing(string name, bool compact = false,
-	                  unordered_set<Node*> invalid_nodes = {}) const;
-
-	void CheckClustering(string name) const;
+	void PrintListing(string name, bool compact,
+	                  map<Node*, string> invalid_nodes) const;
 
 	void UpdateNodeOutputs() const;
 

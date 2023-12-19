@@ -53,6 +53,6 @@ class Program {
 Program* GenerateProgram(IR* ir);
 
 string GetOperationListing(const IR&, bool compact = false,
-                           unordered_set<Node*> invalid = {});
+                           map<Node*, string> invalid = {});
 
 }  // namespace TensorFrost

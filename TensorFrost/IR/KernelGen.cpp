@@ -171,14 +171,14 @@ void IR::Clusterize() const {
 }
 
 void IR::PrintListing(string name, bool compact,
-                      unordered_set<Node*> invalid_nodes) const {
+                      map<Node*, string> invalid_nodes) const {
 #ifdef NDEBUG
 	return;
 #endif
 	string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
 
 	if (!invalid_nodes.empty()) {
-		error += name + ": IR is not clusterized correctly";
+		error += name + ": IR is invalid";
 		throw std::runtime_error(error);
 	} else {
 		cout << "Step " << name << " completed successfully: \n" << endl;
@@ -195,12 +195,18 @@ bool BoundaryValid(const Node* input, const Node* output,
 	return !is_boundary;
 }
 
-void IR::CheckClustering(string name) const {
+void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 #ifdef NDEBUG
 	return;
 #endif
 
-	unordered_set<Node*> invalid_nodes;
+	map<Node*, int> node_index;
+	int index = 0;
+	for (auto node = begin(); !node.is_end(); ++node) {
+		node_index[node.get()] = index++;
+	}
+
+	map<Node*, string> invalid_nodes;
 	//check if the IR is clusterized correctly
 	for (auto node = begin(); !node.is_end(); ++node) {
 		// check if node is a cluster edge
@@ -213,16 +219,38 @@ void IR::CheckClustering(string name) const {
 
 		if (prev == nullptr) continue;
 
-		if (!BoundaryValid(prev, *node, identity)) {
-			invalid_nodes.insert(node.get());
+		if (check_clustering) {
+			if (!BoundaryValid(prev, *node, identity)) {
+				invalid_nodes[node.get()] = "Invalid node order";
+			}
 		}
 
 		// go over all inputs
 		for (auto& input : tensor->node_->inputs_) {
-			// check if input is the boundary of this cluster
-			if (!BoundaryValid(input.from_->get(), *node, identity, input.index_,
-			                   input.type_)) {
-				invalid_nodes.insert(node.get());
+			Node* from = input.from_->get();
+			Node* to = node.get();
+
+			if (check_clustering)
+			{
+				// check if input is the boundary of this cluster
+				if (!BoundaryValid(from, to, identity, input.index_, input.type_)) {
+					invalid_nodes[to] = "Invalid clusterization for argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_);
+				}
+			}
+
+			if (check_kernels)
+			{
+				//check if no inputs are outside the cluster
+				if (from->cluster_ != to->cluster_ && 
+					input.type_ != Arg::Type::Memory && 
+					input.type_ != Arg::Type::Shape && from->name != "memory") {
+					invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is outside the kernel";
+				}
+			}
+
+			// check if inputs are before the node
+			if (node_index[from] > node_index[to]) {
+				invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is after the node";
 			}
 		}
 	}
@@ -629,29 +657,12 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Clus
 
 void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Cluster* cluster_, int dims, Tensors kernel_shape)
 {
-	// just use dim_id nodes as indices
-	for (auto node = Iterator(cluster_->begin_);
-		!node.is_cluster_end(cluster_);
-		++node) {
-		if (node->name == "dim_id") {
-			int dim = node->GetTensor()->data[0];
-			if (dim >= dims) {
-				throw runtime_error("Invalid dimension index " + to_string(dim) +
-													" for kernel of size " + to_string(dims));
-			}
-
-			indices[dim] = const_cast<Tensor*>(node->GetTensor());
+	//add dim_id nodes at the beginning of the cluster
+	ExecuteExpressionBefore(cluster_->begin_, [&]() {
+		for (int i = 0; i < dims; i++) {
+			indices[i] = &cluster_->begin_->GetTensor()->Index(i);
 		}
-	}
-
-	//add dim_id nodes if they are missing
-	for (int i = 0; i < dims; i++) {
-		if (indices[i] == nullptr) {
-			ExecuteExpressionBefore(cluster_->begin_, [&]() {
-				indices[i] = &cluster_->begin_->GetTensor()->Index(i);
-			});
-		}
-	}
+	});
 }
 
 void IR::TransformToLinearIndex() {
@@ -745,20 +756,20 @@ void IR::CompileIR()
 	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
-	PrintListing("Input");
+	CheckIR("Input", false, false);
 	RemoveUnusedNodes();
 	Clusterize();
-	CheckClustering("Clusterize");
+	CheckIR("Clusterize", true, false);
 	OptimizeClusters();
-	CheckClustering("Post cluster optimization");
+	CheckIR("Post cluster optimization", true, false);
 	RemoveUnusedNodes();
-	CheckClustering("Remove unused nodes 1");
+	CheckIR("Remove unused nodes 1", true, false);
 	PostProcessClusters();
-	CheckClustering("Post process clusters");
+	CheckIR("Post process clusters", true, true);
 	TransformToLinearIndex();
-	CheckClustering("Transform to linear index");
+	CheckIR("Transform to linear index", true, true);
 	RemoveUnusedNodes();
-	CheckClustering("Remove unused nodes 2");
+	CheckIR("Remove unused nodes 2", true, true);
 }
 
 Program* GenerateProgram(IR* ir) 
