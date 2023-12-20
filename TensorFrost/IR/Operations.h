@@ -7,6 +7,7 @@
 #include <tuple>
 #include <utility>
 #include <vector>
+#include <algorithm>
 
 namespace TensorFrost {
 
