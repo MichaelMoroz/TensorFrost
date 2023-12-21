@@ -364,15 +364,17 @@ class IR {
 	[[nodiscard]] map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
 
-	void OptimizeClusters();
+	void OptimizeKernels();
 
-	void RemoveUnusedNodes();
+	void OptimizeOperations();
+
+	void RemoveUnusedOperations();
 
 	[[nodiscard]] Iterator begin() const { return begin_; }
 
 	[[nodiscard]] Iterator end() const { return end_; }
 
-	void Clusterize() const;
+	void SeparateOperationsIntoKernels() const;
 
 	void PrintListing(string name, bool compact,
 	                  map<Node*, string> invalid_nodes) const;
@@ -381,7 +383,7 @@ class IR {
 
 	[[nodiscard]] ClusterProp GetClusterProperties() const;
 
-	void PostProcessClusters();
+	void AddKernelGlobalMemoryOperations();
 
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
 	                       Cluster* cluster, int dims, Tensors kernel_shape);
@@ -390,7 +392,7 @@ class IR {
 	                                 vector<Tensor*>& indices, Cluster* cluster_,
 	                                 int dims, Tensors kernel_shape);
 
-	void TransformToLinearIndex();
+	void FinalizeMemoryIndexing();
 
 	void CompileIR();
 

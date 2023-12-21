@@ -46,23 +46,11 @@ bool CompareShape(const Node* a, const Node* b) {
 	return true;
 }
 
-// returns true if the edge between given nodes is a boundary between clusters (pre-kernels)
+// returns true if the edge between given nodes is a boundary between kernels
 bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, int arg_index = -1, Arg::Type arg_type = Arg::Type::None) {
 	if (arg_index >= 0) {
 		OpType input_type = input->op->GetOpType();
 		OpType output_type = output->op->GetOpType();
-
-		bool is_from_scatter = input_type == OpType::Scatter;
-		bool is_to_scatter = output_type == OpType::Scatter;
-		bool is_from_store = input_type == OpType::Store;
-		bool is_from_output = input->memory_type_ == MemoryType::Output;
-
-		if (is_from_scatter || is_from_store) {
-			if (is_from_scatter && is_to_scatter) {
-				return false;  // multiple scatters can be merged
-			}
-			return true;
-		}
 
 		if (output_type == OpType::Load || output_type == OpType::Store) {
 			return arg_type == Arg::Type::Memory && !is_identity;
@@ -90,7 +78,7 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 }
 
 
-void IR::Clusterize() const {
+void IR::SeparateOperationsIntoKernels() const {
 	vector<Cluster*> clusters;
 	Cluster* current_cluster = nullptr;
 	for (auto node = begin(); !node.is_end(); ++node) {
@@ -178,10 +166,10 @@ void IR::PrintListing(string name, bool compact,
 	string error = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
 
 	if (!invalid_nodes.empty()) {
-		error += name + ": IR is invalid";
+		error += "Step [" + name + "] failed. ";
 		throw std::runtime_error(error);
 	} else {
-		cout << "Step " << name << " completed successfully: \n" << endl;
+		cout << "Step [" << name << "] completed successfully: \n" << endl;
 		cout << error << endl;
 	}
 }
@@ -320,7 +308,7 @@ map<Node*, Node*> IR::CopyComputation(
 	return copied_node_map;
 }
 
-void IR::OptimizeClusters() {
+void IR::OptimizeKernels() {
 	// get cluster data
 	ClusterProp clusters = GetClusterProperties();
 
@@ -369,13 +357,147 @@ void IR::OptimizeClusters() {
 	}
 }
 
+bool isConstantAndEqualTo(const Tensor* tensor, float value) {
+	if (tensor->node_->name != "const" || tensor->node_->has_been_modified_) {
+		return false;
+	}
+
+	switch (tensor->type) {
+		case DataType::Float:
+			return AsFloat(tensor->data[0]) == value;
+		case DataType::Int:
+			return AsInt(tensor->data[0]) == value;
+		case DataType::Uint:
+			return tensor->data[0] == value;
+		default:
+			throw std::runtime_error("Unexpected type in isConstantAndEqualTo");
+	}
+}
+
+bool isConstant(const Tensor* tensor) {
+	return tensor->node_->name == "const" && !tensor->node_->has_been_modified_;
+}
+
+Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32) {
+	switch (a->type) {
+		case DataType::Float:
+			return &Tensor::Constant(opF32(AsFloat(a->data[0]), AsFloat(b->data[0])));
+		case DataType::Int:
+			return &Tensor::Constant(opI32(AsInt(a->data[0]), AsInt(b->data[0])));
+		case DataType::Uint:
+			return &Tensor::Constant(opU32(a->data[0], b->data[0]));
+		default:
+			throw std::runtime_error("Unexpected type in ApplyMultiOP");
+	}
+}
+
+#define ApplyOP(v1, v2, op) ApplyMultiOP(v1, v2, [](float a, float b) { return a op b; }, [](int a, int b) { return a op b; }, [](uint a, uint b) { return a op b; })
+#define ApplyFUNC(v1, v2, func) ApplyMultiOP(v1, v2, [](float a, float b) { return func(a, b); }, [](int a, int b) { return func(a, b); }, [](uint a, uint b) { return func(a, b); })
+
+void IR::OptimizeOperations() 
+{
+	for (auto node = begin(); !node.is_end(); ++node) {
+		if (node->op->op_type_ != OpType::Operator) {
+			continue;
+		}
+
+		//get node operation
+		const string op = node->name;
+
+		//get inputs
+		map<int, const Tensor*> inputs = node->GetArgumentTensors(Arg::Type::Input);
+		ExecuteExpressionAfter(*node, [&]() {
+			const Tensor* result = nullptr;
+			if (op == "add") {
+				// if any are zero, replace with the other
+				if (isConstantAndEqualTo(inputs[0], 0.0F)) {
+					// replace with input 1
+					result = inputs[1];
+				} else if (isConstantAndEqualTo(inputs[1], 0.0F)) {
+					// replace with input 0
+					result = inputs[0];
+				}
+
+				// if all are constants, replace with result
+				if (isConstant(inputs[0]) && isConstant(inputs[1])) {
+					// replace with result
+					result = ApplyOP(inputs[0], inputs[1], +);
+				}
+			} else if (op == "sub") {
+				// if any are zero, replace with the other
+				if (isConstantAndEqualTo(inputs[0], 0.0F)) {
+					// replace with negation of input 1
+					result = &(-*inputs[1]);
+				} else if (isConstantAndEqualTo(inputs[1], 0.0F)) {
+					// replace with input 0
+					result = inputs[0];
+				}
+
+				// if all are constants, replace with result
+				if (isConstant(inputs[0]) && isConstant(inputs[1])) {
+					// compute result
+					result = ApplyOP(inputs[0], inputs[1], -);
+				}
+			} else if (op == "mul") {
+				// if any are zero, replace with zero
+				if (isConstantAndEqualTo(inputs[0], 0.0F) ||
+									    isConstantAndEqualTo(inputs[1], 0.0F)) {
+					// replace with zero
+					result = &Tensor::Constant(0u, inputs[0]->type);
+				}
+
+				// if any are one, replace with the other
+				if (isConstantAndEqualTo(inputs[0], 1.0F)) {
+					// replace with input 1
+					result = inputs[1];
+				} else if (isConstantAndEqualTo(inputs[1], 1.0F)) {
+					// replace with input 0
+					result = inputs[0];
+				}
+
+				// if all are constants, replace with result
+				if (isConstant(inputs[0]) && isConstant(inputs[1])) {
+					// compute result
+					result = ApplyOP(inputs[0], inputs[1], *);
+				}
+			} else if (op == "div") {
+				// if first is zero, replace with zero
+				if (isConstantAndEqualTo(inputs[0], 0.0F)) {
+					// replace with zero
+					result = &Tensor::Constant(0u, inputs[0]->type);
+				}
+
+				// if second is one, replace with first
+				if (isConstantAndEqualTo(inputs[1], 1.0F)) {
+					// replace with input 0
+					result = inputs[0];
+				}
+
+				// if all are constants, replace with result	
+				if (isConstant(inputs[0]) && isConstant(inputs[1])) {
+					// compute result
+					result = ApplyOP(inputs[0], inputs[1], /);
+				}
+			}
+
+			//TODO (Moroz): add more optimizations
+
+			// if computed optimized result, replace all node references with it
+			if (result != nullptr)
+			{
+				CopyLable(node.get(), result->node_);
+			}
+		});
+	}
+}
+
 bool IsChangingInput(Arg* arg) {
 	return arg->type_ == Arg::Type::Memory ||
 	       (arg->to_->get()->name == "set" && arg->index_ == 0) ||
 		   (arg->to_->get()->name == "loop_end"); //okay, this is stupid
 }
 
-void IR::RemoveUnusedNodes() {
+void IR::RemoveUnusedOperations() {
 	// use depth first search to find all nodes that are used for the output nodes
 	unordered_set<Node*> used_nodes;
 
@@ -477,7 +599,7 @@ ClusterProp IR::GetClusterProperties() const {
 	return ClusterProp(cluster_outputs, node_output, node_cost, clusters);
 }
 
-void IR::PostProcessClusters() {
+void IR::AddKernelGlobalMemoryOperations() {
 	// get cluster data
 	ClusterProp clusters = GetClusterProperties();
 
@@ -665,11 +787,9 @@ void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& ind
 	});
 }
 
-void IR::TransformToLinearIndex() {
+void IR::FinalizeMemoryIndexing() {
 	ClusterProp clusters = GetClusterProperties();
 
-	// replace all dim_id nodes with the corresponding index computed from
-	// thread_id
 	for (auto* cluster : clusters.clusters) {
 		Node* shape_node = cluster->shape_node_->get();
 		if (shape_node == nullptr) continue;
@@ -757,19 +877,22 @@ void IR::CompileIR()
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
 	CheckIR("Input", false, false);
-	RemoveUnusedNodes();
-	Clusterize();
-	CheckIR("Clusterize", true, false);
-	OptimizeClusters();
-	CheckIR("Post cluster optimization", true, false);
-	RemoveUnusedNodes();
-	CheckIR("Remove unused nodes 1", true, false);
-	PostProcessClusters();
-	CheckIR("Post process clusters", true, true);
-	TransformToLinearIndex();
-	CheckIR("Transform to linear index", true, true);
-	RemoveUnusedNodes();
-	CheckIR("Remove unused nodes 2", true, true);
+	OptimizeOperations();
+	CheckIR("Optimize operations", false, false);
+	RemoveUnusedOperations();
+	SeparateOperationsIntoKernels();
+	CheckIR("Separate Operations Into Kernels", true, false);
+	OptimizeKernels();
+	CheckIR("Optimize Kernels", true, false);
+	RemoveUnusedOperations();
+	CheckIR("Remove Unused Operations 1", true, false);
+	AddKernelGlobalMemoryOperations();
+	CheckIR("Add Kernel Global Memory Operations", true, true);
+	FinalizeMemoryIndexing();
+	OptimizeKernels();
+	CheckIR("Finalize Memory Indexing", true, true);
+	RemoveUnusedOperations();
+	CheckIR("Remove Unused Operations 2", true, true);
 }
 
 Program* GenerateProgram(IR* ir) 

@@ -29,7 +29,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		}
 
 		if (invalid.contains(node.get())) {
-			listing += "[!!!] " + invalid[node.get()] + ": \n";
+			listing += "[ERROR] " + invalid[node.get()] + ": \n";
 		}
 
 		if (!compact && node->cluster_ != nullptr) {

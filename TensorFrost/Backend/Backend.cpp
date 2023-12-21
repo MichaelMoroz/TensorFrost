@@ -4,9 +4,9 @@ namespace TensorFrost {
 
 TensorMemoryManager* global_memory_manager = nullptr;
 
-void InitializeBackend(BackendType backendType, const string& compilerPath) {
-	if (!compilerPath.empty()) {
-		kernel_compile_options = compilerPath;
+void InitializeBackend(BackendType backendType, const string& compilerOptions) {
+	if (!compilerOptions.empty()) {
+		kernel_compile_options = compilerOptions;
 	}
 	switch (backendType) {
 		case BackendType::CPU:
@@ -86,6 +86,9 @@ vector<TensorMemory*> ExecuteProgram(
 					if (shape_node->name == "const") {
 						shape.push_back(shape_node->GetTensor()->data[0]);
 						continue;
+					}
+					if (!shape_constants.contains(shape_node)) {
+						throw std::runtime_error("Shape constant not found");
 					}
 					shape.push_back(shape_constants[shape_node]);
 				}

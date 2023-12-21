@@ -287,7 +287,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		// Generate kernel
 		C_CodeGenerator generator;
 		generator.GenerateKernelLines(program->ir_, cluster, kernel);
-		//generator.Compactify();
+		generator.Compactify();
 
 		string loop = "";
 		const int block_size = 4; //TODO chose automatically
