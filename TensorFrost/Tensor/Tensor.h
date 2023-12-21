@@ -24,7 +24,7 @@ class Tensor {
 		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error(
 			    "Evaluation context has not been set. Are you doing operations "
-			    "outside a TensorProgram?");
+			    "without compiling first?");
 		}
 
 		auto* tensor = new Tensor(type);

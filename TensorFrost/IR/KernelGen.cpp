@@ -60,15 +60,17 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 			return arg_type == Arg::Type::Memory;
 		}
 
-		if (arg_type == Arg::Type::Shape) // shape must be outside cluster
+		if (arg_type == Arg::Type::Shape) // shape must be outside kernels
 			return true;
+
+		//TODO: memory stores and loads to the same memory must be in separate kernels
 	}
 
 	if (!CompareShape(input, output)) {
 		return true;
 	}
 
-	// memory should not be inside work clusters
+	// memory should not be inside work kernels
 	if ((input->name == "memory" || output->name == "memory") &&
 	    (input->name != output->name)) {
 		return true;
@@ -183,16 +185,19 @@ bool BoundaryValid(const Node* input, const Node* output,
 	return !is_boundary;
 }
 
+void IR::RecomputeGlobalIndices() const {
+	// go over all nodes and recompute global indices
+	int index = 0;
+	for (auto node = begin(); !node.is_end(); ++node) {
+		node->global_index_ = index++;
+	}
+}
+
 void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 #ifdef NDEBUG
 	return;
 #endif
-
-	map<Node*, int> node_index;
-	int index = 0;
-	for (auto node = begin(); !node.is_end(); ++node) {
-		node_index[node.get()] = index++;
-	}
+	RecomputeGlobalIndices();
 
 	map<Node*, string> invalid_nodes;
 	//check if the IR is clusterized correctly
@@ -237,7 +242,7 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 			}
 
 			// check if inputs are before the node
-			if (node_index[from] > node_index[to]) {
+			if (from->global_index_ >= to->global_index_) {
 				invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is after the node";
 			}
 		}
@@ -891,6 +896,7 @@ void IR::CompileIR()
 	FinalizeMemoryIndexing();
 	OptimizeKernels();
 	CheckIR("Finalize Memory Indexing", true, true);
+	OptimizeOperations();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 2", true, true);
 }

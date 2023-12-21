@@ -96,6 +96,8 @@ class Node {
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
 
+	int global_index_ = 0;
+
 	bool has_been_modified_ = false;
 
 	Node(Tensor* tensor, Arguments&& args, string&& name)
@@ -211,6 +213,11 @@ class Node {
 		if (tensor_ == nullptr) {
 			throw std::runtime_error("Tensor not found");
 		}
+	}
+
+	Node* GetLastModifiedVersion() {
+		//find last store/scatter operation
+		Node* last_store = nullptr;
 	}
 
 	~Node();
@@ -357,6 +364,8 @@ class IR {
 		cursor_ = old_cursor;
 		current_cluster_ = old_cluster_head;
 	}
+
+	void RecomputeGlobalIndices() const;
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
 

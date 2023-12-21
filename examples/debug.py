@@ -235,6 +235,8 @@ def matmul():
 
 loop = tf.compile(matmul)
 
+print(loop.list_operations())
+
 A = np.random.rand(n, m).astype(np.float32)
 B = np.random.rand(m, k).astype(np.float32)
 
