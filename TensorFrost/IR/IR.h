@@ -215,9 +215,25 @@ class Node {
 		}
 	}
 
-	Node* GetLastModifiedVersion() {
+	const Node* GetLastVersion(const Node* latest_node) const {
 		//find last store/scatter operation
-		Node* last_store = nullptr;
+		const Node* last_modifier = this;
+		int last_index = -1;
+		for (auto& output : outputs_) {
+			if (output->type_ != Arg::Type::Memory) {
+				continue;
+			}
+			Node* output_node = output->to_->get();
+			if (output_node->op->op_type_ == OpType::Store ||
+			    output_node->op->op_type_ == OpType::Scatter) {
+				if (output_node->global_index_ > last_index &&
+				    output_node->global_index_ < latest_node->global_index_) {
+					last_index = output_node->global_index_;
+					last_modifier = output_node;
+				}
+			}
+		}
+		return last_modifier;
 	}
 
 	~Node();

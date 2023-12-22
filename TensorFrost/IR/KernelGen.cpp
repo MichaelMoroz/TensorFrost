@@ -63,7 +63,10 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 		if (arg_type == Arg::Type::Shape) // shape must be outside kernels
 			return true;
 
-		//TODO: memory stores and loads to the same memory must be in separate kernels
+		//if input is a store or a scatter and the output is a load then it is a boundary
+		if (input_type == OpType::Store || input_type == OpType::Scatter) {
+			return output_type == OpType::Load;
+		}
 	}
 
 	if (!CompareShape(input, output)) {
@@ -83,6 +86,10 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 void IR::SeparateOperationsIntoKernels() const {
 	vector<Cluster*> clusters;
 	Cluster* current_cluster = nullptr;
+
+	RecomputeGlobalIndices();
+	UpdateNodeOutputs();
+
 	for (auto node = begin(); !node.is_end(); ++node) {
 		// remove old cluster head
 		if (node->cluster_ != nullptr) {
@@ -120,9 +127,11 @@ void IR::SeparateOperationsIntoKernels() const {
 
 		// go over all inputs
 		for (auto& input : tensor->node_->inputs_) {
+			// get latest input version
+			const Node* latest = input.from_->get()->GetLastVersion(*node);
 			// check if input is the boundary of this cluster
-			if (input.from_->get()->cluster_ == current_cluster &&
-			    IsBoundary(input.from_->get(), *node, identity, input.index_, input.type_)) {
+			if (latest->cluster_ == current_cluster &&
+			    IsBoundary(latest, *node, identity, input.index_, input.type_)) {
 				is_boundary = true;
 				break;
 			}
@@ -225,8 +234,10 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 			if (check_clustering)
 			{
+				// get latest input version
+				const Node* latest = input.from_->get()->GetLastVersion(*node);
 				// check if input is the boundary of this cluster
-				if (!BoundaryValid(from, to, identity, input.index_, input.type_)) {
+				if (!BoundaryValid(latest, to, identity, input.index_, input.type_)) {
 					invalid_nodes[to] = "Invalid clusterization for argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_);
 				}
 			}
