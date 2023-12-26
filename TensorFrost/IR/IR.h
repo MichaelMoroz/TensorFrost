@@ -81,6 +81,7 @@ enum class MemoryType {
 class Node {
  public:
 	const string name;
+	float cost_ = -1.0f;
 	const Operation* op;
 	const Tensor* tensor_;
 
@@ -95,7 +96,6 @@ class Node {
 	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
-
 	int global_index_ = 0;
 
 	bool has_been_modified_ = false;
@@ -224,8 +224,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->op_type_ == OpType::Store ||
-			    output_node->op->op_type_ == OpType::Scatter) {
+			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
 				if (output_node->global_index_ > last_index &&
 				    output_node->global_index_ < latest_node->global_index_) {
 					last_index = output_node->global_index_;
@@ -247,14 +246,12 @@ class ClusterProp {
 	vector<Cluster*> clusters;
 	map<Cluster*, vector<Node*>> output;
 	map<Node*, vector<Arg*>> node_output;
-	map<Node*, float> node_cost;
 
 	ClusterProp(map<Cluster*, vector<Node*>> cluster_outputs,
-	            map<Node*, vector<Arg*>> output, map<Node*, float> cost,
+	            map<Node*, vector<Arg*>> output,
 	            vector<Cluster*> clusters)
 	    : output(std::move(cluster_outputs)),
 	      node_output(std::move(output)),
-	      node_cost(std::move(cost)),
 	      clusters(std::move(clusters)) {}
 };
 

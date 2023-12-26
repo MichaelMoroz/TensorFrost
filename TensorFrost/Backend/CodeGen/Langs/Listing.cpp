@@ -115,8 +115,8 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 				break;
 		}
 
-		if (clusters.node_cost[node.get()] != 0) {
-			listing += "cost=" + to_string(clusters.node_cost[node.get()]);
+		if (node->cost_ >= 0) {
+			listing += "cost=" + to_string(node->cost_);
 		}
 
 		listing += ")\n";

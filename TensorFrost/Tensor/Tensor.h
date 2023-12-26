@@ -144,6 +144,11 @@ class Tensor {
 		pair<Operation, DataType> operation = GetOperation(op, tensors);
 		DataType output_type = operation.second;
 
+		if (operation.first.HasAllTypes(OpType::Modifier))
+		{
+			memory->node_->SetAsModified();
+		}
+
 		// create argument list
 		Arguments arguments = Arguments();
 
@@ -483,48 +488,40 @@ class Tensor {
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
 	                     const Tensors& indices = Tensors()) {
-		tensor.node_->SetAsModified();
 		return MemoryOp("store", &tensor, indices, &value);
 	}
 
 	void Set(const Tensor& value) const  {
-		node_->SetAsModified();
-		Op("set", this, &value);
+		MemoryOp("set", this, {}, &value);
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedMax", &tensor, indices, &value);
 	}
 
 	static void ScatterMin(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedMin", &tensor, indices, &value);
 	}
 
 	static void ScatterOr(const Tensor& tensor, const Tensor& value,
 	                      const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedOr", &tensor, indices, &value);
 	}
 
 	static void ScatterAnd(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedAnd", &tensor, indices, &value);
 	}
 
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
-		tensor.node_->SetAsModified();
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 

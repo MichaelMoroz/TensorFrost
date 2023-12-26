@@ -39,6 +39,8 @@ enum class OpType {
 	TypeReinterpret,
 	DimensionIndex,
 	Constant,
+	MemoryOp,
+	Modifier,
 };
 
 using DataTypeList = vector<DataType>;
@@ -51,18 +53,26 @@ public:
 	float cost_ = 0.0F;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
-	OpType op_type_;
-
+	vector<OpType> op_types_;
 
 	Operation(string name, initializer_list<string> oloads, float cost,
-	          string code = "", OpType op_type = OpType::Function)
-	    : name_(std::move(name)), op_type_(op_type) {
+	          string code = "", initializer_list <OpType> op_type = {})
+	    : name_(std::move(name)){
 		if (code.empty()) {
 			code = name_;
 		}
 
 		code_ = code;
 		cost_ = cost;
+
+		//add op types
+		for (const auto& type : op_type) {
+			op_types_.push_back(type);
+		}
+
+		if (op_types_.empty()) {
+			op_types_.push_back(OpType::Function);
+		}
 
 		// parse the overloads
 		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool,
@@ -106,9 +116,25 @@ public:
 		}
 	}
 
-	[[nodiscard]] float GetCost() const { return cost_; }
+	[[nodiscard]] bool HasAllTypes(OpType type) const {
+		return std::find(op_types_.begin(), op_types_.end(), type) != op_types_.end();
+	}
 
-	[[nodiscard]] OpType GetOpType() const { return op_type_; }
+	template <typename... Args>
+	[[nodiscard]] bool HasAllTypes(OpType type, Args... args) const {
+		return HasAllTypes(type) && HasAllTypes(args...);
+	}
+
+	[[nodiscard]] bool HasAnyType(OpType type) const {
+		return HasAllTypes(type);
+	}
+
+	template <typename... Args>
+	[[nodiscard]] bool HasAnyType(OpType type, Args... args) const {
+		return HasAllTypes(type) || HasAnyType(args...);
+	}
+
+	[[nodiscard]] float GetCost() const { return cost_; }
 
 	[[nodiscard]] string GetName() const { return name_; }
 
@@ -171,15 +197,6 @@ public:
 		}
 		throw std::runtime_error("Invalid input types for operation");
 	}
-
-	[[nodiscard]] bool IsOperator() const { return op_type_ == OpType::Operator; }
-
-	[[nodiscard]] string GetCode() const { return code_; }
-
-	[[nodiscard]] string GenerateOpString(const vector<string>& arguments) const;
-	[[nodiscard]] string GenerateLine(const string& var_name,
-	                                  const vector<string>& arguments,
-	                                  const vector<DataType>& input_types) const;
 };
 
 const Operation& FindOperation(const string& name);

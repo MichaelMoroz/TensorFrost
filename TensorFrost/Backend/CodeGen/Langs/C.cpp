@@ -69,8 +69,7 @@ class C_CodeGenerator : public CodeGenerator {
 			left += "if (" + arguments[0] + ") {";
 		} else if (op->name_ == "if_end") {
 			left += "}";
-		} else if (op->op_type_ == OpType::Store || op->op_type_ == OpType::Load ||
-		           op->op_type_ == OpType::Scatter) {
+		} else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address = "off[" + to_string(offsets[memory[0].from_->get()]) +
 			                 "] + " + arguments[1];
 			string memory_expression = "mem[" + address + "]";
@@ -99,14 +98,14 @@ class C_CodeGenerator : public CodeGenerator {
 				}
 				right += ";";
 			}
-			else if (op->op_type_ == OpType::Scatter)
+			else if (op->HasAllTypes(OpType::Scatter))
 			{
 				string input_type_name = type_names[input_types[0]];
 				expression += op->code_ + "((" + input_type_name + "*)mem, " +
 				              address + ", " + arguments[2] + ")";
 				right += ";";
 			}
-		} else if (op->op_type_ == OpType::Set) {
+		} else if (op->name_ == "set") {
 			left += arguments[0] + " = ";
 			expression += arguments[1];
 			right += ";";
@@ -116,7 +115,7 @@ class C_CodeGenerator : public CodeGenerator {
 			}
 			string line;
 
-			switch (op->op_type_) {
+			switch (op->op_types_[0]) { //TODO: properly support multiple op types
 				case OpType::Operator:
 					line += arguments[0] + " " + op->code_ + " " + arguments[1];
 					break;

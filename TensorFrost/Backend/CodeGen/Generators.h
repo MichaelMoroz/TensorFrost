@@ -11,11 +11,7 @@ using NodeNames = std::unordered_map<const Node*, string>;
 NodeNames GenerateNodeNames(const IR& ir);
 string GetNodeName(const Node* node, NodeNames& names, bool compact = false);
 
-string GenerateHLSL(const IR&);
-string GenerateKernelHLSL(const IR&, const Lable*);
-
 pair<string, vector<string>> GenerateC(Program* program);
-
 
 class Line {
  public:
