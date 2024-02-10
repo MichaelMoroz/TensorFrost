@@ -7,25 +7,25 @@ using namespace std;
 
 NodeNames GenerateNodeNames(const IR& ir) {
 	NodeNames names = NodeNames();
-	map<Cluster*, int> cluster_var_index = map<Cluster*, int>();
+	map<Scope*, int> cluster_var_index = map<Scope*, int>();
 	int mem_index = 0;
 	int cluster_index = 0;
-	Cluster* curent_cluster = nullptr;
+	Scope* curent_cluster = nullptr;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		if (node->cluster_ != curent_cluster) {
+		if (node->kernel_ != curent_cluster) {
 			cluster_index++;
 		}
 		if (node->name == "memory") {
 			names[*node] = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
-			Cluster* cluster_id = node->cluster_;
+			Scope* cluster_id = node->kernel_;
 			int var_index = cluster_var_index[cluster_id];
 			names[*node] =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
 			cluster_var_index[cluster_id]++;
 		}
-		curent_cluster = node->cluster_;
+		curent_cluster = node->kernel_;
 	}
 
 	return names;
@@ -62,7 +62,7 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelLines(const IR* ir, const Cluster* cluster,
+void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
                          const Kernel* kernel) {
 	NodeNames names = GenerateNodeNames(*ir);
 

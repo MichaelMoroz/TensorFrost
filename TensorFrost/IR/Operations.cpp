@@ -114,6 +114,10 @@ const vector<Operation> operations = {
     Operation("continue", {""}, 0, "continue", {OpType::Keyword}),
     Operation("return", {""}, 0, "return", {OpType::Keyword}),
     Operation("GroupMemoryBarrierWithGroupSync", {""}, 256),
+
+    Operation("allocate", {"u_u"}, 0, "", {OpType::Special}),
+    Operation("free", {"u_"}, 0, "", {OpType::Special}),
+    Operation("dispatch", {"uuu_"}, 0, "", {OpType::Special}),
 };
 
 DataTypeList Types(initializer_list<DataType> elements) {

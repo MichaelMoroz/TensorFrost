@@ -268,6 +268,30 @@ inline void InterlockedXor(uint* memory, int address, uint value)
   memory[address] ^= value;
 }
 
+inline void InterlockedMin(int* memory, int address, int value)
+{
+  #pragma omp critical
+  memory[address] = min(memory[address], value);
+}
+
+inline void InterlockedMin(float* memory, int address, float value)
+{
+  #pragma omp critical
+  memory[address] = min(memory[address], value);
+}
+
+inline void InterlockedMax(int* memory, int address, int value)
+{
+  #pragma omp critical
+  memory[address] = max(memory[address], value);
+}
+
+inline void InterlockedMax(float* memory, int address, float value)
+{
+  #pragma omp critical
+  memory[address] = max(memory[address], value);
+}
+
 )";
 
 	// Generate HLSL code for each compute kernel
@@ -275,7 +299,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 	vector<string> kernel_names;
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Cluster* cluster = kernel->begin_->cluster_;
+		Scope* cluster = kernel->begin_->kernel_;
 		if (kernel->type_ != KernelType::Compute) {
 			continue;
 		}
@@ -286,7 +310,7 @@ inline void InterlockedXor(uint* memory, int address, uint value)
 		// Generate kernel
 		C_CodeGenerator generator;
 		generator.GenerateKernelLines(program->ir_, cluster, kernel);
-		generator.Compactify();
+		//generator.Compactify();
 
 		string loop = "";
 		const int block_size = 4; //TODO chose automatically

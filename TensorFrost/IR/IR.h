@@ -56,12 +56,12 @@ class Arg {
 
 
 
-class Cluster {
+class Scope {
  public:
 	Node* begin_;
 	Lable* shape_node_;
 
-	Cluster(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {}
+	Scope(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {}
 };
 
 using ArgMap = map<int, const Arg*>;
@@ -87,7 +87,8 @@ class Node {
 
 	Lable* lable_ = nullptr;
 
-	Cluster* cluster_ = nullptr;
+	Scope* kernel_ = nullptr;
+	Scope* scope_ = nullptr;
 
 	Node* prev_ = nullptr;
 	Node* next_ = nullptr;
@@ -243,13 +244,13 @@ void CopyLable(Node* target, Node* copy);
 
 class ClusterProp {
  public:
-	vector<Cluster*> clusters;
-	map<Cluster*, vector<Node*>> output;
+	vector<Scope*> clusters;
+	map<Scope*, vector<Node*>> output;
 	map<Node*, vector<Arg*>> node_output;
 
-	ClusterProp(map<Cluster*, vector<Node*>> cluster_outputs,
+	ClusterProp(map<Scope*, vector<Node*>> cluster_outputs,
 	            map<Node*, vector<Arg*>> output,
-	            vector<Cluster*> clusters)
+	            vector<Scope*> clusters)
 	    : output(std::move(cluster_outputs)),
 	      node_output(std::move(output)),
 	      clusters(std::move(clusters)) {}
@@ -305,12 +306,12 @@ class IR {
 		[[nodiscard]] bool is_begin() const { return node_ == nullptr; }
 
 		[[nodiscard]] bool is_cluster_begin() const {
-			return node_ == nullptr || node_->cluster_ == nullptr ||
-			       node_->cluster_->begin_ == node_;
+			return node_ == nullptr || node_->kernel_ == nullptr ||
+			       node_->kernel_->begin_ == node_;
 		}
 
-		bool is_cluster_end(const Cluster* cluster) const {
-			return node_ == nullptr || node_->cluster_ != cluster;
+		bool is_cluster_end(const Scope* cluster) const {
+			return node_ == nullptr || node_->kernel_ != cluster;
 		}
 
 		Node* get() { return node_; }
@@ -339,9 +340,9 @@ class IR {
 		if (node == *begin_) {
 			begin_ = Iterator(node->next_);
 		}
-		if (node->cluster_ != nullptr && node->cluster_->begin_ == node) {
+		if (node->kernel_ != nullptr && node->kernel_->begin_ == node) {
 			//assuming the next node is also in the cluster
-			node->cluster_->begin_ = node->next_;
+			node->kernel_->begin_ = node->next_;
 		}
 		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
 		delete node;
@@ -351,31 +352,39 @@ class IR {
 	                            bool in_cluster = true) {
 		// TODO(Moroz): check if no future nodes are used
 		Iterator old_cursor = cursor_;
-		Cluster* old_cluster = current_cluster_;
+		Scope* old_kernel = current_kernel_;
+		Scope* old_scope = current_scope_;
 		if (!in_cluster) {
-			current_cluster_ = nullptr;
+			current_kernel_ = nullptr;
+			current_scope_ = nullptr;
 		} else {
-			current_cluster_ = node->cluster_;
+			current_kernel_ = node->kernel_;
+			current_scope_ = node->scope_;
 		}
 		SetCursor(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_ = old_cluster;
+		current_kernel_ = old_kernel;
+		current_scope_ = old_scope;
 	}
 
 	void ExecuteExpressionBefore(Node* node, const function<void()>&& expression,
 	                             bool in_cluster = true) {
 		Iterator old_cursor = cursor_;
-		Cluster* old_cluster_head = current_cluster_;
+		Scope* old_kernel = current_kernel_;
+		Scope* old_scope = current_scope_;
 		if (!in_cluster) {
-			current_cluster_ = nullptr;
+			current_kernel_ = nullptr;
+			current_scope_ = nullptr;
 		} else {
-			current_cluster_= node->cluster_;
+			current_kernel_= node->kernel_;
+			current_scope_ = node->scope_;
 		}
 		SetCursorBefore(node);
 		expression();
 		cursor_ = old_cursor;
-		current_cluster_ = old_cluster_head;
+		current_kernel_ = old_kernel;
+		current_scope_ = old_scope;
 	}
 
 	void RecomputeGlobalIndices() const;
@@ -408,10 +417,10 @@ class IR {
 	void AddKernelGlobalMemoryOperations();
 
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Cluster* cluster, int dims, Tensors kernel_shape);
+	                       Scope* cluster, int dims, Tensors kernel_shape);
 
 	void MultiDimensionalModeIndices(Tensor*& thread_index,
-	                                 vector<Tensor*>& indices, Cluster* cluster_,
+	                                 vector<Tensor*>& indices, Scope* kernel_,
 	                                 int dims, Tensors kernel_shape);
 
 	void FinalizeMemoryIndexing();
@@ -441,19 +450,26 @@ class IR {
 	Iterator cursor_next_ = Iterator(nullptr);
 	Iterator begin_ = Iterator(nullptr);
 	Iterator end_ = Iterator(nullptr);
-	Cluster* current_cluster_ = nullptr;
+	Scope* current_kernel_ = nullptr;
+	Scope* current_scope_ = nullptr;
 
 	void InsertAtCursor(Node* node) {
 		nodes_.push_back(node);
-		node->cluster_ = current_cluster_;
+		node->kernel_ = current_kernel_;
+		node->scope_ = current_scope_;
 		if (*cursor_ != nullptr) {
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
-				if (current_cluster_ != nullptr &&
-				    current_cluster_->begin_ == prev_next) {
+				if (current_kernel_ != nullptr &&
+				    current_kernel_->begin_ == prev_next) {
 					// if the next node is a cluster head, then we need to update the
 					// cluster head
-					current_cluster_->begin_ = node;
+					current_kernel_->begin_ = node;
+				}
+				if (current_scope_ != nullptr && current_scope_->begin_ == prev_next) {
+					// if the next node is a scope head, then we need to update the
+					// scope head
+					current_scope_->begin_ = node;
 				}
 				node->next_ = prev_next;
 				prev_next->prev_ = node;
@@ -492,6 +508,12 @@ class IR {
 			throw std::runtime_error("Node is nullptr");
 		}
 	}
+
+	void SetCurrentScope(Node* node) {
+		current_scope_ = node->scope_;
+	}
+
+
 };
 
 bool CompareShape(const Node* a, const Node* b);

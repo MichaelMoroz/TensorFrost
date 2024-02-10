@@ -14,7 +14,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 	// now create the listing
 	string listing;
 	int indent = 0;
-	Cluster* prev_cluster = nullptr;
+	Scope* prev_cluster = nullptr;
 	for (auto node = ir.begin(); !node.is_end(); ++node) {
 		if (compact) {
 			if (node->name == "const") continue;
@@ -24,7 +24,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			indent--;
 		}
 
-		if (node->cluster_ != prev_cluster) {
+		if (node->kernel_ != prev_cluster) {
 			listing += "\n";
 		}
 
@@ -32,8 +32,8 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "[ERROR] " + invalid[node.get()] + ": \n";
 		}
 
-		if (!compact && node->cluster_ != nullptr) {
-			listing += GetNodeName(node->cluster_->begin_, names, false) + ": ";
+		if (!compact && node->kernel_ != nullptr) {
+			listing += GetNodeName(node->kernel_->begin_, names, false) + ": ";
 		}
 
 		// indent
@@ -125,7 +125,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			indent++;
 		}
 
-		prev_cluster = node->cluster_;
+		prev_cluster = node->kernel_;
 	}
 
 	return listing;

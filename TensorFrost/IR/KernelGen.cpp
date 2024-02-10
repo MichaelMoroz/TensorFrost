@@ -85,21 +85,21 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 
 
 void IR::SeparateOperationsIntoKernels() const {
-	vector<Cluster*> clusters;
-	Cluster* current_cluster = nullptr;
+	vector<Scope*> clusters;
+	Scope* current_cluster = nullptr;
 
 	RecomputeGlobalIndices();
 	UpdateNodeOutputs();
 
 	for (auto node = begin(); !node.is_end(); ++node) {
 		// remove old cluster head
-		if (node->cluster_ != nullptr) {
+		if (node->kernel_ != nullptr) {
 			// if last cluster node, delete lable
 			if (node->next_ == nullptr ||
-			    node->next_->cluster_ != node->cluster_) {
-				delete node->cluster_;
+			    node->next_->kernel_ != node->kernel_) {
+				delete node->kernel_;
 			}
-			node->cluster_ = nullptr;
+			node->kernel_ = nullptr;
 		}
 
 		// check if node is a cluster edge
@@ -112,7 +112,7 @@ void IR::SeparateOperationsIntoKernels() const {
 		bool is_boundary = false;
 		Node* prev = node.get_prev();
 		if (prev != nullptr) {
-			if (prev->cluster_ == current_cluster &&
+			if (prev->kernel_ == current_cluster &&
 			    IsBoundary(prev, *node, identity)) {
 				is_boundary = true;
 			}
@@ -132,7 +132,7 @@ void IR::SeparateOperationsIntoKernels() const {
 			// get latest input version
 			const Node* latest = input.from_->get()->GetLastVersion(*node);
 			// check if input is the boundary of this cluster
-			if (latest->cluster_ == current_cluster &&
+			if (latest->kernel_ == current_cluster &&
 			    IsBoundary(latest, *node, identity, input.index_, input.type_)) {
 				is_boundary = true;
 				break;
@@ -140,11 +140,11 @@ void IR::SeparateOperationsIntoKernels() const {
 		}
 
 		if (is_boundary) {
-			current_cluster = new Cluster(*node);
+			current_cluster = new Scope(*node);
 			clusters.push_back(current_cluster);
 		}
 
-		node->cluster_ = current_cluster;
+		node->kernel_ = current_cluster;
 
 		if (current_cluster->shape_node_ == nullptr) {
 			// TODO (Moroz): do operation categories
@@ -187,7 +187,7 @@ void IR::PrintListing(string name, bool compact,
 bool BoundaryValid(const Node* input, const Node* output,
                    bool is_identity = true, int arg_index = -1,
                    Arg::Type arg_type = Arg::Type::None) {
-	bool same_cluster = input->cluster_ == output->cluster_;
+	bool same_cluster = input->kernel_ == output->kernel_;
 	bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
 	if (!same_cluster) return true;
 	return !is_boundary;
@@ -244,7 +244,7 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 			if (check_kernels)
 			{
 				//check if no inputs are outside the cluster
-				if (from->cluster_ != to->cluster_ && 
+				if (from->kernel_ != to->kernel_ && 
 					input.type_ != Arg::Type::Memory && 
 					input.type_ != Arg::Type::Shape && from->name != "memory" &&
 				    from->name != "const") {
@@ -266,7 +266,7 @@ bool CannotCopyArgument(Arg& arg) {
 	return arg.type_ == Arg::Type::Memory || arg.type_ == Arg::Type::Shape ||
 	       arg.from_->get()->name == "memory" ||
 	       arg.from_->get()->HasBeenModified();
-			//(arg.from_->get()->cluster_ != arg.to_->get()->cluster_ && arg.from_->get()->name != "const"); //only copy inside the same cluster
+			//(arg.from_->get()->kernel_ != arg.to_->get()->kernel_ && arg.from_->get()->name != "const"); //only copy inside the same cluster
 }
 
 map<Node*, Node*> IR::CopyComputation(
@@ -356,7 +356,7 @@ void IR::OptimizeKernels() {
 
 				// if input is outside the cluster and has the same shape as the node,
 				// then copy it
-				if (input.from_->get()->cluster_ != node->cluster_/* && CompareShape(input.from_->get(), node.get())*/) {
+				if (input.from_->get()->kernel_ != node->kernel_/* && CompareShape(input.from_->get(), node.get())*/) {
 					// check if input is cheap enough to copy
 					int input_cost = input.from_->get()->cost_;
 					if (input_cost == -1.0)
@@ -565,7 +565,14 @@ void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.is_end(); ++node) {
 		if (!used_nodes.contains(node.get())) {
-			nodes_to_remove.insert(node.get());
+			if (node->memory_type_ != MemoryType::Input)
+			{
+				nodes_to_remove.insert(node.get());
+			}
+			else
+			{
+				//throw std::runtime_error("Input is not being used");
+			}
 		}
 	}
 
@@ -575,16 +582,16 @@ void IR::RemoveUnusedOperations() {
 }
 
 ClusterProp IR::GetClusterProperties() const {
-	map<Cluster*, vector<Node*>> cluster_outputs;
+	map<Scope*, vector<Node*>> cluster_outputs;
 	map<Node*, vector<Arg*>> node_output;
-	vector<Cluster*> clusters;
-	unordered_set<Cluster*> added_clusters;
+	vector<Scope*> clusters;
+	unordered_set<Scope*> added_clusters;
 
 	UpdateNodeOutputs();
 	// find all nodes that are outputs of a cluster (i.e. point to a node outside
 	// the cluster)
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->name == "memory" || node->cluster_ == nullptr || *node == nullptr) {
+		if (node->name == "memory" || node->kernel_ == nullptr || *node == nullptr) {
 			continue;
 		}
 
@@ -607,20 +614,20 @@ ClusterProp IR::GetClusterProperties() const {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->cluster_ != node->cluster_) {
+			if (output_node->kernel_ != node->kernel_) {
 				outputs.push_back(output);
 				is_output = true;
 			}
 		}
 
 		if (is_output) {
-			cluster_outputs[node->cluster_].push_back(*node);
+			cluster_outputs[node->kernel_].push_back(*node);
 			node_output[*node] = outputs;
 		}
 
-		if (!added_clusters.contains(node->cluster_))
-			clusters.push_back(node->cluster_);
-		added_clusters.insert(node->cluster_);
+		if (!added_clusters.contains(node->kernel_))
+			clusters.push_back(node->kernel_);
+		added_clusters.insert(node->kernel_);
 	}
 
 	return ClusterProp(cluster_outputs, node_output, clusters);
@@ -634,13 +641,13 @@ void IR::AddKernelGlobalMemoryOperations() {
 	// output
 	for (const auto& cluster_out : clusters.output) {
 		vector<Node*> cluster_outs = cluster_out.second;
-		Cluster* cluster_ = cluster_out.first;
+		Scope* kernel_ = cluster_out.first;
 
 		for (auto* output : cluster_outs) {
 			Node* mem;
 			// add memory node before this cluster
 			ExecuteExpressionBefore(
-			    cluster_->begin_,
+			    kernel_->begin_,
 			    [&]() {
 				    mem = Tensor::Memory(output->GetArguments(Arg::Type::Shape),
 				                         output->tensor_->type)
@@ -677,7 +684,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 			ExecuteExpressionAfter(output, [&]() {
 				// add store node after this node
 				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor());
-				store->node_->cluster_ = cluster_;
+				store->node_->kernel_ = kernel_;
 			});
 		}
 	}
@@ -776,7 +783,7 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 	return flat_index;
 }
 
-void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Cluster* cluster, int dims, Tensors kernel_shape)
+void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Scope* cluster, int dims, Tensors kernel_shape)
 {
 	ExecuteExpressionBefore(cluster->begin_, [&]() {
 		thread_index = &cluster->shape_node_->get()->GetTensor()->ThreadIndex();
@@ -809,12 +816,12 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Clus
 	}
 }
 
-void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Cluster* cluster_, int dims, Tensors kernel_shape)
+void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Scope* kernel_, int dims, Tensors kernel_shape)
 {
 	//add dim_id nodes at the beginning of the cluster
-	ExecuteExpressionBefore(cluster_->begin_, [&]() {
+	ExecuteExpressionBefore(kernel_->begin_, [&]() {
 		for (int i = 0; i < dims; i++) {
-			indices[i] = &cluster_->begin_->GetTensor()->Index(i);
+			indices[i] = &kernel_->begin_->GetTensor()->Index(i);
 		}
 	});
 }
@@ -963,7 +970,7 @@ Program* GenerateProgram(IR* ir)
 			int memory_index = 0;
 
 			for (auto node = IR::Iterator(begin);
-			     !node.is_cluster_end(begin->cluster_); ++node) {
+			     !node.is_cluster_end(begin->kernel_); ++node) {
 				if (node->op->HasAllTypes(OpType::MemoryOp, OpType::Modifier)) {
 					has_output = true;
 				}
