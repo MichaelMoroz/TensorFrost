@@ -39,7 +39,7 @@ tf.initialize(tf.cpu, "/Zi")
 #
 #N = 256
 #M = 512
-#
+
 #def WaveEq():
 #    u = tf.input([-1,-1], tf.float32)
 #    v = tf.input(u.shape, tf.float32)
@@ -376,7 +376,7 @@ def matmul():
     B = tf.input([M, -1], tf.float32)
     K = B.shape[1]
         
-    #Bt = transpose(B)
+    Bt = transpose(B)
         
     #C = tf.zeros([N, K])
     #i, j, k = tf.indices([N, K, M])
@@ -388,7 +388,7 @@ def matmul():
         
     s = tf.zeros([N, K], tf.float32)
     def loop_body(k):
-        s.set(s + A[i, k] * B[k, j])
+        s.set(s + A[i, k] * Bt[j, k])
          
     tf.loop(loop_body, 0, M, 1)
         

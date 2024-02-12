@@ -75,6 +75,7 @@ enum class MemoryType {
 	None,
 	Input,
 	Output,
+	Shape,
 	Constant,
 };
 

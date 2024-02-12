@@ -42,7 +42,7 @@ class CodeGenerator {
 	                          map<Node*, int> variables) = 0;
 
 	void GenerateKernelLines(const IR* ir, const Scope* cluster,
-	                         const Kernel* kernel);
+	                         const Kernel* kernel, NodeNames names);
 	void Compactify();
 	string GetFinalCode();
 };

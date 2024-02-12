@@ -28,7 +28,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 		}
 
 		auto* tensor_memory = new TensorMemory(shape, frame, this);
-		allocated[frame] = tensor_memory;
+		allocated_by_offset[frame->start] = tensor_memory;
 		return tensor_memory;
 	}
 
@@ -51,11 +51,15 @@ class CpuMemoryManager : public TensorMemoryManager {
 	void Free(TensorMemory* memory) override {
 		Frame* frame = memory->frame;
 		allocator.FreeFrame(*frame);
-		allocated.erase(frame);
+		allocated_by_offset.erase(frame->start);
+	}
+
+	void Free(uint offset) override { 
+		Free(allocated_by_offset[offset]);
 	}
 
 	~CpuMemoryManager() override {
-		for (auto& pair : allocated) {
+		for (auto& pair : allocated_by_offset) {
 			delete pair.second;
 		}
 	}

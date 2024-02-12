@@ -658,6 +658,10 @@ void IR::AddKernelGlobalMemoryOperations() {
 					    mem->memory_index_ = output->memory_index_;
 					    output->memory_type_ = MemoryType::None;
 				    }
+
+					// create new cluster
+				    Scope* new_cluster = new Scope(mem);
+					mem->kernel_ = new_cluster;
 			    },
 			    false);
 
@@ -929,6 +933,7 @@ void IR::CompileIR()
 	FinalizeMemoryIndexing();
 	OptimizeKernels();
 	CheckIR("Finalize Memory Indexing", true, true);
+	//SeparateOperationsIntoKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 2", true, true);
@@ -945,7 +950,7 @@ Program* GenerateProgram(IR* ir)
 	for (auto node = ir->begin(); !node.is_end(); ++node) {
 		Node* begin = node.get();
 
-		if (begin->name != "memory" && !node.is_cluster_begin()) {
+		if (!node.is_cluster_begin()) {
 			continue;
 		}
 
@@ -956,9 +961,6 @@ Program* GenerateProgram(IR* ir)
 		ArgMap shape;
 		int dim = 0;
 		if (begin->name == "memory") {
-			if (begin->memory_type_ == MemoryType::Input) {
-				continue;
-			}
 			type = KernelType::Memory;
 		} else {
 			type = KernelType::Compute;

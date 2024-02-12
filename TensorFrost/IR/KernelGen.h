@@ -37,6 +37,11 @@ class Program {
 	function<void()> unload_callback;
 	string generated_code_;
 
+	function<void(uint* in, uint* out, uint* mem,
+	              std::function<uint(uint*&, uint*, uint dim)> allocate,
+	              std::function<void(uint)> deallocate)>
+	    execute_callback;
+
 	explicit Program(IR* ir) : ir_(ir) {}
 
 	void AddKernel(KernelType type, KernelIndexingMode indexing_mode, Node* begin, map<Node*, int> variables, map<Node*, int> memory,

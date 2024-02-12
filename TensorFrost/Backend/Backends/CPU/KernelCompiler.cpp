@@ -125,6 +125,7 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 
 using uint = unsigned int;
 using kernel_func = void (*)(uint*, uint*, uint*, uint*);
+using main_func = void (*)(uint*, uint*, uint*, std::function<uint(uint*&, uint*, uint dim)>,  std::function<void(uint)>);
 
 void CompileAndLoadKernel(Program* program) {
 #if defined(_WIN32)
@@ -228,6 +229,27 @@ void CompileAndLoadKernel(Program* program) {
 
 		i++;
 	}
+
+	// Load the main function
+	#if defined(_WIN32)
+	auto main_callback = reinterpret_cast<main_func>(
+	    GetProcAddress(lib_handle, "main"));
+	#else
+	auto main_callback = reinterpret_cast<main_func>(
+	    dlsym(lib_handle, "main"));
+	#endif
+
+	if (!main_callback) {
+		throw std::runtime_error("Compiler error: cannot load main function");
+	}
+
+	// Set the execute callback
+	program->execute_callback =
+	    [main_callback](uint* in, uint* out, uint* mem,
+	                    std::function<uint(uint*&, uint*, uint dim)> allocate,
+	                    std::function<void(uint)> deallocate) {
+		main_callback(in, out, mem, allocate, deallocate);
+	};
 
 	cout << "Successfully compiled and loaded kernel library." << endl;
 }

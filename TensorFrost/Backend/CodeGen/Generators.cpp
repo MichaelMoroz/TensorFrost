@@ -63,9 +63,7 @@ inline string Tensor::GetConstantString() const {
 }
 
 void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
-                         const Kernel* kernel) {
-	NodeNames names = GenerateNodeNames(*ir);
-
+                         const Kernel* kernel, NodeNames names) {
 	int indent = 0;
 	int variable_index = 0;
 	int memory_index = 0;
@@ -93,6 +91,10 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
 
 		Line* line = GenerateLine(&names, op, node.get(), inputs, indices, shape,
 		                          memory, kernel->memory, kernel->variables);
+		if (line == nullptr) {
+			continue;
+		}
+
 		line->indent = indent;
 		lines.push_back(line);
 
@@ -196,16 +198,16 @@ string CodeGenerator::GetFinalCode() {
 	}
 
 	// update names
-	int i = 0;
-	for (auto& line : lines) {
-		string old_name = line->name;
-		string new_name = "v" + to_string(i);
-		i++;
-		std::regex name_regex("\\b" + old_name +
-		                      "\\b");  // regex for whole word match
-		code = std::regex_replace(code, name_regex, new_name);
-		line->name = new_name;
-	}
+	//int i = 0;
+	//for (auto& line : lines) {
+	//	string old_name = line->name;
+	//	string new_name = "v" + to_string(i);
+	//	i++;
+	//	std::regex name_regex("\\b" + old_name +
+	//	                      "\\b");  // regex for whole word match
+	//	code = std::regex_replace(code, name_regex, new_name);
+	//	line->name = new_name;
+	//}
 
 	return code;
 }

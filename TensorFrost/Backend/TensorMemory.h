@@ -22,13 +22,14 @@ class TensorMemory;
 class TensorMemoryManager {
  public:
 	FrameAllocator allocator;
-	map<Frame*, TensorMemory*> allocated;
+	map<uint, TensorMemory*> allocated_by_offset;
 
 	virtual TensorMemory* Allocate(const vector<int>& shape) = 0;
 	virtual TensorMemory* AllocateWithData(const vector<int>& shape,
 	                                       const vector<uint>& data) = 0;
 	virtual vector<uint> Readback(const TensorMemory* memory) = 0;
 	virtual void Free(TensorMemory* memory) = 0;
+	virtual void Free(uint offset) = 0;
 
 	[[nodiscard]] uint32_t GetAllocatedSize() const {
 		return allocator.GetRequiredAllocatedStorage();

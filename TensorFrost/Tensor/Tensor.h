@@ -418,7 +418,9 @@ class Tensor {
 			//check if tensor is a negative constant
 			if (tensor->node_->name == "const" && (*(int*)&(tensor->data[0])) < 0)
 			{
-				result.push_back(&Memory(DataType::Int));
+				Tensor& mem = Memory(DataType::Int);
+				mem.SetMemoryType(MemoryType::Shape);
+				result.push_back(&mem);
 			}
 			else 
 			{
