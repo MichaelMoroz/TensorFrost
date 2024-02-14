@@ -7,7 +7,7 @@ using namespace std;
 
 class C_CodeGenerator : public CodeGenerator {
  public:
-	Line* GenerateLine(NodeNames* names, const Operation* op, Node* node,
+	Line* GenerateLine(const Operation* op, Node* node,
 	                   Arguments inputs, Arguments indices, Arguments shape,
 	                   Arguments memory, map<Node*, int> offsets,
 	                   map<Node*, int> variables) override {
@@ -16,7 +16,7 @@ class C_CodeGenerator : public CodeGenerator {
 		vector<string> input_variables;
 		vector<DataType> input_types;
 		for (const Arg& arg : memory) {
-			string var_name = GetNodeName(arg.from_->get(), *names, true);
+			string var_name = GetNodeName(arg.from_->get(), true);
 			arguments.push_back(var_name);
 			if (arg.from_->get()->name != "const" &&
 			    arg.from_->get()->name != "memory") {
@@ -24,7 +24,7 @@ class C_CodeGenerator : public CodeGenerator {
 			}
 		}
 		for (const Arg& arg : indices) {
-			string var_name = GetNodeName(arg.from_->get(), *names, true);
+			string var_name = GetNodeName(arg.from_->get(), true);
 			arguments.push_back(var_name);
 			if (arg.from_->get()->name != "const" &&
 			    arg.from_->get()->name != "memory") {
@@ -33,7 +33,7 @@ class C_CodeGenerator : public CodeGenerator {
 		}
 		for (const Arg& arg : inputs) {
 			Node* input = arg.from_->get();
-			string name = GetNodeName(input, *names, true);
+			string name = GetNodeName(input, true);
 			if (input->name == "memory") {
 				name = "var[" + to_string(variables[input]) + "]";
 			}
@@ -46,11 +46,11 @@ class C_CodeGenerator : public CodeGenerator {
 
 		vector<string> shapes;
 		for (const Arg& arg : shape) {
-			string name = GetNodeName(arg.from_->get(), *names, true);
+			string name = GetNodeName(arg.from_->get(), true);
 			shapes.push_back(name);
 		}
 
-		string name = (*names)[node];
+		string name = node->var_name;
 
 		// get output type
 		DataType output_type = node->tensor_->type;//op->GetOutputType(input_types);
@@ -172,6 +172,14 @@ class C_CodeGenerator : public CodeGenerator {
 		                needs_parenthesis, op->cost_);
 	}
 };
+
+string ReadVariable(Node* node) {
+	if (node->name == "const") {
+		return to_string(node->GetTensor()->data[0]);
+	} else {
+		return "mem[" + node->var_name + "]";
+	}
+}
 
 pair<string, vector<string>> GenerateC(Program* program) {
 	string all_kernels = R"(
@@ -311,6 +319,18 @@ inline void InterlockedMax(float* memory, int address, float value)
   memory[address] = max(memory[address], value);
 }
 
+inline uint pcg(uint v)
+{
+	uint state = v * 747796405u + 2891336453u;
+	uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+	return (word >> 22u) ^ word;
+}
+
+inline float pcgf(uint v)
+{
+	return (float)pcg(v) / 4294967296.0f;
+}
+
 void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initializer_list<uint> off, std::initializer_list<uint> var, std::initializer_list<uint> shape)
 {
   uint* off_arr = new uint[off.size()];
@@ -341,7 +361,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 
 )";
 	
-	NodeNames names = GenerateNodeNames(*program->ir_);
+	GenerateNodeNames(*program->ir_);
 	vector<string> allocated_memories;
 	vector<Node*> output_memories;
 	int input_memory_index = 0;
@@ -357,8 +377,8 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 #endif
 	    " void "
 	    "main"
-	    "(uint* in, uint* out, uint* mem, std::function<uint(uint*&, uint*, uint dim)> allocate,  "
-	    "std::function<void(uint)> deallocate)\n"
+	    "(uint* in, uint* out, uint* mem, uint allocate(uint*&, uint*, uint dim), "
+	    "void deallocate(uint))\n"
 	    "{\n";
 
 	for (auto& i : program->kernels_) {
@@ -371,7 +391,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 			for (auto node = IR::Iterator(cluster->begin_);
 			     !node.is_cluster_end(cluster); ++node) {
 				if (node->name == "memory") {
-					string left = "uint " + names[*node] + " = ";
+					string left = "uint " + node->var_name + " = ";
 					//if input memory type then just take the input and store it in the output
 					if (node->memory_type_ == MemoryType::Input || node->memory_type_ == MemoryType::Shape) {
 						memory_code += left + "in[" + to_string(input_memory_index++) + "];\n";
@@ -381,16 +401,18 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 						// get shape arguments
 						ArgMap args = node->GetArgumentMap(Arg::Shape);
 						uint dims = args.size();
-						string shape_name = "shape_" + names[*node];
+						string shape_name = "shape_" + node->var_name;
 						memory_code += "std::vector<uint> " + shape_name + " = {";
 						if (dims == 0) {
 							memory_code += "1";
 						} else {
-							memory_code += "mem[" + names[args[0]->from_->get()] + "]";
-
-							for (int j = 1; j < dims; j++) {
+							for (int j = 0; j < dims; j++) {
+								if (j != 0) {
+									memory_code += ", ";
+								}
 								Node* shape_node = args[j]->from_->get();
-								memory_code += ", mem[" + names[shape_node] + "]";
+						
+								memory_code += ReadVariable(shape_node);
 							}
 						}
 
@@ -404,7 +426,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 						}
 						else
 						{
-							allocated_memories.push_back(names[*node]);
+							allocated_memories.push_back(node->var_name);
 						}
 					}
 				}
@@ -425,7 +447,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 
 		// Generate kernel
 		C_CodeGenerator generator;
-		generator.GenerateKernelLines(program->ir_, cluster, kernel, names);
+		generator.GenerateKernelLines(program->ir_, cluster, kernel);
 		//generator.Compactify();
 
 		
@@ -507,21 +529,21 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 				if (d != 0) {
 					host_code += ", ";
 				}
-				host_code += names[memory_nodes[d]];
+				host_code += memory_nodes[d]->var_name;
 			}
 			host_code += "}, {";
 			for (int d = 0; d < variable_nodes.size(); d++) {
 				if (d != 0) {
 					host_code += ", ";
 				}
-				host_code += "mem[" + names[variable_nodes[d]] + "]";
+				host_code += ReadVariable(variable_nodes[d]);
 			}
 			host_code += "}, {";
 			for (int d = 0; d < i.dim; d++) {
 				if (d != 0) {
 					host_code += ", ";
 				}
-				host_code += "mem[" + names[i.shape[d]->from_->get()] + "]";
+				host_code += ReadVariable(i.shape[d]->from_->get());
 			}
 			host_code += "});\n";
 			host_code += "\n";
@@ -531,7 +553,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 	//set output memories and deallocate
 	for (auto& memory : output_memories) {
 		int output_memory_index = memory->memory_index_;
-		string mem_name = names[memory];
+		string mem_name = memory->var_name;
 		host_code +=
 		    "  out[" + to_string(output_memory_index++) + "] = " + mem_name + ";\n";
 	}

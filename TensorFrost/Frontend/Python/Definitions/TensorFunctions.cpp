@@ -44,6 +44,9 @@ void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(rsqrt);
 	UNARY_FUNCTION(rcp);
 
+	UNARY_FUNCTION(pcg);
+	UNARY_FUNCTION(pcgf);
+
 	m.def("float", [](const PyTensor& t) { return PT(Tensor::tofloat(T(t))); });
 	m.def("uint", [](const PyTensor& t) { return PT(Tensor::touint(T(t))); });
 	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });

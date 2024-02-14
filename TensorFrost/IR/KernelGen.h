@@ -38,8 +38,8 @@ class Program {
 	string generated_code_;
 
 	function<void(uint* in, uint* out, uint* mem,
-	              std::function<uint(uint*&, uint*, uint dim)> allocate,
-	              std::function<void(uint)> deallocate)>
+	              uint(uint*&, uint*, uint dim),
+	              void(uint))>
 	    execute_callback;
 
 	explicit Program(IR* ir) : ir_(ir) {}

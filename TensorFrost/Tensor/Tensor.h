@@ -659,6 +659,9 @@ class Tensor {
 	static Tensor& trunc(const Tensor& x) { return Op("trunc", &x); }
 	static Tensor& frac(const Tensor& x) { return Op("frac", &x); }
 
+	static Tensor& pcg(const Tensor& x) { return Op("pcg", &x); }
+	static Tensor& pcgf(const Tensor& x) { return Op("pcgf", &x); }
+
 	static Tensor& tofloat(const Tensor& x) { return Op("float", &x); }
 	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }

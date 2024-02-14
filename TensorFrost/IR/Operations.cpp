@@ -106,18 +106,14 @@ const vector<Operation> operations = {
     Operation("group_id", {"_i"}, 0),
     Operation("group_count", {"_i"}, 1),
     Operation("thread_count", {"_i"}, 1),
-    Operation("loop_begin", {"iii_i"}, 3),
-    Operation("loop_end", {"i_"}, 0),
+    Operation("loop_begin", {"iii_i"}, 100),
+    Operation("loop_end", {"i_"}, 100),
     Operation("if_begin", {"b_"}, 1),
     Operation("if_end", {""}, 0),
     Operation("break", {""}, 0, "break", {OpType::Keyword}),
     Operation("continue", {""}, 0, "continue", {OpType::Keyword}),
     Operation("return", {""}, 0, "return", {OpType::Keyword}),
     Operation("GroupMemoryBarrierWithGroupSync", {""}, 256),
-
-    Operation("allocate", {"u_u"}, 0, "", {OpType::Special}),
-    Operation("free", {"u_"}, 0, "", {OpType::Special}),
-    Operation("dispatch", {"uuu_"}, 0, "", {OpType::Special}),
 };
 
 DataTypeList Types(initializer_list<DataType> elements) {

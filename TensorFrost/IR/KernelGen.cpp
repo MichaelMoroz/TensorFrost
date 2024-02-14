@@ -52,7 +52,7 @@ bool IsBoundary(const Node* input, const Node* output, bool is_identity = true, 
 		const Operation* input_op = input->op;
 		const Operation* output_op = output->op;
 
-		if (output_op->HasAnyType(OpType::Load, OpType::Store)) {
+		if (output_op->HasAnyType(OpType::Load)) {
 			return arg_type == Arg::Type::Memory && !is_identity;
 		}
 
@@ -189,6 +189,7 @@ bool BoundaryValid(const Node* input, const Node* output,
                    Arg::Type arg_type = Arg::Type::None) {
 	bool same_cluster = input->kernel_ == output->kernel_;
 	bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
+	//if (output->op->HasAllTypes(OpType::Set) && !same_cluster) return false; // set is always within the same cluster
 	if (!same_cluster) return true;
 	return !is_boundary;
 }
@@ -263,10 +264,18 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 }
 
 bool CannotCopyArgument(Arg& arg) {
+	Node* from = arg.from_->get();
+	Node* to = arg.to_->get();
 	return arg.type_ == Arg::Type::Memory || arg.type_ == Arg::Type::Shape ||
-	       arg.from_->get()->name == "memory" ||
-	       arg.from_->get()->HasBeenModified();
+	       from->name == "memory" || from->HasBeenModified();
 			//(arg.from_->get()->kernel_ != arg.to_->get()->kernel_ && arg.from_->get()->name != "const"); //only copy inside the same cluster
+}
+
+bool CannotMoveArgument(Arg& arg) {
+	Node* from = arg.from_->get();
+	Node* to = arg.to_->get();
+	return (arg.type_ == Arg::Type::Memory && !to->op->HasAllTypes(OpType::Set)) || arg.type_ == Arg::Type::Shape ||
+	       from->name == "memory";
 }
 
 map<Node*, Node*> IR::CopyComputation(
@@ -347,24 +356,36 @@ void IR::OptimizeKernels() {
 		}
 
 		unordered_set<Arg*> args_to_copy;
+		unordered_set<Node*> nodes_to_move;
 		// go over all nodes in the cluster and check if their inputs can be copied
 		for (auto node = Iterator(begin); !node.is_cluster_end(cluster_begin);
 		     ++node) {
 			// go over all inputs
 			for (auto& input : node->inputs_) {
-				if (CannotCopyArgument(input)) continue;
+				bool inside_cluster = input.from_->get()->kernel_ == node->kernel_;
 
-				// if input is outside the cluster and has the same shape as the node,
-				// then copy it
-				if (input.from_->get()->kernel_ != node->kernel_/* && CompareShape(input.from_->get(), node.get())*/) {
-					// check if input is cheap enough to copy
-					int input_cost = input.from_->get()->cost_;
-					if (input_cost == -1.0)
-					{
-						throw std::runtime_error("Cost has not been computed");
+				if (!CannotCopyArgument(input))
+				{
+					// if input is outside the cluster and has the same shape as the node,
+					// then copy it
+					if (!inside_cluster/* && CompareShape(input.from_->get(), node.get())*/) {
+						// check if input is cheap enough to copy
+						int input_cost = input.from_->get()->cost_;
+						if (input_cost == -1.0) {
+							throw std::runtime_error("Cost has not been computed");
+						}
+						if (input_cost >= 0.0F && input_cost < 256.0F) {
+							args_to_copy.insert(&input);
+						}
 					}
-					if (input_cost >= 0.0F && input_cost < 256.0F) {
-						args_to_copy.insert(&input);
+				}
+
+				if (!CannotMoveArgument(input))
+				{
+					// if this node is a set and its input is outside of the cluser ->
+					// move it inside
+					if (node->op->HasAllTypes(OpType::Set)) {
+						if (!inside_cluster) nodes_to_move.insert(input.from_->get());
 					}
 				}
 			}
@@ -383,6 +404,11 @@ void IR::OptimizeKernels() {
 		// replace all the arguments that use the copied nodes
 		for (auto* arg : args_to_copy) {
 			arg->from_ = copied_node_map[arg->from_->get()]->GetLable();
+		}
+
+		// move all the nodes that are outside the cluster inside
+		for (auto* node : nodes_to_move) {
+			MoveNodeBefore(begin, node);
 		}
 	}
 }
@@ -555,7 +581,7 @@ void IR::RemoveUnusedOperations() {
 
 	//mark all output nodes as used
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->memory_type_ == MemoryType::Output) {
+		if (node->memory_type_ == MemoryType::Output || node->name == "loop_begin" || node->name == "loop_end") {
 			dfs(node.get());
 		}
 	}
@@ -922,6 +948,7 @@ void IR::CompileIR()
 	OptimizeOperations();
 	CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
+	CheckIR("Remove Unused Operations 0", false, false);
 	SeparateOperationsIntoKernels();
 	CheckIR("Separate Operations Into Kernels", true, false);
 	OptimizeKernels();

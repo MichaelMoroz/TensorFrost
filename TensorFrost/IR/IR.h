@@ -81,6 +81,7 @@ enum class MemoryType {
 
 class Node {
  public:
+	string var_name = "none";
 	const string name;
 	float cost_ = -1.0f;
 	const Operation* op;
@@ -427,6 +428,62 @@ class IR {
 	void FinalizeMemoryIndexing();
 
 	void CompileIR();
+
+	void MoveNodeBefore(Node* before, Node* node) {
+		if (node == before) {
+			return;
+		}
+
+		// remove node from current position
+		if (node->prev_ != nullptr) {
+			node->prev_->next_ = node->next_;
+		}
+		if (node->next_ != nullptr) {
+			node->next_->prev_ = node->prev_;
+		}
+
+		node->next_ = before;
+		if (before->prev_ != nullptr)
+		{
+			before->prev_->next_ = node;
+			node->prev_ = before->prev_;
+		}
+		else
+		{
+			begin_ = Iterator(node);
+		}
+		before->prev_ = node;
+
+		node->kernel_ = before->kernel_;
+	}
+
+	void MoveNodeAfter(Node* after, Node* node) {
+		if (node == after) {
+			return;
+		}
+
+		// remove node from current position
+		if (node->prev_ != nullptr) {
+			node->prev_->next_ = node->next_;
+		}
+		if (node->next_ != nullptr) {
+			node->next_->prev_ = node->prev_;
+		}
+
+		node->prev_ = after;
+		if (after->next_ != nullptr)
+		{
+			after->next_->prev_ = node;
+			node->next_ = after->next_;
+		}
+		else
+		{
+			end_ = Iterator(node);
+		}
+		after->next_ = node;
+
+		node->kernel_ = after->kernel_;
+	}
 
 	~IR();
 

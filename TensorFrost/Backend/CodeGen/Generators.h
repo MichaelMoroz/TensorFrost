@@ -6,10 +6,9 @@
 #include "Tensor/Tensor.h"
 
 namespace TensorFrost {
-using NodeNames = std::unordered_map<const Node*, string>;
 
-NodeNames GenerateNodeNames(const IR& ir);
-string GetNodeName(const Node* node, NodeNames& names, bool compact = false);
+string GetNodeName(const Node* node,  bool compact = false);
+void GenerateNodeNames(const IR& ir);
 
 pair<string, vector<string>> GenerateC(Program* program);
 
@@ -35,14 +34,14 @@ class CodeGenerator {
 
 	CodeGenerator() = default;
 
-	virtual Line* GenerateLine(NodeNames* names, const Operation* op, Node* node,
+	virtual Line* GenerateLine(const Operation* op, Node* node,
 	                          Arguments inputs, Arguments indices,
 	                          Arguments shape, Arguments memory,
 	                          map<Node*, int> offsets,
 	                          map<Node*, int> variables) = 0;
 
 	void GenerateKernelLines(const IR* ir, const Scope* cluster,
-	                         const Kernel* kernel, NodeNames names);
+	                         const Kernel* kernel);
 	void Compactify();
 	string GetFinalCode();
 };

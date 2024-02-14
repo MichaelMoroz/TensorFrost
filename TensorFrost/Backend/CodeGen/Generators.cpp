@@ -5,8 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-NodeNames GenerateNodeNames(const IR& ir) {
-	NodeNames names = NodeNames();
+void GenerateNodeNames(const IR& ir) {
 	map<Scope*, int> cluster_var_index = map<Scope*, int>();
 	int mem_index = 0;
 	int cluster_index = 0;
@@ -16,22 +15,20 @@ NodeNames GenerateNodeNames(const IR& ir) {
 			cluster_index++;
 		}
 		if (node->name == "memory") {
-			names[*node] = "m" + to_string(mem_index);
+			node->var_name = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
 			Scope* cluster_id = node->kernel_;
 			int var_index = cluster_var_index[cluster_id];
-			names[*node] =
+			node->var_name =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
 			cluster_var_index[cluster_id]++;
 		}
 		curent_cluster = node->kernel_;
 	}
-
-	return names;
 }
 
-string GetNodeName(const Node* node, NodeNames& names, bool compact) {
+string GetNodeName(const Node* node,  bool compact) {
 	if (compact) {
 		if (node->name == "const" && !node->has_been_modified_) {
 			return node->GetTensor()->GetConstantString();
@@ -39,10 +36,10 @@ string GetNodeName(const Node* node, NodeNames& names, bool compact) {
 	}
 	else {
 		if (node->name == "const") {
-			return names[node] + "(" + node->GetTensor()->GetConstantString() + ")";
+			return node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
 		}
 	}
-	return names[node];
+	return node->var_name;
 }
 
 inline string Tensor::GetConstantString() const {
@@ -63,7 +60,7 @@ inline string Tensor::GetConstantString() const {
 }
 
 void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
-                         const Kernel* kernel, NodeNames names) {
+                         const Kernel* kernel) {
 	int indent = 0;
 	int variable_index = 0;
 	int memory_index = 0;
@@ -87,9 +84,9 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
 		Arguments shape = node->GetArguments(Arg::Type::Shape);
 		Arguments memory = node->GetArguments(Arg::Type::Memory);
 
-		string name = names[*node];
+		string name = node->var_name;
 
-		Line* line = GenerateLine(&names, op, node.get(), inputs, indices, shape,
+		Line* line = GenerateLine(op, node.get(), inputs, indices, shape,
 		                          memory, kernel->memory, kernel->variables);
 		if (line == nullptr) {
 			continue;
@@ -151,6 +148,10 @@ void CodeGenerator::Compactify() {
 				auto words_end = std::sregex_iterator();
 
 				int instances = (int)std::distance(words_begin, words_end);
+
+				if (instances == 0) {
+					continue;
+				}
 
 				if (instances < 2 || line2->cost < 1.0f) {
 					// merge lines

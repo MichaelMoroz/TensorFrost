@@ -363,55 +363,117 @@ tf.initialize(tf.cpu, "/Zi")
 #scaler = tf.compile(Downscale)
 #print(scaler.list_operations())
 
-S = 512
+#S = 512
+#
+#def transpose(A):
+#    N, M = A.shape
+#    i, j = tf.indices([M, N])
+#    return A[j, i] * 1.0
+#
+#def matmul():
+#    A = tf.input([-1, -1], tf.float32)
+#    N, M = A.shape
+#    B = tf.input([M, -1], tf.float32)
+#    K = B.shape[1]
+#        
+#    Bt = transpose(B)
+#        
+#    #C = tf.zeros([N, K])
+#    #i, j, k = tf.indices([N, K, M])
+#    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
+#        
+#    C = tf.buffer([N, K])
+#        
+#    i, j = C.indices
+#        
+#    s = tf.zeros([N, K], tf.float32)
+#    def loop_body(k):
+#        s.set(s + A[i, k] * Bt[j, k])
+#         
+#    tf.loop(loop_body, 0, M, 1)
+#        
+#    C[i, j] = s
+#        
+#    return [C]
+#
+#mmul = tf.compile(matmul)
+#
+#Anp = np.random.rand(64, 32).astype(np.float32)
+#Bnp = np.random.rand(32, 48).astype(np.float32)
+#
+#A = tf.tensor(Anp)
+#B = tf.tensor(Bnp)
+#C, = mmul(A, B)
+#
+#Cnp = C.numpy
+#
+##compare to numpy
+#Cnp2 = Anp @ Bnp
+#
+#print(Cnp)
+#print(Cnp2)
+#
+#Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
+#print("Error:", Cerror)
 
-def transpose(A):
-    N, M = A.shape
-    i, j = tf.indices([M, N])
-    return A[j, i] * 1.0
+S = 2048
+def SDF_mandelbulb(px, py, pz):
+    
+    dr = 1.0
+    r = 0.0
+    for k in range(6):
+        r = tf.sqrt(px*px + py*py + pz*pz)
+        theta = tf.acos(pz / r)
+        phi = tf.atan2(py, px)
+        dr = tf.pow(r, 8.0)*8.0*dr + 1.0
+        zr = tf.pow(r, 8.0)
+        theta = theta*8.0
+        phi = phi*8.0
+        px = px + zr*tf.sin(theta)*tf.cos(phi)
+        py = py + zr*tf.sin(phi)*tf.sin(theta)
+        pz = pz + zr*tf.cos(theta)
 
-def matmul():
-    A = tf.input([-1, -1], tf.float32)
-    N, M = A.shape
-    B = tf.input([M, -1], tf.float32)
-    K = B.shape[1]
-        
-    Bt = transpose(B)
-        
-    #C = tf.zeros([N, K])
-    #i, j, k = tf.indices([N, K, M])
-    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
-        
-    C = tf.buffer([N, K])
-        
-    i, j = C.indices
-        
-    s = tf.zeros([N, K], tf.float32)
+    return 0.5*tf.log(r)*r/dr
+
+def ray_marcher():
+    canvas = tf.zeros([S, S, 3], tf.float32)
+    i, j = tf.indices([S, S])
+    u, v = tf.float(i), tf.float(j)
+    u = (u - 0.5 * S) / float(S)
+    v = (v - 0.5 * S) / float(S)
+
+    camx = 0.0
+    camy = 0.0
+    camz = -2.0
+
+    dirx = u
+    diry = v
+    dirz = 0.5
+
+    # normalize direction
+    dir_mag = tf.sqrt(dirx*dirx + diry*diry + dirz*dirz)
+    dirx = dirx / dir_mag
+    diry = diry / dir_mag
+    dirz = dirz / dir_mag
+
+    td = tf.zeros([S, S], tf.float32)
     def loop_body(k):
-        s.set(s + A[i, k] * Bt[j, k])
-         
-    tf.loop(loop_body, 0, M, 1)
-        
-    C[i, j] = s
-        
-    return [C]
+        px = camx + dirx * td
+        py = camy + diry * td
+        pz = camz + dirz * td
+        sdf = SDF_mandelbulb(px, py, pz)
+        td.set(td + sdf)
 
-mmul = tf.compile(matmul)
+    tf.loop(loop_body, 0, 32, 1)
 
-Anp = np.random.rand(64, 32).astype(np.float32)
-Bnp = np.random.rand(32, 48).astype(np.float32)
+    canvas[i, j, 0] = tf.exp(-0.5*td)
+    canvas[i, j, 1] = tf.exp(-0.8*td)
+    canvas[i, j, 2] = tf.exp(-1.0*td)
 
-A = tf.tensor(Anp)
-B = tf.tensor(Bnp)
-C, = mmul(A, B)
+    return [canvas]
 
-Cnp = C.numpy
+raymarch = tf.compile(ray_marcher)
 
-#compare to numpy
-Cnp2 = Anp @ Bnp
-
-print(Cnp)
-print(Cnp2)
-
-Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
-print("Error:", Cerror)
+res = raymarch()
+resnp = res[0].numpy
+print(resnp.shape)

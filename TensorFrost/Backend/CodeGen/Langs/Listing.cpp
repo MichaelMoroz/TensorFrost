@@ -8,7 +8,7 @@ using namespace std;
 
 string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invalid) {
 	// first give unique names to all the tensors
-	NodeNames names = GenerateNodeNames(ir);
+	GenerateNodeNames(ir);
 	ClusterProp clusters = ir.GetClusterProperties();
 
 	// now create the listing
@@ -33,7 +33,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		}
 
 		if (!compact && node->kernel_ != nullptr) {
-			listing += GetNodeName(node->kernel_->begin_, names, false) + ": ";
+			listing += GetNodeName(node->kernel_->begin_, false) + ": ";
 		}
 
 		// indent
@@ -49,7 +49,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		listing += "[";
 		for (int i = 0; i < shape.size(); i++) {
 			if (i != 0) listing += ",";
-			listing += GetNodeName(shape[i].from_->get(), names, false);
+			listing += GetNodeName(shape[i].from_->get(), false);
 		}
 		listing += "]";
 
@@ -60,7 +60,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		if (node->tensor_->type != DataType::None) {
 			// 
 			//  the tensor name
-			listing += names[*node] + " =";
+			listing += node->var_name + " =";
 		}
 
 		listing += " " + node->name + "(";
@@ -69,7 +69,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "memory=[";
 			for (int i = 0; i < memory.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(memory[i].from_->get(), names, false);
+				listing += GetNodeName(memory[i].from_->get(), false);
 			}
 			listing += "], ";
 		}
@@ -78,7 +78,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "inputs=[";
 			for (int i = 0; i < inputs.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].from_->get(), names, false);
+				listing += GetNodeName(inputs[i].from_->get(), false);
 			}
 			listing += "], ";
 		}
@@ -87,7 +87,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "indices=[";
 			for (int i = 0; i < indices.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].from_->get(), names, false);
+				listing += GetNodeName(indices[i].from_->get(), false);
 			}
 			listing += "], ";
 		}
