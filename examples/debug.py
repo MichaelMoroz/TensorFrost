@@ -347,20 +347,35 @@ tf.initialize(tf.cpu, "/Zi")
 #
 #poissonTest = tf.compile(PoissonTest)
 
+def DownscaleVolume(vol):
+	N, M, K = vol.shape
+	
+	i, j, k = tf.indices([N/2, M/2, K/2])
+	i, j, k = 2*i, 2*j, 2*k
+	
+	B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
+	
+	return B
 
-#def Downscale():
-#    A = tf.input([-1, -1], tf.float32)
-#
-#    m, n = A.shape
-#
-#    i, j = tf.indices([m/2, n/2])
-#    i, j = 2*i, 2*j
-#
-#    B = 0.25 * (A[i, j] + A[i+1, j] + A[i, j+1] + A[i+1, j+1])
-#
-#    return [B]
-#
-#scaler = tf.compile(Downscale)
+
+def Downscale():
+	A = tf.input([-1, -1, -1], tf.float32)
+	
+	A = DownscaleVolume(A)
+	
+	return [A]
+
+downscaler = tf.compile(Downscale)
+
+vol = np.random.rand(128, 128, 128).astype(np.float32)
+
+A = tf.tensor(vol)
+
+res, = downscaler(A)
+
+print(res.numpy.shape)
+
+
 #print(scaler.list_operations())
 
 #S = 512
@@ -415,65 +430,3 @@ tf.initialize(tf.cpu, "/Zi")
 #
 #Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
 #print("Error:", Cerror)
-
-S = 2048
-def SDF_mandelbulb(px, py, pz):
-    
-    dr = 1.0
-    r = 0.0
-    for k in range(6):
-        r = tf.sqrt(px*px + py*py + pz*pz)
-        theta = tf.acos(pz / r)
-        phi = tf.atan2(py, px)
-        dr = tf.pow(r, 8.0)*8.0*dr + 1.0
-        zr = tf.pow(r, 8.0)
-        theta = theta*8.0
-        phi = phi*8.0
-        px = px + zr*tf.sin(theta)*tf.cos(phi)
-        py = py + zr*tf.sin(phi)*tf.sin(theta)
-        pz = pz + zr*tf.cos(theta)
-
-    return 0.5*tf.log(r)*r/dr
-
-def ray_marcher():
-    canvas = tf.zeros([S, S, 3], tf.float32)
-    i, j = tf.indices([S, S])
-    u, v = tf.float(i), tf.float(j)
-    u = (u - 0.5 * S) / float(S)
-    v = (v - 0.5 * S) / float(S)
-
-    camx = 0.0
-    camy = 0.0
-    camz = -2.0
-
-    dirx = u
-    diry = v
-    dirz = 0.5
-
-    # normalize direction
-    dir_mag = tf.sqrt(dirx*dirx + diry*diry + dirz*dirz)
-    dirx = dirx / dir_mag
-    diry = diry / dir_mag
-    dirz = dirz / dir_mag
-
-    td = tf.zeros([S, S], tf.float32)
-    def loop_body(k):
-        px = camx + dirx * td
-        py = camy + diry * td
-        pz = camz + dirz * td
-        sdf = SDF_mandelbulb(px, py, pz)
-        td.set(td + sdf)
-
-    tf.loop(loop_body, 0, 32, 1)
-
-    canvas[i, j, 0] = tf.exp(-0.5*td)
-    canvas[i, j, 1] = tf.exp(-0.8*td)
-    canvas[i, j, 2] = tf.exp(-1.0*td)
-
-    return [canvas]
-
-raymarch = tf.compile(ray_marcher)
-
-res = raymarch()
-resnp = res[0].numpy
-print(resnp.shape)

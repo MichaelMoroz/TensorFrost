@@ -992,7 +992,6 @@ Program* GenerateProgram(IR* ir)
 		} else {
 			type = KernelType::Compute;
 		
-			bool has_output = false;
 			bool has_shape = false;
 
 			int variable_index = 0;
@@ -1000,9 +999,7 @@ Program* GenerateProgram(IR* ir)
 
 			for (auto node = IR::Iterator(begin);
 			     !node.is_cluster_end(begin->kernel_); ++node) {
-				if (node->op->HasAllTypes(OpType::MemoryOp, OpType::Modifier)) {
-					has_output = true;
-				}
+
 				if (node->op->HasAllTypes(OpType::MemoryOp)) {
 					// get the memory node
 					const Tensor* memory =
@@ -1035,13 +1032,6 @@ Program* GenerateProgram(IR* ir)
 						has_shape = true;
 					}
 				}
-			}
-
-			if (!has_output) continue;
-
-			if (!has_shape)
-			{
-				throw runtime_error("Kernel does not have a shape");
 			}
 		}
 

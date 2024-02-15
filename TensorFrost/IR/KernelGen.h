@@ -24,8 +24,6 @@ class Kernel {
 	map<Node*, int> memory;
 	ArgMap shape;
 	int dim = 0;
-	function<void(TensorMemoryManager*, vector<uint>, vector<uint>, vector<uint>)>
-	    execute_callback;
 
 	string generated_code_;
 };
@@ -47,9 +45,6 @@ class Program {
 	void AddKernel(KernelType type, KernelIndexingMode indexing_mode, Node* begin, map<Node*, int> variables, map<Node*, int> memory,
 	               ArgMap shape, int dim) 
 	{
-		if (type == KernelType::Compute && dim == 0) {
-			throw std::runtime_error("Invalid dimension");
-		}
 		kernels_.push_back(
 		    {type, indexing_mode, begin, std::move(variables), std::move(memory), std::move(shape), dim});
 	}

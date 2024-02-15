@@ -186,50 +186,6 @@ void CompileAndLoadKernel(Program* program) {
 		#endif
 	};
 
-	// Load symbols for each kernel
-	int i = 0;
-	for (auto& k : program->kernels_) {
-		Kernel* kernel = &k;
-		if (kernel->type_ != KernelType::Compute) {
-			continue;
-		}
-
-		string kernel_name = kernel_names[i];
-		const string& symbol_name = kernel_name;
-
-		// Load the symbol
-		#if defined(_WIN32)
-		auto kernel_callback = reinterpret_cast<kernel_func>(
-		    GetProcAddress(lib_handle, symbol_name.c_str()));
-		#else
-		auto kernel_callback = reinterpret_cast<kernel_func>(
-		    dlsym(lib_handle, symbol_name.c_str()));
-		#endif
-
-		if (!kernel_callback) {
-			throw std::runtime_error("Compiler error: cannot load kernel function");
-		}
-
-		kernel->execute_callback = [kernel_callback](
-		                               TensorMemoryManager* memory_manager,
-		                               vector<uint> variables, vector<uint> offsets,
-		                               vector<uint> shape) {
-			// get CPU memory manager
-			auto* cpu_memory_manager =
-			    dynamic_cast<CpuMemoryManager*>(memory_manager);
-			if (!cpu_memory_manager) {
-				throw std::runtime_error(
-				    "Cannot execute kernel on non-CPU memory manager");
-			}
-			// get memory
-			uint* memory = cpu_memory_manager->memory.data();
-			// execute kernel
-			kernel_callback(variables.data(), offsets.data(), memory, shape.data());
-		};
-
-		i++;
-	}
-
 	// Load the main function
 	#if defined(_WIN32)
 	auto main_callback = reinterpret_cast<main_func>(

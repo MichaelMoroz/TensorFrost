@@ -7,6 +7,10 @@ using namespace std;
 
 class C_CodeGenerator : public CodeGenerator {
  public:
+	string offset_name_ = "off";
+	string variable_name_ = "var";
+	string memory_name_ = "mem";
+
 	Line* GenerateLine(const Operation* op, Node* node,
 	                   Arguments inputs, Arguments indices, Arguments shape,
 	                   Arguments memory, map<Node*, int> offsets,
@@ -35,7 +39,7 @@ class C_CodeGenerator : public CodeGenerator {
 			Node* input = arg.from_->get();
 			string name = GetNodeName(input, true);
 			if (input->name == "memory") {
-				name = "var[" + to_string(variables[input]) + "]";
+				name = variable_name_ + "[" + to_string(variables[input]) + "]";
 			}
 			arguments.push_back(name);
 			input_types.push_back(arg.from_->get()->GetTensor()->type);
@@ -76,9 +80,12 @@ class C_CodeGenerator : public CodeGenerator {
 		} else if (op->name_ == "if_end") {
 			left += "}";
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
-			string address = "off[" + to_string(offsets[memory[0].from_->get()]) +
-			                 "] + " + arguments[1];
-			string memory_expression = "mem[" + address + "]";
+			string address =
+			    offset_name_ + "[" + to_string(offsets[memory[0].from_->get()]) + "]";
+			if (arguments.size() > 1) { //if has index (not a scalar)
+				address += " + " + arguments[1];
+			}
+			string memory_expression = memory_name_ + "[" + address + "]";
 			if (op->name_ == "load") {
 				left += type_names[output_type] + " " + name + " = ";
 				if (output_type == DataType::Float) {
@@ -107,8 +114,8 @@ class C_CodeGenerator : public CodeGenerator {
 			else if (op->HasAllTypes(OpType::Scatter))
 			{
 				string input_type_name = type_names[input_types[0]];
-				expression += op->code_ + "((" + input_type_name + "*)mem, " +
-				              address + ", " + arguments[2] + ")";
+				expression += op->code_ + "((" + input_type_name + "*)" + memory_name_ +
+				              ", " + address + ", " + arguments[2] + ")";
 				right += ";";
 			}
 		} else if (op->name_ == "set") {
@@ -176,9 +183,11 @@ class C_CodeGenerator : public CodeGenerator {
 string ReadVariable(Node* node) {
 	if (node->name == "const") {
 		return to_string(node->GetTensor()->data[0]);
-	} else {
+	}
+	if (node->name == "memory") {
 		return "mem[" + node->var_name + "]";
 	}
+	return node->var_name;
 }
 
 pair<string, vector<string>> GenerateC(Program* program) {
@@ -328,7 +337,7 @@ inline uint pcg(uint v)
 
 inline float pcgf(uint v)
 {
-	return (float)pcg(v) / 4294967296.0f;
+	return (float)pcg(v) / (float)0xffffffffu;
 }
 
 void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initializer_list<uint> off, std::initializer_list<uint> var, std::initializer_list<uint> shape)
@@ -412,7 +421,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 								}
 								Node* shape_node = args[j]->from_->get();
 						
-								memory_code += ReadVariable(shape_node);
+								memory_code += "(uint)" + ReadVariable(shape_node);
 							}
 						}
 
@@ -436,30 +445,81 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 				}
 			}
 
-			host_code += AddIndent(memory_code, "  ");
 			host_code += "\n";
+			host_code += AddIndent(memory_code, "  ");
 
 			continue;
 		}
 
-		string kernel_name = "kernel_" + to_string(kernel_count++);
+		string kernel_name = "kernel_" + to_string(kernel_count);
 		kernel_names.push_back(kernel_name);
 
 		// Generate kernel
 		C_CodeGenerator generator;
-		generator.GenerateKernelLines(program->ir_, cluster, kernel);
-		//generator.Compactify();
 
-		
-		string kernel_code = generator.GetFinalCode();
-		kernel->generated_code_ = kernel_code;
+		vector<Node*> memory_nodes;
+		memory_nodes.resize(kernel->memory.size());
+		for (auto& memory : kernel->memory) {
+			memory_nodes[memory.second] = memory.first;
+		}
 
-		if (i.dim == 0) //add it to host code if scalar
+		vector<Node*> variable_nodes;
+		variable_nodes.resize(kernel->variables.size());
+		for (auto& variable : kernel->variables) {
+			variable_nodes[variable.second] = variable.first;
+		}
+
+		string memory_args = "{";
+		for (int d = 0; d < memory_nodes.size(); d++) {
+			if (d != 0) {
+				memory_args += ", ";
+			}
+			memory_args += memory_nodes[d]->var_name;
+		}
+		memory_args += "}";
+
+		string variable_args = "{";
+		for (int d = 0; d < variable_nodes.size(); d++) {
+			if (d != 0) {
+				variable_args += ", ";
+			}
+			variable_args += ReadVariable(variable_nodes[d]);
+		}
+		variable_args += "}";
+
+		string shape_args = "{";
+		for (int d = 0; d < i.dim; d++) {
+			if (d != 0) {
+				shape_args += ", ";
+			}
+			shape_args += "(uint)"+ReadVariable(i.shape[d]->from_->get());
+		}
+		shape_args += "}";
+
+		if (i.dim == 0) //add it to host code if scalar kernel
 		{
+			generator.offset_name_ = "off_" + to_string(kernel_count);
+			generator.variable_name_ = "var_" + to_string(kernel_count);
+			generator.GenerateKernelLines(program->ir_, cluster, kernel);
+			string kernel_code = generator.GetFinalCode();
+			kernel->generated_code_ = kernel_code;
+
+			host_code += "\n";
+			if (memory_nodes.size() > 0) {
+				host_code += "  std::vector<uint> " + generator.offset_name_ + " = " + memory_args + ";\n";
+			}
+			if (variable_nodes.size() > 0) {
+				host_code += "  std::vector<uint> " + generator.variable_name_ + " = " + variable_args + ";\n";
+			}
+			host_code += "\n";
 			host_code += AddIndent(kernel_code, "  ");
 		}
 		else
 		{
+			generator.GenerateKernelLines(program->ir_, cluster, kernel);
+			string kernel_code = generator.GetFinalCode();
+			kernel->generated_code_ = kernel_code;
+
 			string loop = "";
 			const int block_size = 4;  // TODO chose automatically
 			switch (kernel->indexing_mode_) {
@@ -511,43 +571,11 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 			    "  }\n"
 			    "}\n";
 
-			host_code += "  dispatch(" + kernel_name + ", mem, {";
-
-			vector<Node*> memory_nodes;
-			memory_nodes.resize(kernel->memory.size());
-			for (auto& memory : kernel->memory) {
-				memory_nodes[memory.second] = memory.first;
-			}
-
-			vector<Node*> variable_nodes;
-			variable_nodes.resize(kernel->variables.size());
-			for (auto& variable : kernel->variables) {
-				variable_nodes[variable.second] = variable.first;
-			}
-
-			for (int d = 0; d < memory_nodes.size(); d++) {
-				if (d != 0) {
-					host_code += ", ";
-				}
-				host_code += memory_nodes[d]->var_name;
-			}
-			host_code += "}, {";
-			for (int d = 0; d < variable_nodes.size(); d++) {
-				if (d != 0) {
-					host_code += ", ";
-				}
-				host_code += ReadVariable(variable_nodes[d]);
-			}
-			host_code += "}, {";
-			for (int d = 0; d < i.dim; d++) {
-				if (d != 0) {
-					host_code += ", ";
-				}
-				host_code += ReadVariable(i.shape[d]->from_->get());
-			}
-			host_code += "});\n";
 			host_code += "\n";
+			host_code += "  dispatch(" + kernel_name + ", mem, " +
+			             memory_args + ", " + variable_args + ", " + shape_args + ");\n";
 		}
+		kernel_count++;
 	}
 
 	//set output memories and deallocate
