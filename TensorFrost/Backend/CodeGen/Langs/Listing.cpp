@@ -26,6 +26,14 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 
 		if (node->kernel_ != prev_cluster) {
 			listing += "\n";
+			switch (node->kernel_->type_) {
+				case Scope::ScopeType::Host:
+					listing += "Host: \n";
+					break;
+				case Scope::ScopeType::Kernel:
+					listing += "Kernel: \n";
+					break;
+			}
 		}
 
 		if (invalid.contains(node.get())) {
@@ -110,6 +118,9 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 				break;
 			case MemoryType::Constant:
 				listing += "memory_type=constant, ";
+				break;
+			case MemoryType::Shape:
+				listing += "memory_type=input_shape, ";
 				break;
 			default:
 				break;

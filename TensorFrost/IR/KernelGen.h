@@ -11,7 +11,7 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
                 Arg::Type arg_type);
 
 enum KernelType {
-	Memory,
+	Host,
 	Compute,
 };
 

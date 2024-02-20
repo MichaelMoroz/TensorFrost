@@ -32,13 +32,11 @@ void Deallocator(uint a) { global_memory_manager->Free(a); }
 
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs) {
-	vector<Node*> memory_inputs;
 
-	for (auto node = program->ir_->begin(); !node.is_end(); ++node) {
-		if (node->memory_type_ == MemoryType::Input) {
-			memory_inputs.push_back(*node);
-		}
-	}
+	vector<Node*> memory_inputs = program->ir_->memory_inputs;
+	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map = program->ir_->shape_memory_map;
+	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
+	int output_count = output_memory_map.size();
 
 	if (memory_inputs.size() != inputs.size()) {
 		throw std::runtime_error(
@@ -46,27 +44,52 @@ vector<TensorMemory*> ExecuteProgram(
 		    to_string(memory_inputs.size()) + ", got " + to_string(inputs.size()));
 	}
 
-	map<Node*, TensorMemory*> memory_map;
-	map<Node*, int> shape_constants;
+	if (output_count == 0) {
+		throw std::runtime_error("TensorProgram does not do any computation: no outputs");
+	}
+
+	vector<uint> input_offsets;
+	unordered_set<Node*> processed_shapes;
+	vector<TensorMemory*> to_remove;
 	for (int i = 0; i < memory_inputs.size(); i++) {
-		memory_map[memory_inputs[i]] = inputs[i];
-		// get shape arguments
-		Arguments args = memory_inputs[i]->GetArguments(Arg::Shape);
+		// add and check input shapes
+		unordered_map<int, Node*> args = shape_memory_map[memory_inputs[i]];
 		vector<int> shape = inputs[i]->GetShape();
+
+		if (shape.size() != args.size()) {
+			throw std::runtime_error(
+			    "Invalid dimension for input " + to_string(i) + ". Expected " +
+				to_string(args.size()) + ", got " + to_string(shape.size()));
+		}
+
 		for (int j = 0; j < args.size(); j++) {
-			Node* shape_node = args[j].from_->get();
+			Node* shape_node = args[j];
+			
 			// if shape node is a constant, compare constant value to input shape
-			bool invalid_shape = false;
 			int expected = -1;
-			bool is_const = false;
 
-			if (shape_node->name == "const") {
+			if (shape_node->name == "const") 
+			{
 				expected = shape_node->GetTensor()->data[0];
-				is_const = true;
 			}
-
-			if (shape_constants.contains(shape_node)) {
-				expected = shape_constants[shape_node];
+			else if (shape_node->memory_type_ == MemoryType::Shape) 
+			{
+				if (!processed_shapes.contains(shape_node)) //if not already allocated
+				{
+					// Allocate scalar for shape
+					vector<uint> data;
+					data.push_back(shape[j]);
+					TensorMemory* shape_mem =
+					    global_memory_manager->AllocateWithData({1}, data);
+					// add input memory shape offset
+					input_offsets.push_back(shape_mem->frame->start);
+					to_remove.push_back(shape_mem);
+					processed_shapes.insert(shape_node);
+				}
+			}
+			else 
+			{
+				throw std::runtime_error("Invalid shape node type for input " + to_string(i));
 			}
 
 			if (expected != -1 && expected != shape[j])
@@ -76,33 +99,10 @@ vector<TensorMemory*> ExecuteProgram(
 				                         to_string(expected) + ", got " +
 				                         to_string(shape[j]));
 			}
+		}
 
-			shape_constants[shape_node] = shape[j];
-		}
-	}
-
-	vector<uint> input_offsets;
-	vector<TensorMemory*> to_remove;
-	int output_count = 0;
-
-	for (auto node = program->ir_->begin(); !node.is_end(); ++node) {
-		if (node->memory_type_ == MemoryType::Input) {
-			input_offsets.push_back(memory_map[*node]->frame->start);
-		}
-		if (node->memory_type_ == MemoryType::Shape)
-		{
-			//Allocate scalar 
-			vector<uint> data;
-			data.push_back(shape_constants[*node]);
-			TensorMemory* shape_mem =
-			    global_memory_manager->AllocateWithData({1}, data);
-			input_offsets.push_back(shape_mem->frame->start);
-			to_remove.push_back(shape_mem);
-		}
-		if (node->memory_type_ == MemoryType::Output)
-		{
-			output_count++;
-		}
+		// add input memory offset
+		input_offsets.push_back(inputs[i]->frame->start);
 	}
 
 	uint* mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();

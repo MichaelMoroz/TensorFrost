@@ -52,7 +52,7 @@ class Tensor {
 	}
 
 	static bool CompareTensorShape(const Tensor* a, const Tensor* b) {
-		return CompareShape(a->node_, b->node_);
+		return CompareShape(a->node_, b->node_).compatible;
 	}
 
 	static pair<Operation, DataType> GetOperation(const string& name,
@@ -414,12 +414,13 @@ class Tensor {
 
 	static Tensors GetInputShapeTensors(Tensors shape) {
 		Tensors result = Tensors();
-		for (const Tensor* tensor : shape) {
+		for (int dim = 0; dim < shape.size(); dim++) {
+			const Tensor* tensor = shape[dim];
 			//check if tensor is a negative constant
 			if (tensor->node_->name == "const" && (*(int*)&(tensor->data[0])) < 0)
 			{
 				Tensor& mem = Memory(DataType::Int);
-				mem.SetMemoryType(MemoryType::Shape);
+				mem.SetMemoryType(MemoryType::Shape, dim);
 				result.push_back(&mem);
 			}
 			else 
@@ -432,13 +433,15 @@ class Tensor {
 	 
 	static Tensor& Input(const DataType type = DataType::Float) {
 		Tensor& output = Memory(type);
-		output.SetMemoryType(MemoryType::Input);
+		output.SetMemoryType(MemoryType::Input,
+		                     evaluation_context_ir_->input_counter++);
 		return output;
 	}
 	static Tensor& Input(const Tensors& shape,
 	                     const DataType type = DataType::Float) {
 		Tensor& output = Memory(GetInputShapeTensors(shape), type);
-		output.SetMemoryType(MemoryType::Input);
+		output.SetMemoryType(MemoryType::Input,
+		                     evaluation_context_ir_->input_counter++);
 		return output;
 	}
 	static Tensor& Input(const vector<int>& shape,
@@ -446,7 +449,7 @@ class Tensor {
 		return Input(GetShapeTensors(shape), type);
 	}
 
-	static Tensor& Index(const Tensors& shape, int dim) {
+	static Tensor& Index(Tensors shape, int dim) {
 		Tensor& output = Static("dim_id", shape, DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;

@@ -5,11 +5,27 @@
 namespace TensorFrost {
 using namespace std;
 
+string ReadVariable(Node* node) {
+	if (node->name == "const") {
+		return to_string(node->GetTensor()->data[0]);
+	}
+	if (node->name == "memory") {
+		return "mem[" + node->var_name + "]";
+	}
+	return node->var_name;
+}
+
 class C_CodeGenerator : public CodeGenerator {
  public:
 	string offset_name_ = "off";
 	string variable_name_ = "var";
 	string memory_name_ = "mem";
+
+	int* input_memory_index;
+	vector<string>* allocated_memories;
+	vector<Node*>* output_memories;
+
+	bool offset_array = true;
 
 	Line* GenerateLine(const Operation* op, Node* node,
 	                   Arguments inputs, Arguments indices, Arguments shape,
@@ -80,8 +96,16 @@ class C_CodeGenerator : public CodeGenerator {
 		} else if (op->name_ == "if_end") {
 			left += "}";
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
-			string address =
-			    offset_name_ + "[" + to_string(offsets[memory[0].from_->get()]) + "]";
+			string address;
+			if (offset_array)
+			{
+				address = offset_name_ + "[" + to_string(offsets[memory[0].from_->get()]) + "]";
+			}
+			else
+			{
+				address = arguments[0];
+			}
+			    
 			if (arguments.size() > 1) { //if has index (not a scalar)
 				address += " + " + arguments[1];
 			}
@@ -122,6 +146,47 @@ class C_CodeGenerator : public CodeGenerator {
 			left += arguments[0] + " = ";
 			expression += arguments[1];
 			right += ";";
+		} else if (op->name_ == "memory") {
+			left += "uint " + node->var_name + " = ";
+			// if input memory type then just take the input and store it in the
+			// output
+			if (node->memory_type_ == MemoryType::Input ||
+				node->memory_type_ == MemoryType::Shape) {
+				expression += "in[" + to_string((*input_memory_index)++) + "]";
+				right += ";";
+			}
+			// if any other memory type - allocate it
+			else {
+				// get shape arguments
+				ArgMap args = node->GetArgumentMap(Arg::Shape);
+				uint dims = args.size();
+			
+				string shape_arg = "{";
+				if (dims == 0) {
+					shape_arg += "1";
+				} else {
+					for (int j = 0; j < dims; j++) {
+						if (j != 0) {
+							shape_arg += ", ";
+						}
+						Node* shape_node = args[j]->from_->get();
+
+						shape_arg += "(uint)" + ReadVariable(shape_node);
+					}
+				}
+
+				shape_arg += "}";
+
+				expression += "allocate(alloc, mem, " + shape_arg + ")";
+				right += ";";
+
+				if (node->memory_type_ == MemoryType::Output) {
+					output_memories->push_back(node);
+				}
+				else {
+					allocated_memories->push_back(node->var_name);
+				}
+			}
 		} else {
 			if (output_type != DataType::None) {
 				left += type_names[output_type] + " " + name + " = ";
@@ -179,16 +244,6 @@ class C_CodeGenerator : public CodeGenerator {
 		                needs_parenthesis, op->cost_);
 	}
 };
-
-string ReadVariable(Node* node) {
-	if (node->name == "const") {
-		return to_string(node->GetTensor()->data[0]);
-	}
-	if (node->name == "memory") {
-		return "mem[" + node->var_name + "]";
-	}
-	return node->var_name;
-}
 
 pair<string, vector<string>> GenerateC(Program* program) {
 	string all_kernels = R"(
@@ -368,6 +423,22 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
   delete[] shape_arr;
 } 
 
+uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_list<uint> shape)
+{
+  uint* shape_arr = new uint[shape.size()];
+
+  for (int i = 0; i < shape.size(); i++)
+  {
+	shape_arr[i] = shape.begin()[i];
+  }
+
+  uint off = alloc(mem, shape_arr, shape.size());
+
+  delete[] shape_arr;
+
+  return off;
+}
+
 )";
 	
 	GenerateNodeNames(*program->ir_);
@@ -386,7 +457,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 #endif
 	    " void "
 	    "main"
-	    "(uint* in, uint* out, uint* mem, uint allocate(uint*&, uint*, uint dim), "
+	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
 	    "void deallocate(uint))\n"
 	    "{\n";
 
@@ -394,57 +465,17 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 		Kernel* kernel = &i;
 		Scope* cluster = kernel->begin_->kernel_;
 
-		if (kernel->type_ == KernelType::Memory) {
+		C_CodeGenerator generator;
 
-			string memory_code = "";
-			for (auto node = IR::Iterator(cluster->begin_);
-			     !node.is_cluster_end(cluster); ++node) {
-				if (node->name == "memory") {
-					string left = "uint " + node->var_name + " = ";
-					//if input memory type then just take the input and store it in the output
-					if (node->memory_type_ == MemoryType::Input || node->memory_type_ == MemoryType::Shape) {
-						memory_code += left + "in[" + to_string(input_memory_index++) + "];\n";
-					}
-					//if any other memory type - allocate it
-					else {
-						// get shape arguments
-						ArgMap args = node->GetArgumentMap(Arg::Shape);
-						uint dims = args.size();
-						string shape_name = "shape_" + node->var_name;
-						memory_code += "std::vector<uint> " + shape_name + " = {";
-						if (dims == 0) {
-							memory_code += "1";
-						} else {
-							for (int j = 0; j < dims; j++) {
-								if (j != 0) {
-									memory_code += ", ";
-								}
-								Node* shape_node = args[j]->from_->get();
-						
-								memory_code += "(uint)" + ReadVariable(shape_node);
-							}
-						}
+		if (kernel->type_ == KernelType::Host) {
+			generator.input_memory_index = &input_memory_index;
+			generator.allocated_memories = &allocated_memories;
+			generator.output_memories = &output_memories;
+			generator.offset_array = false;
 
-						memory_code += "};\n";
-
-						memory_code += left + "allocate(mem, " + shape_name + ".data(), " + to_string(dims) + ");\n";
-
-						if (node->memory_type_ == MemoryType::Output)
-						{
-							output_memories.push_back(*node);
-						}
-						else
-						{
-							allocated_memories.push_back(node->var_name);
-						}
-					}
-				}
-				else
-				{
-					throw std::runtime_error("Invalid kernel");
-				}
-			}
-
+			generator.GenerateKernelLines(program->ir_, cluster, kernel);
+			string memory_code = generator.GetFinalCode();
+			
 			host_code += "\n";
 			host_code += AddIndent(memory_code, "  ");
 
@@ -455,7 +486,7 @@ void dispatch(void(*kernel)(uint*, uint*, uint*, uint*), uint* mem, std::initial
 		kernel_names.push_back(kernel_name);
 
 		// Generate kernel
-		C_CodeGenerator generator;
+		
 
 		vector<Node*> memory_nodes;
 		memory_nodes.resize(kernel->memory.size());

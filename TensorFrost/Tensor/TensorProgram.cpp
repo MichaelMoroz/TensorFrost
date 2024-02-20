@@ -32,7 +32,7 @@ string TensorProgram::PrintProperties() const {
 	int intermediate_buffers = 0;
 	int compute_kernels = 0;
 	for (int i = 0; i < program->kernels_.size(); i++) {
-		if (program->kernels_[i].type_ == KernelType::Memory) {
+		if (program->kernels_[i].type_ == KernelType::Host) {
 			intermediate_buffers++;
 		}
 		else {

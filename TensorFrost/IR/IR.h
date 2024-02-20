@@ -15,6 +15,7 @@
 namespace TensorFrost {
 class Tensor;
 class Node;
+class Scope;
 
 class Lable {
  public:
@@ -52,16 +53,6 @@ class Arg {
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
-};
-
-
-
-class Scope {
- public:
-	Node* begin_;
-	Lable* shape_node_;
-
-	Scope(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {}
 };
 
 using ArgMap = map<int, const Arg*>;
@@ -244,6 +235,30 @@ class Node {
 void SwapLables(Node* a, Node* b);
 void CopyLable(Node* target, Node* copy);
 
+class Scope {
+ public:
+	enum ScopeType {
+		None,
+		Host,
+		Kernel,
+		HostLoop,
+		KernelLoop,
+	};
+
+	Node* begin_;
+	Lable* shape_node_;
+	ScopeType type_ = ScopeType::None;
+
+	Scope(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {
+		Arguments shape_args = cluster_begin->GetArguments(Arg::Type::Shape);
+		if (cluster_begin->name == "memory" || shape_args.size() == 0) {
+			type_ = ScopeType::Host;  // allocation and scalar operations
+		} else {
+			type_ = ScopeType::Kernel;  // multi-dimensional operations
+		}
+	}
+};
+
 class ClusterProp {
  public:
 	vector<Scope*> clusters;
@@ -397,6 +412,10 @@ class IR {
 	[[nodiscard]] map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
 
+	void GetInputList();
+	void GetOutputList();
+
+	void ReorderOperations();
 	void OptimizeKernels();
 
 	void OptimizeOperations();
@@ -440,6 +459,12 @@ class IR {
 		}
 		if (node->next_ != nullptr) {
 			node->next_->prev_ = node->prev_;
+		}
+
+		// if before is the begin of the cluster, then we need to update the cluster
+		// head
+		if (before->kernel_ != nullptr && before->kernel_->begin_ == before) {
+			before->kernel_->begin_ = node;
 		}
 
 		node->next_ = before;
@@ -499,7 +524,11 @@ class IR {
 		tensor_indexing_mode_ = indexing_mode;
 	}
 
+	int input_counter = 0;
 	vector<Node*> nodes_;
+	vector<Node*> memory_inputs;
+	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
+	unordered_map<int, Node*> output_memory_map;
 	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
 	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
  private:
@@ -573,7 +602,14 @@ class IR {
 
 
 };
+struct ShapeCompareResult {
+	bool compatible;
+	bool is_broadcast;
+	int a_dim;
+	int b_dim;
+	int min_dim;
+};
 
-bool CompareShape(const Node* a, const Node* b);
+ShapeCompareResult CompareShape(const Node* a, const Node* b);
 
 }  // namespace TensorFrost
