@@ -29,6 +29,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 		}
 
 		auto* tensor_memory = new TensorMemory(shape, frame, this);
+		tensor_memory->type = type;
 		allocated_by_offset[frame->start] = tensor_memory;
 		return tensor_memory;
 	}
@@ -36,7 +37,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 	TensorMemory* AllocateWithData(const vector<int>& shape,
 	                               const vector<uint>& data,
 	    const DataType type = DataType::Float) override {
-		TensorMemory* tensor_memory = Allocate(shape);
+		TensorMemory* tensor_memory = Allocate(shape, type);
 		memcpy(memory.data() + tensor_memory->frame->start, data.data(),
 		       data.size() * sizeof(uint));
 		return tensor_memory;

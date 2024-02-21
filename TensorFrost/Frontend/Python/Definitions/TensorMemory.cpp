@@ -15,86 +15,88 @@ void TensorMemoryDefinition(py::module& m,
 	    },
 	    "Create a TensorMemory with the given shape");
 
-	// "constructor" from numpy float array 
+	// "constructor" from numpy array
 	m.def(
 	    "tensor",
-	    [](const py::array_t<float>& arr) {
-		    py::buffer_info info = arr.request();
+	    [](std::variant<py::array_t<float>, py::array_t<int>> arr) {
+			if (std::holds_alternative<py::array_t<float>>(arr))
+			{
+			    py::array_t<float> arr_f = std::get<py::array_t<float>>(arr);
+			    py::buffer_info info = arr_f.request();
 
-		    // Get the shape
-		    std::vector<int> shape(info.shape.begin(), info.shape.end());
+			    // Get the shape
+			    std::vector<int> shape(info.shape.begin(), info.shape.end());
 
-		    // Create the data vector
-		    std::vector<uint> data;
-		    data.reserve(info.size);
+			    // Create the data vector
+			    std::vector<uint> data;
+			    data.reserve(info.size);
 
-		    // Define a recursive lambda function for multi-dimensional iteration
-		    std::function<void(const int, std::vector<int>&)> iter_dims;
-		    iter_dims = [&iter_dims, &info, &data](const int dim,
-		                                           std::vector<int>& indices) {
-			    if (dim == info.ndim) {
-				    // Calculate the actual memory address using strides
-				    char* ptr = static_cast<char*>(info.ptr);
-				    for (int i = 0; i < info.ndim; ++i) {
-					    ptr += indices[i] * info.strides[i];
+			    // Define a recursive lambda function for multi-dimensional iteration
+			    std::function<void(const int, std::vector<int>&)> iter_dims;
+				iter_dims = [&iter_dims, &info, &data](const int dim,
+					std::vector<int>& indices) {
+						if (dim == info.ndim) {
+					    // Calculate the actual memory address using strides
+					    char* ptr = static_cast<char*>(info.ptr);
+						for (int i = 0; i < info.ndim; ++i) {
+						    ptr += indices[i] * info.strides[i];
+					    }
+					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
+						}
+						else {
+							for (indices[dim] = 0; indices[dim] < info.shape[dim];
+								++indices[dim]) {
+						    iter_dims(dim + 1, indices);
+					    }
 				    }
-				    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-			    } else {
-				    for (indices[dim] = 0; indices[dim] < info.shape[dim];
-				         ++indices[dim]) {
-					    iter_dims(dim + 1, indices);
+			    };
+
+			    // Start the multi-dimensional iteration
+			    std::vector<int> start_indices(info.ndim, 0);
+			    iter_dims(0, start_indices);
+
+			    // Allocate the memory
+			    return global_memory_manager->AllocateWithData(shape, data, DataType::Float);
+		    }
+			else if (std::holds_alternative<py::array_t<int>>(arr))
+			{
+				py::array_t<int> arr_i = std::get<py::array_t<int>>(arr);
+			    py::buffer_info info = arr_i.request();
+
+			    // Get the shape
+			    std::vector<int> shape(info.shape.begin(), info.shape.end());
+
+			    // Create the data vector
+			    std::vector<uint> data;
+			    data.reserve(info.size);
+
+			    // Define a recursive lambda function for multi-dimensional iteration
+			    std::function<void(const int, std::vector<int>&)> iter_dims;
+				iter_dims = [&iter_dims, &info, &data](const int dim,
+					std::vector<int>& indices) {
+						if (dim == info.ndim) {
+					    // Calculate the actual memory address using strides
+					    char* ptr = static_cast<char*>(info.ptr);
+						for (int i = 0; i < info.ndim; ++i) {
+						    ptr += indices[i] * info.strides[i];
+					    }
+					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
+						}
+						else {
+							for (indices[dim] = 0; indices[dim] < info.shape[dim];
+								++indices[dim]) {
+						    iter_dims(dim + 1, indices);
+					    }
 				    }
-			    }
-		    };
+			    };
 
-		    // Start the multi-dimensional iteration
-		    std::vector<int> start_indices(info.ndim, 0);
-		    iter_dims(0, start_indices);
+			    // Start the multi-dimensional iteration
+			    std::vector<int> start_indices(info.ndim, 0);
+			    iter_dims(0, start_indices);
 
-		    // Allocate the memory
-		    return global_memory_manager->AllocateWithData(shape, data, DataType::Float);
-	    },
-	    "Create a TensorMemory from a numpy array");
-	
-	// "constructor" from numpy int array
-	m.def(
-	    "tensor",
-		[](const py::array_t<int>& arr) {
-		    py::buffer_info info = arr.request();
-
-		    // Get the shape
-		    std::vector<int> shape(info.shape.begin(), info.shape.end());
-
-		    // Create the data vector
-		    std::vector<uint> data;
-		    data.reserve(info.size);
-
-		    // Define a recursive lambda function for multi-dimensional iteration
-		    std::function<void(const int, std::vector<int>&)> iter_dims;
-			iter_dims = [&iter_dims, &info, &data](const int dim,
-				std::vector<int>& indices) {
-					if (dim == info.ndim) {
-				    // Calculate the actual memory address using strides
-				    char* ptr = static_cast<char*>(info.ptr);
-					for (int i = 0; i < info.ndim; ++i) {
-					    ptr += indices[i] * info.strides[i];
-				    }
-				    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-					}
-					else {
-						for (indices[dim] = 0; indices[dim] < info.shape[dim];
-							++indices[dim]) {
-					    iter_dims(dim + 1, indices);
-				    }
-			    }
-		    };
-
-		    // Start the multi-dimensional iteration
-		    std::vector<int> start_indices(info.ndim, 0);
-		    iter_dims(0, start_indices);
-
-		    // Allocate the memory
-		    return global_memory_manager->AllocateWithData(shape, data, DataType::Int);
+			    // Allocate the memory
+			    return global_memory_manager->AllocateWithData(shape, data, DataType::Int);
+			}
 	    },
 	    "Create a TensorMemory from a numpy array");
 

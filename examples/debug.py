@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-#tf.initialize(tf.cpu, "/Zi")
-tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
+tf.initialize(tf.cpu, "/Zi")
+#tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 
 #def test():
 #    canvas = tf.buffer([32, 32, 3], tf.float32)
@@ -723,7 +723,6 @@ def Sparsify():
 	BZ = K / block_size
 	max_block_count = BX * BY * BZ
 	
-	
 	counter = tf.zeros([1], tf.int32)
 	block_ids = tf.zeros([max_block_count], tf.int32)
 	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
@@ -737,7 +736,7 @@ def Sparsify():
 	max_block_val = tf.zeros([max_block_count], tf.float32)
 	tf.scatterMax(max_block_val[b], voxel_value)
 
-	threshold = 0.998
+	threshold = 0.996
 
 	cond1 = (max_block_val[b] > threshold) & (i == 0) & (j == 0) & (k == 0)
 
@@ -781,3 +780,29 @@ print(blocksnp[0, 0, :, :])
 print(vol[0, 0:8, 0:8])
 
 print(posnp)
+
+def Densify():
+	blocks = tf.input([-1, block_size, block_size, block_size], tf.float32)
+	block_pos = tf.input([blocks.shape[0], 3], tf.int32)
+	shape = tf.input([3], tf.int32)
+
+	volume = tf.buffer([shape[0], shape[1], shape[2]], tf.float32)
+
+	b, i, j, k = blocks.indices
+	x, y, z = block_pos[b, 0] + i, block_pos[b, 1] + j, block_pos[b, 2] + k
+	
+	volume[x, y, z] = blocks[b, i, j, k]
+	return [volume]
+
+
+densifier = tf.compile(Densify)
+
+shape = np.array([32, 32, 32], dtype=np.int32)
+
+densified, = densifier(blocks, pos, tf.tensor(shape))
+
+densifiednp = densified.numpy
+
+print(densifiednp.shape)
+print(densifiednp[0, 0, :])
+print(vol[0, 0, :])
