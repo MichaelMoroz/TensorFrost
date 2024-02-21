@@ -19,7 +19,8 @@ class CpuMemoryManager : public TensorMemoryManager {
  public:
 	vector<uint> memory;
 
-	TensorMemory* Allocate(const vector<int>& shape) override {
+	TensorMemory* Allocate(const vector<int>& shape,
+	                       const DataType type = DataType::Float) override {
 		int size = GetLinearSize(shape);
 		Frame* frame = allocator.AllocateFrame(size);
 		// reserve space in memory if needed
@@ -33,7 +34,8 @@ class CpuMemoryManager : public TensorMemoryManager {
 	}
 
 	TensorMemory* AllocateWithData(const vector<int>& shape,
-	                               const vector<uint>& data) override {
+	                               const vector<uint>& data,
+	    const DataType type = DataType::Float) override {
 		TensorMemory* tensor_memory = Allocate(shape);
 		memcpy(memory.data() + tensor_memory->frame->start, data.data(),
 		       data.size() * sizeof(uint));

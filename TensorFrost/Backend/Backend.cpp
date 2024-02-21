@@ -53,13 +53,22 @@ vector<TensorMemory*> ExecuteProgram(
 	vector<TensorMemory*> to_remove;
 	for (int i = 0; i < memory_inputs.size(); i++) {
 		// add and check input shapes
-		unordered_map<int, Node*> args = shape_memory_map[memory_inputs[i]];
+		Node* input = memory_inputs[i];
+		unordered_map<int, Node*> args = shape_memory_map[input];
 		vector<int> shape = inputs[i]->GetShape();
 
 		if (shape.size() != args.size()) {
 			throw std::runtime_error(
 			    "Invalid dimension for input " + to_string(i) + ". Expected " +
 				to_string(args.size()) + ", got " + to_string(shape.size()));
+		}
+
+		//check if data type is correct
+		if (input->tensor_->type != inputs[i]->type) {
+			throw std::runtime_error(
+			    "Invalid data type for input " + to_string(i) + ". Expected " +
+			                         DataTypeToString(input->tensor_->type) +
+			                         ", got " + DataTypeToString(inputs[i]->type));
 		}
 
 		for (int j = 0; j < args.size(); j++) {
@@ -116,6 +125,7 @@ vector<TensorMemory*> ExecuteProgram(
 	for (int i = 0; i < output_count; i++)
 	{
 		outputs[i] = global_memory_manager->allocated_by_offset[out[i]];
+		outputs[i]->type = output_memory_map[i]->tensor_->type;
 	}
 
 	for (auto mem : to_remove)

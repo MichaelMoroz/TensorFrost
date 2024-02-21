@@ -15,7 +15,7 @@ void TensorMemoryDefinition(py::module& m,
 	    },
 	    "Create a TensorMemory with the given shape");
 
-	// "constructor" from numpy array
+	// "constructor" from numpy float array 
 	m.def(
 	    "tensor",
 	    [](const py::array_t<float>& arr) {
@@ -52,7 +52,49 @@ void TensorMemoryDefinition(py::module& m,
 		    iter_dims(0, start_indices);
 
 		    // Allocate the memory
-		    return global_memory_manager->AllocateWithData(shape, data);
+		    return global_memory_manager->AllocateWithData(shape, data, DataType::Float);
+	    },
+	    "Create a TensorMemory from a numpy array");
+	
+	// "constructor" from numpy int array
+	m.def(
+	    "tensor",
+		[](const py::array_t<int>& arr) {
+		    py::buffer_info info = arr.request();
+
+		    // Get the shape
+		    std::vector<int> shape(info.shape.begin(), info.shape.end());
+
+		    // Create the data vector
+		    std::vector<uint> data;
+		    data.reserve(info.size);
+
+		    // Define a recursive lambda function for multi-dimensional iteration
+		    std::function<void(const int, std::vector<int>&)> iter_dims;
+			iter_dims = [&iter_dims, &info, &data](const int dim,
+				std::vector<int>& indices) {
+					if (dim == info.ndim) {
+				    // Calculate the actual memory address using strides
+				    char* ptr = static_cast<char*>(info.ptr);
+					for (int i = 0; i < info.ndim; ++i) {
+					    ptr += indices[i] * info.strides[i];
+				    }
+				    data.push_back(*(reinterpret_cast<uint*>(ptr)));
+					}
+					else {
+						for (indices[dim] = 0; indices[dim] < info.shape[dim];
+							++indices[dim]) {
+					    iter_dims(dim + 1, indices);
+				    }
+			    }
+		    };
+
+		    // Start the multi-dimensional iteration
+		    std::vector<int> start_indices(info.ndim, 0);
+		    iter_dims(0, start_indices);
+
+		    // Allocate the memory
+		    return global_memory_manager->AllocateWithData(shape, data, DataType::Int);
 	    },
 	    "Create a TensorMemory from a numpy array");
 
@@ -65,18 +107,35 @@ void TensorMemoryDefinition(py::module& m,
 	// to numpy array
 	py_tensor_mem.def_property_readonly(
 	    "numpy",
-	    [](const TensorMemory& t) {
-		    // create the numpy array
-			py::array_t<float> arr(t.GetShape());
-			
-		    // copy the data
-		    std::vector<uint> data = global_memory_manager->Readback(&t);
-		    float* ptr = static_cast<float*>(arr.request().ptr);
-		    for (int i = 0; i < data.size(); i++) {
-			    ptr[i] = *(reinterpret_cast<float*>(&data[i]));
-		    }
+	    [](const TensorMemory& t) -> std::variant<py::array_t<float>, py::array_t<int>> {
+			if (t.type == DataType::Float)
+			{
+			    // create the numpy array
+			    py::array_t<float> arr(t.GetShape());
 
-		    return arr;
+			    // copy the data
+			    std::vector<uint> data = global_memory_manager->Readback(&t);
+			    float* ptr = static_cast<float*>(arr.request().ptr);
+			    for (int i = 0; i < data.size(); i++) {
+				    ptr[i] = *(reinterpret_cast<float*>(&data[i]));
+			    }
+
+			    return arr;
+			}
+			else if (t.type == DataType::Int)
+			{
+			    // create the numpy array
+			    py::array_t<int> arr(t.GetShape());
+
+			    // copy the data
+			    std::vector<uint> data = global_memory_manager->Readback(&t);
+			    int* ptr = static_cast<int*>(arr.request().ptr);
+				for (int i = 0; i < data.size(); i++) {
+				    ptr[i] = *(reinterpret_cast<int*>(&data[i]));
+			    }
+
+			    return arr;
+			}
 	    },
 	    "Readback data from tensor memory to a numpy array");
 
