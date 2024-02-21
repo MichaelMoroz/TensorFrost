@@ -29,8 +29,6 @@ enum class OpType {
 	Store,
 	Set,
 	Scatter,
-	Loop,
-	Conditional,
 	Special,
 	Variable,
 	Memory,
@@ -40,6 +38,7 @@ enum class OpType {
 	DimensionIndex,
 	Constant,
 	MemoryOp,
+	Static, //can not be removed or copied
 	Modifier,
 };
 

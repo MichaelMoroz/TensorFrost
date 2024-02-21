@@ -505,6 +505,11 @@ class Tensor {
 		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
+	static Tensor& ScatterAddPrev(const Tensor& tensor, const Tensor& value,
+		const Tensors& indices) {
+		return MemoryOp("InterlockedAdd_Prev", &tensor, indices, &value);
+	}
+
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
 	                       const Tensors& indices) {
 		MemoryOp("InterlockedMax", &tensor, indices, &value);
@@ -546,6 +551,18 @@ class Tensor {
 
 		// end the loop
 		Op("loop_end", &loop);
+	}
+
+	static void If(const Tensor& condition,
+		const std::function<void()>& body) {
+		// create the if
+		Tensor& if_tensor = Op("if_begin", &condition);
+
+		// create the body
+		body();
+
+		// end the if
+		Op("if_end");
 	}
 
 	// destructor

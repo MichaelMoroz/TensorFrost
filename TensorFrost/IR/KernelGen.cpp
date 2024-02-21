@@ -660,11 +660,10 @@ void IR::RemoveUnusedOperations() {
 
 	//mark all output nodes as used
 	for (auto node = begin(); !node.is_end(); ++node) {
-		if (node->memory_type_ == MemoryType::Output || node->name == "loop_begin" || node->name == "loop_end") {
+		if (node->memory_type_ == MemoryType::Output || node->op->HasAllTypes(OpType::Static)) {
 			dfs(node.get());
 		}
 	}
-
 
 	// remove all nodes that are not used
 	unordered_set<Node*> nodes_to_remove;

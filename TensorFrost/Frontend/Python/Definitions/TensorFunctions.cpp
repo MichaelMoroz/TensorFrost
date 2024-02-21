@@ -64,6 +64,10 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
 	});
 
+	m.def("scatterAddPrev", [](const TensorView& t, const PyTensor& t2) {
+		return PT(Tensor::ScatterAddPrev(*t.value, T(t2), t.indices));
+	});
+
 	m.def("scatterMin", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterMin(*t.value, T(t2), t.indices);
 	});
@@ -187,6 +191,14 @@ void TensorFunctionsDefinition(py::module& m) {
 	    },
 	    py::arg("begin") = 0, py::arg("end"), py::arg("step") = 1,
 	    py::arg("body"));
+
+	m.def("if_cond", [](const PyTensor& condition, const py::function& true_body) {
+		std::function<void()> f = [&true_body]() {
+			py::gil_scoped_acquire acquire;
+			true_body();
+		};
+		Tensor::If(T(condition), f);
+	});
 }
 
 }  // namespace TensorFrost

@@ -137,6 +137,9 @@ class C_CodeGenerator : public CodeGenerator {
 			}
 			else if (op->HasAllTypes(OpType::Scatter))
 			{
+				if (output_type != DataType::None) {
+					left += type_names[output_type] + " " + name + " = ";
+				}
 				string input_type_name = type_names[input_types[0]];
 				expression += op->code_ + "((" + input_type_name + "*)" + memory_name_ +
 				              ", " + address + ", " + arguments[2] + ")";
@@ -321,6 +324,39 @@ inline void InterlockedAdd(float* memory, int address, float value)
 {
   #pragma omp atomic
   memory[address] += value;
+}
+
+inline int InterlockedAdd_Prev(int* memory, int address, int value)
+{
+  int prev;
+  #pragma omp atomic capture
+  {
+    prev = memory[address];
+    memory[address] += value;
+  }
+  return prev;
+}
+
+inline uint InterlockedAdd_Prev(uint* memory, int address, uint value)
+{
+  uint prev;
+  #pragma omp atomic capture
+  {
+    prev = memory[address];
+    memory[address] += value;
+  }
+  return prev;
+}
+
+inline float InterlockedAdd_Prev(float* memory, int address, float value)
+{
+  float prev;
+  #pragma omp atomic capture
+  {
+    prev = memory[address];
+    memory[address] += value;
+  }
+  return prev;
 }
 
 inline void InterlockedAnd(int* memory, int address, int value)

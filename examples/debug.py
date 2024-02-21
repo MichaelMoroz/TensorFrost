@@ -646,27 +646,112 @@ tf.initialize(tf.cpu, "/Zi")
 #raymarch = tf.compile(volume_ray_marcher)
 
 
-def DownscaleVolumes(volumes):
-	N, M, K = volumes[0].shape
-	
-	i, j, k = tf.indices([N/2, M/2, K/2])
-	i, j, k = 2*i, 2*j, 2*k
-	
-	out_volumes = ()
-	for vol in volumes:
-		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
-		out_volumes += (B,)
-	
-	return out_volumes
+#def DownscaleVolumes(volumes):
+#	N, M, K = volumes[0].shape
+#	
+#	i, j, k = tf.indices([N/2, M/2, K/2])
+#	i, j, k = 2*i, 2*j, 2*k
+#	
+#	out_volumes = ()
+#	for vol in volumes:
+#		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
+#		out_volumes += (B,)
+#	
+#	return out_volumes
+#
+#def DownscaleVelocity4x():
+#	vx = tf.input([-1, -1, -1], tf.float32)
+#	vy = tf.input(vx.shape, tf.float32)
+#	vz = tf.input(vx.shape, tf.float32)
+#
+#	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
+#	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
+#      
+#	return [vx2, vy2, vz2]
+#
+#downscaler1 = tf.compile(DownscaleVelocity4x)
 
-def DownscaleVelocity4x():
-	vx = tf.input([-1, -1, -1], tf.float32)
-	vy = tf.input(vx.shape, tf.float32)
-	vz = tf.input(vx.shape, tf.float32)
+block_size = 8
 
-	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
-	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
-      
-	return [vx2, vy2, vz2]
+#def Sparsify():
+#	vol = tf.input([-1, -1, -1], tf.float32)
+#	N, M, K = vol.shape
+#
+#	BX = N / block_size
+#	BY = M / block_size
+#	BZ = K / block_size
+#	max_block_count = BX * BY * BZ
+#
+#	blocks = tf.zeros([max_block_count, block_size, block_size, block_size], tf.float32)
+#	
+#	b, i, j, k = blocks.indices
+#
+#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#
+#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#
+#	blocks[b, i, j, k] = vol[ii, jj, kk]
+#
+#	return [blocks]
 
-downscaler1 = tf.compile(DownscaleVelocity4x)
+#def Sparsify():
+#	vol = tf.input([-1, -1, -1], tf.float32)
+#	N, M, K = vol.shape
+#
+#	BX = N / block_size
+#	BY = M / block_size
+#	BZ = K / block_size
+#	max_block_count = BX * BY * BZ
+#	
+#	reordered_blocks = tf.buffer([max_block_count, block_size, block_size, block_size], tf.float32)
+#	counter = tf.zeros([1], tf.int32)
+#	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+#
+#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#
+#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#
+#	voxel_value = vol[ii, jj, kk]
+#
+#	max_block_val = tf.zeros([max_block_count], tf.float32)
+#	tf.scatterMax(max_block_val[b], voxel_value)
+#	
+#	index = tf.scatterAddPrev(counter[0], 1)
+#	reordered_blocks[index, i, j, k] = voxel_value
+#
+#	return [reordered_blocks]
+#
+#sparsifier = tf.compile(Sparsify)
+#
+#vol = np.random.rand(32, 32, 32).astype(np.float32)
+#
+#A = tf.tensor(vol)
+#
+#res, = sparsifier(A)
+#
+#resnp = res.numpy
+#
+#print(resnp.shape)
+##compare first block
+#print(resnp[0, 0, :, :])
+#print(vol[0, 0:8, 0:8])
+
+def IfTest():
+	res = tf.buffer([8, 8], tf.float32)
+	i,j = res.indices
+
+	cond = (i < 2) & (j < 4)
+	
+	def if_body():
+		res[i, j] = 1.0
+
+	res[i, j] = 0.0
+	tf.if_cond(cond, if_body)
+
+	return [res]
+
+iftest = tf.compile(IfTest)
+
+res, = iftest()
+
+print(res.numpy)
