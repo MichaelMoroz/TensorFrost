@@ -440,6 +440,22 @@ void IR::GetOutputList() {
 	}
 }
 
+void IR::ComputeStatistics() {
+	for (auto node = begin(); !node.is_end(); ++node) 
+	{
+		if (node->name == "memory")
+		{
+			if (node->memory_type_ == MemoryType::Output) {
+				output_memory_count++;
+			} else if (node->memory_type_ == MemoryType::Input) {
+				input_memory_count++;
+			} else {
+				temp_memory_count++;
+			}
+		}
+	}
+}
+
 void IR::OptimizeKernels() {
 	// get cluster data
 	ClusterProp clusters = GetClusterProperties();
@@ -1058,6 +1074,7 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	GetOutputList();
 	CheckIR("Remove Unused Operations 2", true, true);
+	ComputeStatistics();
 }
 
 Program* GenerateProgram(IR* ir) 

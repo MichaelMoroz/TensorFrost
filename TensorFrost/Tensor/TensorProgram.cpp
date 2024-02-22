@@ -29,13 +29,9 @@ vector<TensorMemory*> TensorProgram::Evaluate(
 
 string TensorProgram::PrintProperties() const { 
 	string properties = "TensorProgram:\n";
-	int intermediate_buffers = 0;
 	int compute_kernels = 0;
 	for (int i = 0; i < program->kernels_.size(); i++) {
-		if (program->kernels_[i].type_ == KernelType::Host) {
-			intermediate_buffers++;
-		}
-		else {
+		if (program->kernels_[i].type_ == KernelType::Compute) {
 			compute_kernels++;
 		}
 	}
@@ -46,7 +42,7 @@ string TensorProgram::PrintProperties() const {
 		lines++;
 	}
 	properties += "  Kernel count: " + to_string(compute_kernels) + "\n";
-	properties += "  Intermediate buffers: " + to_string(intermediate_buffers) + "\n";
+	properties += "  Intermediate buffers: " + to_string(ir.temp_memory_count) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR size: " + to_string(ir.nodes_.size()) + "\n";
 	return properties;

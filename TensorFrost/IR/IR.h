@@ -414,6 +414,7 @@ class IR {
 
 	void GetInputList();
 	void GetOutputList();
+	void ComputeStatistics();
 
 	void ReorderOperations();
 	void OptimizeKernels();
@@ -524,7 +525,10 @@ class IR {
 		tensor_indexing_mode_ = indexing_mode;
 	}
 
-	int input_counter = 0;
+	int input_memory_count = 0;
+	int output_memory_count = 0;
+	int temp_memory_count = 0;
+
 	vector<Node*> nodes_;
 	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;

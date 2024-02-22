@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-tf.initialize(tf.cpu, "/Zi")
-#tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
+#tf.initialize(tf.cpu, "/Zi")
+tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 
 #def test():
 #    canvas = tf.buffer([32, 32, 3], tf.float32)

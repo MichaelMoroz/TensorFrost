@@ -433,15 +433,13 @@ class Tensor {
 	 
 	static Tensor& Input(const DataType type = DataType::Float) {
 		Tensor& output = Memory(type);
-		output.SetMemoryType(MemoryType::Input,
-		                     evaluation_context_ir_->input_counter++);
+		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static Tensor& Input(const Tensors& shape,
 	                     const DataType type = DataType::Float) {
 		Tensor& output = Memory(GetInputShapeTensors(shape), type);
-		output.SetMemoryType(MemoryType::Input,
-		                     evaluation_context_ir_->input_counter++);
+		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static Tensor& Input(const vector<int>& shape,

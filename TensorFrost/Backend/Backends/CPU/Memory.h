@@ -22,6 +22,11 @@ class CpuMemoryManager : public TensorMemoryManager {
 	TensorMemory* Allocate(const vector<int>& shape,
 	                       const DataType type = DataType::Float) override {
 		int size = GetLinearSize(shape);
+
+		if (size == 0) {
+			throw invalid_argument("Trying to allocate a tensor with size 0");
+		}
+
 		Frame* frame = allocator.AllocateFrame(size);
 		// reserve space in memory if needed
 		if (frame->end > memory.size()) {
