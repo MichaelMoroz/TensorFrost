@@ -326,7 +326,9 @@ inline void InterlockedAdd(float* memory, int address, float value)
   std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
   float current = place->load(std::memory_order_relaxed);
   float goal = current + value;
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed));
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = current + value;
+  }
 }
 
 inline int InterlockedAdd_Prev(int* memory, int address, int value)
@@ -346,7 +348,9 @@ inline float InterlockedAdd_Prev(float* memory, int address, float value)
   std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
   float current = place->load(std::memory_order_relaxed);
   float goal = current + value;
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed));
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = current + value;
+  }
   return current;
 }
 
