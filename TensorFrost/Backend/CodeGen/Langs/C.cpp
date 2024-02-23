@@ -255,6 +255,7 @@ pair<string, vector<string>> GenerateC(Program* program) {
 #include <initializer_list>
 #include <functional>
 #include <vector>
+#include <atomic>
 
 typedef unsigned int uint;
 
@@ -310,113 +311,119 @@ inline float clamp(float x, float a, float b)
 
 inline void InterlockedAdd(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(float* memory, int address, float value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = current + value;
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed));
 }
 
 inline int InterlockedAdd_Prev(int* memory, int address, int value)
 {
-  int prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
-  }
-  return prev;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline uint InterlockedAdd_Prev(uint* memory, int address, uint value)
 {
-  uint prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
-  }
-  return prev;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline float InterlockedAdd_Prev(float* memory, int address, float value)
 {
-  float prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
-  }
-  return prev;
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = current + value;
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed));
+  return current;
 }
 
 inline void InterlockedAnd(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] &= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAnd(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] &= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_and(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] |= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] |= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] ^= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] ^= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedMin(int* memory, int address, int value)
 {
-  #pragma omp critical
-  memory[address] = min(memory[address], value);
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  int current = place->load(std::memory_order_relaxed);
+  int goal = min(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = min(current, value);
+  }
 }
 
 inline void InterlockedMin(float* memory, int address, float value)
 {
-  #pragma omp critical
-  memory[address] = min(memory[address], value);
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = min(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = min(current, value);
+  }
 }
 
 inline void InterlockedMax(int* memory, int address, int value)
 {
-  #pragma omp critical
-  memory[address] = max(memory[address], value);
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  int current = place->load(std::memory_order_relaxed);
+  int goal = max(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = max(current, value);
+  }
 }
 
 inline void InterlockedMax(float* memory, int address, float value)
 {
-  #pragma omp critical
-  memory[address] = max(memory[address], value);
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = max(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = max(current, value);
+  }
 }
 
 inline uint pcg(uint v)
