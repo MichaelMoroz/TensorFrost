@@ -44,7 +44,6 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Kernel count: " + to_string(compute_kernels) + "\n";
 	properties += "  Intermediate buffers: " + to_string(ir.temp_memory_count) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
-	properties += "  IR size: " + to_string(ir.nodes_.size()) + "\n";
 	return properties;
 }
 

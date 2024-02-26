@@ -136,7 +136,7 @@ void IR::SeparateOperationsIntoKernels() const {
 		bool identity = indices.empty();
 
 		bool is_boundary = false;
-		Node* prev = node.get_prev();
+		Node* prev = node.get_prev_sibling();
 		if (prev != nullptr) {
 			if (prev->kernel_ == current_cluster &&
 			    IsBoundary(prev, *node, identity)) {

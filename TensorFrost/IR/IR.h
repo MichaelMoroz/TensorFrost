@@ -83,6 +83,10 @@ class Node {
 	Scope* kernel_ = nullptr;
 	Scope* scope_ = nullptr;
 
+	vector<Node*> children_;
+	pair<Node*, int> parent_ = pair<Node*, int>(nullptr, 0);
+
+
 	Node* prev_ = nullptr;
 	Node* next_ = nullptr;
 
@@ -93,15 +97,89 @@ class Node {
 	int global_index_ = 0;
 
 	bool has_been_modified_ = false;
+	bool is_static = false;
 
-	Node(Tensor* tensor, Arguments&& args, string&& name)
+	Node(Tensor* tensor, Arguments&& args, string&& name, bool static_node = false)
 	    : tensor_(tensor),
 	      inputs_(std::move(args)),
-	      name(std::move(name)) {
+	      name(std::move(name)),
+		  is_static(static_node)
+	{
 		lable_ = new Lable(this);
 		UpdateArgumentOutputs();
 		op = &FindOperation(this->name);
 		CheckClustering();
+	}
+
+	int GetDepth() const {
+		int depth = 0;
+		const Node* current = this;
+		while (current->parent_.first != nullptr) {
+			depth++;
+			current = current->parent_.first;
+		}
+		return depth;
+	}
+
+	Node* NextSibling() const {
+		if (next_ != nullptr)
+		{
+			// just return the next sibling
+			return next_;
+		}
+		else
+		{
+			if (parent_.first != nullptr) {
+				if (parent_.first->children_.size() >
+				    parent_.second + 1)  // if there is a next child then go to it
+				{
+					return parent_.first->children_[parent_.second + 1];
+				} else  // if there is no next child then return the parent's next
+				        // sibling
+				{
+					return parent_.first->NextSibling();
+				}
+			}
+			return nullptr;  // no parent, no sibling
+		}
+		
+	}
+
+	Node* Next() const {
+		if (children_.empty())
+		{
+			return NextSibling();
+		}	
+		return children_[0];
+	}
+
+	Node* Prev() const {
+		if (prev_ != nullptr)
+		{
+			return prev_;
+		}
+		else
+		{
+			if (parent_.first != nullptr) {
+				if (parent_.second > 0)  // if there is a previous child then go to it
+				{
+					return parent_.first->children_[parent_.second - 1];
+				}
+				else  // if there is no previous child then return the parent's previous
+					 // sibling
+				{
+					return parent_.first->Prev();
+				}
+			}
+			return nullptr;  // no parent, no sibling
+		}
+	}
+
+	[[nodiscard]] bool IsLastSibling() const {
+		if (parent_.first != nullptr) {
+			return parent_.first->children_.size() == parent_.second + 1;
+		}
+		return false;
 	}
 
 	[[nodiscard]] const Tensor* GetTensor() const;
@@ -204,7 +282,7 @@ class Node {
 		}
 
 		// must have tensor
-		if (tensor_ == nullptr) {
+		if (tensor_ == nullptr && !is_static) {
 			throw std::runtime_error("Tensor not found");
 		}
 	}
@@ -291,10 +369,19 @@ enum class TensorIndexingMode {
 class IR {
  public:
 	class Iterator {
-		Node* node_ = nullptr;
-
 	 public:
-		explicit Iterator(Node* node) : node_(node) {}
+		enum Type {
+			Prev,
+			Next,
+			Child,
+			Parent,
+		};
+
+		explicit Iterator(Node* node, Type type = Type::Next, Node* scope = nullptr)
+		    : node_(node), type_(type), scope_(scope) {}
+		explicit Iterator(const Node* node, Type type = Type::Next,
+		                  const Node* scope = nullptr)
+		    : node_(const_cast<Node*>(node)), scope_(const_cast<Node*>(scope)), type_(type) {}
 
 		Node* operator*() const { return node_; }
 
@@ -333,9 +420,16 @@ class IR {
 
 		Node* get() { return node_; }
 
-		Node* get_next() { return node_->next_; }
+		Node* get_next() { return node_->Next(); }
+		Node* get_next_sibling() { return node_->NextSibling(); }
 
-		Node* get_prev() { return node_->prev_; }
+		Node* get_prev() { return node_->Prev(); }
+		Node* get_prev_sibling() { return node_->prev_; }
+
+	private:
+		Node* node_ = nullptr;
+		Node* scope_ = nullptr;
+		Type type_;
 	};
 
 	Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
@@ -354,14 +448,11 @@ class IR {
 		if (node == *cursor_) {
 			cursor_ = Iterator(node->prev_);
 		}
-		if (node == *begin_) {
-			begin_ = Iterator(node->next_);
-		}
+
 		if (node->kernel_ != nullptr && node->kernel_->begin_ == node) {
 			//assuming the next node is also in the cluster
 			node->kernel_->begin_ = node->next_;
 		}
-		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
 		delete node;
 	}
 
@@ -423,9 +514,7 @@ class IR {
 
 	void RemoveUnusedOperations();
 
-	[[nodiscard]] Iterator begin() const { return begin_; }
-
-	[[nodiscard]] Iterator end() const { return end_; }
+	[[nodiscard]] Iterator begin() const { return Iterator(begin_node.Next()); }
 
 	void SeparateOperationsIntoKernels() const;
 
@@ -474,10 +563,6 @@ class IR {
 			before->prev_->next_ = node;
 			node->prev_ = before->prev_;
 		}
-		else
-		{
-			begin_ = Iterator(node);
-		}
 		before->prev_ = node;
 
 		node->kernel_ = before->kernel_;
@@ -502,10 +587,6 @@ class IR {
 			after->next_->prev_ = node;
 			node->next_ = after->next_;
 		}
-		else
-		{
-			end_ = Iterator(node);
-		}
 		after->next_ = node;
 
 		node->kernel_ = after->kernel_;
@@ -529,26 +610,22 @@ class IR {
 	int output_memory_count = 0;
 	int temp_memory_count = 0;
 
-	vector<Node*> nodes_;
+	Node begin_node = Node(nullptr, Arguments(), "scope", true);
+
 	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> output_memory_map;
 	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
 	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
  private:
-	vector<Node*> cluster_nodes_;
-	Iterator cursor_ = Iterator(nullptr);
-	Iterator cursor_next_ = Iterator(nullptr);
-	Iterator begin_ = Iterator(nullptr);
-	Iterator end_ = Iterator(nullptr);
+	Iterator cursor_ = Iterator(&begin_node, Iterator::Type::Child, &begin_node);
 	Scope* current_kernel_ = nullptr;
 	Scope* current_scope_ = nullptr;
 
 	void InsertAtCursor(Node* node) {
-		nodes_.push_back(node);
 		node->kernel_ = current_kernel_;
 		node->scope_ = current_scope_;
-		if (*cursor_ != nullptr) {
+		
 			Node* prev_next = cursor_.get_next();
 			if (prev_next != nullptr) {
 				if (current_kernel_ != nullptr &&
@@ -567,25 +644,13 @@ class IR {
 			}
 			node->prev_ = *cursor_;
 			cursor_->next_ = node;
-		} 
-		else
-		{
-			if (*cursor_next_ != nullptr) {
-				cursor_next_->prev_ = node;
-				node->next_ = *cursor_next_;
-			}
-			begin_ = Iterator(node);
-		}
-		if (node->next_ == nullptr) {
-			end_ = Iterator(node);
-		}
+	
 		SetCursor(node);
 	}
 
 	void SetCursor(Node* node) {
 		if (node != nullptr) {
 			cursor_ = Iterator(node);
-			cursor_next_ = Iterator(node->next_);
 		} else {
 			throw std::runtime_error("Cursor cannot be set to nullptr");
 		}
@@ -594,7 +659,6 @@ class IR {
 	void SetCursorBefore(Node* node) {
 		if (node != nullptr) {
 			cursor_ = Iterator(node->prev_);
-			cursor_next_ = Iterator(node);
 		} else {
 			throw std::runtime_error("Node is nullptr");
 		}
