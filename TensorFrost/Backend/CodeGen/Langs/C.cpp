@@ -510,7 +510,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Scope* cluster = kernel->begin_->kernel_;
+		Node* cluster = kernel->begin_;
 
 		C_CodeGenerator generator;
 

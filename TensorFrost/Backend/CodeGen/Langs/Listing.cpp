@@ -9,13 +9,12 @@ using namespace std;
 string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invalid) {
 	// first give unique names to all the tensors
 	GenerateNodeNames(ir);
-	ClusterProp clusters = ir.GetClusterProperties();
+	//ClusterProp clusters = ir.GetClusterProperties();
 
 	// now create the listing
 	string listing;
 	int indent = 0;
-	Scope* prev_cluster = nullptr;
-	for (auto node = ir.begin(); !node.is_end(); ++node) {
+	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (compact) {
 			if (node->name == "const") continue;
 		}
@@ -24,25 +23,25 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			indent--;
 		}
 
-		if (node->kernel_ != prev_cluster) {
-			listing += "\n";
-			switch (node->kernel_->type_) {
-				case Scope::ScopeType::Host:
-					listing += "Host: \n";
-					break;
-				case Scope::ScopeType::Kernel:
-					listing += "Kernel: \n";
-					break;
-			}
-		}
+		//if (node->kernel_ != prev_cluster) {
+		//	listing += "\n";
+		//	switch (node->kernel_->type_) {
+		//		case Scope::ScopeType::Host:
+		//			listing += "Host: \n";
+		//			break;
+		//		case Scope::ScopeType::Kernel:
+		//			listing += "Kernel: \n";
+		//			break;
+		//	}
+		//}
 
 		if (invalid.contains(node.get())) {
 			listing += "[ERROR] " + invalid[node.get()] + ": \n";
 		}
 
-		if (!compact && node->kernel_ != nullptr) {
-			listing += GetNodeName(node->kernel_->begin_, false) + ": ";
-		}
+		//if (!compact && node->kernel_ != nullptr) {
+		//	listing += GetNodeName(node->kernel_->begin_, false) + ": ";
+		//}
 
 		// indent
 		for (int i = 0; i < indent; i++) {
@@ -135,8 +134,6 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		if (node->name == "loop_begin") {
 			indent++;
 		}
-
-		prev_cluster = node->kernel_;
 	}
 
 	return listing;

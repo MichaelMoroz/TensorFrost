@@ -17,6 +17,7 @@ const vector<Operation> operations = {
     Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
     Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
     Operation("return", {""}, 0, "return", {OpType::Keyword, OpType::Static}),
+    Operation("kernel", {""}, 0, "", {OpType::Static}),
 
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),

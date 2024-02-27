@@ -3,11 +3,11 @@
 namespace TensorFrost {
 
 void IR::UpdateNodeOutputs() const {
-	for (auto node = begin(); !node.is_end(); ++node) {
+	for (auto node = begin(); !node.end(); node.next()) {
 		node->outputs_.clear();
 	}
 
-	for (auto node = begin(); !node.is_end(); ++node) {
+	for (auto node = begin(); !node.end(); node.next()) {
 		node->UpdateOutputs();
 	}
 }
@@ -36,5 +36,16 @@ void CopyLable(Node* target, Node* copy) {
 	target->lable_ = new Lable(target);
 }
 
+ScopeType GetScopeType(const Node* node) {
+	// check if the node has a "kernel" operation parent
+	// go over all parents and check if any of them is a kernel
+	for (Node* parent = node->parent; parent != nullptr;
+	     parent = parent->parent) {
+		if (parent->name == "kernel") {
+			return ScopeType::Kernel;
+		}
+	}
+	return ScopeType::Host;
+}
 
 }  // namespace TensorFrost
