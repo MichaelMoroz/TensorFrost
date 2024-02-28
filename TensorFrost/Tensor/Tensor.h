@@ -542,25 +542,23 @@ class Tensor {
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
 	                 const std::function<void(const Tensor&)>& body) {
 		// create the loop
-		Tensor& loop = Op("loop_begin", &start, &end, &step);
+		Tensor& loop = Op("loop", &start, &end, &step);
 
-		// create the body
-		body(loop);
-
-		// end the loop
-		Op("loop_end", &loop);
+		evaluation_context_ir_->ExecuteExpressionChild(loop.node_, [&]() {
+			// create the body
+			body(loop);
+		});
 	}
 
 	static void If(const Tensor& condition,
 		const std::function<void()>& body) {
 		// create the if
-		Tensor& if_tensor = Op("if_begin", &condition);
+		Tensor& if_tensor = Op("if", &condition);
 
-		// create the body
-		body();
-
-		// end the if
-		Op("if_end");
+		evaluation_context_ir_->ExecuteExpressionChild(if_tensor.node_, [&]() {
+			// create the body
+			body();
+		});
 	}
 
 	// destructor

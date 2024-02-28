@@ -43,9 +43,11 @@ ScopeType GetScopeType(const Node* node) {
 	     parent = parent->parent) {
 		if (parent->name == "kernel") {
 			return ScopeType::Kernel;
+		} else if (parent->name == "host") {
+			return ScopeType::Host;
 		}
 	}
-	return ScopeType::Host;
+	return ScopeType::None;
 }
 
 }  // namespace TensorFrost

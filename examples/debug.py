@@ -738,14 +738,12 @@ def Sparsify():
 
 	threshold = 0.996
 
-	cond1 = (max_block_val[b] > threshold) & (i == 0) & (j == 0) & (k == 0)
-
 	def if_body1():
-		index = tf.scatterAddPrev(counter[0], 1)
-		block_ids[b] = index + 1
-
-	tf.if_cond(cond1, if_body1)
-
+		def if_body2():
+			index = tf.scatterAddPrev(counter[0], 1)
+			block_ids[b] = index + 1
+		tf.if_cond(max_block_val[b] > threshold, if_body2)
+	tf.if_cond((i == 0) & (j == 0) & (k == 0), if_body1)
 
 	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
 	block_pos = tf.buffer([counter[0], 3], tf.int32)

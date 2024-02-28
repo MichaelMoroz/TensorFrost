@@ -9,15 +9,14 @@ map<DataType, string> type_names = {
 };
 
 const vector<Operation> operations = {
-    Operation("scope", {""}, 0, "", {OpType::Static}),
-    Operation("loop_begin", {"iii_i"}, 100, "", {OpType::Static}),
-    Operation("loop_end", {"i_"}, 100, "", {OpType::Static}),
-    Operation("if_begin", {"b_"}, 100, "", {OpType::Static}),
-    Operation("if_end", {""}, 100, "", {OpType::Static}),
+    Operation("host", {""}, 0, "", {OpType::Static}),
+    Operation("kernel", {""}, 0, "", {OpType::Static}),
+
+    Operation("loop", {"iii_i"}, 100, "", {OpType::Static}),
+    Operation("if", {"b_"}, 100, "", {OpType::Static}),
     Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
     Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
     Operation("return", {""}, 0, "return", {OpType::Keyword, OpType::Static}),
-    Operation("kernel", {""}, 0, "", {OpType::Static}),
 
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),

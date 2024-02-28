@@ -117,76 +117,66 @@ void IR::SeparateOperationsIntoKernels() const {
 	RecomputeGlobalIndices();
 	UpdateNodeOutputs();
 
-	//for (auto node = begin(); !node.end(); node.next()) {
-	//	// remove old cluster head
-	//	if (node->kernel_ != nullptr) {
-	//		// if last cluster node, delete lable
-	//		if (node->next_ == nullptr ||
-	//		    node->next_->kernel_ != node->kernel_) {
-	//			delete node->kernel_;
-	//		}
-	//		node->kernel_ = nullptr;
-	//	}
-	//
-	//	// check if node is a cluster edge
-	//	const Tensor* tensor = node->GetTensor();
-	//
-	//	Arguments indices = node->GetArguments(Arg::Type::Index);
-	//	//TODO: do a pass before - removing MemoryOp's by local ops if they have no indices
-	//	bool identity = indices.empty();
-	//
-	//	bool is_boundary = false;
-	//	Node* prev = node.get_prev_sibling();
-	//	if (prev != nullptr) {
-	//		if (prev->kernel_ == current_cluster &&
-	//		    IsBoundary(prev, *node, identity)) {
-	//			is_boundary = true;
-	//		}
-	//	} else {
-	//		is_boundary = true;
-	//	}
-	//
-	//	//TODO (Moroz): do separately on all nodes after clusterization
-	//	if (current_cluster != nullptr && current_cluster->shape_node_ != nullptr) {
-	//		if (!CompareShape(current_cluster->shape_node_->get(), node.get()).compatible) {
-	//			is_boundary = true;
-	//		}
-	//	}
-	//
-	//	// go over all inputs
-	//	for (auto& input : tensor->node_->inputs_) {
-	//		// get latest input version
-	//		const Node* latest = input.from_->get()->GetLastVersion(*node);
-	//		// check if input is the boundary of this cluster
-	//		if (latest->kernel_ == current_cluster &&
-	//		    IsBoundary(latest, *node, identity, input.index_, input.type_)) {
-	//			is_boundary = true;
-	//			break;
-	//		}
-	//	}
-	//
-	//	if (is_boundary) {
-	//		current_cluster = new Scope(*node);
-	//		clusters.push_back(current_cluster);
-	//	}
-	//
-	//	node->kernel_ = current_cluster;
-	//
-	//	if (current_cluster->shape_node_ == nullptr) {
-	//		// TODO (Moroz): do operation categories
-	//		if (!node->op->HasAnyType(OpType::Function, OpType::Operator, OpType::Load, OpType::Store, OpType::Scatter))
-	//			continue;
-	//
-	//		// get the shape argument (if exists)
-	//		ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
-	//		int dim = MaxIndexCount(shape);
-	//		if (dim != 0 && shape.size() == dim) {
-	//			current_cluster->shape_node_ = node->GetLable();
-	//		}
-	//	}
-	//}
-	//
-	//// update cluster shape node if absent
+	for (auto node = begin(); !node.end(); node.next()) {
+		// check if node is a cluster edge
+		//const Tensor* tensor = node->GetTensor();
+		//
+		//Arguments indices = node->GetArguments(Arg::Type::Index);
+		////TODO: do a pass before - removing MemoryOp's by local ops if they have no indices
+		//bool identity = indices.empty();
+		//
+		//bool is_boundary = false;
+		//Node* prev = node.get_prev_sibling();
+		//if (prev != nullptr) {
+		//	if (prev->kernel_ == current_cluster &&
+		//	    IsBoundary(prev, *node, identity)) {
+		//		is_boundary = true;
+		//	}
+		//} else {
+		//	is_boundary = true;
+		//}
+		//
+		////TODO (Moroz): do separately on all nodes after clusterization
+		//if (current_cluster != nullptr && current_cluster->shape_node_ != nullptr) {
+		//	if (!CompareShape(current_cluster->shape_node_->get(), node.get()).compatible) {
+		//		is_boundary = true;
+		//	}
+		//}
+		//
+		//// go over all inputs
+		//for (auto& input : tensor->node_->inputs_) {
+		//	// get latest input version
+		//	const Node* latest = input.from_->get()->GetLastVersion(*node);
+		//	// check if input is the boundary of this cluster
+		//	if (latest->kernel_ == current_cluster &&
+		//	    IsBoundary(latest, *node, identity, input.index_, input.type_)) {
+		//		is_boundary = true;
+		//		break;
+		//	}
+		//}
+		//
+		//if (is_boundary) {
+		//	current_cluster = new Scope(*node);
+		//	clusters.push_back(current_cluster);
+		//}
+		//
+		//node->kernel_ = current_cluster;
+		//
+		//if (current_cluster->shape_node_ == nullptr) {
+		//	// TODO (Moroz): do operation categories
+		//	if (!node->op->HasAnyType(OpType::Function, OpType::Operator, OpType::Load, OpType::Store, OpType::Scatter))
+		//		continue;
+		//
+		//	// get the shape argument (if exists)
+		//	ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
+		//	int dim = MaxIndexCount(shape);
+		//	if (dim != 0 && shape.size() == dim) {
+		//		current_cluster->shape_node_ = node->GetLable();
+		//	}
+		//}
+	}
+	
+	// update cluster shape node if absent
 	//for (auto* cluster : clusters) {
 	//	if (cluster->shape_node_ == nullptr) {
 	//		cluster->shape_node_ = cluster->begin_->GetLable();

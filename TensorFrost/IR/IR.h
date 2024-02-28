@@ -290,39 +290,43 @@ enum class TensorIndexingMode {
 
 
 class NodeIterator {
-private:
-    stack<Node*> parents;
-
 public:
     Node* currentNode;
+	Node* root;
 
-	NodeIterator() : currentNode(nullptr) {}
-    NodeIterator(Node* node) : currentNode(node->child) {}
-	NodeIterator(const Node* node)
-	    : currentNode(const_cast<Node*>(node->child)) {}
+	NodeIterator() : currentNode(nullptr), root(nullptr) {}
+    NodeIterator(Node* node, Node* root) : currentNode(node), root(root) {}
+	NodeIterator(const Node* node, const Node* root)
+	    : currentNode(const_cast<Node*>(node)),
+	      root(const_cast<Node*>(root)) {}
+	NodeIterator(Node* node_root) : currentNode(node_root->child), root(node_root) {}
+	NodeIterator(const Node* node_root)
+	    : currentNode(const_cast<Node*>(node_root->child)),
+	      root(const_cast<Node*>(node_root)) {}
 
     Node* operator*() const {
         return currentNode;
     }
 
     //first child, then next
-	 NodeIterator& next() {
+	NodeIterator& next() {
         if(!currentNode->valid()) {
             return *this;
         }
 
         if (currentNode->child->valid()) { //has child, go down
-            parents.push(currentNode);
             currentNode = currentNode->child;
             return *this;
         }
         
         if (!currentNode->next->valid()) { //no next, try going up
-            while (!parents.empty()) {
-                currentNode = parents.top();
-                parents.pop();
-                if (currentNode->next->valid()) break;
-            }
+			Node* parent = currentNode->parent;
+			while (!parent->next->valid() && root != parent) {
+				parent = parent->parent;
+			}
+			if (root != parent) { //go to next sibling
+				currentNode = parent;
+			}
         }
 
         currentNode = currentNode->next;
@@ -338,6 +342,16 @@ public:
     }
 
 	Node* get() { return currentNode; }
+
+	int depth() {
+		int depth = 0;
+		Node* node = currentNode;
+		while (node->parent != root) {
+			node = node->parent;
+			depth++;
+		}
+		return depth;
+	}
 };
 
 class IR {
@@ -347,7 +361,7 @@ public:
 
 	IR() {
         root = new Node();
-        root->initialize(nullptr, {}, "scope", true);
+        root->initialize(nullptr, {}, "host", true);
         cursor = NodeIterator(root);
     }
 
@@ -383,9 +397,9 @@ public:
     void RemoveNode(Node* node) {
         if (node->valid()) {
             //if direct child of its parent
-            if (node->parent->child == node) {
+            if (node->parent && node->parent->child == node) {
                 node->parent->child = node->next;
-            } else {
+            } else if (node->prev) {
                 node->prev->next = node->next;
             }
 
@@ -396,7 +410,7 @@ public:
     }
 
     void SetCursor(Node* node) {
-        cursor = NodeIterator(node);
+        cursor = NodeIterator(node, root);
     }
 
     void ExecuteExpressionAfter(Node* node, const function<void()>&& expression) {
@@ -412,6 +426,13 @@ public:
         expression();
         cursor = oldCursor;
     }
+
+	void ExecuteExpressionChild(Node* node, const function<void()>&& expression) {
+		NodeIterator oldCursor = cursor;
+		SetCursor(node->child);
+		expression();
+		cursor = oldCursor;
+	}
 
     void moveNodeTo(Node* node, Node* new_prev)
     {

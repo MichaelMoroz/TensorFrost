@@ -13,14 +13,9 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 
 	// now create the listing
 	string listing;
-	int indent = 0;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (compact) {
 			if (node->name == "const") continue;
-		}
-
-		if (node->name == "loop_end") {
-			indent--;
 		}
 
 		//if (node->kernel_ != prev_cluster) {
@@ -44,6 +39,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		//}
 
 		// indent
+		int indent = node.depth();
 		for (int i = 0; i < indent; i++) {
 			listing += "  ";
 		}
@@ -53,24 +49,17 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		Arguments shape = node->GetArguments(Arg::Type::Shape);
 		Arguments memory = node->GetArguments(Arg::Type::Memory);
 		
-		listing += "[";
-		for (int i = 0; i < shape.size(); i++) {
-			if (i != 0) listing += ",";
-			listing += GetNodeName(shape[i].from_->get(), false);
-		}
-		listing += "]";
-
 		if (node->tensor_->type != DataType::None) {
-			listing += " " + DataTypeToString(node->tensor_->type) + " ";
+			listing += DataTypeToString(node->tensor_->type) + " ";
 		}
 
 		if (node->tensor_->type != DataType::None) {
 			// 
 			//  the tensor name
-			listing += node->var_name + " =";
+			listing += node->var_name + " = ";
 		}
 
-		listing += " " + node->name + "(";
+		listing += node->name + "(";
 
 		if (!memory.empty()) {
 			listing += "memory=[";
@@ -126,14 +115,17 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		}
 
 		if (node->cost_ >= 0) {
-			listing += "cost=" + to_string(node->cost_);
+			listing += "cost=" + to_string(node->cost_) + ", ";
 		}
+
+		listing += "shape=[";
+		for (int i = 0; i < shape.size(); i++) {
+			if (i != 0) listing += ",";
+			listing += GetNodeName(shape[i].from_->get(), false);
+		}
+		listing += "]";
 
 		listing += ")\n";
-
-		if (node->name == "loop_begin") {
-			indent++;
-		}
 	}
 
 	return listing;
