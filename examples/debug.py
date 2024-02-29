@@ -749,7 +749,6 @@ def Sparsify():
 	block_pos = tf.buffer([counter[0], 3], tf.int32)
 
 	block_index = block_ids[b] - 1
-	cond2 = block_index >= 0
 
 	def if_body2():
 		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
@@ -757,7 +756,7 @@ def Sparsify():
 		block_pos[block_index, 1] = by * block_size
 		block_pos[block_index, 2] = bz * block_size
 	
-	tf.if_cond(cond2, if_body2)
+	tf.if_cond(block_index >= 0, if_body2)
 
 	return [reordered_blocks, block_pos]
 
