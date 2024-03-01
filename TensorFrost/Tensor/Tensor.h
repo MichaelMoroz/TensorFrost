@@ -633,11 +633,11 @@ class Tensor {
 	}
 
 	Tensor& operator<<(const Tensor& other) const {
-		return Op("blshift", this, &other);
+		return Op("lshift", this, &other);
 	}
 
 	Tensor& operator>>(const Tensor& other) const {
-		return Op("brshift", this, &other);
+		return Op("rshift", this, &other);
 	}
 
 	void operator=(const Tensor& other) = delete;
