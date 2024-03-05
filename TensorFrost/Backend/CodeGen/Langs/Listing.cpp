@@ -12,6 +12,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 	//ClusterProp clusters = ir.GetClusterProperties();
 
 	// now create the listing
+	int prev_depth = 0;
 	string listing;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (compact) {
@@ -39,10 +40,28 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		//}
 
 		// indent
-		int indent = node.depth();
-		for (int i = 0; i < indent; i++) {
+		int depth = node.depth() - 1;
+		//add scope brackets
+		if (depth < prev_depth) {
+			for (int i = prev_depth - 1; i >= depth; i--) {
+				for (int j = 0; j < i; j++) {
+					listing += "  ";
+				}
+				listing += "}\n";
+			}
+		}
+		else if (depth > prev_depth) {
+			for (int i = prev_depth; i < depth; i++) {
+				for (int j = 0; j < i; j++) {
+					listing += "  ";
+				}
+				listing += "{\n";
+			}
+		}
+		for (int i = 0; i < depth; i++) {
 			listing += "  ";
 		}
+		prev_depth = depth;
 
 		Arguments inputs = node->GetArguments(Arg::Type::Input);
 		Arguments indices = node->GetArguments(Arg::Type::Index);
@@ -126,6 +145,13 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		listing += "]";
 
 		listing += ")\n";
+	}
+
+	for (int i = prev_depth - 1; i >= 0; i--) {
+		for (int j = 0; j < i; j++) {
+			listing += "  ";
+		}
+		listing += "}\n";
 	}
 
 	return listing;

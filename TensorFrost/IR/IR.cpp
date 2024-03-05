@@ -2,16 +2,6 @@
 
 namespace TensorFrost {
 
-void IR::UpdateNodeOutputs() const {
-	for (auto node = begin(); !node.end(); node.next()) {
-		node->outputs_.clear();
-	}
-
-	for (auto node = begin(); !node.end(); node.next()) {
-		node->UpdateOutputs();
-	}
-}
-
 int MaxIndexCount(ArgMap& map) {
 	if (map.empty()) return 0;
 	// maps are sorted by index, so the last element has the highest index

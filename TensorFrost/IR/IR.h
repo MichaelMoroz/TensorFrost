@@ -16,6 +16,14 @@
 namespace TensorFrost {
 class Tensor;
 class Node;
+class Scope;
+
+enum class ScopeType {
+	None,
+	Host,
+	Kernel,
+};
+
 
 class Lable {
  public:
@@ -72,15 +80,21 @@ enum class MemoryType {
 
 class Node {
  public:
+	int index_ = 0;
 	string var_name = "none";
 	string name;
 	float cost_ = -1.0f;
 	
 	Node *parent, *child, *prev, *next;
     bool placeholder;
+
+	//only true after graph has been updated
+	Node *true_prev, *true_next;
 	
 	const Operation* op;
 	const Tensor* tensor_;
+
+	ScopeType scope_type_ = ScopeType::None;
 
 	Lable* lable_ = nullptr;
 
@@ -88,7 +102,6 @@ class Node {
 	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
 	int memory_index_ = 0;
-	int global_index_ = 0;
 
 	bool has_been_modified_ = false;
 	bool is_static = false;
@@ -99,13 +112,24 @@ class Node {
         return !placeholder;
     }
 
+	void UpdateEdges() {
+		if (!child) child = new Node(nullptr, this);
+		if (!next) next = new Node(this, parent);
+		if (child->valid()) {
+			child->parent = this;
+		}
+		if (next->valid()) {
+			next->prev = this;
+			next->parent = parent;
+		}
+	}
+
     //initialize and create next/child placeholders
     void initialize(Tensor* tensor, Arguments&& new_args, string&& new_name, bool set_static = false) {
         if(valid()) {
             throw runtime_error("Node already initialized");
         }
-        if(!child) child = new Node(nullptr, this);
-        if(!next) next = new Node(this, parent);
+		UpdateEdges();
         placeholder = false;
 
 		tensor_ = tensor;
@@ -143,6 +167,34 @@ class Node {
 			input.SetOutput(GetLable());
 			input.from_->get()->outputs_.push_back(&input);
 		}
+	}
+
+	int ComputeDepth(Node* root = nullptr) const {
+		int depth = 0;
+		for (const Node* node = this; node != root; node = node->parent) {
+			depth++;
+		}
+		return depth;
+	}
+
+	bool HasParent(Node* node)
+	{
+		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent == node) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool HasParent(string name)
+	{
+		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent->name == name) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) {
@@ -233,9 +285,9 @@ class Node {
 			}
 			Node* output_node = output->to_->get();
 			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
-				if (output_node->global_index_ > last_index &&
-				    output_node->global_index_ < latest_node->global_index_) {
-					last_index = output_node->global_index_;
+				if (output_node->index_ > last_index &&
+				    output_node->index_ < latest_node->index_) {
+					last_index = output_node->index_;
 					last_modifier = output_node;
 				}
 			}
@@ -249,16 +301,143 @@ class Node {
 void SwapLables(Node* a, Node* b);
 void CopyLable(Node* target, Node* copy);
 
-enum class ScopeType {
-	None,
-	Host,
-	Kernel,
-	HostLoop,
-	KernelLoop,
+
+class NodeIterator {
+ public:
+	Node* currentNode;
+	Node* root;
+
+	NodeIterator() : currentNode(nullptr), root(nullptr) {}
+	NodeIterator(Node* node, Node* root) : currentNode(node), root(root) {}
+	NodeIterator(const Node* node, const Node* root)
+	    : currentNode(const_cast<Node*>(node)), root(const_cast<Node*>(root)) {}
+	NodeIterator(Node* node_root)
+	    : currentNode(node_root->child), root(node_root) {}
+	NodeIterator(const Node* node_root)
+	    : currentNode(const_cast<Node*>(node_root->child)),
+	      root(const_cast<Node*>(node_root)) {}
+
+	Node* operator*() const { return currentNode; }
+
+	// first child, then next
+	NodeIterator& next() {
+		if (!currentNode->valid()) {
+			return *this;
+		}
+
+		if (currentNode->child->valid()) {  // has child, go down
+			currentNode = currentNode->child;
+			return *this;
+		}
+
+		if (!currentNode->next->valid()) {  // no next, try going up
+			Node* parent = currentNode->parent;
+			while (!parent->next->valid() && root != parent) {
+				parent = parent->parent;
+			}
+			if (root != parent) {  // go to next sibling
+				currentNode = parent;
+			}
+		}
+
+		currentNode = currentNode->next;
+		return *this;
+	}
+
+	NodeIterator& forward() {
+		// just go to next node and stop if it's the end
+		currentNode = currentNode->next;
+		return *this;
+	}
+
+	NodeIterator& true_next() {
+		currentNode = currentNode->true_next;
+		return *this;
+	}
+
+	NodeIterator& true_prev() {
+		currentNode = currentNode->true_prev;
+		return *this;
+	}
+
+	bool end() { return !currentNode->valid(); }
+
+	Node* operator->() { return currentNode; }
+
+	Node* get() { return currentNode; }
+
+	int depth() { return currentNode->ComputeDepth(root); }
+
+	bool operator!=(const Node* node) { return currentNode != node; }
 };
 
-
 ScopeType GetScopeType(const Node* node);
+
+class Scope
+{
+ public:
+	Node* begin;
+	Node* end;
+	Node* shape_node;
+	ScopeType type = ScopeType::None;
+	int shape_dim = 0;
+
+	Scope(Node* begin) 
+		: begin(begin), end(begin), shape_node(begin) { UpdateEnd(begin); }
+
+	Scope(Node* begin, Node* end)
+	    : begin(begin), end(end) { RecomputeScope(); }
+
+	bool InScope(const Node* node) {
+		int begin_id = begin->index_;
+		int end_id = end->index_;
+		int node_id = node->index_;
+		return node_id >= begin_id && node_id <= end_id;
+	}
+
+	void UpdateType(Node* node) {
+		// if the end node is a memory node, it must be on the cpu
+		if (node->name == "memory") {
+			if (type == ScopeType::Kernel) {
+				throw std::runtime_error("Memory node in kernel scope");
+			}
+			type = ScopeType::Host;
+		} else if (shape_dim > 0 || node->scope_type_ == ScopeType::Kernel) { // non-scalars must be in a kernel
+			if (type == ScopeType::Host) {
+				throw std::runtime_error("Kernel node in host scope");
+			}
+			type = ScopeType::Kernel;
+		}
+	}
+
+	void UpdateEnd(Node* new_end) {
+		end = new_end;
+		UpdateShape(end);
+		UpdateType(end);
+	}
+
+	void UpdateShape(Node* node)
+	{
+		ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
+		int dim = MaxIndexCount(shape);
+		if (node->name == "memory") dim = 0;
+		if (dim >= shape_dim) {
+			shape_dim = dim;
+			shape_node = node;
+		}
+	}
+
+	void RecomputeScope()
+	{
+		shape_dim = 0;
+		type = ScopeType::None;
+		for (auto node = NodeIterator(begin, begin);
+		     node->index_ <= end->index_; node.true_next()) {
+			UpdateShape(*node);
+			UpdateType(*node);
+		}
+	}
+};
 
 class ClusterProp {
  public:
@@ -289,71 +468,6 @@ enum class TensorIndexingMode {
 };
 
 
-class NodeIterator {
-public:
-    Node* currentNode;
-	Node* root;
-
-	NodeIterator() : currentNode(nullptr), root(nullptr) {}
-    NodeIterator(Node* node, Node* root) : currentNode(node), root(root) {}
-	NodeIterator(const Node* node, const Node* root)
-	    : currentNode(const_cast<Node*>(node)),
-	      root(const_cast<Node*>(root)) {}
-	NodeIterator(Node* node_root) : currentNode(node_root->child), root(node_root) {}
-	NodeIterator(const Node* node_root)
-	    : currentNode(const_cast<Node*>(node_root->child)),
-	      root(const_cast<Node*>(node_root)) {}
-
-    Node* operator*() const {
-        return currentNode;
-    }
-
-    //first child, then next
-	NodeIterator& next() {
-        if(!currentNode->valid()) {
-            return *this;
-        }
-
-        if (currentNode->child->valid()) { //has child, go down
-            currentNode = currentNode->child;
-            return *this;
-        }
-        
-        if (!currentNode->next->valid()) { //no next, try going up
-			Node* parent = currentNode->parent;
-			while (!parent->next->valid() && root != parent) {
-				parent = parent->parent;
-			}
-			if (root != parent) { //go to next sibling
-				currentNode = parent;
-			}
-        }
-
-        currentNode = currentNode->next;
-        return *this;
-    }
-
-    bool end() {
-        return !currentNode->valid();
-    }
-
-    Node* operator->() {
-        return currentNode;
-    }
-
-	Node* get() { return currentNode; }
-
-	int depth() {
-		int depth = 0;
-		Node* node = currentNode;
-		while (node->parent != root) {
-			node = node->parent;
-			depth++;
-		}
-		return depth;
-	}
-};
-
 class IR {
 public:
 	Node* root;
@@ -383,8 +497,12 @@ public:
     Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
         if (cursor->valid()) { //already initialized, add new node before cursor
             Node* newNode = new Node(cursor->prev, cursor->parent);
-            cursor->prev->next = newNode;
+			if (cursor->prev) 
+				cursor->prev->next = newNode;
+			else if (cursor->parent) 
+				cursor->parent->child = newNode;
             cursor->prev = newNode;
+			newNode->next = *cursor;
             newNode->initialize(tensor, std::move(args), std::move(name));
 			return newNode;
         } else {
@@ -393,6 +511,23 @@ public:
 			return cursor->prev;
         }
     }
+
+	void MoveNodeTo(Node* node, Node* new_prev) {
+		if (node->valid()) {
+		if (node->parent->child == node) {
+			node->parent->child = node->next;
+		} else {
+			node->prev->next = node->next;
+		}
+
+		node->next->prev = node->prev;
+
+		node->prev = new_prev;
+		node->next = new_prev->next;
+		new_prev->next->prev = node;
+		new_prev->next = node;
+		}
+	 }
 
     void RemoveNode(Node* node) {
         if (node->valid()) {
@@ -434,48 +569,58 @@ public:
 		cursor = oldCursor;
 	}
 
-    void moveNodeTo(Node* node, Node* new_prev)
-    {
-        if (node->valid()) {
-            if (node->parent->child == node) {
-                node->parent->child = node->next;
-            } else {
-                node->prev->next = node->next;
-            }
-
-            node->next->prev = node->prev;
-
-            node->prev = new_prev;
-            node->next = new_prev->next;
-            new_prev->next->prev = node;
-            new_prev->next = node;
-        }
-    }
-
 	[[nodiscard]] map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
 
-	void RecomputeGlobalIndices() const;
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
 	void PrintListing(string name, bool compact, map<Node*, string> invalid_nodes) const;
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
-	//void ReorderOperations();
-	//void OptimizeKernels();
+	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
+	void ReorderOperations();
+	void OptimizeKernels();
 	void OptimizeOperations();
 	void RemoveUnusedOperations();
-	void SeparateOperationsIntoKernels() const;
-	void UpdateNodeOutputs() const;
-	//[[nodiscard]] ClusterProp GetClusterProperties() const;
-	//void AddKernelGlobalMemoryOperations();
-	//void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	//                       Node* cluster, int dims, Tensors kernel_shape);
-	//void MultiDimensionalModeIndices(Tensor*& thread_index,
-	//                                 vector<Tensor*>& indices, Node* kernel_,
-	//                                 int dims, Tensors kernel_shape);
-	//void FinalizeMemoryIndexing();
+	void SeparateOperationsIntoKernels();
+	void ComputeNodeCost();
+	void AddKernelGlobalMemoryOperations();
+	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
+	                       Node* cluster, int dims, Tensors kernel_shape);
+	void MultiDimensionalModeIndices(Tensor*& thread_index,
+	                                 vector<Tensor*>& indices, Node* kernel_,
+	                                 int dims, Tensors kernel_shape);
+	void FinalizeMemoryIndexing();
+	void FinalizeKernels();
 	void CompileIR();
+
+	void UpdateGraph() const {
+		Node* prev = nullptr;
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->UpdateEdges();
+			node->outputs_.clear();
+			if (prev) {
+				prev->true_next = *node;
+				node->true_prev = prev;
+			}
+			prev = *node;
+		}
+		int index = 0;    
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->UpdateOutputs();
+			node->index_ = index++;
+		}
+	}
+
+	vector<Node*> GetNodesOfType(const string& name) const {
+		vector<Node*> result;
+		for (auto node = begin(); !node.end(); node.next()) {
+			if (node->name == name) {
+				result.push_back(*node);
+			}
+		}
+		return result;
+	}
 
 	//TODO (Moroz): Make this per kernel
 	void SetKernelIndexingMode(KernelIndexingMode indexing_mode)

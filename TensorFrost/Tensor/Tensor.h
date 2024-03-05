@@ -561,6 +561,25 @@ class Tensor {
 		});
 	}
 
+	static Tensor& Kernel(const Arguments& shape, const std::function<void()>& body) {
+		// create the kernel
+		Tensor& kernel = Static("kernel", shape, DataType::None);
+
+		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
+			// create the body
+			body();
+		});
+
+		return kernel;
+	}
+
+	static Tensor& Kernel(const Arguments& shape)
+	{
+		// create the kernel
+		Tensor& kernel = Static("kernel", shape, DataType::None);
+		return kernel;
+	}
+
 	// destructor
 	~Tensor() = default;
 
