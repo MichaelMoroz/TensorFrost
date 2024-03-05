@@ -512,22 +512,30 @@ public:
         }
     }
 
-	void MoveNodeTo(Node* node, Node* new_prev) {
-		if (node->valid()) {
-		if (node->parent->child == node) {
-			node->parent->child = node->next;
-		} else {
-			node->prev->next = node->next;
-		}
+	void MoveNodeTo(Node* target_place, Node* note_to_move) {
+		if (note_to_move->valid()) {
+			//remove from current position
+			if (note_to_move->parent && note_to_move->parent->child == note_to_move) {
+				note_to_move->parent->child = note_to_move->next;
+			}
+			else if (note_to_move->prev) {
+				note_to_move->prev->next = note_to_move->next;
+			}
+			note_to_move->next->prev = note_to_move->prev;
 
-		node->next->prev = node->prev;
-
-		node->prev = new_prev;
-		node->next = new_prev->next;
-		new_prev->next->prev = node;
-		new_prev->next = node;
+			//insert into new position
+			note_to_move->parent = target_place->parent;
+			note_to_move->prev = target_place->prev;
+			note_to_move->next = target_place;
+			if (target_place->prev) {
+				target_place->prev->next = note_to_move;
+			}
+			else if (target_place->parent) {
+				target_place->parent->child = note_to_move;
+			}
+			target_place->prev = note_to_move;
 		}
-	 }
+	}
 
     void RemoveNode(Node* node) {
         if (node->valid()) {

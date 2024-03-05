@@ -508,168 +508,168 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #
 #fluid = tf.compile(FluidTest)
 #
-#S = 512
-#VS = 128 # volume size
-#density_scale = 10.0
-#
-#def Trilinear(tex, x, y, z):
-#    xi, yi, zi = tf.floor(x), tf.floor(y), tf.floor(z)
-#    xf, yf, zf = x-xi, y-yi, z-zi
-#    xi, yi, zi = tf.int(xi), tf.int(yi), tf.int(zi)
-#    oxf, oyf, ozf = 1.0-xf, 1.0-yf, 1.0-zf
-#    return tex[xi, yi, zi]*oxf*oyf*ozf + tex[xi+1, yi, zi]*xf*oyf*ozf + tex[xi, yi+1, zi]*oxf*yf*ozf + tex[xi+1, yi+1, zi]*xf*yf*ozf + tex[xi, yi, zi+1]*oxf*oyf*zf + tex[xi+1, yi, zi+1]*xf*oyf*zf + tex[xi, yi+1, zi+1]*oxf*yf*zf + tex[xi+1, yi+1, zi+1]*xf*yf*zf
-#
-#def ToVolumeSpace(x, y, z):
-#    return (x + 1.0) * 0.5 * float(VS), (y + 1.0) * 0.5 * float(VS), (z + 1.0) * 0.5 * float(VS)
-#
-#def FromVolumeSpace(x, y, z):
-#    return x / float(VS) * 2.0 - 1.0, y / float(VS) * 2.0 - 1.0, z / float(VS) * 2.0 - 1.0
-#
-#def SampleVolume(volume, x, y, z):
-#    # convert to volume space [-1.0, 1.0] to [0, VS]
-#    x, y, z = ToVolumeSpace(x, y, z)
-#    #check if we are outside the volume
-#    check = tf.float((x>0.0) & (x<VS-1.0) & (y>0.0) & (y<VS-1.0) & (z>0.0) & (z<VS-1.0))
-#    return Trilinear(volume, x, y, z) * check * density_scale
-#
-#def MarchRay(volume, shape, camx, camy, camz, dirx, diry, dirz, dx=0.05, steps=64):
-#    td = tf.zeros(shape, tf.float32)
-#    density = tf.zeros(shape, tf.float32)
-#    def loop_body(k):
-#        px = camx + dirx * td
-#        py = camy + diry * td
-#        pz = camz + dirz * td
-#        rho = SampleVolume(volume, px, py, pz)
-#        td.set(td + dx)
-#        density.set(density + rho*dx)
-#    tf.loop(loop_body, 0, steps, 1)
-#    return density
-#
-#def MarchColor(dens, colx, coly, colz, camx, camy, camz, dirx, diry, dirz, dx):
-#    td = tf.zeros([S, S], tf.float32)
-#    cx = tf.zeros([S, S], tf.float32)
-#    cy = tf.zeros([S, S], tf.float32)
-#    cz = tf.zeros([S, S], tf.float32)
-#    density = tf.zeros([S, S], tf.float32)
-#    def loop_body(k):
-#        px = camx + dirx * td
-#        py = camy + diry * td
-#        pz = camz + dirz * td
-#        rho = SampleVolume(dens, px, py, pz)
-#        crhox = SampleVolume(colx, px, py, pz)
-#        crhoy = SampleVolume(coly, px, py, pz)
-#        crhoz = SampleVolume(colz, px, py, pz)
-#
-#        opacity = tf.exp(-density) * rho * dx
-#        cx.set(cx + crhox * opacity)
-#        cy.set(cy + crhoy * opacity)
-#        cz.set(cz + crhoz * opacity)
-#        density.set(density + rho*dx)
-#        td.set(td + dx)
-#
-#    tf.loop(loop_body, 0, 128, 1)
-#
-#    return cx, cy, cz
-#
-#light_dir_x = -0.577
-#light_dir_y = -0.577
-#light_dir_z = -0.577
-#
-#import numpy as np
-#
-#def spherical_to_cartesian(r, theta, phi):
-#    # Convert spherical to Cartesian coordinates
-#    x = r * np.sin(phi) * np.cos(theta)
-#    y = r * np.sin(phi) * np.sin(theta)
-#    z = r * np.cos(phi)
-#    return x, y, z
-#
-#def camera_axes(r, theta, phi):
-#    # Camera position
-#    x, y, z = spherical_to_cartesian(r, theta, phi)
-#    
-#    # Forward vector (normalized vector from camera position to origin)
-#    forward = np.array([-x, -y, -z]) / np.linalg.norm([x, y, z])
-#    
-#    # Assuming Z is up
-#    world_up = np.array([0, 0, 1])
-#    
-#    # Right vector (cross product of world up and forward vector)
-#    right = np.cross(world_up, forward)
-#    right /= np.linalg.norm(right)
-#    
-#    # Recalculate the up vector to ensure orthogonality
-#    up = np.cross(forward, right)
-#    up /= np.linalg.norm(up)
-#    
-#    return x, y, z, up, forward, right
-#
-#def get_camera(i, j, phi, theta):
-#    u, v = tf.float(i), tf.float(j)
-#    u = (u - 0.5 * S) / float(S)
-#    v = (v - 0.5 * S) / float(S)
-#    camx, camy, camz, up, forward, right = camera_axes(2.0, phi, theta)
-#
-#    dirx = forward[0] + u * right[0] + v * up[0]
-#    diry = forward[1] + u * right[1] + v * up[1]
-#    dirz = forward[2] + u * right[2] + v * up[2]
-#
-#    # normalize direction
-#    dir_mag = tf.sqrt(dirx*dirx + diry*diry + dirz*dirz)
-#    dirx = dirx / dir_mag
-#    diry = diry / dir_mag
-#    dirz = dirz / dir_mag
-#
-#    return camx, camy, camz, dirx, diry, dirz
-#
-#def volume_ray_marcher():
-#    volume = tf.input([VS, VS, VS], tf.float32)
-#
-#    # compute volume shadows
-#    i,j,k = volume.indices
-#    x, y, z = FromVolumeSpace(tf.float(i), tf.float(j), tf.float(k))
-#    shadow = tf.exp(-MarchRay(volume, volume.shape, x, y, z, light_dir_x, light_dir_y, light_dir_z, 0.05, 16))
-#
-#    canvas = tf.zeros([S, S, 3], tf.float32)
-#    i, j = tf.indices([S, S])
-#    
-#    camx, camy, camz, dirx, diry, dirz = get_camera(i, j, 3.0, 0.4)
-#    
-#    cx, cy, cz = MarchColor(volume, shadow, shadow, shadow, camx, camy, camz, dirx, diry, dirz, 0.025)
-#
-#    canvas[i, j, 0] = cx
-#    canvas[i, j, 1] = cy
-#    canvas[i, j, 2] = cz
-#    
-#    return [canvas]
-#
-#raymarch = tf.compile(volume_ray_marcher)
+S = 512
+VS = 128 # volume size
+density_scale = 10.0
+
+def Trilinear(tex, x, y, z):
+    xi, yi, zi = tf.floor(x), tf.floor(y), tf.floor(z)
+    xf, yf, zf = x-xi, y-yi, z-zi
+    xi, yi, zi = tf.int(xi), tf.int(yi), tf.int(zi)
+    oxf, oyf, ozf = 1.0-xf, 1.0-yf, 1.0-zf
+    return tex[xi, yi, zi]*oxf*oyf*ozf + tex[xi+1, yi, zi]*xf*oyf*ozf + tex[xi, yi+1, zi]*oxf*yf*ozf + tex[xi+1, yi+1, zi]*xf*yf*ozf + tex[xi, yi, zi+1]*oxf*oyf*zf + tex[xi+1, yi, zi+1]*xf*oyf*zf + tex[xi, yi+1, zi+1]*oxf*yf*zf + tex[xi+1, yi+1, zi+1]*xf*yf*zf
+
+def ToVolumeSpace(x, y, z):
+    return (x + 1.0) * 0.5 * float(VS), (y + 1.0) * 0.5 * float(VS), (z + 1.0) * 0.5 * float(VS)
+
+def FromVolumeSpace(x, y, z):
+    return x / float(VS) * 2.0 - 1.0, y / float(VS) * 2.0 - 1.0, z / float(VS) * 2.0 - 1.0
+
+def SampleVolume(volume, x, y, z):
+    # convert to volume space [-1.0, 1.0] to [0, VS]
+    x, y, z = ToVolumeSpace(x, y, z)
+    #check if we are outside the volume
+    check = tf.float((x>0.0) & (x<VS-1.0) & (y>0.0) & (y<VS-1.0) & (z>0.0) & (z<VS-1.0))
+    return Trilinear(volume, x, y, z) * check * density_scale
+
+def MarchRay(volume, shape, camx, camy, camz, dirx, diry, dirz, dx=0.05, steps=64):
+    td = tf.zeros(shape, tf.float32)
+    density = tf.zeros(shape, tf.float32)
+    def loop_body(k):
+        px = camx + dirx * td
+        py = camy + diry * td
+        pz = camz + dirz * td
+        rho = SampleVolume(volume, px, py, pz)
+        td.set(td + dx)
+        density.set(density + rho*dx)
+    tf.loop(loop_body, 0, steps, 1)
+    return density
+
+def MarchColor(dens, colx, coly, colz, camx, camy, camz, dirx, diry, dirz, dx):
+    td = tf.zeros([S, S], tf.float32)
+    cx = tf.zeros([S, S], tf.float32)
+    cy = tf.zeros([S, S], tf.float32)
+    cz = tf.zeros([S, S], tf.float32)
+    density = tf.zeros([S, S], tf.float32)
+    def loop_body(k):
+        px = camx + dirx * td
+        py = camy + diry * td
+        pz = camz + dirz * td
+        rho = SampleVolume(dens, px, py, pz)
+        crhox = SampleVolume(colx, px, py, pz)
+        crhoy = SampleVolume(coly, px, py, pz)
+        crhoz = SampleVolume(colz, px, py, pz)
+
+        opacity = tf.exp(-density) * rho * dx
+        cx.set(cx + crhox * opacity)
+        cy.set(cy + crhoy * opacity)
+        cz.set(cz + crhoz * opacity)
+        density.set(density + rho*dx)
+        td.set(td + dx)
+
+    tf.loop(loop_body, 0, 128, 1)
+
+    return cx, cy, cz
+
+light_dir_x = -0.577
+light_dir_y = -0.577
+light_dir_z = -0.577
+
+import numpy as np
+
+def spherical_to_cartesian(r, theta, phi):
+    # Convert spherical to Cartesian coordinates
+    x = r * np.sin(phi) * np.cos(theta)
+    y = r * np.sin(phi) * np.sin(theta)
+    z = r * np.cos(phi)
+    return x, y, z
+
+def camera_axes(r, theta, phi):
+    # Camera position
+    x, y, z = spherical_to_cartesian(r, theta, phi)
+    
+    # Forward vector (normalized vector from camera position to origin)
+    forward = np.array([-x, -y, -z]) / np.linalg.norm([x, y, z])
+    
+    # Assuming Z is up
+    world_up = np.array([0, 0, 1])
+    
+    # Right vector (cross product of world up and forward vector)
+    right = np.cross(world_up, forward)
+    right /= np.linalg.norm(right)
+    
+    # Recalculate the up vector to ensure orthogonality
+    up = np.cross(forward, right)
+    up /= np.linalg.norm(up)
+    
+    return x, y, z, up, forward, right
+
+def get_camera(i, j, phi, theta):
+    u, v = tf.float(i), tf.float(j)
+    u = (u - 0.5 * S) / float(S)
+    v = (v - 0.5 * S) / float(S)
+    camx, camy, camz, up, forward, right = camera_axes(2.0, phi, theta)
+
+    dirx = forward[0] + u * right[0] + v * up[0]
+    diry = forward[1] + u * right[1] + v * up[1]
+    dirz = forward[2] + u * right[2] + v * up[2]
+
+    # normalize direction
+    dir_mag = tf.sqrt(dirx*dirx + diry*diry + dirz*dirz)
+    dirx = dirx / dir_mag
+    diry = diry / dir_mag
+    dirz = dirz / dir_mag
+
+    return camx, camy, camz, dirx, diry, dirz
+
+def volume_ray_marcher():
+    volume = tf.input([VS, VS, VS], tf.float32)
+
+    # compute volume shadows
+    i,j,k = volume.indices
+    x, y, z = FromVolumeSpace(tf.float(i), tf.float(j), tf.float(k))
+    shadow = tf.exp(-MarchRay(volume, volume.shape, x, y, z, light_dir_x, light_dir_y, light_dir_z, 0.05, 16))
+
+    canvas = tf.zeros([S, S, 3], tf.float32)
+    i, j = tf.indices([S, S])
+    
+    camx, camy, camz, dirx, diry, dirz = get_camera(i, j, 3.0, 0.4)
+    
+    cx, cy, cz = MarchColor(volume, shadow, shadow, shadow, camx, camy, camz, dirx, diry, dirz, 0.025)
+
+    canvas[i, j, 0] = cx
+    canvas[i, j, 1] = cy
+    canvas[i, j, 2] = cz
+    
+    return [canvas]
+
+raymarch = tf.compile(volume_ray_marcher)
 
 
-def DownscaleVolumes(volumes):
-	N, M, K = volumes[0].shape
-	
-	i, j, k = tf.indices([N/2, M/2, K/2])
-	i, j, k = 2*i, 2*j, 2*k
-	
-	out_volumes = ()
-	for vol in volumes:
-		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
-		out_volumes += (B,)
-	
-	return out_volumes
-
-def DownscaleVelocity4x():
-	vx = tf.input([-1, -1, -1], tf.float32)
-	vy = tf.input(vx.shape, tf.float32)
-	vz = tf.input(vx.shape, tf.float32)
-
-	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
-	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
-      
-	return [vx2, vy2, vz2]
-
-downscaler1 = tf.compile(DownscaleVelocity4x)
+#def DownscaleVolumes(volumes):
+#	N, M, K = volumes[0].shape
+#	
+#	i, j, k = tf.indices([N/2, M/2, K/2])
+#	i, j, k = 2*i, 2*j, 2*k
+#	
+#	out_volumes = ()
+#	for vol in volumes:
+#		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
+#		out_volumes += (B,)
+#	
+#	return out_volumes
+#
+#def DownscaleVelocity4x():
+#	vx = tf.input([-1, -1, -1], tf.float32)
+#	vy = tf.input(vx.shape, tf.float32)
+#	vz = tf.input(vx.shape, tf.float32)
+#
+#	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
+#	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
+#      
+#	return [vx2, vy2, vz2]
+#
+#downscaler1 = tf.compile(DownscaleVelocity4x)
 
 #block_size = 8
 

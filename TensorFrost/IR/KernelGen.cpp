@@ -307,6 +307,7 @@ bool CannotMoveArgument(Arg& arg) {
 
 void IR::ReorderOperations() {
 	// get kernel data
+	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	
 	for (auto* kernel: kernels) {
@@ -315,11 +316,11 @@ void IR::ReorderOperations() {
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
 			for (auto& input : node->inputs_) {
-				bool outside_kernel = !input.from_->get()->HasParent("kernel");
+				bool outside_kernel = !input.from_->get()->HasParent(kernel);
 				if (outside_kernel && !CannotMoveArgument(input)) {
 					// if this node is a set and its input is outside of the cluser ->
 					// move it inside
-					if (node->op->HasAllTypes(OpType::Set) || node->name == "memory") {
+					if (node->op->HasAllTypes(OpType::Set)) {
 						nodes_to_move.insert(input.from_->get());
 					}
 				}
@@ -329,8 +330,9 @@ void IR::ReorderOperations() {
 		//TODO (Moroz): do a check on order of the moved nodes - seems to be breaking sometimes
 	
 		// move all the nodes that are outside the kernel inside
+		Node* kernel_begin = kernel->child;
 		for (auto* node : nodes_to_move) {
-			MoveNodeTo(kernel->child, node);
+			MoveNodeTo(kernel_begin, node);
 		}
 	}
 }
