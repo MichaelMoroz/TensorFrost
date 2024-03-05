@@ -1087,6 +1087,7 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", true, false);
 	AddKernelGlobalMemoryOperations();
+	FinalizeKernels();
 	CheckIR("Add Kernel Global Memory Operations", true, true);
 	ReorderOperations();
 	FinalizeMemoryIndexing();
