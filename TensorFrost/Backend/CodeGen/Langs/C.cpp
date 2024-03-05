@@ -166,7 +166,7 @@ class C_CodeGenerator : public CodeGenerator {
 			else {
 				// get shape arguments
 				ArgMap args = node->GetArgumentMap(Arg::Shape);
-				uint dims = args.size();
+				int dims = (int)args.size();
 			
 				string shape_arg = "{";
 				if (dims == 0) {
@@ -503,7 +503,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Node* kernel_node = kernel->begin_;
+		Node* kernel_node = kernel->kernel_node_;
 
 		string kernel_name = "kernel_" + to_string(kernel_count++);
 

@@ -36,7 +36,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		}
 
 		//if (!compact && node->kernel_ != nullptr) {
-		//	listing += GetNodeName(node->kernel_->begin_, false) + ": ";
+		//	listing += GetNodeName(node->kernel_->kernel_node_, false) + ": ";
 		//}
 
 		// indent

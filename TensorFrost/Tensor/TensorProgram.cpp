@@ -29,7 +29,7 @@ vector<TensorMemory*> TensorProgram::Evaluate(
 
 string TensorProgram::PrintProperties() const { 
 	string properties = "TensorProgram:\n";
-	int compute_kernels = program->kernels_.size();
+	int compute_kernels = (int)program->kernels_.size();
 	int lines = 0;
 	string line;
 	istringstream stream(program->generated_code_);

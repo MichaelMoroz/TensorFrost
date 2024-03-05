@@ -646,32 +646,32 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #raymarch = tf.compile(volume_ray_marcher)
 
 
-#def DownscaleVolumes(volumes):
-#	N, M, K = volumes[0].shape
-#	
-#	i, j, k = tf.indices([N/2, M/2, K/2])
-#	i, j, k = 2*i, 2*j, 2*k
-#	
-#	out_volumes = ()
-#	for vol in volumes:
-#		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
-#		out_volumes += (B,)
-#	
-#	return out_volumes
-#
-#def DownscaleVelocity4x():
-#	vx = tf.input([-1, -1, -1], tf.float32)
-#	vy = tf.input(vx.shape, tf.float32)
-#	vz = tf.input(vx.shape, tf.float32)
-#
-#	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
-#	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
-#      
-#	return [vx2, vy2, vz2]
-#
-#downscaler1 = tf.compile(DownscaleVelocity4x)
+def DownscaleVolumes(volumes):
+	N, M, K = volumes[0].shape
+	
+	i, j, k = tf.indices([N/2, M/2, K/2])
+	i, j, k = 2*i, 2*j, 2*k
+	
+	out_volumes = ()
+	for vol in volumes:
+		B = 0.125 * (vol[i, j, k] + vol[i+1, j, k] + vol[i, j+1, k] + vol[i+1, j+1, k] + vol[i, j, k+1] + vol[i+1, j, k+1] + vol[i, j+1, k+1] + vol[i+1, j+1, k+1])
+		out_volumes += (B,)
+	
+	return out_volumes
 
-block_size = 8
+def DownscaleVelocity4x():
+	vx = tf.input([-1, -1, -1], tf.float32)
+	vy = tf.input(vx.shape, tf.float32)
+	vz = tf.input(vx.shape, tf.float32)
+
+	vx1, vy1, vz1 = DownscaleVolumes([vx, vy, vz])
+	vx2, vy2, vz2 = DownscaleVolumes([vx1, vy1, vz1])
+      
+	return [vx2, vy2, vz2]
+
+downscaler1 = tf.compile(DownscaleVelocity4x)
+
+#block_size = 8
 
 #def Sparsify():
 #	vol = tf.input([-1, -1, -1], tf.float32)
@@ -714,70 +714,70 @@ block_size = 8
 #
 #print(res.numpy)
 
-def Sparsify():
-	vol = tf.input([-1, -1, -1], tf.float32)
-	N, M, K = vol.shape
-
-	BX = N / block_size
-	BY = M / block_size
-	BZ = K / block_size
-	max_block_count = BX * BY * BZ
-	
-	counter = tf.zeros([1], tf.int32)
-	block_ids = tf.zeros([max_block_count], tf.int32)
-	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
-
-	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
-
-	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
-
-	voxel_value = vol[ii, jj, kk]
-
-	max_block_val = tf.zeros([max_block_count], tf.float32)
-	tf.scatterMax(max_block_val[b], voxel_value)
-
-	threshold = 0.996
-
-	def if_body1():
-		def if_body2():
-			index = tf.scatterAddPrev(counter[0], 1)
-			block_ids[b] = index + 1
-		tf.if_cond(max_block_val[b] > threshold, if_body2)
-	tf.if_cond((i == 0) & (j == 0) & (k == 0), if_body1)
-
-	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
-	block_pos = tf.buffer([counter[0], 3], tf.int32)
-
-	block_index = block_ids[b] - 1
-
-	def if_body2():
-		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
-		block_pos[block_index, 0] = bx * block_size
-		block_pos[block_index, 1] = by * block_size
-		block_pos[block_index, 2] = bz * block_size
-	
-	tf.if_cond(block_index >= 0, if_body2)
-
-	return [reordered_blocks, block_pos]
-
-sparsifier = tf.compile(Sparsify)
-
-vol = np.random.rand(32, 32, 32).astype(np.float32)
-
-A = tf.tensor(vol)
-
-blocks, pos = sparsifier(A)
-
-blocksnp = blocks.numpy
-posnp = pos.numpy
-
-print(blocksnp.shape)
-#compare first block
-print(blocksnp[0, 0, :, :])
-print(vol[0, 0:8, 0:8])
-
-print(posnp)
-
+#def Sparsify():
+#	vol = tf.input([-1, -1, -1], tf.float32)
+#	N, M, K = vol.shape
+#
+#	BX = N / block_size
+#	BY = M / block_size
+#	BZ = K / block_size
+#	max_block_count = BX * BY * BZ
+#	
+#	counter = tf.zeros([1], tf.int32)
+#	block_ids = tf.zeros([max_block_count], tf.int32)
+#	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+#
+#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#
+#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#
+#	voxel_value = vol[ii, jj, kk]
+#
+#	max_block_val = tf.zeros([max_block_count], tf.float32)
+#	tf.scatterMax(max_block_val[b], voxel_value)
+#
+#	threshold = 0.996
+#
+#	def if_body1():
+#		def if_body2():
+#			index = tf.scatterAddPrev(counter[0], 1)
+#			block_ids[b] = index + 1
+#		tf.if_cond(max_block_val[b] > threshold, if_body2)
+#	tf.if_cond((i == 0) & (j == 0) & (k == 0), if_body1)
+#
+#	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
+#	block_pos = tf.buffer([counter[0], 3], tf.int32)
+#
+#	block_index = block_ids[b] - 1
+#
+#	def if_body2():
+#		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
+#		block_pos[block_index, 0] = bx * block_size
+#		block_pos[block_index, 1] = by * block_size
+#		block_pos[block_index, 2] = bz * block_size
+#	
+#	tf.if_cond(block_index >= 0, if_body2)
+#
+#	return [reordered_blocks, block_pos]
+#
+#sparsifier = tf.compile(Sparsify)
+#
+#vol = np.random.rand(32, 32, 32).astype(np.float32)
+#
+#A = tf.tensor(vol)
+#
+#blocks, pos = sparsifier(A)
+#
+#blocksnp = blocks.numpy
+#posnp = pos.numpy
+#
+#print(blocksnp.shape)
+##compare first block
+#print(blocksnp[0, 0, :, :])
+#print(vol[0, 0:8, 0:8])
+#
+#print(posnp)
+#
 #def Densify():
 #	blocks = tf.input([-1, block_size, block_size, block_size], tf.float32)
 #	block_pos = tf.input([blocks.shape[0], 3], tf.int32)
