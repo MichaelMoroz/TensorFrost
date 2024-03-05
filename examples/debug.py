@@ -806,6 +806,11 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 
 S = 2048
 
+def smoothstep(x, a, b):
+	t = (x - a) / (b - a)
+	t = tf.clamp(t, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
+
 def mandelbrot():
     canvas = tf.zeros([S, S, 3], tf.float32)
     i, j = tf.indices([S, S])
@@ -813,22 +818,26 @@ def mandelbrot():
 
     z_re = tf.zeros([S, S], tf.float32)
     z_im = tf.zeros([S, S], tf.float32)
+    l = tf.zeros([S, S], tf.float32)
     c_re = x * (2.0 / S) - 1.5
     c_im = y * (2.0 / S) - 1.0
-
     def loop_body(k):
         z_re_new = z_re*z_re - z_im*z_im + c_re
         z_im_new = 2.0*z_re*z_im + c_im
-        z_re.set(tf.clamp(z_re_new, -4.0, 4.0))
-        z_im.set(tf.clamp(z_im_new, -4.0, 4.0))
+        z_re.set(z_re_new)
+        z_im.set(z_im_new)
+        tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
+        l.set(l + 1.0)
          
     tf.loop(loop_body, 0, 32, 1)
 
-    z_mag = tf.sqrt(z_re*z_re + z_im*z_im)
+    color1 = [0.0, 0.0, 0.0]
+    color2 = [0.1, 0.2, 1.0]
 
-    canvas[i, j, 0] = tf.abs(z_re)*z_mag
-    canvas[i, j, 1] = tf.abs(z_im)*z_mag
-    canvas[i, j, 2] = z_mag
+    t = smoothstep(l, 0.0, 32.0)
+    canvas[i, j, 0] = tf.lerp(color1[0], color2[0], t)
+    canvas[i, j, 1] = tf.lerp(color1[1], color2[1], t)
+    canvas[i, j, 2] = tf.lerp(color1[2], color2[2], t)
 
     return [canvas]
 

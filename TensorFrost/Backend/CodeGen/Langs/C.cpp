@@ -239,6 +239,9 @@ class C_CodeGenerator : public CodeGenerator {
 					line += node->GetTensor()->GetConstantString();
 					needs_parenthesis = false;
 					break;
+				case OpType::TernaryOperator:
+					line += arguments[0] + " ? " + arguments[1] + " : " + arguments[2];
+					break;
 				default:
 					line += "";
 					break;
@@ -311,6 +314,11 @@ inline int clamp(int x, int a, int b)
 inline float clamp(float x, float a, float b)
 {
   return min(max(x, a), b);
+}
+
+inline float lerp(float a, float b, float t)
+{
+  return a + (b - a) * t;
 }
 
 inline void InterlockedAdd(int* memory, int address, int value)

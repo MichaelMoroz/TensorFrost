@@ -33,6 +33,7 @@ enum class OpType {
 	Variable,
 	Memory,
 	UnaryOperator,
+	TernaryOperator,
 	TypeCast,
 	TypeReinterpret,
 	DimensionIndex,

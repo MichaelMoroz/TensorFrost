@@ -59,6 +59,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);
+	TERNARY_FUNCTION(select);
 
 	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
@@ -199,6 +200,9 @@ void TensorFunctionsDefinition(py::module& m) {
 		};
 		Tensor::If(T(condition), f);
 	});
+
+	m.def("break_loop", []() { Tensor::Break(); });
+	m.def("continue_loop", []() { Tensor::Continue(); });
 }
 
 }  // namespace TensorFrost

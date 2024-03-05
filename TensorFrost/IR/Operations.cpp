@@ -16,12 +16,10 @@ const vector<Operation> operations = {
     Operation("if", {"b_"}, 100, "", {OpType::Static}),
     Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
     Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
-    Operation("return", {""}, 0, "return", {OpType::Keyword, OpType::Static}),
     Operation("group_barrier", {""}, 256, "", {OpType::Static}), // TODO implement in graph
 
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
     Operation("deallocate", {"f_", "i_", "u_"}, 0, "", {OpType::Memory}), //TODO implement in graph
-
 
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
     Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
@@ -99,7 +97,8 @@ const vector<Operation> operations = {
     Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
-    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4),
+    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "",
+              {OpType::TernaryOperator}),
     Operation("load", {"_f", "_u", "_i"}, 128, "", {OpType::Load, OpType::MemoryOp}),
     Operation("store", {"f_", "u_", "i_"}, 128, "",
               {OpType::Store, OpType::MemoryOp, OpType::Modifier}),

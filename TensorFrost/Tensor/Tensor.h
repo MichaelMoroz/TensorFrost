@@ -580,6 +580,16 @@ class Tensor {
 		return kernel;
 	}
 
+	static void Break() {
+		// create the break
+		Tensor& break_tensor = Static("break", DataType::None);
+	}
+
+	static void Continue() {
+		// create the continue
+		Tensor& continue_tensor = Static("continue", DataType::None);
+	}
+
 	// destructor
 	~Tensor() = default;
 
@@ -727,6 +737,10 @@ class Tensor {
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {
 		return Op("lerp", &x, &y, &a);
+	}
+
+	static Tensor& select(const Tensor& cond, const Tensor& x, const Tensor& y) {
+		return Op("ternary", &cond, &x, &y);
 	}
 
 	static Tensor& fma(const Tensor& x, const Tensor& y, const Tensor& z) {
