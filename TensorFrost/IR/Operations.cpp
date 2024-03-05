@@ -17,6 +17,18 @@ const vector<Operation> operations = {
     Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
     Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
     Operation("return", {""}, 0, "return", {OpType::Keyword, OpType::Static}),
+    Operation("group_barrier", {""}, 256, "", {OpType::Static}), // TODO implement in graph
+
+    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
+    Operation("deallocate", {"f_", "i_", "u_"}, 0, "", {OpType::Memory}), //TODO implement in graph
+
+
+    Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
+    Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
+    Operation("group_thread_id", {"_i"}, 0), //TODO implement in graph
+    Operation("group_id", {"_i"}, 0), //TODO implement in graph
+    Operation("group_count", {"_i"}, 1), //TODO implement in graph 
+    Operation("thread_count", {"_i"}, 1), //TODO implement in graph
 
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),
@@ -93,8 +105,6 @@ const vector<Operation> operations = {
               {OpType::Store, OpType::MemoryOp, OpType::Modifier}),
     Operation("set", {"f_", "u_", "i_"}, 1, "",
               {OpType::Set, OpType::Modifier}),
-    Operation("const_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
-    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
     Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
               {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
     Operation("InterlockedMin", {"u_", "i_", "f_"}, 256, "",
@@ -109,15 +119,7 @@ const vector<Operation> operations = {
               {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
     Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
               {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("variable", {"_f", "_u", "_i"}, 1),
     Operation("const", {"_f", "_u", "_i"}, 0, "", {OpType::Constant}),
-    Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
-    Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
-    Operation("group_thread_id", {"_i"}, 0),
-    Operation("group_id", {"_i"}, 0),
-    Operation("group_count", {"_i"}, 1),
-    Operation("thread_count", {"_i"}, 1),
-    Operation("GroupMemoryBarrierWithGroupSync", {""}, 256),
 };
 
 DataTypeList Types(initializer_list<DataType> elements) {
