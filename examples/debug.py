@@ -671,7 +671,7 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #
 #downscaler1 = tf.compile(DownscaleVelocity4x)
 
-block_size = 8
+#block_size = 8
 
 #def Sparsify():
 #	vol = tf.input([-1, -1, -1], tf.float32)
@@ -714,95 +714,133 @@ block_size = 8
 #
 #print(res.numpy)
 
-def Sparsify():
-	vol = tf.input([-1, -1, -1], tf.float32)
-	N, M, K = vol.shape
+#def Sparsify():
+#	vol = tf.input([-1, -1, -1], tf.float32)
+#	N, M, K = vol.shape
+#
+#	BX = N / block_size
+#	BY = M / block_size
+#	BZ = K / block_size
+#	max_block_count = BX * BY * BZ
+#	
+#	counter = tf.zeros([1], tf.int32)
+#	block_ids = tf.zeros([max_block_count], tf.int32)
+#	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+#
+#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#
+#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#
+#	voxel_value = vol[ii, jj, kk]
+#
+#	max_block_val = tf.zeros([max_block_count], tf.float32)
+#	tf.scatterMax(max_block_val[b], voxel_value)
+#
+#	threshold = 0.996
+#
+#	def if_body1():
+#		def if_body2():
+#			index = tf.scatterAddPrev(counter[0], 1)
+#			block_ids[b] = index + 1
+#		tf.if_cond(max_block_val[b] > threshold, if_body2)
+#	tf.if_cond((i == 0) & (j == 0) & (k == 0), if_body1)
+#
+#	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
+#	block_pos = tf.buffer([counter[0], 3], tf.int32)
+#
+#	block_index = block_ids[b] - 1
+#
+#	def if_body2():
+#		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
+#		block_pos[block_index, 0] = bx * block_size
+#		block_pos[block_index, 1] = by * block_size
+#		block_pos[block_index, 2] = bz * block_size
+#	
+#	tf.if_cond(block_index >= 0, if_body2)
+#
+#	return [reordered_blocks, block_pos]
+#
+#sparsifier = tf.compile(Sparsify)
+#
+#vol = np.random.rand(32, 32, 32).astype(np.float32)
+#
+#A = tf.tensor(vol)
+#
+#blocks, pos = sparsifier(A)
+#
+#blocksnp = blocks.numpy
+#posnp = pos.numpy
+#
+#print(blocksnp.shape)
+##compare first block
+#print(blocksnp[0, 0, :, :])
+#print(vol[0, 0:8, 0:8])
+#
+#print(posnp)
+#
+#def Densify():
+#	blocks = tf.input([-1, block_size, block_size, block_size], tf.float32)
+#	block_pos = tf.input([blocks.shape[0], 3], tf.int32)
+#	shape = tf.input([3], tf.int32)
+#
+#	volume = tf.buffer([shape[0], shape[1], shape[2]], tf.float32)
+#
+#	b, i, j, k = blocks.indices
+#	x, y, z = block_pos[b, 0] + i, block_pos[b, 1] + j, block_pos[b, 2] + k
+#	
+#	volume[x, y, z] = blocks[b, i, j, k]
+#	return [volume]
+#
+#
+#densifier = tf.compile(Densify)
+#
+#shape = np.array([32, 32, 32], dtype=np.int32)
+#
+#densified, = densifier(blocks, pos, tf.tensor(shape))
+#
+#densifiednp = densified.numpy
+#
+#print(densifiednp.shape)
+#print(densifiednp[0, 0, :])
+#print(vol[0, 0, :])
 
-	BX = N / block_size
-	BY = M / block_size
-	BZ = K / block_size
-	max_block_count = BX * BY * BZ
-	
-	counter = tf.zeros([1], tf.int32)
-	block_ids = tf.zeros([max_block_count], tf.int32)
-	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+S = 2048
 
-	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+def smoothstep(x, a, b):
+	t = (x - a) / (b - a)
+	t = tf.clamp(t, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
 
-	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+def mandelbrot():
+    canvas = tf.zeros([S, S, 3], tf.float32)
+    i, j = tf.indices([S, S])
+    y, x = tf.float(i), tf.float(j)
 
-	voxel_value = vol[ii, jj, kk]
+    z_re = tf.zeros([S, S], tf.float32)
+    z_im = tf.zeros([S, S], tf.float32)
+    l = tf.zeros([S, S], tf.float32)
+    c_re = x * (2.0 / S) - 1.5
+    c_im = y * (2.0 / S) - 1.0
+    def loop_body(k):
+        z_re_new = z_re*z_re - z_im*z_im + c_re
+        z_im_new = 2.0*z_re*z_im + c_im
+        z_re.set(z_re_new)
+        z_im.set(z_im_new)
+        tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
+        l.set(l + 1.0)
+         
+    tf.loop(loop_body, 0, 32, 1)
 
-	max_block_val = tf.zeros([max_block_count], tf.float32)
-	tf.scatterMax(max_block_val[b], voxel_value)
+    color1 = [0.0, 0.0, 0.0]
+    color2 = [0.1, 0.2, 1.0]
 
-	threshold = 0.996
+    t = smoothstep(l, 0.0, 32.0)
+    canvas[i, j, 0] = tf.lerp(color1[0], color2[0], t)
+    canvas[i, j, 1] = tf.lerp(color1[1], color2[1], t)
+    canvas[i, j, 2] = tf.lerp(color1[2], color2[2], t)
 
-	cond1 = (max_block_val[b] > threshold) & (i == 0) & (j == 0) & (k == 0)
+    return [canvas]
 
-	def if_body1():
-		index = tf.scatterAddPrev(counter[0], 1)
-		block_ids[b] = index + 1
-
-	tf.if_cond(cond1, if_body1)
-
-
-	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
-	block_pos = tf.buffer([counter[0], 3], tf.int32)
-
-	block_index = block_ids[b] - 1
-	cond2 = block_index >= 0
-
-	def if_body2():
-		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
-		block_pos[block_index, 0] = bx * block_size
-		block_pos[block_index, 1] = by * block_size
-		block_pos[block_index, 2] = bz * block_size
-	
-	tf.if_cond(cond2, if_body2)
-
-	return [reordered_blocks, block_pos]
-
-sparsifier = tf.compile(Sparsify)
-
-vol = np.random.rand(32, 32, 32).astype(np.float32)
-
-A = tf.tensor(vol)
-
-blocks, pos = sparsifier(A)
-
-blocksnp = blocks.numpy
-posnp = pos.numpy
-
-print(blocksnp.shape)
-#compare first block
-print(blocksnp[0, 0, :, :])
-print(vol[0, 0:8, 0:8])
-
-print(posnp)
-
-def Densify():
-	blocks = tf.input([-1, block_size, block_size, block_size], tf.float32)
-	block_pos = tf.input([blocks.shape[0], 3], tf.int32)
-	shape = tf.input([3], tf.int32)
-
-	volume = tf.buffer([shape[0], shape[1], shape[2]], tf.float32)
-
-	b, i, j, k = blocks.indices
-	x, y, z = block_pos[b, 0] + i, block_pos[b, 1] + j, block_pos[b, 2] + k
-	
-	volume[x, y, z] = blocks[b, i, j, k]
-	return [volume]
-
-
-densifier = tf.compile(Densify)
-
-shape = np.array([32, 32, 32], dtype=np.int32)
-
-densified, = densifier(blocks, pos, tf.tensor(shape))
-
-densifiednp = densified.numpy
-
-print(densifiednp.shape)
-print(densifiednp[0, 0, :])
-print(vol[0, 0, :])
+mand = tf.compile(mandelbrot)
+res = mand()
+resnp = res[0].numpy

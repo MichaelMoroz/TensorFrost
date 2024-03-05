@@ -20,7 +20,7 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 
 uint Allocator(uint*& mem, uint* a, uint dim) {
 	vector<int> shape;
-	for (int i = 0; i < dim; i++) {
+	for (uint i = 0; i < dim; i++) {
 		shape.push_back(a[i]);
 	}
 	uint off = global_memory_manager->Allocate(shape)->frame->start;
@@ -36,7 +36,7 @@ vector<TensorMemory*> ExecuteProgram(
 	vector<Node*> memory_inputs = program->ir_->memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map = program->ir_->shape_memory_map;
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
-	int output_count = output_memory_map.size();
+	int output_count = (int)output_memory_map.size();
 
 	if (memory_inputs.size() != inputs.size()) {
 		throw std::runtime_error(

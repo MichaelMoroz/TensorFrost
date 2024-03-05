@@ -25,12 +25,20 @@ class C_CodeGenerator : public CodeGenerator {
 	vector<string>* allocated_memories;
 	vector<Node*>* output_memories;
 
+	map<Node*, string> custom_generated_code_;
+
 	bool offset_array = true;
 
 	Line* GenerateLine(const Operation* op, Node* node,
 	                   Arguments inputs, Arguments indices, Arguments shape,
 	                   Arguments memory, map<Node*, int> offsets,
 	                   map<Node*, int> variables) override {
+
+		if (custom_generated_code_.contains(node))
+		{
+			return new Line("", custom_generated_code_[node], ";", "", {}, false, 0);
+		}
+
 		// get node names
 		vector<string> arguments;
 		vector<string> input_variables;
@@ -86,16 +94,12 @@ class C_CodeGenerator : public CodeGenerator {
 		string expression = "";
 		string right = "";
 		bool needs_parenthesis = true;
-		if (op->name_ == "loop_begin") {
+		if (op->name_ == "loop") {
 			left += "for (int " + name + " = " + arguments[0] + "; " + name + " < " +
-			        arguments[1] + "; " + name + " += " + arguments[2] + ") {";
-		} else if (op->name_ == "loop_end") {
-			left += "}";
-		} else if (op->name_ == "if_begin") {
-			left += "if (" + arguments[0] + ") {";
-		} else if (op->name_ == "if_end") {
-			left += "}";
-		} else if (op->HasAllTypes(OpType::MemoryOp)) {
+			        arguments[1] + "; " + name + " += " + arguments[2] + ")";
+		}  else if (op->name_ == "if") {
+			left += "if (" + arguments[0] + ")";
+		}  else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 			if (offset_array)
 			{
@@ -162,7 +166,7 @@ class C_CodeGenerator : public CodeGenerator {
 			else {
 				// get shape arguments
 				ArgMap args = node->GetArgumentMap(Arg::Shape);
-				uint dims = args.size();
+				int dims = (int)args.size();
 			
 				string shape_arg = "{";
 				if (dims == 0) {
@@ -235,6 +239,9 @@ class C_CodeGenerator : public CodeGenerator {
 					line += node->GetTensor()->GetConstantString();
 					needs_parenthesis = false;
 					break;
+				case OpType::TernaryOperator:
+					line += arguments[0] + " ? " + arguments[1] + " : " + arguments[2];
+					break;
 				default:
 					line += "";
 					break;
@@ -248,13 +255,14 @@ class C_CodeGenerator : public CodeGenerator {
 	}
 };
 
-pair<string, vector<string>> GenerateC(Program* program) {
+string GenerateC(Program* program) {
 	string all_kernels = R"(
 #include <cmath>
 #include <omp.h>
 #include <initializer_list>
 #include <functional>
 #include <vector>
+#include <atomic>
 
 typedef unsigned int uint;
 
@@ -308,115 +316,130 @@ inline float clamp(float x, float a, float b)
   return min(max(x, a), b);
 }
 
+inline float lerp(float a, float b, float t)
+{
+  return a + (b - a) * t;
+}
+
 inline void InterlockedAdd(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(float* memory, int address, float value)
 {
-  #pragma omp atomic
-  memory[address] += value;
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = current + value;
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = current + value;
+  }
 }
 
 inline int InterlockedAdd_Prev(int* memory, int address, int value)
 {
-  int prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
-  }
-  return prev;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline uint InterlockedAdd_Prev(uint* memory, int address, uint value)
 {
-  uint prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
-  }
-  return prev;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline float InterlockedAdd_Prev(float* memory, int address, float value)
 {
-  float prev;
-  #pragma omp atomic capture
-  {
-    prev = memory[address];
-    memory[address] += value;
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = current + value;
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = current + value;
   }
-  return prev;
+  return current;
 }
 
 inline void InterlockedAnd(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] &= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAnd(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] &= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_and(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] |= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] |= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(int* memory, int address, int value)
 {
-  #pragma omp atomic
-  memory[address] ^= value;
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(uint* memory, int address, uint value)
 {
-  #pragma omp atomic
-  memory[address] ^= value;
+  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+  place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedMin(int* memory, int address, int value)
 {
-  #pragma omp critical
-  memory[address] = min(memory[address], value);
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  int current = place->load(std::memory_order_relaxed);
+  int goal = min(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = min(current, value);
+  }
 }
 
 inline void InterlockedMin(float* memory, int address, float value)
 {
-  #pragma omp critical
-  memory[address] = min(memory[address], value);
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = min(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = min(current, value);
+  }
 }
 
 inline void InterlockedMax(int* memory, int address, int value)
 {
-  #pragma omp critical
-  memory[address] = max(memory[address], value);
+  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+  int current = place->load(std::memory_order_relaxed);
+  int goal = max(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = max(current, value);
+  }
 }
 
 inline void InterlockedMax(float* memory, int address, float value)
 {
-  #pragma omp critical
-  memory[address] = max(memory[address], value);
+  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+  float current = place->load(std::memory_order_relaxed);
+  float goal = max(current, value);
+  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+      goal = max(current, value);
+  }
 }
 
 inline uint pcg(uint v)
@@ -482,48 +505,17 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	vector<Node*> output_memories;
 	int input_memory_index = 0;
 
-	// Generate HLSL code for each compute kernel
+	// Generate code for each compute kernel
 	int kernel_count = 0;
-	vector<string> kernel_names;
-	string host_code =
-	    "\n"
-	    "extern \"C\" "
-#ifdef _WIN32
-	    "__declspec(dllexport)"
-#endif
-	    " void "
-	    "main"
-	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
-	    "void deallocate(uint))\n"
-	    "{\n";
+	map<Node*, string> dispatch_code;
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Scope* cluster = kernel->begin_->kernel_;
+		Node* kernel_node = kernel->kernel_node_;
 
-		C_CodeGenerator generator;
-
-		if (kernel->type_ == KernelType::Host) {
-			generator.input_memory_index = &input_memory_index;
-			generator.allocated_memories = &allocated_memories;
-			generator.output_memories = &output_memories;
-			generator.offset_array = false;
-
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string memory_code = generator.GetFinalCode();
-			
-			host_code += "\n";
-			host_code += AddIndent(memory_code, "  ");
-
-			continue;
-		}
-
-		string kernel_name = "kernel_" + to_string(kernel_count);
-		kernel_names.push_back(kernel_name);
+		string kernel_name = "kernel_" + to_string(kernel_count++);
 
 		// Generate kernel
-		
-
 		vector<Node*> memory_nodes;
 		memory_nodes.resize(kernel->memory.size());
 		for (auto& memory : kernel->memory) {
@@ -563,87 +555,82 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 		}
 		shape_args += "}";
 
-		if (i.dim == 0) //add it to host code if scalar kernel
-		{
-			generator.offset_name_ = "off_" + to_string(kernel_count);
-			generator.variable_name_ = "var_" + to_string(kernel_count);
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string kernel_code = generator.GetFinalCode();
-			kernel->generated_code_ = kernel_code;
+		C_CodeGenerator generator;
+		generator.GenerateKernelLines(program->ir_, kernel_node, kernel);
+		string kernel_code = generator.GetFinalCode();
+		kernel->generated_code_ = kernel_code;
 
-			host_code += "\n";
-			if (memory_nodes.size() > 0) {
-				host_code += "  std::vector<uint> " + generator.offset_name_ + " = " + memory_args + ";\n";
-			}
-			if (variable_nodes.size() > 0) {
-				host_code += "  std::vector<uint> " + generator.variable_name_ + " = " + variable_args + ";\n";
-			}
-			host_code += "\n";
-			host_code += AddIndent(kernel_code, "  ");
+		string loop = "";
+		const int block_size = 4;  // TODO chose automatically
+		switch (kernel->indexing_mode_) {
+			case KernelIndexingMode::Linear:
+				loop =
+					"  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+				loop += "  {\n";
+				break;
+			case KernelIndexingMode::MultiDimensional:
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int dim" + to_string(d) + " = 0; dim" +
+						    to_string(d) + " < shape[" + to_string(d) + "]; dim" +
+						    to_string(d) + "++)\n";
+				}
+				loop += "  {\n";
+				break;
+			case KernelIndexingMode::MultiDimensionalBlocks:
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
+						    " < shape[" + to_string(d) + "]; wg" + to_string(d) +
+						    "+= " + to_string(block_size) + ")\n";
+				}
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
+						    "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
+						    to_string(block_size) + ", shape[" + to_string(d) +
+						    "]); dim" + to_string(d) + "++)\n";
+				}
+				loop += "  {\n";
+				break;
+			default:
+				throw std::runtime_error("Invalid indexing mode");
+				break;
 		}
-		else
-		{
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string kernel_code = generator.GetFinalCode();
-			kernel->generated_code_ = kernel_code;
-
-			string loop = "";
-			const int block_size = 4;  // TODO chose automatically
-			switch (kernel->indexing_mode_) {
-				case KernelIndexingMode::Linear:
-					loop =
-					    "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
-					loop += "  {\n";
-					break;
-				case KernelIndexingMode::MultiDimensional:
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int dim" + to_string(d) + " = 0; dim" +
-						        to_string(d) + " < shape[" + to_string(d) + "]; dim" +
-						        to_string(d) + "++)\n";
-					}
-					loop += "  {\n";
-					break;
-				case KernelIndexingMode::MultiDimensionalBlocks:
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
-						        " < shape[" + to_string(d) + "]; wg" + to_string(d) +
-						        "+= " + to_string(block_size) + ")\n";
-					}
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
-						        "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
-						        to_string(block_size) + ", shape[" + to_string(d) +
-						        "]); dim" + to_string(d) + "++)\n";
-					}
-					loop += "  {\n";
-					break;
-				default:
-					throw std::runtime_error("Invalid indexing mode");
-					break;
-			}
 
 
-			all_kernels +=
-			    "\n"
-			    "extern \"C\" "
-#ifdef _WIN32
-			    "__declspec(dllexport)"
-#endif
-			    " void " +
-			    kernel_name +
-			    "(uint* var, uint* off, uint* mem, uint* shape)\n"
-			    "{\n"
-			    "  #pragma omp parallel for shared(mem) \n" +
-			    loop + AddIndent(kernel_code, "    ") +
-			    "  }\n"
-			    "}\n";
+		all_kernels +=
+			"\n"
+			"void " +
+			kernel_name +
+			"(uint* var, uint* off, uint* mem, uint* shape)\n"
+			"{\n"
+			"  #pragma omp parallel for shared(mem) \n" +
+			loop + AddIndent(kernel_code, "    ") +
+			"  }\n"
+			"}\n";
 
-			host_code += "\n";
-			host_code += "  dispatch(" + kernel_name + ", mem, " +
-			             memory_args + ", " + variable_args + ", " + shape_args + ");\n";
-		}
-		kernel_count++;
+		dispatch_code[kernel_node] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
+
+	C_CodeGenerator generator;
+	generator.custom_generated_code_ = dispatch_code;
+	generator.input_memory_index = &input_memory_index;
+	generator.allocated_memories = &allocated_memories;
+	generator.output_memories = &output_memories;
+	generator.offset_array = false;
+	generator.GenerateKernelLines(program->ir_, program->ir_->root, &program->kernels_[0]);
+
+	string host_code =
+	    "\n"
+	    "extern \"C\" "
+#ifdef _WIN32
+	    "__declspec(dllexport)"
+#endif
+	    " void "
+	    "main"
+	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
+	    "void deallocate(uint))\n"
+	    "{\n";
+
+	host_code += AddIndent(generator.GetFinalCode(), "  ");
 
 	//set output memories and deallocate
 	for (auto& memory : output_memories) {
@@ -661,6 +648,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	all_kernels += host_code + "}\n";
 
 	program->generated_code_ = all_kernels;
-	return pair<string, vector<string>>(all_kernels, kernel_names);
+	return all_kernels;
 }
 }  // namespace TensorFrost

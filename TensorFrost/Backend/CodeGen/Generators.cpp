@@ -6,25 +6,25 @@ namespace TensorFrost {
 using namespace std;
 
 void GenerateNodeNames(const IR& ir) {
-	map<Scope*, int> cluster_var_index = map<Scope*, int>();
+	map<Node*, int> cluster_var_index = map<Node*, int>();
 	int mem_index = 0;
 	int cluster_index = 0;
-	Scope* curent_cluster = nullptr;
-	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		if (node->kernel_ != curent_cluster) {
+	Node* curent_cluster = nullptr;
+	for (auto node = ir.begin(); !node.end(); node.next()) {
+		if (node->parent != curent_cluster) {
 			cluster_index++;
 		}
 		if (node->name == "memory") {
 			node->var_name = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
-			Scope* cluster_id = node->kernel_;
+			Node* cluster_id = node->parent;
 			int var_index = cluster_var_index[cluster_id];
 			node->var_name =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
 			cluster_var_index[cluster_id]++;
 		}
-		curent_cluster = node->kernel_;
+		curent_cluster = node->parent;
 	}
 }
 
@@ -59,20 +59,15 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
+void CodeGenerator::GenerateKernelLines(const IR* ir, const Node* cluster,
                          const Kernel* kernel) {
-	int indent = 0;
 	int variable_index = 0;
 	int memory_index = 0;
+	int prev_depth = 0;
 	// Translate each operation into HLSL
-	for (auto node = IR::Iterator(cluster->begin_); !node.is_cluster_end(cluster);
-	     ++node) {
+	for (auto node = NodeIterator(cluster); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
 		if (node->name == "const" && !node->has_been_modified_) {
 			continue;
-		}
-
-		if (node->name == "loop_end" || node->name == "if_end") {
-			indent--;
 		}
 
 		// get node operation
@@ -92,12 +87,28 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Scope* cluster,
 			continue;
 		}
 
-		line->indent = indent;
-		lines.push_back(line);
-
-		if (node->name == "loop_begin" || node->name == "if_begin") {
-			indent++;
+		int depth = node.depth() - 1;
+		if (depth != prev_depth)
+		{
+			// add scope brackets
+			if (depth < prev_depth) {
+				for (int i = prev_depth - 1; i >= depth; i--) {
+					lines.push_back(new Line(i, "}"));
+				}
+			} else if (depth > prev_depth) {
+				for (int i = prev_depth; i < depth; i++) {
+					lines.push_back(new Line(i, "{"));
+				}
+			}
 		}
+		line->indent = depth;
+		lines.push_back(line);
+		prev_depth = depth;
+	}
+
+	// add closing brackets
+	for (int i = 0; i < prev_depth; i++) {
+		lines.push_back(new Line(i, "}"));
 	}
 }
 

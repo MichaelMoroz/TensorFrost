@@ -25,7 +25,10 @@ void TensorMemoryDefinition(py::module& m,
 			    py::buffer_info info = arr_f.request();
 
 			    // Get the shape
-			    std::vector<int> shape(info.shape.begin(), info.shape.end());
+			    std::vector<int> shape;
+				for (int i = 0; i < info.ndim; i++) {
+				    shape.push_back((int)info.shape[i]);
+			    }
 
 			    // Create the data vector
 			    std::vector<uint> data;
@@ -64,7 +67,10 @@ void TensorMemoryDefinition(py::module& m,
 			    py::buffer_info info = arr_i.request();
 
 			    // Get the shape
-			    std::vector<int> shape(info.shape.begin(), info.shape.end());
+			    std::vector<int> shape;
+			    for (int i = 0; i < info.ndim; i++) {
+				    shape.push_back((int)info.shape[i]);
+			    }
 
 			    // Create the data vector
 			    std::vector<uint> data;
@@ -96,6 +102,9 @@ void TensorMemoryDefinition(py::module& m,
 
 			    // Allocate the memory
 			    return global_memory_manager->AllocateWithData(shape, data, DataType::Int);
+			}
+			else {
+			    throw std::runtime_error("Unsupported data type");
 			}
 	    },
 	    "Create a TensorMemory from a numpy array");
@@ -137,6 +146,9 @@ void TensorMemoryDefinition(py::module& m,
 			    }
 
 			    return arr;
+			}
+			else {
+			    throw std::runtime_error("Unsupported data type");
 			}
 	    },
 	    "Readback data from tensor memory to a numpy array");

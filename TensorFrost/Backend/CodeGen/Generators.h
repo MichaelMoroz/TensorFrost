@@ -10,7 +10,7 @@ namespace TensorFrost {
 string GetNodeName(const Node* node,  bool compact = false);
 void GenerateNodeNames(const IR& ir);
 
-pair<string, vector<string>> GenerateC(Program* program);
+string GenerateC(Program* program);
 
 class Line {
  public:
@@ -26,6 +26,9 @@ class Line {
 	Line(string left, string expression, string right, string name,
 	     vector<string> args, bool needs_parenthesis = false, float cost = 0, int indent = 0)
 	    : left(left), right(right), name(name), arguments(args), indent(indent), expression(expression), needs_parenthesis(needs_parenthesis), cost(cost) {}
+
+	Line(int indent, string expression)
+	    : indent(indent), expression(expression), needs_parenthesis(false), cost(0), left(""), right(""), name("") {}
 };
 
 class CodeGenerator {
@@ -40,7 +43,7 @@ class CodeGenerator {
 	                          map<Node*, int> offsets,
 	                          map<Node*, int> variables) = 0;
 
-	void GenerateKernelLines(const IR* ir, const Scope* cluster,
+	void GenerateKernelLines(const IR* ir, const Node* cluster,
 	                         const Kernel* kernel);
 	void Compactify();
 	string GetFinalCode();

@@ -153,9 +153,7 @@ void CompileAndLoadKernel(Program* program) {
 	cout << "Temp file: " << temp_file_name << endl;
 
 	// Generate C code
-	pair<string, vector<string>> source_names = GenerateC(program);
-	string source_code = source_names.first;
-	vector<string> kernel_names = source_names.second;
+	string source_code = GenerateC(program);
 
 	// Compile the library
 	CompileKernelLibrary(source_code, temp_path, temp_file_name);

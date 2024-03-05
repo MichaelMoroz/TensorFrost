@@ -542,25 +542,52 @@ class Tensor {
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
 	                 const std::function<void(const Tensor&)>& body) {
 		// create the loop
-		Tensor& loop = Op("loop_begin", &start, &end, &step);
+		Tensor& loop = Op("loop", &start, &end, &step);
 
-		// create the body
-		body(loop);
-
-		// end the loop
-		Op("loop_end", &loop);
+		evaluation_context_ir_->ExecuteExpressionChild(loop.node_, [&]() {
+			// create the body
+			body(loop);
+		});
 	}
 
 	static void If(const Tensor& condition,
 		const std::function<void()>& body) {
 		// create the if
-		Tensor& if_tensor = Op("if_begin", &condition);
+		Tensor& if_tensor = Op("if", &condition);
 
-		// create the body
-		body();
+		evaluation_context_ir_->ExecuteExpressionChild(if_tensor.node_, [&]() {
+			// create the body
+			body();
+		});
+	}
 
-		// end the if
-		Op("if_end");
+	static Tensor& Kernel(const Arguments& shape, const std::function<void()>& body) {
+		// create the kernel
+		Tensor& kernel = Static("kernel", shape, DataType::None);
+
+		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
+			// create the body
+			body();
+		});
+
+		return kernel;
+	}
+
+	static Tensor& Kernel(const Arguments& shape)
+	{
+		// create the kernel
+		Tensor& kernel = Static("kernel", shape, DataType::None);
+		return kernel;
+	}
+
+	static void Break() {
+		// create the break
+		Tensor& break_tensor = Static("break", DataType::None);
+	}
+
+	static void Continue() {
+		// create the continue
+		Tensor& continue_tensor = Static("continue", DataType::None);
 	}
 
 	// destructor
@@ -635,11 +662,11 @@ class Tensor {
 	}
 
 	Tensor& operator<<(const Tensor& other) const {
-		return Op("blshift", this, &other);
+		return Op("lshift", this, &other);
 	}
 
 	Tensor& operator>>(const Tensor& other) const {
-		return Op("brshift", this, &other);
+		return Op("rshift", this, &other);
 	}
 
 	void operator=(const Tensor& other) = delete;
@@ -710,6 +737,10 @@ class Tensor {
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {
 		return Op("lerp", &x, &y, &a);
+	}
+
+	static Tensor& select(const Tensor& cond, const Tensor& x, const Tensor& y) {
+		return Op("ternary", &cond, &x, &y);
 	}
 
 	static Tensor& fma(const Tensor& x, const Tensor& y, const Tensor& z) {
