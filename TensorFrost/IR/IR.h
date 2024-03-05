@@ -580,6 +580,7 @@ public:
 	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
 	void ReorderOperations();
 	void OptimizeKernels();
+	void OptimizeHost();
 	void OptimizeOperations();
 	void RemoveUnusedOperations();
 	void SeparateOperationsIntoKernels();

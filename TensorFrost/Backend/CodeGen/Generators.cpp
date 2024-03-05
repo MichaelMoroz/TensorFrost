@@ -61,17 +61,13 @@ inline string Tensor::GetConstantString() const {
 
 void CodeGenerator::GenerateKernelLines(const IR* ir, const Node* cluster,
                          const Kernel* kernel) {
-	int indent = 0;
 	int variable_index = 0;
 	int memory_index = 0;
+	int prev_depth = 0;
 	// Translate each operation into HLSL
-	for (auto node = NodeIterator(cluster); !node.end(); node.next()) {
+	for (auto node = NodeIterator(cluster); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
 		if (node->name == "const" && !node->has_been_modified_) {
 			continue;
-		}
-
-		if (node->name == "loop_end" || node->name == "if_end") {
-			indent--;
 		}
 
 		// get node operation
@@ -91,12 +87,28 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Node* cluster,
 			continue;
 		}
 
-		line->indent = indent;
-		lines.push_back(line);
-
-		if (node->name == "loop_begin" || node->name == "if_begin") {
-			indent++;
+		int depth = node.depth() - 1;
+		if (depth != prev_depth)
+		{
+			// add scope brackets
+			if (depth < prev_depth) {
+				for (int i = prev_depth - 1; i >= depth; i--) {
+					lines.push_back(new Line(i, "}"));
+				}
+			} else if (depth > prev_depth) {
+				for (int i = prev_depth; i < depth; i++) {
+					lines.push_back(new Line(i, "{"));
+				}
+			}
 		}
+		line->indent = depth;
+		lines.push_back(line);
+		prev_depth = depth;
+	}
+
+	// add closing brackets
+	for (int i = 0; i < prev_depth; i++) {
+		lines.push_back(new Line(i, "}"));
 	}
 }
 

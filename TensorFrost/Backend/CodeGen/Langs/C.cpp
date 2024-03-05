@@ -25,12 +25,20 @@ class C_CodeGenerator : public CodeGenerator {
 	vector<string>* allocated_memories;
 	vector<Node*>* output_memories;
 
+	map<Node*, string> custom_generated_code_;
+
 	bool offset_array = true;
 
 	Line* GenerateLine(const Operation* op, Node* node,
 	                   Arguments inputs, Arguments indices, Arguments shape,
 	                   Arguments memory, map<Node*, int> offsets,
 	                   map<Node*, int> variables) override {
+
+		if (custom_generated_code_.contains(node))
+		{
+			return new Line("", custom_generated_code_[node], ";", "", {}, false, 0);
+		}
+
 		// get node names
 		vector<string> arguments;
 		vector<string> input_variables;
@@ -86,16 +94,12 @@ class C_CodeGenerator : public CodeGenerator {
 		string expression = "";
 		string right = "";
 		bool needs_parenthesis = true;
-		if (op->name_ == "loop_begin") {
+		if (op->name_ == "loop") {
 			left += "for (int " + name + " = " + arguments[0] + "; " + name + " < " +
-			        arguments[1] + "; " + name + " += " + arguments[2] + ") {";
-		} else if (op->name_ == "loop_end") {
-			left += "}";
-		} else if (op->name_ == "if_begin") {
-			left += "if (" + arguments[0] + ") {";
-		} else if (op->name_ == "if_end") {
-			left += "}";
-		} else if (op->HasAllTypes(OpType::MemoryOp)) {
+			        arguments[1] + "; " + name + " += " + arguments[2] + ")";
+		}  else if (op->name_ == "if") {
+			left += "if (" + arguments[0] + ")";
+		}  else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 			if (offset_array)
 			{
@@ -248,7 +252,7 @@ class C_CodeGenerator : public CodeGenerator {
 	}
 };
 
-pair<string, vector<string>> GenerateC(Program* program) {
+string GenerateC(Program* program) {
 	string all_kernels = R"(
 #include <cmath>
 #include <omp.h>
@@ -493,48 +497,17 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	vector<Node*> output_memories;
 	int input_memory_index = 0;
 
-	// Generate HLSL code for each compute kernel
+	// Generate code for each compute kernel
 	int kernel_count = 0;
-	vector<string> kernel_names;
-	string host_code =
-	    "\n"
-	    "extern \"C\" "
-#ifdef _WIN32
-	    "__declspec(dllexport)"
-#endif
-	    " void "
-	    "main"
-	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
-	    "void deallocate(uint))\n"
-	    "{\n";
+	map<Node*, string> dispatch_code;
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Node* cluster = kernel->begin_;
+		Node* kernel_node = kernel->begin_;
 
-		C_CodeGenerator generator;
-
-		if (kernel->type_ == KernelType::Host) {
-			generator.input_memory_index = &input_memory_index;
-			generator.allocated_memories = &allocated_memories;
-			generator.output_memories = &output_memories;
-			generator.offset_array = false;
-
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string memory_code = generator.GetFinalCode();
-			
-			host_code += "\n";
-			host_code += AddIndent(memory_code, "  ");
-
-			continue;
-		}
-
-		string kernel_name = "kernel_" + to_string(kernel_count);
-		kernel_names.push_back(kernel_name);
+		string kernel_name = "kernel_" + to_string(kernel_count++);
 
 		// Generate kernel
-		
-
 		vector<Node*> memory_nodes;
 		memory_nodes.resize(kernel->memory.size());
 		for (auto& memory : kernel->memory) {
@@ -574,87 +547,82 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 		}
 		shape_args += "}";
 
-		if (i.dim == 0) //add it to host code if scalar kernel
-		{
-			generator.offset_name_ = "off_" + to_string(kernel_count);
-			generator.variable_name_ = "var_" + to_string(kernel_count);
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string kernel_code = generator.GetFinalCode();
-			kernel->generated_code_ = kernel_code;
+		C_CodeGenerator generator;
+		generator.GenerateKernelLines(program->ir_, kernel_node, kernel);
+		string kernel_code = generator.GetFinalCode();
+		kernel->generated_code_ = kernel_code;
 
-			host_code += "\n";
-			if (memory_nodes.size() > 0) {
-				host_code += "  std::vector<uint> " + generator.offset_name_ + " = " + memory_args + ";\n";
-			}
-			if (variable_nodes.size() > 0) {
-				host_code += "  std::vector<uint> " + generator.variable_name_ + " = " + variable_args + ";\n";
-			}
-			host_code += "\n";
-			host_code += AddIndent(kernel_code, "  ");
+		string loop = "";
+		const int block_size = 4;  // TODO chose automatically
+		switch (kernel->indexing_mode_) {
+			case KernelIndexingMode::Linear:
+				loop =
+					"  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+				loop += "  {\n";
+				break;
+			case KernelIndexingMode::MultiDimensional:
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int dim" + to_string(d) + " = 0; dim" +
+						    to_string(d) + " < shape[" + to_string(d) + "]; dim" +
+						    to_string(d) + "++)\n";
+				}
+				loop += "  {\n";
+				break;
+			case KernelIndexingMode::MultiDimensionalBlocks:
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
+						    " < shape[" + to_string(d) + "]; wg" + to_string(d) +
+						    "+= " + to_string(block_size) + ")\n";
+				}
+				for (int d = 0; d < i.dim; d++) {
+					loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
+						    "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
+						    to_string(block_size) + ", shape[" + to_string(d) +
+						    "]); dim" + to_string(d) + "++)\n";
+				}
+				loop += "  {\n";
+				break;
+			default:
+				throw std::runtime_error("Invalid indexing mode");
+				break;
 		}
-		else
-		{
-			generator.GenerateKernelLines(program->ir_, cluster, kernel);
-			string kernel_code = generator.GetFinalCode();
-			kernel->generated_code_ = kernel_code;
-
-			string loop = "";
-			const int block_size = 4;  // TODO chose automatically
-			switch (kernel->indexing_mode_) {
-				case KernelIndexingMode::Linear:
-					loop =
-					    "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
-					loop += "  {\n";
-					break;
-				case KernelIndexingMode::MultiDimensional:
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int dim" + to_string(d) + " = 0; dim" +
-						        to_string(d) + " < shape[" + to_string(d) + "]; dim" +
-						        to_string(d) + "++)\n";
-					}
-					loop += "  {\n";
-					break;
-				case KernelIndexingMode::MultiDimensionalBlocks:
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
-						        " < shape[" + to_string(d) + "]; wg" + to_string(d) +
-						        "+= " + to_string(block_size) + ")\n";
-					}
-					for (int d = 0; d < i.dim; d++) {
-						loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
-						        "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
-						        to_string(block_size) + ", shape[" + to_string(d) +
-						        "]); dim" + to_string(d) + "++)\n";
-					}
-					loop += "  {\n";
-					break;
-				default:
-					throw std::runtime_error("Invalid indexing mode");
-					break;
-			}
 
 
-			all_kernels +=
-			    "\n"
-			    "extern \"C\" "
-#ifdef _WIN32
-			    "__declspec(dllexport)"
-#endif
-			    " void " +
-			    kernel_name +
-			    "(uint* var, uint* off, uint* mem, uint* shape)\n"
-			    "{\n"
-			    "  #pragma omp parallel for shared(mem) \n" +
-			    loop + AddIndent(kernel_code, "    ") +
-			    "  }\n"
-			    "}\n";
+		all_kernels +=
+			"\n"
+			"void " +
+			kernel_name +
+			"(uint* var, uint* off, uint* mem, uint* shape)\n"
+			"{\n"
+			"  #pragma omp parallel for shared(mem) \n" +
+			loop + AddIndent(kernel_code, "    ") +
+			"  }\n"
+			"}\n";
 
-			host_code += "\n";
-			host_code += "  dispatch(" + kernel_name + ", mem, " +
-			             memory_args + ", " + variable_args + ", " + shape_args + ");\n";
-		}
-		kernel_count++;
+		dispatch_code[kernel_node] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
+
+	C_CodeGenerator generator;
+	generator.custom_generated_code_ = dispatch_code;
+	generator.input_memory_index = &input_memory_index;
+	generator.allocated_memories = &allocated_memories;
+	generator.output_memories = &output_memories;
+	generator.offset_array = false;
+	generator.GenerateKernelLines(program->ir_, program->ir_->root, &program->kernels_[0]);
+
+	string host_code =
+	    "\n"
+	    "extern \"C\" "
+#ifdef _WIN32
+	    "__declspec(dllexport)"
+#endif
+	    " void "
+	    "main"
+	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
+	    "void deallocate(uint))\n"
+	    "{\n";
+
+	host_code += AddIndent(generator.GetFinalCode(), "  ");
 
 	//set output memories and deallocate
 	for (auto& memory : output_memories) {
@@ -672,6 +640,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	all_kernels += host_code + "}\n";
 
 	program->generated_code_ = all_kernels;
-	return pair<string, vector<string>>(all_kernels, kernel_names);
+	return all_kernels;
 }
 }  // namespace TensorFrost

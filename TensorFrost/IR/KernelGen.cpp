@@ -601,19 +601,15 @@ void IR::OptimizeKernels() {
 			for (auto& input : node->inputs_) {
 				bool inside_cluster = input.from_->get()->HasParent(kernel);
 
-				if (!CannotCopyArgument(input))
+				if (!inside_cluster && !CannotCopyArgument(input))
 				{
-					// if input is outside the cluster and has the same shape as the node,
-					// then copy it
-					if (!inside_cluster) {
-						// check if input is cheap enough to copy
-						int input_cost = input.from_->get()->cost_;
-						if (input_cost == -1.0) {
-							throw std::runtime_error("Cost has not been computed");
-						}
-						if (input_cost >= 0.0f && input_cost < 512.0f) {
-							args_to_copy.insert(&input);
-						}
+					// check if input is cheap enough to copy
+					int input_cost = input.from_->get()->cost_;
+					if (input_cost == -1.0) {
+						throw std::runtime_error("Cost has not been computed");
+					}
+					if (input_cost >= 0.0f && input_cost < 512.0f) {
+						args_to_copy.insert(&input);
 					}
 				}
 			}
@@ -624,6 +620,37 @@ void IR::OptimizeKernels() {
 		UpdateGraph();
 	}
 }
+
+void IR::OptimizeHost() {
+	ComputeNodeCost();
+
+	//loop over all nodes and copy their arguments if they are cheap enough and inside kernels
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (node->HasParent("kernel")) {
+			continue;
+		}
+
+		unordered_set<Arg*> args_to_copy;
+		// go over all inputs
+		for (auto& input : node->inputs_) {
+			bool inside_cluster = input.from_->get()->HasParent("kernel");
+
+			if (inside_cluster && !CannotCopyArgument(input)) {
+				// check if input is cheap enough to copy
+				int input_cost = input.from_->get()->cost_;
+				if (input_cost == -1.0) {
+					throw std::runtime_error("Cost has not been computed");
+				}
+				if (input_cost >= 0.0f && input_cost < 512.0f) {
+					args_to_copy.insert(&input);
+				}
+			}
+		}
+
+		CopyArguments(args_to_copy, node.get());
+	}
+}
+
 
 bool isConstantAndEqualTo(const Tensor* tensor, float value) {
 	if (tensor->node_->name != "const" || tensor->node_->has_been_modified_) {
@@ -1221,7 +1248,8 @@ void IR::CompileIR()
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);
 	OptimizeKernels();
-	CheckIR("Optimize Kernels", true, false);
+	OptimizeHost();
+	CheckIR("Optimize program", true, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", true, false);
 	AddKernelGlobalMemoryOperations();
@@ -1252,67 +1280,47 @@ Program* GenerateProgram(IR* ir)
 	for (auto node = ir->begin(); !node.end(); node.next()) {
 		Node* begin = node.get();
 
-		//if (!node.is_cluster_begin()) {
-		//	continue;
-		//}
-		//
-		//// get the cluster type
-		//KernelType type;
-		//map<Node*, int> variables;
-		//map<Node*, int> memory_nodes;
-		//ArgMap shape;
-		//int dim = 0;
-		//if (begin->kernel_->type_ == Scope::ScopeType::Host) {
-		//	type = KernelType::Host;
-		//} else {
-		//	type = KernelType::Compute;
-		//
-		//	bool has_shape = false;
-		//
-		//	int variable_index = 0;
-		//	int memory_index = 0;
-		//
-		//	for (auto node = IR::Iterator(begin);
-		//	     !node.is_cluster_end(begin->kernel_); ++node) {
-		//
-		//		if (node->op->HasAllTypes(OpType::MemoryOp)) {
-		//			// get the memory node
-		//			const Tensor* memory =
-		//			    node->GetArgumentTensors(Arg::Type::Memory)[0];
-		//
-		//			if (!memory_nodes.contains(memory->node_))
-		//			{
-		//				memory_nodes[memory->node_] = memory_index++;
-		//			}
-		//		}
-		//
-		//		// get all input arguments
-		//		map<int, const Tensor*> inputs =
-		//		    node->GetArgumentTensors(Arg::Type::Input);
-		//		for (auto& input : inputs) {
-		//			if (input.second->node_->name == "memory") {
-		//				if (!variables.contains(input.second->node_))
-		//				{
-		//					variables[input.second->node_] = variable_index++;
-		//				}
-		//			}
-		//		}
-		//
-		//		if (!has_shape)
-		//		{
-		//			// get the shape argument (if exists)
-		//			shape = node->GetArgumentMap(Arg::Type::Shape);
-		//			dim = MaxIndexCount(shape);
-		//			if (dim != 0 && shape.size() == dim) {
-		//				has_shape = true;
-		//			}
-		//		}
-		//	}
-		//}
-		//
-		//// add the cluster to the program
-		//program->AddKernel(type, ir->indexing_mode_, begin, variables, memory_nodes,
-		//                   shape, dim);
+		if (node->name != "kernel") {
+			continue;
+		}
+		
+		// get the cluster type
+		map<Node*, int> variables;
+		map<Node*, int> memory_nodes;
+		ArgMap shape = begin->GetArgumentMap(Arg::Type::Shape);
+
+		int variable_index = 0;
+		int memory_index = 0;
+		
+		for (auto node = NodeIterator(begin); !node.end(); node.next()) {
+			if (node->op->HasAllTypes(OpType::MemoryOp)) {
+				// get the memory node
+				const Tensor* memory =
+					node->GetArgumentTensors(Arg::Type::Memory)[0];
+		
+				if (!memory_nodes.contains(memory->node_))
+				{
+					memory_nodes[memory->node_] = memory_index++;
+				}
+			}
+		
+			// get all input arguments
+			map<int, const Tensor*> inputs =
+				node->GetArgumentTensors(Arg::Type::Input);
+			for (auto& input : inputs) {
+				if (input.second->node_->name == "memory") {
+					if (!variables.contains(input.second->node_))
+					{
+						variables[input.second->node_] = variable_index++;
+					}
+				}
+			}
+		}
+		
+		int dim = MaxIndexCount(shape);
+
+		// add the cluster to the program
+		program->AddKernel(ir->indexing_mode_, begin, variables, memory_nodes, shape, dim);
 	}
 
 	return program;
