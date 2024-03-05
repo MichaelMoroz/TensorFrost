@@ -474,8 +474,6 @@ void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
 		Node* to = copied_node_map[from];
 		arg->from_ = to->GetLable();
 	}
-	
-	UpdateGraph();
 }
 
 void IR::OptimizeKernels() {
