@@ -474,6 +474,8 @@ void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
 		Node* to = copied_node_map[from];
 		arg->from_ = to->GetLable();
 	}
+	
+	UpdateGraph();
 }
 
 void IR::OptimizeKernels() {
@@ -485,11 +487,13 @@ void IR::OptimizeKernels() {
 	// cheap enough
 	for (auto kernel : kernels) {
 		unordered_set<Arg*> args_to_copy;
+		unordered_set<Arg*> shape_args_to_copy;
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
 			for (auto& input : node->inputs_) {
 				bool inside_kernel = input.from_->get()->HasParent(kernel);
+				bool from_in_kernel = input.from_->get()->HasParent("kernel");
 
 				if (!inside_kernel && !CannotCopyArgument(input))
 				{
@@ -502,12 +506,25 @@ void IR::OptimizeKernels() {
 						args_to_copy.insert(&input);
 					}
 				}
+				//shape arguments can not be inside kernels
+				if (from_in_kernel && input.type_ == Arg::Type::Shape) {
+					shape_args_to_copy.insert(&input);
+				}
 			}
 		}
 
-		CopyArguments(args_to_copy, kernel->child);
+		//go over kernel shape arguments
+		for (auto& arg : kernel->inputs_) {
+			bool from_in_kernel = arg.from_->get()->HasParent("kernel");
+			if (from_in_kernel && arg.type_ == Arg::Type::Shape) {
+				shape_args_to_copy.insert(&arg);
+			}
+		}
 
-		UpdateGraph();
+		// copy the nodes that are outside the kernel inside
+		CopyArguments(args_to_copy, kernel->child);
+		// copy shape arguments before the kernel
+		CopyArguments(shape_args_to_copy, kernel);
 	}
 }
 
@@ -751,6 +768,32 @@ void IR::ComputeNodeCost()
 	}
 }
 
+map<Node*, vector<Arg*>> IR::GetKernelOutputs(Node* kernel)
+{
+	map<Node*, vector<Arg*>> node_output;
+	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+		bool is_output = node->memory_type_ == MemoryType::Output;
+		vector<Arg*> outputs;
+
+		for (auto& output : node->outputs_) {
+			if (output->to_ == nullptr) continue;
+			// if is a shape or memory argument, then skip (shape is loaded on CPU)
+			if (output->type_ == Arg::Type::Shape) continue;
+			Node* output_node = output->to_->get();
+			if (!output_node->HasParent(kernel)) {
+				outputs.push_back(output);
+				is_output = true;
+			}
+		}
+
+		if (is_output) {
+			node_output[*node] = outputs;
+		}
+	}
+
+	return node_output;
+}
+
 void IR::AddKernelGlobalMemoryOperations() {
 	// get kernels
 	UpdateGraph();
@@ -759,32 +802,10 @@ void IR::AddKernelGlobalMemoryOperations() {
 	// go over all outputs of each kernel and create memory nodes to store the
 	// output
 	for (auto kernel: kernels) {
-		//find kernel outputs
-		vector<Node*> kernel_outs;
-		map<Node*, vector<Arg*>> node_output;
-		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			bool is_output = node->memory_type_ == MemoryType::Output;
-			bool is_memory = node->name == "memory";
-			vector<Arg*> outputs;
+		map<Node*, vector<Arg*>> node_output = GetKernelOutputs(kernel);
 
-			for (auto& output : node->outputs_) {
-				if (output->to_ == nullptr) continue;
-				// if is a shape or memory argument, then skip (shape is loaded on CPU) 	 	
-				if (output->type_ == Arg::Type::Shape && !is_memory) continue;
-				Node* output_node = output->to_->get();
-				if (!output_node->HasParent(kernel)) {
-					outputs.push_back(output);
-					is_output = true;
-				}
-			}
-			
-			if (is_output) {
-				kernel_outs.push_back(*node);
-				node_output[*node] = outputs;
-			}
-		}
-
-		for (auto* output : kernel_outs) {
+		for (auto out : node_output) {
+			Node* output = out.first;
 			// if the output is already a memory node, then skip
 			if (output->name == "memory") {
 				continue;
@@ -1040,26 +1061,32 @@ void IR::FinalizeMemoryIndexing() {
 	}
 }
 
-void IR::FinalizeKernels()
+void IR::RemoveUnusedKernels()
 {
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
+	vector<Node*> nodes_to_remove;
 
-	//if any kernel shape arguments are inside other kernels, then copy them before the kernel
 	for (auto kernel : kernels) {
-		unordered_set<Arg*> args_to_copy;
-		
-		for (auto& arg : kernel->inputs_) {
-			if (arg.type_ == Arg::Type::Shape && arg.from_->get()->HasParent("kernel")) {
-				args_to_copy.insert(&arg);
+		// remove all kernel nodes that dont do anything
+		int memory_modifiers = 0;
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+				memory_modifiers++;
+			}
+			//if any output is outside the kernel, then the kernel is needed
+			for (auto& output : node->outputs_) {
+				if (!output->to_->get()->HasParent(kernel)) {
+					memory_modifiers++;
+				}
 			}
 		}
+		if (memory_modifiers == 0) nodes_to_remove.push_back(kernel);
+	}
 
-		//copy the arguments and paste them before the kernel
-		CopyArguments(args_to_copy, kernel);
-
-		// remove all kernel nodes that dont have children (dont do anything)
-		if (!kernel->child->valid()) RemoveNode(kernel);
+	// remove all nodes that are not used
+	for (auto* node : nodes_to_remove) {
+		RemoveNode(node);
 	}
 }
 
@@ -1087,7 +1114,7 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", true, false);
 	AddKernelGlobalMemoryOperations();
-	FinalizeKernels();
+	RemoveUnusedKernels();
 	CheckIR("Add Kernel Global Memory Operations", true, true);
 	ReorderOperations();
 	FinalizeMemoryIndexing();
@@ -1097,7 +1124,7 @@ void IR::CompileIR()
 	OptimizeHost();
 	RemoveUnusedOperations();
 	CheckIR("Finalize Memory Indexing 2", true, true);
-	FinalizeKernels();
+	RemoveUnusedKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();
 	GetOutputList();

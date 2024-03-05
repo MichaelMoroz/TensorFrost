@@ -539,6 +539,17 @@ public:
 
     void RemoveNode(Node* node) {
         if (node->valid()) {
+			// if child node exists, iterate through it and remove all children
+			if (node->child) {
+				vector<Node*> to_delete;
+				for (auto child = NodeIterator(node); !child.end(); child.next()) {
+					to_delete.push_back(*child);
+				}
+				for (Node* child : to_delete) {
+					RemoveNode(child);
+				}
+			}
+
             //if direct child of its parent
             if (node->parent && node->parent->child == node) {
                 node->parent->child = node->next;
@@ -547,7 +558,6 @@ public:
             }
 
             node->next->prev = node->prev;
-            
             delete node;
         }
     }
@@ -593,6 +603,7 @@ public:
 	void RemoveUnusedOperations();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
+	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
 	void AddKernelGlobalMemoryOperations();
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
 	                       Node* cluster, int dims, Tensors kernel_shape);
@@ -600,7 +611,7 @@ public:
 	                                 vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
 	void FinalizeMemoryIndexing();
-	void FinalizeKernels();
+	void RemoveUnusedKernels();
 	void CompileIR();
 
 	void UpdateGraph() const {
