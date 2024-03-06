@@ -6,23 +6,22 @@ namespace TensorFrost {
 using namespace std;
 
 void GenerateNodeNames(const IR& ir) {
-	map<Node*, int> cluster_var_index = map<Node*, int>();
+	int var_index = 0;
 	int mem_index = 0;
 	int cluster_index = 0;
 	Node* curent_cluster = nullptr;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (node->parent != curent_cluster) {
 			cluster_index++;
+			var_index = 0;
 		}
 		if (node->name == "memory") {
 			node->var_name = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
-			Node* cluster_id = node->parent;
-			int var_index = cluster_var_index[cluster_id];
 			node->var_name =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
-			cluster_var_index[cluster_id]++;
+			var_index++;
 		}
 		curent_cluster = node->parent;
 	}
