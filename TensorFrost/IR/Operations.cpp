@@ -19,7 +19,7 @@ const vector<Operation> operations = {
     Operation("group_barrier", {""}, 256, "", {OpType::Static}), // TODO implement in graph
 
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
-    Operation("deallocate", {"f_", "i_", "u_"}, 0, "", {OpType::Memory}), //TODO implement in graph
+    Operation("deallocate", {""}, 0, "", {OpType::Memory}),
 
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
     Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),

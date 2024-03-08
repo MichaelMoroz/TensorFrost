@@ -187,14 +187,19 @@ class Node {
 		return false;
 	}
 
-	bool HasParent(string name)
+
+	Node* GetParent(string name)
 	{
 		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
 			if (cur_parent->name == name) {
-				return true;
+				return cur_parent;
 			}
 		}
-		return false;
+		return this;
+	}
+
+	bool HasParent(string name) {
+		return GetParent(name) != this;
 	}
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) {
@@ -605,6 +610,7 @@ public:
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
 	void AddKernelGlobalMemoryOperations();
+	void AddMemoryDeallocation();
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
 	                       Node* cluster, int dims, Tensors kernel_shape);
 	void MultiDimensionalModeIndices(Tensor*& thread_index,

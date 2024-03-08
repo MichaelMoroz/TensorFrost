@@ -870,6 +870,46 @@ void IR::AddKernelGlobalMemoryOperations() {
 	}
 }
 
+void IR::AddMemoryDeallocation()
+{
+	UpdateGraph();
+	vector<Node*> memory_nodes = GetNodesOfType("memory");
+
+	// go over all outputs of each memory and and put a deallocation node after the last time it is used
+	for (auto memory : memory_nodes) {
+		if (memory->memory_type_ == MemoryType::Input || memory->memory_type_ == MemoryType::Shape || memory->memory_type_ == MemoryType::Output) {
+			continue;
+		}
+
+		// get all outputs of this memory
+		vector<Arg*> outputs;
+		for (auto& output : memory->outputs_) {
+			if (output->to_ == nullptr) continue;
+			outputs.push_back(output);
+		}
+
+		// if the memory is not used, then skip
+		if (outputs.empty()) {
+			continue;
+		}
+
+		// get the last time the memory is used
+		Node* last_output = outputs[0]->to_->get();
+		for (auto& output : outputs) {
+			if (output->to_->get()->index_ > last_output->index_) {
+				last_output = output->to_->get();
+			}
+		}
+
+		Node* last_output_kernel = last_output->GetParent("kernel");
+
+		// add deallocation node after the last time the memory is used
+		ExecuteExpressionAfter(last_output_kernel, [&]() {
+			Tensor* deallocate = &Tensor::Deallocate(*memory->GetTensor());
+		});
+	}
+}
+
 vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shape, int dims)
 {
 	vector<Tensor*> indices = vector<Tensor*>(dims);
@@ -1128,6 +1168,7 @@ void IR::CompileIR()
 	RemoveUnusedKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();
+	AddMemoryDeallocation();
 	GetOutputList();
 	CheckIR("Remove Unused Operations 2", true, true);
 	ComputeStatistics();

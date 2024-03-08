@@ -481,6 +481,10 @@ class Tensor {
 		return MemoryOp("load", &tensor, indices);
 	}
 
+	static Tensor& Deallocate(const Tensor& tensor) {
+		return MemoryOp("deallocate", &tensor, {});
+	}
+
 	[[nodiscard]] Tensor& Index(int dim) const {
 		Tensor& output = Static("dim_id", node_->GetArguments(Arg::Type::Shape),
 		                        DataType::Int);

@@ -22,7 +22,6 @@ class C_CodeGenerator : public CodeGenerator {
 	string memory_name_ = "mem";
 
 	int* input_memory_index;
-	vector<string>* allocated_memories;
 	vector<Node*>* output_memories;
 
 	map<Node*, string> custom_generated_code_;
@@ -190,10 +189,11 @@ class C_CodeGenerator : public CodeGenerator {
 				if (node->memory_type_ == MemoryType::Output) {
 					output_memories->push_back(node);
 				}
-				else {
-					allocated_memories->push_back(node->var_name);
-				}
 			}
+		}
+		else if (op->name_ == "deallocate") {
+			left = "deallocate(" + arguments[0] + ")";
+			right = ";";
 		} else {
 			if (output_type != DataType::None) {
 				left += type_names[output_type] + " " + name + " = ";
@@ -613,7 +613,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	C_CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
 	generator.input_memory_index = &input_memory_index;
-	generator.allocated_memories = &allocated_memories;
 	generator.output_memories = &output_memories;
 	generator.offset_array = false;
 	generator.GenerateKernelLines(program->ir_, program->ir_->root, &program->kernels_[0]);
@@ -638,11 +637,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 		string mem_name = memory->var_name;
 		host_code +=
 		    "  out[" + to_string(output_memory_index++) + "] = " + mem_name + ";\n";
-	}
-
-	//TODO: deallocate exactly after the last use for better memory management
-	for (auto& memory : allocated_memories) {
-		host_code += "  deallocate(" + memory + ");\n";
 	}
 
 	all_kernels += host_code + "}\n";
