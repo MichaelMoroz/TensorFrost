@@ -839,12 +839,16 @@ def modified_gram_schmidt(A):
     Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
     return Q, R
 
-def sum(A):
+def matmul(Q, A):
     A = A * 1.0
     n, m = A.shape
-    sum_buf = tf.zeros([m], tf.float32)
-    i, j = A.indices
-    tf.scatterAdd(sum_buf[j], A[i, j])
+    sum_buf = tf.buffer([m], tf.float32)
+    j, = sum_buf.indices
+    summ = tf.zeros([m], tf.float32)
+    def loop_body(i):
+        summ.set(summ + A[i, j])
+    tf.loop(loop_body, 0, n, 1)
+    sum_buf[j] = summ
     return sum_buf
 
 def norm(A):
@@ -869,8 +873,13 @@ def QRDecomposition():
         Q[j, i] = A[j, i] / R[i, i]
 
         t, = tf.index_grid([i+1], [n])
+        dotprod = tf.zeros(t.shape, tf.float32)
+        def loop_body(it):
+            dotprod.set(dotprod + Q[it, i] * A[it, t])
+        tf.loop(loop_body, 0, m, 1)
+        R[i, t] = dotprod
+        
         p, k = tf.index_grid([0, i+1], [m, n])
-        R[i, t] = sum(Q[p, i] * A[p, k])
         A[p, k] -= Q[p, i] * R[i, k]
 
     tf.loop(loop_body, 0, n-1, 1)
