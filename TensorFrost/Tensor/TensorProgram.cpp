@@ -28,7 +28,7 @@ vector<TensorMemory*> TensorProgram::Evaluate(
 }
 
 string TensorProgram::PrintProperties() const { 
-	string properties = "TensorProgram:\n";
+	string properties = program_name + ":\n";
 	int compute_kernels = (int)program->kernels_.size();
 	int lines = 0;
 	string line;

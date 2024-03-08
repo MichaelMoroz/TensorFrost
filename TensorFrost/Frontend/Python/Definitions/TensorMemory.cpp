@@ -118,7 +118,7 @@ void TensorMemoryDefinition(py::module& m,
 	// to numpy array
 	py_tensor_mem.def_property_readonly(
 	    "numpy",
-	    [](const TensorMemory& t) -> std::variant<py::array_t<float>, py::array_t<int>> {
+	    [](const TensorMemory& t) -> std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>> {
 			if (t.type == DataType::Float)
 			{
 			    // create the numpy array
@@ -146,6 +146,21 @@ void TensorMemoryDefinition(py::module& m,
 			    }
 
 			    return arr;
+			}
+			else if (t.type == DataType::Uint)
+			{
+			    // create the numpy array
+			    py::array_t<uint> arr(t.GetShape());
+
+				// copy the data
+				std::vector<uint> data = global_memory_manager->Readback(&t);
+			    uint* ptr = static_cast<uint*>(arr.request().ptr);
+
+				for (int i = 0; i < data.size(); i++) {
+				    ptr[i] = data[i];
+			    }
+
+				return arr;
 			}
 			else {
 			    throw std::runtime_error("Unsupported data type");

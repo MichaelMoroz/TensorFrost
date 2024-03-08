@@ -50,6 +50,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("float", [](const PyTensor& t) { return PT(Tensor::tofloat(T(t))); });
 	m.def("uint", [](const PyTensor& t) { return PT(Tensor::touint(T(t))); });
 	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });
+	m.def("bool", [](const PyTensor& t) { return PT(Tensor::tobool(T(t))); });
 
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
@@ -75,6 +76,18 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("scatterMax", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterOr", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterOr(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterAnd", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterAnd(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterXor", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterXor(*t.value, T(t2), t.indices);
 	});
 
 	m.def("buffer", [](py::list shape, DataType type) {

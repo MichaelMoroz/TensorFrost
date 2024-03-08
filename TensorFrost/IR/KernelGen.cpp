@@ -94,7 +94,7 @@ bool IsBoundary(const Node* input, const Node* output,
 				return arg_type == Arg::Type::Memory && !is_identity;
 			}
 
-			if (output_op->HasAnyType(OpType::Scatter)) {
+			if (output_op->HasAnyType(OpType::Scatter) && !input_op->HasAnyType(OpType::Scatter)) {
 				return arg_type == Arg::Type::Memory;
 			}
 
@@ -287,7 +287,10 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 			// check if inputs are before the node
 			if (from->index_ >= to->index_) {
-				invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is after the node";
+				if (input.type_ != Arg::Type::Shape) {
+					invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" +
+										to_string(input.index_) + " is after the node";
+				}
 			}
 		}
 	}
@@ -444,7 +447,7 @@ void IR::ComputeStatistics() {
 		{
 			if (node->memory_type_ == MemoryType::Output) {
 				output_memory_count++;
-			} else if (node->memory_type_ == MemoryType::Input) {
+			} else if (node->memory_type_ == MemoryType::Input || node->memory_type_ == MemoryType::Shape) {
 				input_memory_count++;
 			} else {
 				temp_memory_count++;
@@ -734,13 +737,13 @@ void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (!used_nodes.contains(node.get())) {
-			if (node->memory_type_ != MemoryType::Input)
+			if (node->memory_type_ != MemoryType::Input && node->memory_type_ != MemoryType::Output && node->memory_type_ != MemoryType::Shape)
 			{
 				nodes_to_remove.insert(node.get());
 			}
 			else
 			{
-				//throw std::runtime_error("Input is not being used");
+				throw std::runtime_error("Input " + node->var_name + " is not being used");
 			}
 		}
 	}

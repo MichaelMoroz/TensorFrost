@@ -20,6 +20,10 @@ void TensorProgramDefinition(py::module& m,
 			    }
 			    return outputs;
 		    });
+		    // Extract the name of the Python function
+		    std::string func_name =
+		        py_evaluate.attr("__name__").cast<std::string>();
+			program.program_name = func_name;
 		    py::print(program.PrintProperties());
 			return &program;
 	    },

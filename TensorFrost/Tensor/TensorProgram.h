@@ -20,6 +20,7 @@ class TensorProgram {
 	EvaluateFunction evaluate_callback;
 	IR ir;
 	Program* program;
+	string program_name = "TensorProgram";
 	bool debug = false;
 
 	explicit TensorProgram(EvaluateFunction evaluate)

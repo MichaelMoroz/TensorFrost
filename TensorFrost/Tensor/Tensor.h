@@ -710,6 +710,7 @@ class Tensor {
 	static Tensor& tofloat(const Tensor& x) { return Op("float", &x); }
 	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }
+	static Tensor& tobool(const Tensor& x) { return Op("bool", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
 		return Op("clamp", &x, &min, &max);
