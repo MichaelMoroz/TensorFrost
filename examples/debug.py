@@ -672,48 +672,20 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #downscaler1 = tf.compile(DownscaleVelocity4x)
 
 #block_size = 8
-
-#def Sparsify():
-#	vol = tf.input([-1, -1, -1], tf.float32)
-#	N, M, K = vol.shape
 #
-#	BX = N / block_size
-#	BY = M / block_size
-#	BZ = K / block_size
-#	max_block_count = BX * BY * BZ
+#def BlockMaxAbs(blocks, max_block_count):
+#	block_max = tf.zeros([max_block_count], tf.float32)
+#	b, = block_max.indices
 #
-#	blocks = tf.zeros([max_block_count, block_size, block_size, block_size], tf.float32)
-#	
-#	b, i, j, k = blocks.indices
+#	def loop_body(it):
+#		i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
+#		block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
 #
-#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#	tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
 #
-#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#	block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
+#	return block_max
 #
-#	blocks[b, i, j, k] = vol[ii, jj, kk]
-#
-#	return [blocks]
-
-#def IfTest():
-#	res = tf.buffer([8, 8], tf.float32)
-#	i,j = res.indices
-#
-#	cond = (i < 2) & (j < 4)
-#	
-#	def if_body():
-#		res[i, j] = 1.0
-#
-#	res[i, j] = 0.0
-#	tf.if_cond(cond, if_body)
-#
-#	return [res]
-#
-#iftest = tf.compile(IfTest)
-#
-#res, = iftest()
-#
-#print(res.numpy)
-
 #def Sparsify():
 #	vol = tf.input([-1, -1, -1], tf.float32)
 #	N, M, K = vol.shape
@@ -723,42 +695,43 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #	BZ = K / block_size
 #	max_block_count = BX * BY * BZ
 #	
-#	counter = tf.zeros([1], tf.int32)
-#	block_ids = tf.zeros([max_block_count], tf.int32)
 #	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
-#
+#	
 #	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
 #
 #	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
 #
-#	voxel_value = vol[ii, jj, kk]
+#	blocks = vol[ii, jj, kk]*1.0
 #
-#	max_block_val = tf.zeros([max_block_count], tf.float32)
-#	tf.scatterMax(max_block_val[b], voxel_value)
+#	block_max = BlockMaxAbs(blocks, max_block_count)
 #
-#	threshold = 0.996
+#	counter = tf.zeros([1], tf.int32)
+#	block_ids = tf.buffer([max_block_count], tf.int32)
+#	b, = block_ids.indices
 #
 #	def if_body1():
-#		def if_body2():
-#			index = tf.scatterAddPrev(counter[0], 1)
-#			block_ids[b] = index + 1
-#		tf.if_cond(max_block_val[b] > threshold, if_body2)
-#	tf.if_cond((i == 0) & (j == 0) & (k == 0), if_body1)
-#
-#	reordered_blocks = tf.buffer([counter[0], block_size, block_size, block_size], tf.float32)
-#	block_pos = tf.buffer([counter[0], 3], tf.int32)
-#
-#	block_index = block_ids[b] - 1
-#
-#	def if_body2():
-#		reordered_blocks[block_index, i, j, k] = vol[ii, jj, kk]
-#		block_pos[block_index, 0] = bx * block_size
-#		block_pos[block_index, 1] = by * block_size
-#		block_pos[block_index, 2] = bz * block_size
+#		index = tf.scatterAddPrev(counter[0], 1)
+#		block_ids[index] = b
 #	
-#	tf.if_cond(block_index >= 0, if_body2)
+#	#todo: compute threshold based on the block variance
+#	tf.if_cond(block_max[b] > 1e-3, if_body1)
+#	
+#	non_empty_blocks = counter[0]
+#	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
+#	b, = tf.indices([non_empty_blocks])
+#	
+#	block_index = block_ids[b]
+#	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
+#	block_pos[b, 0] = bx
+#	block_pos[b, 1] = by
+#	block_pos[b, 2] = bz
 #
-#	return [reordered_blocks, block_pos]
+#	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
+#
+#	block_index = block_ids[b]
+#	reordered_blocks1 = blocks[block_index, i, j, k]
+#
+#	return [reordered_blocks1, block_pos]
 #
 #sparsifier = tf.compile(Sparsify)
 #
@@ -804,43 +777,122 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #print(densifiednp[0, 0, :])
 #print(vol[0, 0, :])
 
-S = 2048
+#S = 2048
+#
+#def smoothstep(x, a, b):
+#	t = (x - a) / (b - a)
+#	t = tf.clamp(t, 0.0, 1.0)
+#	return t * t * (3.0 - 2.0 * t)
+#
+#def mandelbrot():
+#    canvas = tf.zeros([S, S, 3], tf.float32)
+#    i, j = tf.indices([S, S])
+#    y, x = tf.float(i), tf.float(j)
+#
+#    z_re = tf.zeros([S, S], tf.float32)
+#    z_im = tf.zeros([S, S], tf.float32)
+#    l = tf.zeros([S, S], tf.float32)
+#    c_re = x * (2.0 / S) - 1.5
+#    c_im = y * (2.0 / S) - 1.0
+#    def loop_body(k):
+#        z_re_new = z_re*z_re - z_im*z_im + c_re
+#        z_im_new = 2.0*z_re*z_im + c_im
+#        z_re.set(z_re_new)
+#        z_im.set(z_im_new)
+#        tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
+#        l.set(l + 1.0)
+#         
+#    tf.loop(loop_body, 0, 32, 1)
+#
+#    color1 = [0.0, 0.0, 0.0]
+#    color2 = [0.1, 0.2, 1.0]
+#
+#    t = smoothstep(l, 0.0, 32.0)
+#    canvas[i, j, 0] = tf.lerp(color1[0], color2[0], t)
+#    canvas[i, j, 1] = tf.lerp(color1[1], color2[1], t)
+#    canvas[i, j, 2] = tf.lerp(color1[2], color2[2], t)
+#
+#    return [canvas]
+#
+#mand = tf.compile(mandelbrot)
+#res = mand()
+#resnp = res[0].numpy
 
-def smoothstep(x, a, b):
-	t = (x - a) / (b - a)
-	t = tf.clamp(t, 0.0, 1.0)
-	return t * t * (3.0 - 2.0 * t)
+QRS = 64
 
-def mandelbrot():
-    canvas = tf.zeros([S, S, 3], tf.float32)
-    i, j = tf.indices([S, S])
-    y, x = tf.float(i), tf.float(j)
+def modified_gram_schmidt(A):
+    """
+    Implements the Modified Gram-Schmidt orthogonalization to get the QR decomposition of matrix A.
+    A = QR
+    """
+    A = A.astype(float)  # Ensure A is of float type
+    m, n = A.shape
+    Q = np.zeros((m, n))
+    R = np.zeros((n, n))
+    
+    for i in range(n-1):
+        R[i, i] = np.linalg.norm(A[:, i])
+        Q[:, i] = A[:, i] / R[i, i]
+        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
+    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
+    return Q, R
 
-    z_re = tf.zeros([S, S], tf.float32)
-    z_im = tf.zeros([S, S], tf.float32)
-    l = tf.zeros([S, S], tf.float32)
-    c_re = x * (2.0 / S) - 1.5
-    c_im = y * (2.0 / S) - 1.0
-    def loop_body(k):
-        z_re_new = z_re*z_re - z_im*z_im + c_re
-        z_im_new = 2.0*z_re*z_im + c_im
-        z_re.set(z_re_new)
-        z_im.set(z_im_new)
-        tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
-        l.set(l + 1.0)
-         
-    tf.loop(loop_body, 0, 32, 1)
+def sum(A):
+    A = A * 1.0
+    n, m = A.shape
+    sum_buf = tf.zeros([m], tf.float32)
+    i, j = A.indices
+    tf.scatterAdd(sum_buf[j], A[i, j])
+    return sum_buf
 
-    color1 = [0.0, 0.0, 0.0]
-    color2 = [0.1, 0.2, 1.0]
+def norm(A):
+    A = A * 1.0
+    sum_buf = tf.zeros([1], tf.float32)
+    ids = tf.indices(A.shape)
+    tf.scatterAdd(sum_buf[0], A[ids] ** 2)
+    return tf.sqrt(sum_buf)
 
-    t = smoothstep(l, 0.0, 32.0)
-    canvas[i, j, 0] = tf.lerp(color1[0], color2[0], t)
-    canvas[i, j, 1] = tf.lerp(color1[1], color2[1], t)
-    canvas[i, j, 2] = tf.lerp(color1[2], color2[2], t)
+#dynamic size QR decomposition
+def QRDecomposition():
+    A = tf.input([-1, -1], tf.float32)
 
-    return [canvas]
+    m, n = A.shape
+    Q = tf.zeros([m, n])
+    R = tf.zeros([n, n])
 
-mand = tf.compile(mandelbrot)
-res = mand()
-resnp = res[0].numpy
+    j = tf.index(0, [m])
+
+    def loop_body(i):
+        R[i, i] = norm(A[j, i])
+        Q[j, i] = A[j, i] / R[i, i]
+
+        t, = tf.index_grid([i+1], [n])
+        p, k = tf.index_grid([0, i+1], [m, n])
+        R[i, t] = sum(Q[p, i] * A[p, k])
+        A[p, k] -= Q[p, i] * R[i, k]
+
+    tf.loop(loop_body, 0, n-1, 1)
+
+    R[n-1, n-1] = norm(A[j, n-1])
+    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+
+    return [Q, R]
+
+qr = tf.compile(QRDecomposition)
+
+Anp = np.random.rand(QRS, QRS).astype(np.float32)
+Qnp, Rnp = modified_gram_schmidt(Anp)
+print(Qnp)
+print(Rnp)
+
+A = tf.tensor(Anp)
+Qtf, Rtf = qr(A)
+Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
+Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
+print("Q error: ", Qerror)
+print("R error: ", Rerror)
+if Qerror > 1e-5 or Rerror > 1e-5:
+	print("QR decomposition failed")
+	exit(1)

@@ -37,6 +37,12 @@ class C_CodeGenerator : public CodeGenerator {
 		{
 			return new Line("", custom_generated_code_[node], ";", "", {}, false, 0);
 		}
+		
+		map<DataType, string> type_names = {
+		    {DataType::None, "void"},   {DataType::Bool, "bool"},
+		    {DataType::Float, "float"}, {DataType::Uint, "uint"},
+		    {DataType::Int, "int"},
+		};
 
 		// get node names
 		vector<string> arguments;
@@ -61,8 +67,9 @@ class C_CodeGenerator : public CodeGenerator {
 		for (const Arg& arg : inputs) {
 			Node* input = arg.from_->get();
 			string name = GetNodeName(input, true);
-			if (input->name == "memory") {
+			if (variables.contains(input)) {
 				name = variable_name_ + "[" + to_string(variables[input]) + "]";
+				name = "as" + type_names[input->GetTensor()->type] + "(" + name + ")";
 			}
 			arguments.push_back(name);
 			input_types.push_back(arg.from_->get()->GetTensor()->type);
@@ -81,12 +88,6 @@ class C_CodeGenerator : public CodeGenerator {
 
 		// get output type
 		DataType output_type = node->tensor_->type;//op->GetOutputType(input_types);
-
-		map<DataType, string> type_names = {
-		    {DataType::None, "void"},   {DataType::Bool, "bool"},
-		    {DataType::Float, "float"}, {DataType::Uint, "uint"},
-		    {DataType::Int, "int"},
-		};
 
 		// generate line
 		string left = "";
@@ -221,10 +222,6 @@ class C_CodeGenerator : public CodeGenerator {
 				case OpType::Keyword:
 					line += op->code_;
 					break;
-				case OpType::Variable:
-					line += op->code_;
-					needs_parenthesis = false;
-					break;
 				case OpType::DimensionIndex:
 					line += op->code_ + to_string(node->GetTensor()->data[0]);
 					needs_parenthesis = false;
@@ -296,14 +293,19 @@ inline uint asuint(float x)
   return *(uint*)&x;
 }
 
-inline int asint(uint x)
-{
-  return *(int*)&x;
-}
-
 inline uint asuint(int x)
 {
   return *(uint*)&x;
+}
+
+inline uint asuint(uint x)
+{
+  return *(uint*)&x;
+}
+
+inline int asint(uint x)
+{
+  return *(int*)&x;
 }
 
 inline int clamp(int x, int a, int b)
@@ -542,7 +544,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 			if (d != 0) {
 				variable_args += ", ";
 			}
-			variable_args += ReadVariable(variable_nodes[d]);
+			variable_args += "asuint(" + ReadVariable(variable_nodes[d]) + ")";
 		}
 		variable_args += "}";
 

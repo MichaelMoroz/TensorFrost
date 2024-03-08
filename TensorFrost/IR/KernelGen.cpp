@@ -156,17 +156,21 @@ void IR::SeparateOperationsIntoKernels() {
 				boundary_nodes[latest->index_] = latest;
 			}
 		}
-
 		
 		// if boundary, create new scope, else make this new end
 		if (boundary_nodes.size() > 0) {
-			if (current_scope->type == ScopeType::Kernel) {
+			int current_depth = node->ComputeDepth();
+			if (current_scope->begin->ComputeDepth() > current_depth) {
+				Node* last_child = current_scope->begin->parent->GetLastChild();
+				NodeIterator it(last_child, last_child);
+				kernels.push_back(new Scope(current_scope->begin, it.get()));
+				current_scope = new Scope(it.next().get(), node);
+			} else if (current_scope->type == ScopeType::Kernel) {
 				// split the current scope using the last boundary node (highest index)
 				Node* boundary_node = boundary_nodes.rbegin()->second;
 				//find the nearest parent node of the scope end with the same parent as the boundary node
 				Node* parent = node;
 				int boundary_depth = boundary_node->ComputeDepth();
-				int current_depth = node->ComputeDepth();
 				if (current_depth > boundary_depth) {
 					while (parent->parent != boundary_node->parent && parent != nullptr) {
 						parent = parent->parent;
@@ -175,10 +179,13 @@ void IR::SeparateOperationsIntoKernels() {
 						throw std::runtime_error("Parent node not found");
 					}
 				}
-				Scope* before = new Scope(current_scope->begin, parent->true_prev);
-				kernels.push_back(before);
+				vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
+				for (auto scope : new_scopes) {
+					kernels.push_back(scope);
+				}
 				current_scope = new Scope(parent, node);
-			} else { //the current scope was a host scope, can just ignore it, we wont be using it
+			} else { 
+				// the current scope was a host scope, can just ignore it, we wont be using it
 				current_scope = new Scope(node);
 			}
 		} else {
@@ -346,7 +353,7 @@ bool CannotCopyArgument(Arg& arg) {
 	bool shape = arg.type_ == Arg::Type::Shape;
 	bool to_memory = to->name == "memory";
 	bool shape_not_memory = shape && !to_memory;
-	return arg.type_ == Arg::Type::Memory || shape_not_memory ||
+	return arg.type_ == Arg::Type::Memory || shape_not_memory || from->op->HasAllTypes(OpType::Static) ||
 	       from->name == "memory" || from->HasBeenModified();
 }
 
@@ -1203,12 +1210,13 @@ Program* GenerateProgram(IR* ir)
 			}
 
 			// get all input arguments
-			map<int, const Tensor*> inputs =
-			    node->GetArgumentTensors(Arg::Type::Input);
-			for (auto& input : inputs) {
-				if (input.second->node_->name == "memory") {
-					if (!variables.contains(input.second->node_)) {
-						variables[input.second->node_] = variable_index++;
+			for (auto input : node->inputs_) {
+				if (input.type_ == Arg::Type::Input)
+				{
+					Node* from = input.from_->get();
+					bool from_outside_kernel = !from->HasParent(kernel);
+					if (from_outside_kernel && !variables.contains(from)) {
+						variables[from] = variable_index++;
 					}
 				}
 			}

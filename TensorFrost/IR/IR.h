@@ -198,6 +198,14 @@ class Node {
 		return this;
 	}
 
+	Node* GetLastChild() {
+		Node* last_child = child;
+		while (last_child->next->valid()) {
+			last_child = last_child->next;
+		}
+		return last_child;
+	}
+
 	bool HasParent(string name) {
 		return GetParent(name) != this;
 	}
@@ -324,14 +332,8 @@ class NodeIterator {
 
 	Node* operator*() const { return currentNode; }
 
-	// first child, then next
-	NodeIterator& next() {
+	NodeIterator& forward() {
 		if (!currentNode->valid()) {
-			return *this;
-		}
-
-		if (currentNode->child->valid()) {  // has child, go down
-			currentNode = currentNode->child;
 			return *this;
 		}
 
@@ -345,13 +347,24 @@ class NodeIterator {
 			}
 		}
 
+		// just go to next node and stop if it's the end
 		currentNode = currentNode->next;
 		return *this;
 	}
 
-	NodeIterator& forward() {
-		// just go to next node and stop if it's the end
-		currentNode = currentNode->next;
+	// first child, then next
+	NodeIterator& next() {
+		if (!currentNode->valid()) {
+			return *this;
+		}
+
+		if (currentNode->child->valid()) {  // has child, go down
+			currentNode = currentNode->child;
+			return *this;
+		}
+
+		forward();
+
 		return *this;
 	}
 
@@ -442,19 +455,49 @@ class Scope
 			UpdateType(*node);
 		}
 	}
-};
 
-class ClusterProp {
- public:
-	vector<Node*> clusters;
-	map<Node*, vector<Node*>> output;
-	map<Node*, vector<Arg*>> node_output;
+	static vector<Scope*> GetScopes(Node* begin, Node* end) {
+		int begin_depth = begin->ComputeDepth();
+		int end_depth = end->ComputeDepth();
+		vector<Scope*> scopes;
+		if (begin_depth <= end_depth) {
+			Node* prev_parent = nullptr;
+			for (Node* cur_parent = end; cur_parent != begin->parent;
+			     cur_parent = cur_parent->parent) {
+				if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+					scopes.push_back(new Scope(cur_parent->child, prev_parent->prev));
+				}
+				prev_parent = cur_parent;
+			}
 
-	ClusterProp(map<Node*, vector<Node*>> cluster_outputs,
-	            map<Node*, vector<Arg*>> output, vector<Node*> clusters)
-	    : output(std::move(cluster_outputs)),
-	      node_output(std::move(output)),
-	      clusters(std::move(clusters)) {}
+			if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+				scopes.push_back(new Scope(begin, prev_parent->prev));
+			}
+		}
+		else
+		{
+			throw std::runtime_error("Invalid scope");
+			//if (begin->parent->next) {
+			//	scopes.push_back(new Scope(begin, begin->parent->next->true_prev));
+			//	if (begin->parent->next != end)
+			//	{
+			//		scopes.push_back(new Scope(begin->parent->next, end->prev));
+			//	}
+			//}
+			
+			//Node* prev_parent = nullptr;
+			//for (Node* cur_parent = begin->parent; cur_parent != end->parent;
+			//     cur_parent = cur_parent->parent) {
+			//	if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+			//		scopes.push_back(new Scope(prev_parent->prev->next, cur_parent->child));
+			//	}
+			//	prev_parent = cur_parent;
+			//}
+		}
+		
+
+		return scopes;
+	}
 };
 
 enum class KernelIndexingMode
