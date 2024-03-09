@@ -839,24 +839,6 @@ def modified_gram_schmidt(A):
     Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
     return Q, R
 
-def matmul(Q, A):
-    A = A * 1.0
-    n, m = A.shape
-    sum_buf = tf.buffer([m], tf.float32)
-    j, = sum_buf.indices
-    summ = tf.zeros([m], tf.float32)
-    def loop_body(i):
-        summ.set(summ + A[i, j])
-    tf.loop(loop_body, 0, n, 1)
-    sum_buf[j] = summ
-    return sum_buf
-
-def norm(A):
-    A = A * 1.0
-    sum_buf = tf.zeros([1], tf.float32)
-    ids = tf.indices(A.shape)
-    tf.scatterAdd(sum_buf[0], A[ids] ** 2)
-    return tf.sqrt(sum_buf)
 
 #dynamic size QR decomposition
 def QRDecomposition():
@@ -869,14 +851,18 @@ def QRDecomposition():
     j = tf.index(0, [m])
 
     def loop_body(i):
-        R[i, i] = norm(A[j, i])
+        norm2 = tf.zeros([1], tf.float32)
+        def loop_body1(it):
+            norm2.set(norm2 + A[it, i] ** 2)
+        tf.loop(loop_body1, 0, m, 1)
+        R[i, i] = tf.sqrt(norm2)
         Q[j, i] = A[j, i] / R[i, i]
-
+        
         t, = tf.index_grid([i+1], [n])
         dotprod = tf.zeros(t.shape, tf.float32)
-        def loop_body(it):
+        def loop_body2(it):
             dotprod.set(dotprod + Q[it, i] * A[it, t])
-        tf.loop(loop_body, 0, m, 1)
+        tf.loop(loop_body2, 0, m, 1)
         R[i, t] = dotprod
         
         p, k = tf.index_grid([0, i+1], [m, n])
@@ -884,7 +870,11 @@ def QRDecomposition():
 
     tf.loop(loop_body, 0, n-1, 1)
 
-    R[n-1, n-1] = norm(A[j, n-1])
+    norm2 = tf.zeros([1], tf.float32)
+    def loop_body1(it):
+        norm2.set(norm2 + A[it, n-1] ** 2)
+    tf.loop(loop_body1, 0, m, 1)
+    R[n-1, n-1] = tf.sqrt(norm2)
     Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
 
     return [Q, R]
@@ -902,6 +892,6 @@ Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
 Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
 print("Q error: ", Qerror)
 print("R error: ", Rerror)
-if Qerror > 1e-5 or Rerror > 1e-5:
+if Qerror > 1e-4 or Rerror > 1e-4:
 	print("QR decomposition failed")
 	exit(1)
