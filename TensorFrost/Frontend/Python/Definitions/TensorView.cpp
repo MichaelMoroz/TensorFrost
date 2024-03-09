@@ -15,7 +15,7 @@ namespace TensorFrost {
 		                return PT(T(PyTensor(t)) op T(t2));                        \
 	                });                                                          \
 	tensor_view.def("__" #opname "__", [](const TensorView& t, const float f) {  \
-		return PT(Tensor::Constant(f) op T(PyTensor(t)));                          \
+		return PT(T(PyTensor(t)) op Tensor::Constant(f));                          \
 	});                                                                          \
 	tensor_view.def("__r" #opname "__",                                          \
 	                [](const TensorView& t, const TensorView& t2) {              \

@@ -2,13 +2,6 @@
 
 namespace TensorFrost {
 
-void IR::UpdateNodeOutputs() const {
-	for (auto node = begin(); !node.is_end(); ++node) {
-		node->outputs_.clear();
-		node->UpdateOutputs();
-	}
-}
-
 int MaxIndexCount(ArgMap& map) {
 	if (map.empty()) return 0;
 	// maps are sorted by index, so the last element has the highest index
@@ -33,5 +26,18 @@ void CopyLable(Node* target, Node* copy) {
 	target->lable_ = new Lable(target);
 }
 
+ScopeType GetScopeType(const Node* node) {
+	// check if the node has a "kernel" operation parent
+	// go over all parents and check if any of them is a kernel
+	for (Node* parent = node->parent; parent != nullptr;
+	     parent = parent->parent) {
+		if (parent->name == "kernel") {
+			return ScopeType::Kernel;
+		} else if (parent->name == "host") {
+			return ScopeType::Host;
+		}
+	}
+	return ScopeType::None;
+}
 
 }  // namespace TensorFrost

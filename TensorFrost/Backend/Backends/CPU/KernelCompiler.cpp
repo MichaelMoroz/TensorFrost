@@ -7,20 +7,35 @@ namespace TensorFrost {
 std::string kernel_compile_options;
 
 bool RunCompiler(char* tempPath, char* dllName) {
-	cout << "Compile options: " << kernel_compile_options << endl;
 	std::basic_stringstream<char> ss;
 
 #if defined(_WIN32)
+	if (kernel_compile_options.empty()) {
+#ifdef NDEBUG
+		kernel_compile_options = "/O2 /fp:fast /openmp";
+#else
+		kernel_compile_options = "/Zi";
+#endif
+	}
 	//what the fu..
 	ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl " 
 	   << kernel_compile_options << " /LD " << tempPath
 	   << "generated_lib.cpp /Fe:" << dllName 
 	   << "\"\"\\\"\"";  // MSVC
 #else
+	if (kernel_compile_options.empty()) {
+#ifdef NDEBUG
+		kernel_compile_options = "-O3 -ffast-math -fopenmp";
+#else
+		kernel_compile_options = "-g";
+#endif
+	}
 	ss << "g++ " << kernel_compile_options << " -shared -fPIC " << tempPath
 	   << "generated_lib.cpp -o " << dllName;  // GCC
 #endif
 
+	
+	cout << "Compile options: " << kernel_compile_options << endl;
 	std::basic_string<char> command = ss.str();
 
 	cout << "Command: " << command << endl;
@@ -110,6 +125,7 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 
 using uint = unsigned int;
 using kernel_func = void (*)(uint*, uint*, uint*, uint*);
+using main_func = void (*)(uint*, uint*, uint*, uint(uint*&, uint*, uint dim), void(uint));
 
 void CompileAndLoadKernel(Program* program) {
 #if defined(_WIN32)
@@ -137,9 +153,7 @@ void CompileAndLoadKernel(Program* program) {
 	cout << "Temp file: " << temp_file_name << endl;
 
 	// Generate C code
-	pair<string, vector<string>> source_names = GenerateC(program);
-	string source_code = source_names.first;
-	vector<string> kernel_names = source_names.second;
+	string source_code = GenerateC(program);
 
 	// Compile the library
 	CompileKernelLibrary(source_code, temp_path, temp_file_name);
@@ -170,49 +184,26 @@ void CompileAndLoadKernel(Program* program) {
 		#endif
 	};
 
-	// Load symbols for each kernel
-	int i = 0;
-	for (auto& k : program->kernels_) {
-		Kernel* kernel = &k;
-		if (kernel->type_ != KernelType::Compute) {
-			continue;
-		}
+	// Load the main function
+	#if defined(_WIN32)
+	auto main_callback = reinterpret_cast<main_func>(
+	    GetProcAddress(lib_handle, "main"));
+	#else
+	auto main_callback = reinterpret_cast<main_func>(
+	    dlsym(lib_handle, "main"));
+	#endif
 
-		string kernel_name = kernel_names[i];
-		const string& symbol_name = kernel_name;
-
-		// Load the symbol
-		#if defined(_WIN32)
-		auto kernel_callback = reinterpret_cast<kernel_func>(
-		    GetProcAddress(lib_handle, symbol_name.c_str()));
-		#else
-		auto kernel_callback = reinterpret_cast<kernel_func>(
-		    dlsym(lib_handle, symbol_name.c_str()));
-		#endif
-
-		if (!kernel_callback) {
-			throw std::runtime_error("Compiler error: cannot load kernel function");
-		}
-
-		kernel->execute_callback = [kernel_callback](
-		                               TensorMemoryManager* memory_manager,
-		                               vector<uint> variables, vector<uint> offsets,
-		                               vector<uint> shape) {
-			// get CPU memory manager
-			auto* cpu_memory_manager =
-			    dynamic_cast<CpuMemoryManager*>(memory_manager);
-			if (!cpu_memory_manager) {
-				throw std::runtime_error(
-				    "Cannot execute kernel on non-CPU memory manager");
-			}
-			// get memory
-			uint* memory = cpu_memory_manager->memory.data();
-			// execute kernel
-			kernel_callback(variables.data(), offsets.data(), memory, shape.data());
-		};
-
-		i++;
+	if (!main_callback) {
+		throw std::runtime_error("Compiler error: cannot load main function");
 	}
+
+	// Set the execute callback
+	program->execute_callback =
+	    [main_callback](uint* in, uint* out, uint* mem,
+	                                uint allocate(uint*&, uint*, uint dim),
+	                                void deallocate(uint)) {
+		main_callback(in, out, mem, allocate, deallocate);
+	};
 
 	cout << "Successfully compiled and loaded kernel library." << endl;
 }

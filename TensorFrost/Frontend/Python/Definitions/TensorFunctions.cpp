@@ -44,9 +44,13 @@ void TensorFunctionsDefinition(py::module& m) {
 	UNARY_FUNCTION(rsqrt);
 	UNARY_FUNCTION(rcp);
 
+	UNARY_FUNCTION(pcg);
+	UNARY_FUNCTION(pcgf);
+
 	m.def("float", [](const PyTensor& t) { return PT(Tensor::tofloat(T(t))); });
 	m.def("uint", [](const PyTensor& t) { return PT(Tensor::touint(T(t))); });
 	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });
+	m.def("bool", [](const PyTensor& t) { return PT(Tensor::tobool(T(t))); });
 
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
@@ -56,9 +60,14 @@ void TensorFunctionsDefinition(py::module& m) {
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);
+	TERNARY_FUNCTION(select);
 
 	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterAddPrev", [](const TensorView& t, const PyTensor& t2) {
+		return PT(Tensor::ScatterAddPrev(*t.value, T(t2), t.indices));
 	});
 
 	m.def("scatterMin", [](const TensorView& t, const PyTensor& t2) {
@@ -67,6 +76,18 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("scatterMax", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterMax(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterOr", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterOr(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterAnd", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterAnd(*t.value, T(t2), t.indices);
+	});
+
+	m.def("scatterXor", [](const TensorView& t, const PyTensor& t2) {
+		Tensor::ScatterXor(*t.value, T(t2), t.indices);
 	});
 
 	m.def("buffer", [](py::list shape, DataType type) {
@@ -172,8 +193,8 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def(
 	    "loop",
-	    [](const PyTensor& begin, const PyTensor& end, const PyTensor& step,
-	       const py::function& body) {
+	    [](const py::function& body, const PyTensor& begin, const PyTensor& end,
+	       const PyTensor& step) {
 		    // wrap the function to convert the PyTensor to Tensor
 		    std::function<void(const Tensor&)> f2 = [&body](const Tensor& t) {
 			    py::gil_scoped_acquire acquire;
@@ -184,6 +205,17 @@ void TensorFunctionsDefinition(py::module& m) {
 	    },
 	    py::arg("begin") = 0, py::arg("end"), py::arg("step") = 1,
 	    py::arg("body"));
+
+	m.def("if_cond", [](const PyTensor& condition, const py::function& true_body) {
+		std::function<void()> f = [&true_body]() {
+			py::gil_scoped_acquire acquire;
+			true_body();
+		};
+		Tensor::If(T(condition), f);
+	});
+
+	m.def("break_loop", []() { Tensor::Break(); });
+	m.def("continue_loop", []() { Tensor::Continue(); });
 }
 
 }  // namespace TensorFrost

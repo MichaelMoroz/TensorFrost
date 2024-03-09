@@ -5,44 +5,40 @@
 namespace TensorFrost {
 using namespace std;
 
-NodeNames GenerateNodeNames(const IR& ir) {
-	NodeNames names = NodeNames();
-	map<Cluster*, int> cluster_var_index = map<Cluster*, int>();
+void GenerateNodeNames(const IR& ir) {
+	int var_index = 0;
 	int mem_index = 0;
 	int cluster_index = 0;
-	Cluster* curent_cluster = nullptr;
-	for (auto node = ir.begin(); !node.is_end(); ++node) {
-		if (node->cluster_ != curent_cluster) {
+	Node* curent_cluster = nullptr;
+	for (auto node = ir.begin(); !node.end(); node.next()) {
+		if (node->parent != curent_cluster) {
 			cluster_index++;
+			var_index = 0;
 		}
 		if (node->name == "memory") {
-			names[*node] = "m" + to_string(mem_index);
+			node->var_name = "m" + to_string(mem_index);
 			mem_index++;
 		} else {
-			Cluster* cluster_id = node->cluster_;
-			int var_index = cluster_var_index[cluster_id];
-			names[*node] =
+			node->var_name =
 			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
-			cluster_var_index[cluster_id]++;
+			var_index++;
 		}
-		curent_cluster = node->cluster_;
+		curent_cluster = node->parent;
 	}
-
-	return names;
 }
 
-string GetNodeName(const Node* node, NodeNames& names, bool compact) {
+string GetNodeName(const Node* node,  bool compact) {
 	if (compact) {
-		if (node->name == "const") {
+		if (node->name == "const" && !node->has_been_modified_) {
 			return node->GetTensor()->GetConstantString();
 		}
 	}
 	else {
 		if (node->name == "const") {
-			return names[node] + "(" + node->GetTensor()->GetConstantString() + ")";
+			return node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
 		}
 	}
-	return names[node];
+	return node->var_name;
 }
 
 inline string Tensor::GetConstantString() const {
@@ -62,20 +58,15 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelLines(const IR* ir, const Cluster* cluster,
+void CodeGenerator::GenerateKernelLines(const IR* ir, const Node* cluster,
                          const Kernel* kernel) {
-	NodeNames names = GenerateNodeNames(*ir);
-
-	int indent = 0;
 	int variable_index = 0;
 	int memory_index = 0;
+	int prev_depth = 0;
 	// Translate each operation into HLSL
-	for (auto node = IR::Iterator(cluster->begin_); !node.is_cluster_end(cluster);
-	     ++node) {
-		if (node->name == "const") continue;
-
-		if (node->name == "loop_end" || node->name == "if_end") {
-			indent--;
+	for (auto node = NodeIterator(cluster); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
+		if (node->name == "const" && !node->has_been_modified_) {
+			continue;
 		}
 
 		// get node operation
@@ -87,16 +78,36 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Cluster* cluster,
 		Arguments shape = node->GetArguments(Arg::Type::Shape);
 		Arguments memory = node->GetArguments(Arg::Type::Memory);
 
-		string name = names[*node];
+		string name = node->var_name;
 
-		Line* line = GenerateLine(&names, op, node.get(), inputs, indices, shape,
+		Line* line = GenerateLine(op, node.get(), inputs, indices, shape,
 		                          memory, kernel->memory, kernel->variables);
-		line->indent = indent;
-		lines.push_back(line);
-
-		if (node->name == "loop_begin" || node->name == "if_begin") {
-			indent++;
+		if (line == nullptr) {
+			continue;
 		}
+
+		int depth = node.depth() - 1;
+		if (depth != prev_depth)
+		{
+			// add scope brackets
+			if (depth < prev_depth) {
+				for (int i = prev_depth - 1; i >= depth; i--) {
+					lines.push_back(new Line(i, "}"));
+				}
+			} else if (depth > prev_depth) {
+				for (int i = prev_depth; i < depth; i++) {
+					lines.push_back(new Line(i, "{"));
+				}
+			}
+		}
+		line->indent = depth;
+		lines.push_back(line);
+		prev_depth = depth;
+	}
+
+	// add closing brackets
+	for (int i = 0; i < prev_depth; i++) {
+		lines.push_back(new Line(i, "}"));
 	}
 }
 
@@ -148,6 +159,10 @@ void CodeGenerator::Compactify() {
 
 				int instances = (int)std::distance(words_begin, words_end);
 
+				if (instances == 0) {
+					continue;
+				}
+
 				if (instances < 2 || line2->cost < 1.0f) {
 					// merge lines
 					string replace = line2->expression;
@@ -194,16 +209,16 @@ string CodeGenerator::GetFinalCode() {
 	}
 
 	// update names
-	int i = 0;
-	for (auto& line : lines) {
-		string old_name = line->name;
-		string new_name = "v" + to_string(i);
-		i++;
-		std::regex name_regex("\\b" + old_name +
-		                      "\\b");  // regex for whole word match
-		code = std::regex_replace(code, name_regex, new_name);
-		line->name = new_name;
-	}
+	//int i = 0;
+	//for (auto& line : lines) {
+	//	string old_name = line->name;
+	//	string new_name = "v" + to_string(i);
+	//	i++;
+	//	std::regex name_regex("\\b" + old_name +
+	//	                      "\\b");  // regex for whole word match
+	//	code = std::regex_replace(code, name_regex, new_name);
+	//	line->name = new_name;
+	//}
 
 	return code;
 }

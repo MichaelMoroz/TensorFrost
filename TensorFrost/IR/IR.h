@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <stack>
 
 #include "Operations.h"
 #include "Utility/Utility.h"
@@ -15,6 +16,14 @@
 namespace TensorFrost {
 class Tensor;
 class Node;
+class Scope;
+
+enum class ScopeType {
+	None,
+	Host,
+	Kernel,
+};
+
 
 class Lable {
  public:
@@ -36,6 +45,13 @@ class Arg {
 		None,
 	};
 
+	static inline const map<Type, string> type_names = {
+	    {Type::Input, "Input"}, {Type::Index, "Index"}, {Type::Shape, "Shape"},
+		{Type::Memory, "Memory"}, {Type::None, "None"},
+	};
+
+	static string TypeToString(Type type) { return type_names.at(type); }
+
 	Type type_;
 	Lable* from_;
 	Lable* to_{nullptr};
@@ -45,14 +61,6 @@ class Arg {
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
-};
-
-class Cluster {
- public:
-	Node* begin_;
-	Lable* shape_node_;
-
-	Cluster(Node* cluster_begin) : begin_(cluster_begin), shape_node_(nullptr) {}
 };
 
 using ArgMap = map<int, const Arg*>;
@@ -66,21 +74,29 @@ enum class MemoryType {
 	None,
 	Input,
 	Output,
+	Shape,
 	Constant,
 };
 
 class Node {
  public:
-	const string name;
+	int index_ = 0;
+	string var_name = "none";
+	string name;
+	float cost_ = -1.0f;
+	
+	Node *parent, *child, *prev, *next;
+    bool placeholder;
+
+	//only true after graph has been updated
+	Node *true_prev, *true_next;
+	
 	const Operation* op;
 	const Tensor* tensor_;
 
+	ScopeType scope_type_ = ScopeType::None;
+
 	Lable* lable_ = nullptr;
-
-	Cluster* cluster_ = nullptr;
-
-	Node* prev_ = nullptr;
-	Node* next_ = nullptr;
 
 	Arguments inputs_;
 	vector<Arg*> outputs_;
@@ -88,16 +104,43 @@ class Node {
 	int memory_index_ = 0;
 
 	bool has_been_modified_ = false;
+	bool is_static = false;
 
-	Node(Tensor* tensor, Arguments&& args, string&& name)
-	    : tensor_(tensor),
-	      inputs_(std::move(args)),
-	      name(std::move(name)) {
-		lable_ = new Lable(this);
-		UpdateArgumentOutputs();
-		op = &FindOperation(this->name);
-		CheckClustering();
+	Node(Node* prev = nullptr, Node* parent = nullptr) : child(nullptr), next(nullptr), placeholder(true), parent(parent), prev(prev) {}
+
+    bool valid() {
+        return !placeholder;
+    }
+
+	void UpdateEdges() {
+		if (!child) child = new Node(nullptr, this);
+		if (!next) next = new Node(this, parent);
+		if (child->valid()) {
+			child->parent = this;
+		}
+		if (next->valid()) {
+			next->prev = this;
+			next->parent = parent;
+		}
 	}
+
+    //initialize and create next/child placeholders
+    void initialize(Tensor* tensor, Arguments&& new_args, string&& new_name, bool set_static = false) {
+        if(valid()) {
+            throw runtime_error("Node already initialized");
+        }
+		UpdateEdges();
+        placeholder = false;
+
+		tensor_ = tensor;
+		    inputs_ = std::move(new_args);
+		name = std::move(new_name);
+		lable_ = new Lable(this);
+		is_static = set_static;
+		UpdateArgumentOutputs();
+		op = &FindOperation(name);
+		CheckClustering();
+    }
 
 	[[nodiscard]] const Tensor* GetTensor() const;
 
@@ -124,6 +167,47 @@ class Node {
 			input.SetOutput(GetLable());
 			input.from_->get()->outputs_.push_back(&input);
 		}
+	}
+
+	int ComputeDepth(Node* root = nullptr) const {
+		int depth = 0;
+		for (const Node* node = this; node != root; node = node->parent) {
+			depth++;
+		}
+		return depth;
+	}
+
+	bool HasParent(Node* node)
+	{
+		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent == node) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+
+	Node* GetParent(string name)
+	{
+		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent->name == name) {
+				return cur_parent;
+			}
+		}
+		return this;
+	}
+
+	Node* GetLastChild() {
+		Node* last_child = child;
+		while (last_child->next->valid()) {
+			last_child = last_child->next;
+		}
+		return last_child;
+	}
+
+	bool HasParent(string name) {
+		return GetParent(name) != this;
 	}
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) {
@@ -199,9 +283,29 @@ class Node {
 		}
 
 		// must have tensor
-		if (tensor_ == nullptr) {
+		if (tensor_ == nullptr && !is_static) {
 			throw std::runtime_error("Tensor not found");
 		}
+	}
+
+	const Node* GetLastVersion(const Node* latest_node) const {
+		//find last store/scatter operation
+		const Node* last_modifier = this;
+		int last_index = -1;
+		for (auto& output : outputs_) {
+			if (output->type_ != Arg::Type::Memory) {
+				continue;
+			}
+			Node* output_node = output->to_->get();
+			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+				if (output_node->index_ > last_index &&
+				    output_node->index_ < latest_node->index_) {
+					last_index = output_node->index_;
+					last_modifier = output_node;
+				}
+			}
+		}
+		return last_modifier;
 	}
 
 	~Node();
@@ -210,20 +314,190 @@ class Node {
 void SwapLables(Node* a, Node* b);
 void CopyLable(Node* target, Node* copy);
 
-class ClusterProp {
- public:
-	vector<Cluster*> clusters;
-	map<Cluster*, vector<Node*>> output;
-	map<Node*, vector<Arg*>> node_output;
-	map<Node*, float> node_cost;
 
-	ClusterProp(map<Cluster*, vector<Node*>> cluster_outputs,
-	            map<Node*, vector<Arg*>> output, map<Node*, float> cost,
-	            vector<Cluster*> clusters)
-	    : output(std::move(cluster_outputs)),
-	      node_output(std::move(output)),
-	      node_cost(std::move(cost)),
-	      clusters(std::move(clusters)) {}
+class NodeIterator {
+ public:
+	Node* currentNode;
+	Node* root;
+
+	NodeIterator() : currentNode(nullptr), root(nullptr) {}
+	NodeIterator(Node* node, Node* root) : currentNode(node), root(root) {}
+	NodeIterator(const Node* node, const Node* root)
+	    : currentNode(const_cast<Node*>(node)), root(const_cast<Node*>(root)) {}
+	NodeIterator(Node* node_root)
+	    : currentNode(node_root->child), root(node_root) {}
+	NodeIterator(const Node* node_root)
+	    : currentNode(const_cast<Node*>(node_root->child)),
+	      root(const_cast<Node*>(node_root)) {}
+
+	Node* operator*() const { return currentNode; }
+
+	NodeIterator& forward() {
+		if (!currentNode->valid()) {
+			return *this;
+		}
+
+		if (!currentNode->next->valid()) {  // no next, try going up
+			Node* parent = currentNode->parent;
+			while (!parent->next->valid() && root != parent) {
+				parent = parent->parent;
+			}
+			if (root != parent) {  // go to next sibling
+				currentNode = parent;
+			}
+		}
+
+		// just go to next node and stop if it's the end
+		currentNode = currentNode->next;
+		return *this;
+	}
+
+	// first child, then next
+	NodeIterator& next() {
+		if (!currentNode->valid()) {
+			return *this;
+		}
+
+		if (currentNode->child->valid()) {  // has child, go down
+			currentNode = currentNode->child;
+			return *this;
+		}
+
+		forward();
+
+		return *this;
+	}
+
+	NodeIterator& true_next() {
+		currentNode = currentNode->true_next;
+		return *this;
+	}
+
+	NodeIterator& true_prev() {
+		currentNode = currentNode->true_prev;
+		return *this;
+	}
+
+	bool end() { return !currentNode->valid(); }
+
+	Node* operator->() { return currentNode; }
+
+	Node* get() { return currentNode; }
+
+	int depth() { return currentNode->ComputeDepth(root); }
+
+	bool operator!=(const Node* node) { return currentNode != node; }
+};
+
+ScopeType GetScopeType(const Node* node);
+
+class Scope
+{
+ public:
+	Node* begin;
+	Node* end;
+	Node* shape_node;
+	ScopeType type = ScopeType::None;
+	int shape_dim = 0;
+
+	Scope(Node* begin) 
+		: begin(begin), end(begin), shape_node(begin) { UpdateEnd(begin); }
+
+	Scope(Node* begin, Node* end)
+	    : begin(begin), end(end) { RecomputeScope(); }
+
+	bool InScope(const Node* node) {
+		int begin_id = begin->index_;
+		int end_id = end->index_;
+		int node_id = node->index_;
+		return node_id >= begin_id && node_id <= end_id;
+	}
+
+	void UpdateType(Node* node) {
+		// if the end node is a memory node, it must be on the cpu
+		if (node->name == "memory") {
+			if (type == ScopeType::Kernel) {
+				throw std::runtime_error("Memory node in kernel scope");
+			}
+			type = ScopeType::Host;
+		} else if (shape_dim > 0 || node->scope_type_ == ScopeType::Kernel) { // non-scalars must be in a kernel
+			if (type == ScopeType::Host) {
+				throw std::runtime_error("Kernel node in host scope");
+			}
+			type = ScopeType::Kernel;
+		}
+	}
+
+	void UpdateEnd(Node* new_end) {
+		end = new_end;
+		UpdateShape(end);
+		UpdateType(end);
+	}
+
+	void UpdateShape(Node* node)
+	{
+		ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
+		int dim = MaxIndexCount(shape);
+		if (node->name == "memory") dim = 0;
+		if (dim >= shape_dim) {
+			shape_dim = dim;
+			shape_node = node;
+		}
+	}
+
+	void RecomputeScope()
+	{
+		shape_dim = 0;
+		type = ScopeType::None;
+		for (auto node = NodeIterator(begin, begin);
+		     node->index_ <= end->index_; node.true_next()) {
+			UpdateShape(*node);
+			UpdateType(*node);
+		}
+	}
+
+	static vector<Scope*> GetScopes(Node* begin, Node* end) {
+		int begin_depth = begin->ComputeDepth();
+		int end_depth = end->ComputeDepth();
+		vector<Scope*> scopes;
+		if (begin_depth <= end_depth) {
+			Node* prev_parent = nullptr;
+			for (Node* cur_parent = end; cur_parent != begin->parent;
+			     cur_parent = cur_parent->parent) {
+				if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+					scopes.push_back(new Scope(cur_parent->child, prev_parent->prev));
+				}
+				prev_parent = cur_parent;
+			}
+
+			if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+				scopes.push_back(new Scope(begin, prev_parent->prev));
+			}
+		}
+		else
+		{
+			throw std::runtime_error("Invalid scope");
+			//if (begin->parent->next) {
+			//	scopes.push_back(new Scope(begin, begin->parent->next->true_prev));
+			//	if (begin->parent->next != end)
+			//	{
+			//		scopes.push_back(new Scope(begin->parent->next, end->prev));
+			//	}
+			//}
+			
+			//Node* prev_parent = nullptr;
+			//for (Node* cur_parent = begin->parent; cur_parent != end->parent;
+			//     cur_parent = cur_parent->parent) {
+			//	if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
+			//		scopes.push_back(new Scope(prev_parent->prev->next, cur_parent->child));
+			//	}
+			//	prev_parent = cur_parent;
+			//}
+		}
+		
+
+		return scopes;
+	}
 };
 
 enum class KernelIndexingMode
@@ -241,148 +515,181 @@ enum class TensorIndexingMode {
 	Zero,
 };
 
+
 class IR {
- public:
-	class Iterator {
-		Node* node_ = nullptr;
+public:
+	Node* root;
+    NodeIterator cursor;
 
-	 public:
-		explicit Iterator(Node* node) : node_(node) {}
+	IR() {
+        root = new Node();
+        root->initialize(nullptr, {}, "host", true);
+        cursor = NodeIterator(root);
+    }
 
-		Node* operator*() const { return node_; }
+    ~IR() {
+        vector<Node*> to_delete;
+		for (auto node = begin(); !node.end(); node.next()) {
+			to_delete.push_back(*node);
+        }
+        for (Node* node : to_delete) {
+            delete node;
+        }
+		delete root;
+    }
 
-		Node* operator->() { return node_; }
+    NodeIterator begin() const {
+        return NodeIterator(root);
+    }
 
-		Iterator& operator++() {
-			node_ = get_next();
-			return *this;
+    Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
+        if (cursor->valid()) { //already initialized, add new node before cursor
+            Node* newNode = new Node(cursor->prev, cursor->parent);
+			if (cursor->prev) 
+				cursor->prev->next = newNode;
+			else if (cursor->parent) 
+				cursor->parent->child = newNode;
+            cursor->prev = newNode;
+			newNode->next = *cursor;
+            newNode->initialize(tensor, std::move(args), std::move(name));
+			return newNode;
+        } else {
+            cursor->initialize(tensor, std::move(args), std::move(name));
+            cursor.next();
+			return cursor->prev;
+        }
+    }
+
+	void MoveNodeTo(Node* target_place, Node* note_to_move) {
+		if (note_to_move->valid()) {
+			//remove from current position
+			if (note_to_move->parent && note_to_move->parent->child == note_to_move) {
+				note_to_move->parent->child = note_to_move->next;
+			}
+			else if (note_to_move->prev) {
+				note_to_move->prev->next = note_to_move->next;
+			}
+			note_to_move->next->prev = note_to_move->prev;
+
+			//insert into new position
+			note_to_move->parent = target_place->parent;
+			note_to_move->prev = target_place->prev;
+			note_to_move->next = target_place;
+			if (target_place->prev) {
+				target_place->prev->next = note_to_move;
+			}
+			else if (target_place->parent) {
+				target_place->parent->child = note_to_move;
+			}
+			target_place->prev = note_to_move;
 		}
-
-		Iterator& operator--() {
-			node_ = get_prev();
-			return *this;
-		}
-
-		bool operator!=(const Iterator& other) const {
-			return node_ != other.node_;
-		}
-
-		bool operator==(const Iterator& other) const {
-			return node_ == other.node_;
-		}
-
-		[[nodiscard]] bool is_end() const { return node_ == nullptr; }
-
-		[[nodiscard]] bool is_begin() const { return node_ == nullptr; }
-
-		[[nodiscard]] bool is_cluster_begin() const {
-			return node_ == nullptr || node_->cluster_ == nullptr ||
-			       node_->cluster_->begin_ == node_;
-		}
-
-		bool is_cluster_end(const Cluster* cluster) const {
-			return node_ == nullptr || node_->cluster_ != cluster;
-		}
-
-		Node* get() { return node_; }
-
-		Node* get_next() { return node_->next_; }
-
-		Node* get_prev() { return node_->prev_; }
-	};
-
-	Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
-		Node* new_node = new Node(tensor, std::move(args), std::move(name));
-		InsertAtCursor(new_node);
-		return new_node;
 	}
 
-	void RemoveNode(Node* node) {
-		if (node->prev_ != nullptr) {
-			node->prev_->next_ = node->next_;
-		}
-		if (node->next_ != nullptr) {
-			node->next_->prev_ = node->prev_;
-		}
-		if (node == *cursor_) {
-			cursor_ = Iterator(node->prev_);
-		}
-		if (node == *begin_) {
-			begin_ = Iterator(node->next_);
-		}
-		if (node->cluster_ != nullptr && node->cluster_->begin_ == node) {
-			//assuming the next node is also in the cluster
-			node->cluster_->begin_ = node->next_;
-		}
-		nodes_.erase(std::remove(nodes_.begin(), nodes_.end(), node), nodes_.end());
-		delete node;
-	}
+    void RemoveNode(Node* node) {
+        if (node->valid()) {
+			// if child node exists, iterate through it and remove all children
+			if (node->child) {
+				vector<Node*> to_delete;
+				for (auto child = NodeIterator(node); !child.end(); child.next()) {
+					to_delete.push_back(*child);
+				}
+				for (Node* child : to_delete) {
+					RemoveNode(child);
+				}
+			}
 
-	void ExecuteExpressionAfter(Node* node, const function<void()>&& expression,
-	                            bool in_cluster = true) {
-		// TODO(Moroz): check if no future nodes are used
-		Iterator old_cursor = cursor_;
-		Cluster* old_cluster = current_cluster_;
-		if (!in_cluster) {
-			current_cluster_ = nullptr;
-		} else {
-			current_cluster_ = node->cluster_;
-		}
-		SetCursor(node);
+            //if direct child of its parent
+            if (node->parent && node->parent->child == node) {
+                node->parent->child = node->next;
+            } else if (node->prev) {
+                node->prev->next = node->next;
+            }
+
+            node->next->prev = node->prev;
+            delete node;
+        }
+    }
+
+    void SetCursor(Node* node) {
+        cursor = NodeIterator(node, root);
+    }
+
+    void ExecuteExpressionAfter(Node* node, const function<void()>&& expression) {
+        NodeIterator oldCursor = cursor;
+        SetCursor(node->next);
+        expression();
+        cursor = oldCursor;
+    }
+
+    void ExecuteExpressionBefore(Node* node, const function<void()>&& expression) {
+        NodeIterator oldCursor = cursor;
+        SetCursor(node);
+        expression();
+        cursor = oldCursor;
+    }
+
+	void ExecuteExpressionChild(Node* node, const function<void()>&& expression) {
+		NodeIterator oldCursor = cursor;
+		SetCursor(node->child);
 		expression();
-		cursor_ = old_cursor;
-		current_cluster_ = old_cluster;
+		cursor = oldCursor;
 	}
 
-	void ExecuteExpressionBefore(Node* node, const function<void()>&& expression,
-	                             bool in_cluster = true) {
-		Iterator old_cursor = cursor_;
-		Cluster* old_cluster_head = current_cluster_;
-		if (!in_cluster) {
-			current_cluster_ = nullptr;
-		} else {
-			current_cluster_= node->cluster_;
-		}
-		SetCursorBefore(node);
-		expression();
-		cursor_ = old_cursor;
-		current_cluster_ = old_cluster_head;
-	}
-
-	// reexecute nodes and get map from old to copied nodes
 	[[nodiscard]] map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
 
-	void OptimizeClusters();
-
-	void RemoveUnusedNodes();
-
-	[[nodiscard]] Iterator begin() const { return begin_; }
-
-	[[nodiscard]] Iterator end() const { return end_; }
-
-	void Clusterize() const;
-
-	void CheckClustering(string name) const;
-
-	void UpdateNodeOutputs() const;
-
-	[[nodiscard]] ClusterProp GetClusterProperties() const;
-
-	void PostProcessClusters();
-
+	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
+	void PrintListing(string name, bool compact, map<Node*, string> invalid_nodes) const;
+	void GetInputList();
+	void GetOutputList();
+	void ComputeStatistics();
+	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
+	void ReorderOperations();
+	void OptimizeKernels();
+	void OptimizeHost();
+	void OptimizeOperations();
+	void RemoveUnusedOperations();
+	void SeparateOperationsIntoKernels();
+	void ComputeNodeCost();
+	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
+	void AddKernelGlobalMemoryOperations();
+	void AddMemoryDeallocation();
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Cluster* cluster, int dims, Tensors kernel_shape);
-
+	                       Node* cluster, int dims, Tensors kernel_shape);
 	void MultiDimensionalModeIndices(Tensor*& thread_index,
-	                                 vector<Tensor*>& indices, Cluster* cluster_,
+	                                 vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
-
-	void TransformToLinearIndex();
-
+	void FinalizeMemoryIndexing();
+	void RemoveUnusedKernels();
 	void CompileIR();
 
-	~IR();
+	void UpdateGraph() const {
+		Node* prev = nullptr;
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->UpdateEdges();
+			node->outputs_.clear();
+			if (prev) {
+				prev->true_next = *node;
+				node->true_prev = prev;
+			}
+			prev = *node;
+		}
+		int index = 0;    
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->UpdateOutputs();
+			node->index_ = index++;
+		}
+	}
+
+	vector<Node*> GetNodesOfType(const string& name) const {
+		vector<Node*> result;
+		for (auto node = begin(); !node.end(); node.next()) {
+			if (node->name == name) {
+				result.push_back(*node);
+			}
+		}
+		return result;
+	}
 
 	//TODO (Moroz): Make this per kernel
 	void SetKernelIndexingMode(KernelIndexingMode indexing_mode)
@@ -396,68 +703,24 @@ class IR {
 		tensor_indexing_mode_ = indexing_mode;
 	}
 
-	vector<Node*> nodes_;
+	int input_memory_count = 0;
+	int output_memory_count = 0;
+	int temp_memory_count = 0;
+
+	vector<Node*> memory_inputs;
+	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
+	unordered_map<int, Node*> output_memory_map;
 	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
 	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
- private:
-	vector<Node*> cluster_nodes_;
-	Iterator cursor_ = Iterator(nullptr);
-	Iterator cursor_next_ = Iterator(nullptr);
-	Iterator begin_ = Iterator(nullptr);
-	Iterator end_ = Iterator(nullptr);
-	Cluster* current_cluster_ = nullptr;
-
-	void InsertAtCursor(Node* node) {
-		nodes_.push_back(node);
-		node->cluster_ = current_cluster_;
-		if (*cursor_ != nullptr) {
-			Node* prev_next = cursor_.get_next();
-			if (prev_next != nullptr) {
-				if (current_cluster_ != nullptr &&
-				    current_cluster_->begin_ == prev_next) {
-					// if the next node is a cluster head, then we need to update the
-					// cluster head
-					current_cluster_->begin_ = node;
-				}
-				node->next_ = prev_next;
-				prev_next->prev_ = node;
-			}
-			node->prev_ = *cursor_;
-			cursor_->next_ = node;
-		} 
-		else
-		{
-			if (*cursor_next_ != nullptr) {
-				cursor_next_->prev_ = node;
-				node->next_ = *cursor_next_;
-			}
-			begin_ = Iterator(node);
-		}
-		if (node->next_ == nullptr) {
-			end_ = Iterator(node);
-		}
-		SetCursor(node);
-	}
-
-	void SetCursor(Node* node) {
-		if (node != nullptr) {
-			cursor_ = Iterator(node);
-			cursor_next_ = Iterator(node->next_);
-		} else {
-			throw std::runtime_error("Cursor cannot be set to nullptr");
-		}
-	}
-
-	void SetCursorBefore(Node* node) {
-		if (node != nullptr) {
-			cursor_ = Iterator(node->prev_);
-			cursor_next_ = Iterator(node);
-		} else {
-			throw std::runtime_error("Node is nullptr");
-		}
-	}
+};
+struct ShapeCompareResult {
+	bool compatible;
+	bool is_broadcast;
+	int a_dim;
+	int b_dim;
+	int min_dim;
 };
 
-bool CompareShape(const Node* a, const Node* b);
+ShapeCompareResult CompareShape(const Node* a, const Node* b);
 
 }  // namespace TensorFrost

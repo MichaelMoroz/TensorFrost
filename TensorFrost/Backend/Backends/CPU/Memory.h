@@ -19,8 +19,14 @@ class CpuMemoryManager : public TensorMemoryManager {
  public:
 	vector<uint> memory;
 
-	TensorMemory* Allocate(const vector<int>& shape) override {
+	TensorMemory* Allocate(const vector<int>& shape,
+	                       const DataType type = DataType::Float) override {
 		int size = GetLinearSize(shape);
+
+		if (size == 0) {
+			throw invalid_argument("Trying to allocate a tensor with size 0");
+		}
+
 		Frame* frame = allocator.AllocateFrame(size);
 		// reserve space in memory if needed
 		if (frame->end > memory.size()) {
@@ -28,13 +34,15 @@ class CpuMemoryManager : public TensorMemoryManager {
 		}
 
 		auto* tensor_memory = new TensorMemory(shape, frame, this);
-		allocated[frame] = tensor_memory;
+		tensor_memory->type = type;
+		allocated_by_offset[frame->start] = tensor_memory;
 		return tensor_memory;
 	}
 
 	TensorMemory* AllocateWithData(const vector<int>& shape,
-	                               const vector<uint>& data) override {
-		TensorMemory* tensor_memory = Allocate(shape);
+	                               const vector<uint>& data,
+	    const DataType type = DataType::Float) override {
+		TensorMemory* tensor_memory = Allocate(shape, type);
 		memcpy(memory.data() + tensor_memory->frame->start, data.data(),
 		       data.size() * sizeof(uint));
 		return tensor_memory;
@@ -51,11 +59,15 @@ class CpuMemoryManager : public TensorMemoryManager {
 	void Free(TensorMemory* memory) override {
 		Frame* frame = memory->frame;
 		allocator.FreeFrame(*frame);
-		allocated.erase(frame);
+		allocated_by_offset.erase(frame->start);
+	}
+
+	void Free(uint offset) override { 
+		Free(allocated_by_offset[offset]);
 	}
 
 	~CpuMemoryManager() override {
-		for (auto& pair : allocated) {
+		for (auto& pair : allocated_by_offset) {
 			delete pair.second;
 		}
 	}

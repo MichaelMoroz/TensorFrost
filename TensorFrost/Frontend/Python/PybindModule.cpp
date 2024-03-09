@@ -30,7 +30,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	m.attr("float32") = DataType::Float;
 	m.attr("int32") = DataType::Int;
 	m.attr("uint32") = DataType::Uint;
-	m.attr("bool") = DataType::Bool;
+	m.attr("bool1") = DataType::Bool;
 
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("wgpu") = BackendType::WGPU;
