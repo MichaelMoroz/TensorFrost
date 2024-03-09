@@ -6,7 +6,7 @@ with open("../README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='TensorFrost',
-    version='0.1.4',
+    version='0.2.0',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
     description="Tensor library with automatic kernel fusion",
