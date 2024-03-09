@@ -1,4 +1,4 @@
-# 🥶 TensorFrost (v0.1.4) 🥶
+# 🥶 TensorFrost (v0.2.0) 🥶
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 The main idea of this library is to compile optimal fused kernels for the GPU given a set of numpy-ish functions, including other more complex things like loops and conditionals (also TODO)
@@ -164,7 +164,34 @@ Here the 3D nature of the matrix multiplication is apparent. The scatter operati
 
 ### Loops and conditionals
 
-TODO
+```python
+#Mandelbrot set
+z_re = tf.zeros([S, S], tf.float32)
+z_im = tf.zeros([S, S], tf.float32)
+
+def loop_body(k):
+    z_re_new = z_re*z_re - z_im*z_im + c_re
+    z_im_new = 2.0*z_re*z_im + c_im
+    z_re.set(z_re_new)
+    z_im.set(z_im_new)
+    tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
+        
+tf.loop(loop_body, 0, 128, 1)
+```
+
+In this example, the loop body is a function that takes an index `k` and updates the `z_re` and `z_im` tensors. The loop is then run 128 times, and the loop body is executed for each iteration. The `if_cond` operation is used to break the loop if the condition is met.
+Since TensorFrost uses tracing to build the program graph, the loop body must be a function. If you do a normal loop, it will essentially just be unrolled (also wont work if the loop iteration count is not known at compile time).
+
+Also since the setting operation can not be overloaded, the `set` method must be used to update the tensor data outside of this scope. 
+
+```python
+z_re.set(z_re_new) #this is fine
+z_re = z_re_new #this is not fine
+```
+
+Just setting the tensor to a new value will actually create a new tensor on top of the old one, and the old one will not be updated.
+
+Loops and conditionals can be stacked and nested, but they can be compiled into separate kernels inside the loop body if the data dependencies are not local (look at the QR decomposition example in the examples folder). Not all possible loop and conditional can be valid here, if the loop iteration count has a shape incompatible with the shapes of the tensors in the loop body, the program will not compile correctly.
 
 ### Autodifferentiation
 
@@ -180,17 +207,18 @@ TODO
 Core features:
 - [x] Basic operations (memory, indexing, arithmetic, etc.)
 - [x] Basic kernel fusion and compilation
-- [ ] Advanced built-in functions (random, special functions, etc.)
-- [ ] Advanced operations (loops, conditionals, etc.)
+- [x] Advanced built-in functions (random, special functions, etc.)
+- [x] Advanced operations (loops, conditionals, etc.)
 - [ ] Autodifferentiation
 - [ ] Kernel code and execution graph export and editing
 - [ ] Advanced data types and quantization
+- [ ] Compile from Python AST instead of tracing
 - [ ] Advanced IR optimizations
 - [ ] Kernel shape and cache optimization
-- [ ] Compile from Python AST instead of tracing
   
 Algorithm library:
-- [ ] Sort, scan, reduction, etc.
+- [ ] Scan, reduction, etc.
+- [ ] Sorting algorithms
 - [ ] Matrix operations (matrix multiplication, etc.)
 - [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.)
 - [ ] Fast Fourier Transform
@@ -198,7 +226,7 @@ Algorithm library:
 
 Platforms:
 - [x] Windows
-- [ ] Linux
+- [x] Linux
 - [ ] MacOS
 
 Backends:
