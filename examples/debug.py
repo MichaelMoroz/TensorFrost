@@ -3,8 +3,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 
-#tf.initialize(tf.cpu, "/Zi")
-tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
+tf.initialize(tf.cpu, "/Zi")
+#tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 
 #def test():
 #    canvas = tf.buffer([32, 32, 3], tf.float32)
@@ -817,81 +817,3 @@ tf.initialize(tf.cpu, "/O2 /fp:fast /openmp:llvm")
 #mand = tf.compile(mandelbrot)
 #res = mand()
 #resnp = res[0].numpy
-
-QRS = 64
-
-def modified_gram_schmidt(A):
-    """
-    Implements the Modified Gram-Schmidt orthogonalization to get the QR decomposition of matrix A.
-    A = QR
-    """
-    A = A.astype(float)  # Ensure A is of float type
-    m, n = A.shape
-    Q = np.zeros((m, n))
-    R = np.zeros((n, n))
-    
-    for i in range(n-1):
-        R[i, i] = np.linalg.norm(A[:, i])
-        Q[:, i] = A[:, i] / R[i, i]
-        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
-        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
-    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
-    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
-    return Q, R
-
-
-#dynamic size QR decomposition
-def QRDecomposition():
-    A = tf.input([-1, -1], tf.float32)
-
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
-
-    j = tf.index(0, [m])
-
-    def loop_body(i):
-        norm2 = tf.zeros([1], tf.float32)
-        def loop_body1(it):
-            norm2.set(norm2 + A[it, i] ** 2)
-        tf.loop(loop_body1, 0, m, 1)
-        R[i, i] = tf.sqrt(norm2)
-        Q[j, i] = A[j, i] / R[i, i]
-        
-        t, = tf.index_grid([i+1], [n])
-        dotprod = tf.zeros(t.shape, tf.float32)
-        def loop_body2(it):
-            dotprod.set(dotprod + Q[it, i] * A[it, t])
-        tf.loop(loop_body2, 0, m, 1)
-        R[i, t] = dotprod
-        
-        p, k = tf.index_grid([0, i+1], [m, n])
-        A[p, k] -= Q[p, i] * R[i, k]
-
-    tf.loop(loop_body, 0, n-1, 1)
-
-    norm2 = tf.zeros([1], tf.float32)
-    def loop_body1(it):
-        norm2.set(norm2 + A[it, n-1] ** 2)
-    tf.loop(loop_body1, 0, m, 1)
-    R[n-1, n-1] = tf.sqrt(norm2)
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-
-    return [Q, R]
-
-qr = tf.compile(QRDecomposition)
-
-Anp = np.random.rand(QRS, QRS).astype(np.float32)
-Qnp, Rnp = modified_gram_schmidt(Anp)
-print(Qnp)
-print(Rnp)
-
-A = tf.tensor(Anp)
-Qtf, Rtf = qr(A)
-Qerror = np.linalg.norm(Qtf.numpy - Qnp) / np.linalg.norm(Qnp)
-Rerror = np.linalg.norm(Rtf.numpy - Rnp) / np.linalg.norm(Rnp)
-print("Q error: ", Qerror)
-print("R error: ", Rerror)
-if Qerror > 1e-4 or Rerror > 1e-4:
-	print("QR decomposition failed")
-	exit(1)

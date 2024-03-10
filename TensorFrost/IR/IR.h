@@ -211,6 +211,9 @@ class Node {
 	}
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) {
+		if (memory_type_ != MemoryType::None) {
+			throw std::runtime_error("Memory type already set. Are you trying to output an input?");
+		}
 		memory_type_ = memory_type;
 		memory_index_ = index;
 	}
@@ -288,20 +291,27 @@ class Node {
 		}
 	}
 
-	const Node* GetLastVersion(const Node* latest_node) const {
+	Node* GetLastVersion(Node* latest_node) {
 		//find last store/scatter operation
-		const Node* last_modifier = this;
+		Node* last_modifier = this;
 		int last_index = -1;
+		Node* loop_node = latest_node->GetParent("loop");
+		bool has_loop = loop_node != latest_node;
 		for (auto& output : outputs_) {
 			if (output->type_ != Arg::Type::Memory) {
 				continue;
 			}
 			Node* output_node = output->to_->get();
 			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
-				if (output_node->index_ > last_index &&
-				    output_node->index_ < latest_node->index_) {
-					last_index = output_node->index_;
-					last_modifier = output_node;
+				if (output_node->index_>last_index) {
+					// either find the last modifier or the last memory node
+					// or if there is a loop, find the last modifier inside the loop (i.e.
+					// the previous iteration's modifier)
+					if (output_node->index_ < latest_node->index_ || (has_loop && output_node->HasParent(loop_node)))
+					{
+						last_index = output_node->index_;
+						last_modifier = output_node;
+					}
 				}
 			}
 		}

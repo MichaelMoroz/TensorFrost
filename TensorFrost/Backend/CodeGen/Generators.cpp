@@ -41,11 +41,19 @@ string GetNodeName(const Node* node,  bool compact) {
 	return node->var_name;
 }
 
+std::string format_float(float x) {
+	std::string s = std::format("{}", x);
+	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
+		s += '.';
+	}
+	return s + 'f';
+}
+
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
 		switch (type) {
 			case DataType::Float:
-				return to_string(AsFloat(data[0])) + "f";
+				return format_float(AsFloat(data[0]));
 			case DataType::Int:
 				return to_string(AsInt(data[0]));
 			case DataType::Uint:

@@ -27,7 +27,7 @@ class PyTensor {
 
 	explicit PyTensor(const TensorView& indexed_tensor) {
 		// load the elements of the indexed tensor
-		tensor_ = &Tensor::Load(*indexed_tensor.value, indexed_tensor.indices);
+		tensor_ = indexed_tensor.load;
 	}
 
 	explicit PyTensor(float value) { tensor_ = &Tensor::Constant(value); }

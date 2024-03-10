@@ -94,7 +94,8 @@ bool IsBoundary(const Node* input, const Node* output,
 				return arg_type == Arg::Type::Memory && !is_identity;
 			}
 
-			if (output_op->HasAnyType(OpType::Scatter) && !input_op->HasAnyType(OpType::Scatter)) {
+			if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
+			    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
 				return arg_type == Arg::Type::Memory;
 			}
 
@@ -115,17 +116,16 @@ bool IsBoundary(const Node* input, const Node* output,
 	return false;
 }
 
-
+//TODO: rewrite this function
 void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
 	vector<Scope*> kernels;
 	Scope* current_scope = new Scope(root->child);
 	for (auto it = begin(); !it.end(); it.next()) {
 		Node* node = it.get();
-
+		int current_depth = node->ComputeDepth();
+		int begin_depth = current_scope->begin->ComputeDepth();
 		Arguments indices = node->GetArguments(Arg::Type::Index);
-		// TODO: do a pass before - removing MemoryOp's by local ops if they have
-		// no indices
 		bool ident = indices.empty();
 
 		map<int, Node*> boundary_nodes;
@@ -138,7 +138,6 @@ void IR::SeparateOperationsIntoKernels() {
 			}
 		}
 
-		// TODO (Moroz): do separately on all nodes after clusterization
 		ShapeCompareResult result = CompareShape(current_scope->shape_node, node);
 		if (!result.compatible) {
 			boundary_nodes[current_scope->shape_node->index_] =
@@ -148,19 +147,21 @@ void IR::SeparateOperationsIntoKernels() {
 		// go over all inputs
 		for (auto& input : node->inputs_) {
 			// get latest input version
-			Node* latest =
-			    const_cast<Node*>(input.from_->get()->GetLastVersion(node));
+			Node* latest = input.from_->get()->GetLastVersion(node);
 			// check if input is the boundary of this kernel
-			if (current_scope->InScope(latest) &&
+			bool loop_prev_iteration = (latest->index_ > node->index_ && begin_depth < current_depth);
+			if ((current_scope->InScope(latest) || loop_prev_iteration) &&
 			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
+				if (loop_prev_iteration) 
+					latest = latest->GetParent("loop");
 				boundary_nodes[latest->index_] = latest;
 			}
 		}
 		
 		// if boundary, create new scope, else make this new end
 		if (boundary_nodes.size() > 0) {
-			int current_depth = node->ComputeDepth();
-			if (current_scope->begin->ComputeDepth() > current_depth) {
+			
+			if (begin_depth > current_depth) {
 				Node* last_child = current_scope->begin->parent->GetLastChild();
 				NodeIterator it(last_child, last_child);
 				kernels.push_back(new Scope(current_scope->begin, it.get()));
@@ -171,19 +172,27 @@ void IR::SeparateOperationsIntoKernels() {
 				//find the nearest parent node of the scope end with the same parent as the boundary node
 				Node* parent = node;
 				int boundary_depth = boundary_node->ComputeDepth();
-				if (current_depth > boundary_depth) {
+				bool is_different_depth = current_depth > boundary_depth;
+				if (is_different_depth) {
 					while (parent->parent != boundary_node->parent && parent != nullptr) {
 						parent = parent->parent;
 					}
 					if (parent == nullptr) {
 						throw std::runtime_error("Parent node not found");
 					}
+
+					vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
+					for (auto scope : new_scopes) {
+						kernels.push_back(scope);
+					}
+					current_scope = new Scope(parent->true_next, node);
+				} else {
+					vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
+					for (auto scope : new_scopes) {
+						kernels.push_back(scope);
+					}
+					current_scope = new Scope(parent, node);
 				}
-				vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
-				for (auto scope : new_scopes) {
-					kernels.push_back(scope);
-				}
-				current_scope = new Scope(parent, node);
 			} else { 
 				// the current scope was a host scope, can just ignore it, we wont be using it
 				current_scope = new Scope(node);
@@ -764,13 +773,16 @@ void IR::ComputeNodeCost()
 {
 	for (auto node = begin(); !node.end(); node.next()) {
 		bool is_memory = node->name == "memory";
-
-		float input_cost = node->op->GetCost();
+		unordered_map<Node*, float> input_costs;
 		for (auto& input : node->inputs_) {
 			if (input.type_ != Arg::Type::Memory &&
 			    (input.type_ != Arg::Type::Shape && !is_memory)) {
-				input_cost += abs(input.from_->get()->cost_);
+				input_costs[input.from_->get()] = input.from_->get()->cost_;
 			}
+		}
+		float input_cost = node->op->GetCost();
+		for (auto& input : input_costs) {
+			input_cost += abs(input.second);
 		}
 		node->cost_ = input_cost;
 	}

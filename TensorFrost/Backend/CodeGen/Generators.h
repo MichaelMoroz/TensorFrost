@@ -2,6 +2,7 @@
 #include <regex>
 #include <sstream>
 #include <string>
+#include <format>
 #include "IR/KernelGen.h"
 #include "Tensor/Tensor.h"
 
