@@ -51,7 +51,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options) {
 		      InitializeBackend(backend_type, kernel_compile_options);
-	      });
+	      }, py::arg("backend_type") = BackendType::CPU, py::arg("kernel_compile_options") = "", "Initialize the backend");
 
 	py::print("TensorFrost module loaded!");
 }

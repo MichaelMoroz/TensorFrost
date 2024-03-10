@@ -127,6 +127,7 @@ void IR::SeparateOperationsIntoKernels() {
 		int begin_depth = current_scope->begin->ComputeDepth();
 		Arguments indices = node->GetArguments(Arg::Type::Index);
 		bool ident = indices.empty();
+		bool loop_prev_iteration = false;
 
 		map<int, Node*> boundary_nodes;
 
@@ -149,11 +150,14 @@ void IR::SeparateOperationsIntoKernels() {
 			// get latest input version
 			Node* latest = input.from_->get()->GetLastVersion(node);
 			// check if input is the boundary of this kernel
-			bool loop_prev_iteration = (latest->index_ > node->index_ && begin_depth < current_depth);
-			if ((current_scope->InScope(latest) || loop_prev_iteration) &&
+			bool is_loop_boundary =
+			    latest->index_ > node->index_ && begin_depth < current_depth;
+			if ((current_scope->InScope(latest) || is_loop_boundary) &&
 			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
-				if (loop_prev_iteration) 
+				if (is_loop_boundary) {
 					latest = latest->GetParent("loop");
+					loop_prev_iteration = true;
+				}
 				boundary_nodes[latest->index_] = latest;
 			}
 		}
@@ -180,19 +184,24 @@ void IR::SeparateOperationsIntoKernels() {
 					if (parent == nullptr) {
 						throw std::runtime_error("Parent node not found");
 					}
+				} 
+				vector<Scope*> new_scopes =
+				    Scope::GetScopes(current_scope->begin, parent);
+				for (auto scope : new_scopes) {
+					if (scope->type == ScopeType::Kernel) {
+						kernels.push_back(scope);
+					}
+				}
 
-					vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
-					for (auto scope : new_scopes) {
-						kernels.push_back(scope);
-					}
+				if (loop_prev_iteration)
+				{
 					current_scope = new Scope(parent->true_next, node);
-				} else {
-					vector<Scope*> new_scopes = Scope::GetScopes(current_scope->begin, parent);
-					for (auto scope : new_scopes) {
-						kernels.push_back(scope);
-					}
+				}
+				else
+				{
 					current_scope = new Scope(parent, node);
 				}
+				
 			} else { 
 				// the current scope was a host scope, can just ignore it, we wont be using it
 				current_scope = new Scope(node);
