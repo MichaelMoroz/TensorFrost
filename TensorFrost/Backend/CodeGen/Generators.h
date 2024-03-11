@@ -13,20 +13,20 @@ void GenerateNodeNames(const IR& ir);
 
 string GenerateC(Program* program);
 
+using ArgumentNames = map<ArgID, string>;
+
 class Line {
  public:
 	string left;
 	string expression;
 	string right;
 	string name;
-	vector<string> arguments;
 	int indent;
 	bool needs_parenthesis = false;
 	float cost = 0;
 
-	Line(string left, string expression, string right, string name,
-	     vector<string> args, bool needs_parenthesis = false, float cost = 0, int indent = 0)
-	    : left(left), right(right), name(name), arguments(args), indent(indent), expression(expression), needs_parenthesis(needs_parenthesis), cost(cost) {}
+	Line(string left, string expression, string right, string name, bool needs_parenthesis = false, float cost = 0, int indent = 0)
+	    : left(left), right(right), name(name), indent(indent), expression(expression), needs_parenthesis(needs_parenthesis), cost(cost) {}
 
 	Line(int indent, string expression)
 	    : indent(indent), expression(expression), needs_parenthesis(false), cost(0), left(""), right(""), name("") {}
@@ -35,14 +35,12 @@ class Line {
 class CodeGenerator {
  public:
 	list<Line*> lines;
+	map<Node*, string> custom_generated_code_;
 
 	CodeGenerator() = default;
 
-	virtual Line* GenerateLine(const Operation* op, Node* node,
-	                          Arguments inputs, Arguments indices,
-	                          Arguments shape, Arguments memory,
-	                          map<Node*, int> offsets,
-	                          map<Node*, int> variables) = 0;
+	virtual Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables) = 0;
+	virtual ArgumentNames GenerateArgumentNames(ArgumentMap args, map<Node*, int> variables) = 0;
 
 	void GenerateKernelLines(const IR* ir, const Node* cluster,
 	                         const Kernel* kernel);

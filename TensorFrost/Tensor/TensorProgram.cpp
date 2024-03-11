@@ -15,6 +15,10 @@ void TensorProgram::CreateProgram() {
 		outputs[i]->SetMemoryType(MemoryType::Output, i);
 	}
 
+	if (outputs.size() == 0) {
+		throw std::runtime_error("TensorProgram does not do any computation: no outputs");
+	}
+
 	program = GenerateProgram(&ir);
 
 	Tensor::SetEvaluationContext(nullptr);

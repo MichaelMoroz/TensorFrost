@@ -63,10 +63,10 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 		}
 		prev_depth = depth;
 
-		Arguments inputs = node->GetArguments(Arg::Type::Input);
-		Arguments indices = node->GetArguments(Arg::Type::Index);
-		Arguments shape = node->GetArguments(Arg::Type::Shape);
-		Arguments memory = node->GetArguments(Arg::Type::Memory);
+		Arguments inputs = node->GetArguments(ArgType::Input);
+		Arguments indices = node->GetArguments(ArgType::Index);
+		Arguments shape = node->GetArguments(ArgType::Shape);
+		Arguments memory = node->GetArguments(ArgType::Memory);
 		
 		if (node->tensor_->type != DataType::None) {
 			listing += DataTypeToString(node->tensor_->type) + " ";

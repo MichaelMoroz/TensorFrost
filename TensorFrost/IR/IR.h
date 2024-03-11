@@ -35,29 +35,29 @@ class Lable {
 	[[nodiscard]] Node* get() const { return node_; }
 };
 
+enum class ArgType {
+	Input,
+	Index,
+	Shape,
+	Memory,
+	None,
+};
+
 class Arg {
  public:
-	enum Type {
-		Input,
-		Index,
-		Shape,
-		Memory,
-		None,
+	static inline const map<ArgType, string> type_names = {
+	    {ArgType::Input, "Input"}, {ArgType::Index, "Index"}, {ArgType::Shape, "Shape"},
+		{ArgType::Memory, "Memory"}, {ArgType::None, "None"},
 	};
 
-	static inline const map<Type, string> type_names = {
-	    {Type::Input, "Input"}, {Type::Index, "Index"}, {Type::Shape, "Shape"},
-		{Type::Memory, "Memory"}, {Type::None, "None"},
-	};
+	static string TypeToString(ArgType type) { return type_names.at(type); }
 
-	static string TypeToString(Type type) { return type_names.at(type); }
-
-	Type type_;
+	ArgType type_;
 	Lable* from_;
 	Lable* to_{nullptr};
 	int index_;
 
-	Arg(Type type, Lable* node, int index)
+	Arg(ArgType type, Lable* node, int index)
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
@@ -66,6 +66,10 @@ class Arg {
 using ArgMap = map<int, const Arg*>;
 using Arguments = vector<Arg>;
 using ArgumentRefs = vector<const Arg*>;
+using ArgID = pair<ArgType, int>;
+using ArgumentTypes = map<ArgID, DataType>;
+using ArgumentMap = map<ArgID, Node*>;
+using ArgumentCount = map<ArgType, int>;
 using Tensors = vector<const Tensor*>;
 
 int MaxIndexCount(ArgMap& map);
@@ -218,7 +222,7 @@ class Node {
 		memory_index_ = index;
 	}
 
-	int MaxIndex(Arg::Type type) const {
+	int MaxIndex(ArgType type) const {
 		int max_index = 0;
 		for (const auto& input : inputs_) {
 			if (input.type_ == type) {
@@ -228,7 +232,7 @@ class Node {
 		return max_index;
 	}
 
-	[[nodiscard]] Arguments GetArguments(Arg::Type type) const {
+	[[nodiscard]] Arguments GetArguments(ArgType type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs_) {
 			if (input.type_ == type) {
@@ -243,7 +247,7 @@ class Node {
 		return result;
 	}
 
-	ArgMap GetArgumentMap(Arg::Type type) const {
+	ArgMap GetArgumentMap(ArgType type) const {
 		ArgMap result = ArgMap();
 		for (auto& input : inputs_) {
 			if (input.type_ == type) {
@@ -253,8 +257,26 @@ class Node {
 		return result;
 	}
 
+	ArgumentMap GetArgumentMap() {
+		ArgumentMap result = ArgumentMap();
+		for (auto& input : inputs_) {
+			result[ArgID(input.type_, input.index_)] = input.from_->node_;
+		}
+		return result;
+	}
+
+	ArgumentTypes GetArgumentTypes();
+
+	ArgumentCount GetArgumentCounts() {
+		ArgumentCount result = ArgumentCount();
+		for (auto& input : inputs_) {
+			result[input.type_]++;
+		}
+		return result;
+	}
+
 	[[nodiscard]] map<int, const Tensor*> GetArgumentTensors(
-	    Arg::Type type) const {
+	    ArgType type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
 		// convert to tensors
@@ -265,7 +287,7 @@ class Node {
 		return result;
 	}
 
-	void RemoveArguments(Arg::Type type) {
+	void RemoveArguments(ArgType type) {
 		for (auto it = inputs_.begin(); it != inputs_.end();) {
 			if (it->type_ == type) {
 				it = inputs_.erase(it);
@@ -275,7 +297,7 @@ class Node {
 		}
 	}
 
-	void AddArgument(Node* node, Arg::Type type, int index = 0) {
+	void AddArgument(Node* node, ArgType type, int index = 0) {
 		inputs_.emplace_back(type, node->GetLable(), index);
 	}
 
@@ -298,7 +320,7 @@ class Node {
 		Node* loop_node = latest_node->GetParent("loop");
 		bool has_loop = loop_node != latest_node;
 		for (auto& output : outputs_) {
-			if (output->type_ != Arg::Type::Memory) {
+			if (output->type_ != ArgType::Memory) {
 				continue;
 			}
 			Node* output_node = output->to_->get();
@@ -446,7 +468,7 @@ class Scope
 
 	void UpdateShape(Node* node)
 	{
-		ArgMap shape = node->GetArgumentMap(Arg::Type::Shape);
+		ArgMap shape = node->GetArgumentMap(ArgType::Shape);
 		int dim = MaxIndexCount(shape);
 		if (node->name == "memory") dim = 0;
 		if (dim >= shape_dim) {

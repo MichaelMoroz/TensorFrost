@@ -19,75 +19,67 @@ class C_CodeGenerator : public CodeGenerator {
  public:
 	string offset_name_ = "off";
 	string variable_name_ = "var";
-	string memory_name_ = "mem";
+
+	map<DataType, string> type_names = {
+	    {DataType::None, "void"},   {DataType::Bool, "bool"},
+	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
+	    {DataType::Int, "int"},
+	};
 
 	int* input_memory_index;
-	vector<Node*>* output_memories;
-
-	map<Node*, string> custom_generated_code_;
 
 	bool offset_array = true;
 
-	Line* GenerateLine(const Operation* op, Node* node,
-	                   Arguments inputs, Arguments indices, Arguments shape,
-	                   Arguments memory, map<Node*, int> offsets,
-	                   map<Node*, int> variables) override {
-
-		if (custom_generated_code_.contains(node))
-		{
-			return new Line("", custom_generated_code_[node], ";", "", {}, false, 0);
-		}
-		
-		map<DataType, string> type_names = {
-		    {DataType::None, "void"},   {DataType::Bool, "bool"},
-		    {DataType::Float, "float"}, {DataType::Uint, "uint"},
-		    {DataType::Int, "int"},
-		};
-
-		// get node names
-		vector<string> arguments;
-		vector<string> input_variables;
-		vector<DataType> input_types;
-		for (const Arg& arg : memory) {
-			string var_name = GetNodeName(arg.from_->get(), true);
-			arguments.push_back(var_name);
-			if (arg.from_->get()->name != "const" &&
-			    arg.from_->get()->name != "memory") {
-				input_variables.push_back(var_name);
+	ArgumentNames GenerateArgumentNames(ArgumentMap args, map<Node*, int> variables) override {
+		ArgumentNames names;
+		for (auto& arg : args) {
+			string name = GetNodeName(arg.second, true);
+			if (variables.contains(arg.second)) {
+				name = variable_name_ + "[" + to_string(variables[arg.second]) + "]";
+				name =
+				    "as" + type_names[arg.second->GetTensor()->type] + "(" + name + ")";
 			}
+			names[arg.first] = name;
 		}
-		for (const Arg& arg : indices) {
-			string var_name = GetNodeName(arg.from_->get(), true);
-			arguments.push_back(var_name);
-			if (arg.from_->get()->name != "const" &&
-			    arg.from_->get()->name != "memory") {
-				input_variables.push_back(var_name);
-			}
-		}
-		for (const Arg& arg : inputs) {
-			Node* input = arg.from_->get();
-			string name = GetNodeName(input, true);
-			if (variables.contains(input)) {
-				name = variable_name_ + "[" + to_string(variables[input]) + "]";
-				name = "as" + type_names[input->GetTensor()->type] + "(" + name + ")";
-			}
-			arguments.push_back(name);
-			input_types.push_back(arg.from_->get()->GetTensor()->type);
-			if (input->name != "const" && input->name != "memory") {
-				input_variables.push_back(name);
-			}
-		}
+		return names;
+	}
 
-		vector<string> shapes;
-		for (const Arg& arg : shape) {
-			string name = GetNodeName(arg.from_->get(), true);
-			shapes.push_back(name);
-		}
-
+	Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables) override {
+		//TODO: Create argument manager class
+		ArgumentMap args = node->GetArgumentMap();
+		ArgumentNames names = GenerateArgumentNames(args, variables);
+		ArgumentTypes types = node->GetArgumentTypes();
+		ArgumentCount arg_count = node->GetArgumentCounts();
+		const Operation* op = node->op;
 		string name = node->var_name;
 
 		// get output type
-		DataType output_type = node->tensor_->type;//op->GetOutputType(input_types);
+		DataType output_type = node->tensor_->type;
+
+		// lambda to get argument names
+		auto ArgName = [&](ArgType type, int index = 0) {
+			if (!names.contains(ArgID(type, index)))
+			{
+				throw std::runtime_error("Argument name not found");
+			}
+			return names[ArgID(type, index)];
+		};
+
+		auto HasArgument = [&](ArgType type, int index = 0) {
+			return args.contains(ArgID(type, index));
+		};
+
+		auto Argument = [&](ArgType type, int index = 0) { 
+			if (!args.contains(ArgID(type, index))) {
+				throw std::runtime_error("Argument not found");
+			}
+			return args[ArgID(type, index)];
+		};
+
+		auto Type = [&](ArgType type, int index = 0) {
+			return types[ArgID(type, index)];
+		};
+
 
 		// generate line
 		string left = "";
@@ -95,25 +87,27 @@ class C_CodeGenerator : public CodeGenerator {
 		string right = "";
 		bool needs_parenthesis = true;
 		if (op->name_ == "loop") {
-			left += "for (int " + name + " = " + arguments[0] + "; " + name + " < " +
-			        arguments[1] + "; " + name + " += " + arguments[2] + ")";
+			left += "for (int " + name + " = " + ArgName(ArgType::Input, 0) + "; " + name +
+			        " < " + ArgName(ArgType::Input, 1) + "; " + name +
+			        " += " + ArgName(ArgType::Input, 2) + ")";
 		}  else if (op->name_ == "if") {
-			left += "if (" + arguments[0] + ")";
+			left += "if (" + ArgName(ArgType::Input, 0) + ")";
 		}  else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 			if (offset_array)
 			{
-				address = offset_name_ + "[" + to_string(offsets[memory[0].from_->get()]) + "]";
+				address = offset_name_ + "[" + to_string(offsets[Argument(ArgType::Memory)]) + "]";
 			}
 			else
 			{
-				address = arguments[0];
+				address = ArgName(ArgType::Memory);
 			}
-			    
-			if (arguments.size() > 1) { //if has index (not a scalar)
-				address += " + " + arguments[1];
+			
+			//if has index (not a scalar)
+			if (HasArgument(ArgType::Index)) {
+				address += " + " + ArgName(ArgType::Index);
 			}
-			string memory_expression = memory_name_ + "[" + address + "]";
+			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {
 				left += type_names[output_type] + " " + name + " = ";
 				if (output_type == DataType::Float) {
@@ -130,11 +124,11 @@ class C_CodeGenerator : public CodeGenerator {
 				needs_parenthesis = false;
 			} else if (op->name_ == "store") {
 				expression += memory_expression + " = ";
-				if (input_types[0] != DataType::Uint) {
+				if (Type(ArgType::Memory) != DataType::Uint) {
 					expression += "asuint(";
 				}
-				expression += arguments[2];
-				if (input_types[0] != DataType::Uint) {
+				expression += ArgName(ArgType::Input, 0);
+				if (Type(ArgType::Memory) != DataType::Uint) {
 					expression += ")";
 				}
 				right += ";";
@@ -144,14 +138,14 @@ class C_CodeGenerator : public CodeGenerator {
 				if (output_type != DataType::None) {
 					left += type_names[output_type] + " " + name + " = ";
 				}
-				string input_type_name = type_names[input_types[0]];
-				expression += op->code_ + "((" + input_type_name + "*)" + memory_name_ +
-				              ", " + address + ", " + arguments[2] + ")";
+				string input_type_name = type_names[Type(ArgType::Input)];
+				expression += op->code_ + "((" + input_type_name + "*)mem" +
+				              ", " + address + ", " + ArgName(ArgType::Input) + ")";
 				right += ";";
 			}
 		} else if (op->name_ == "set") {
-			left += arguments[0] + " = ";
-			expression += arguments[1];
+			left += ArgName(ArgType::Memory) + " = ";
+			expression += ArgName(ArgType::Input);
 			right += ";";
 		} else if (op->name_ == "memory") {
 			left += "uint " + node->var_name + " = ";
@@ -165,7 +159,7 @@ class C_CodeGenerator : public CodeGenerator {
 			// if any other memory type - allocate it
 			else {
 				// get shape arguments
-				ArgMap args = node->GetArgumentMap(Arg::Shape);
+				ArgMap args = node->GetArgumentMap(ArgType::Shape);
 				int dims = (int)args.size();
 			
 				string shape_arg = "{";
@@ -186,14 +180,10 @@ class C_CodeGenerator : public CodeGenerator {
 
 				expression += "allocate(alloc, mem, " + shape_arg + ")";
 				right += ";";
-
-				if (node->memory_type_ == MemoryType::Output) {
-					output_memories->push_back(node);
-				}
 			}
 		}
 		else if (op->name_ == "deallocate") {
-			left = "deallocate(" + arguments[0] + ")";
+			left = "deallocate(" + ArgName(ArgType::Memory) + ")";
 			right = ";";
 		} else {
 			if (output_type != DataType::None) {
@@ -203,18 +193,19 @@ class C_CodeGenerator : public CodeGenerator {
 
 			switch (op->op_types_[0]) { //TODO: properly support multiple op types
 				case OpType::Operator:
-					line += arguments[0] + " " + op->code_ + " " + arguments[1];
+					line += ArgName(ArgType::Input, 0) + " " + op->code_ + " " +
+					        ArgName(ArgType::Input, 1);
 					break;
 				case OpType::UnaryOperator:
-					line += op->code_ + arguments[0];
+					line += op->code_ + ArgName(ArgType::Input, 0);
 					break;
 				case OpType::Function:
 					line += op->code_ + "(";
-					for (int i = 0; i < arguments.size(); i++) {
+					for (int i = 0; i < arg_count[ArgType::Input]; i++) {
 						if (i != 0) {
 							line += ", ";
 						}
-						line += arguments[i];
+						line += ArgName(ArgType::Input, i);
 					}
 					line += ")";
 					needs_parenthesis = false;
@@ -227,17 +218,18 @@ class C_CodeGenerator : public CodeGenerator {
 					needs_parenthesis = false;
 					break;
 				case OpType::TypeCast:
-					line += "(" + op->code_ + ")" + arguments[0];
+					line += "(" + op->code_ + ")" + ArgName(ArgType::Input, 0);
 					break;
 				case OpType::TypeReinterpret:
-					line += "*(" + op->code_ + "*)&" + arguments[0];
+					line += "*(" + op->code_ + "*)&" + ArgName(ArgType::Input, 0);
 					break;
 				case OpType::Constant:
 					line += node->GetTensor()->GetConstantString();
 					needs_parenthesis = false;
 					break;
 				case OpType::TernaryOperator:
-					line += arguments[0] + " ? " + arguments[1] + " : " + arguments[2];
+					line += ArgName(ArgType::Input, 0) + " ? " + ArgName(ArgType::Input, 1) +
+					        " : " + ArgName(ArgType::Input, 2);
 					break;
 				default:
 					line += "";
@@ -247,8 +239,7 @@ class C_CodeGenerator : public CodeGenerator {
 			right += ";";
 		}
 
-		return new Line(left, expression, right, name, input_variables,
-		                needs_parenthesis, op->cost_);
+		return new Line(left, expression, right, name, needs_parenthesis, op->cost_);
 	}
 };
 
@@ -503,8 +494,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 )";
 	
 	GenerateNodeNames(*program->ir_);
-	vector<string> allocated_memories;
-	vector<Node*> output_memories;
 	int input_memory_index = 0;
 
 	// Generate code for each compute kernel
@@ -615,7 +604,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	C_CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
 	generator.input_memory_index = &input_memory_index;
-	generator.output_memories = &output_memories;
 	generator.offset_array = false;
 	generator.GenerateKernelLines(program->ir_, program->ir_->root, &program->kernels_[0]);
 
@@ -634,11 +622,10 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 	host_code += AddIndent(generator.GetFinalCode(), "  ");
 
 	//set output memories and deallocate
-	for (auto& memory : output_memories) {
-		int output_memory_index = memory->memory_index_;
-		string mem_name = memory->var_name;
-		host_code +=
-		    "  out[" + to_string(output_memory_index++) + "] = " + mem_name + ";\n";
+	for (auto& memory : program->ir_->output_memory_map) {
+		int output_memory_index = memory.first;
+		string mem_name = memory.second->var_name;
+		host_code += "  out[" + to_string(output_memory_index) + "] = " + mem_name + ";\n";
 	}
 
 	all_kernels += host_code + "}\n";

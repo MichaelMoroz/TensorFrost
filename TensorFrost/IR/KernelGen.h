@@ -8,7 +8,7 @@
 namespace TensorFrost {
 
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
-                Arg::Type arg_type);
+                ArgType arg_type);
 
 class Kernel {
  public:

@@ -12,8 +12,8 @@ namespace TensorFrost {
 }
 
 ShapeCompareResult CompareShape(const Node* a, const Node* b) {
-	ArgMap a_shape = a->GetArgumentMap(Arg::Type::Shape);
-	ArgMap b_shape = b->GetArgumentMap(Arg::Type::Shape);
+	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
+	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
 	int a_dim = MaxIndexCount(a_shape);
 	int b_dim = MaxIndexCount(b_shape);
 
@@ -59,7 +59,7 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b) {
 // returns true if the edge between given nodes is a boundary between kernels
 bool IsBoundary(const Node* input, const Node* output,
                 ScopeType input_scope = ScopeType::None, bool is_identity = true,
-                int arg_index = -1, Arg::Type arg_type = Arg::Type::None) {
+                int arg_index = -1, ArgType arg_type = ArgType::None) {
 	ShapeCompareResult result = CompareShape(input, output);
 
 	if (!result.compatible) {
@@ -91,15 +91,15 @@ bool IsBoundary(const Node* input, const Node* output,
 			const Operation* output_op = output->op;
 
 			if (output_op->HasAnyType(OpType::Load)) {
-				return arg_type == Arg::Type::Memory && !is_identity;
+				return arg_type == ArgType::Memory && !is_identity;
 			}
 
 			if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
 			    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-				return arg_type == Arg::Type::Memory;
+				return arg_type == ArgType::Memory;
 			}
 
-			if (arg_type == Arg::Type::Shape) {
+			if (arg_type == ArgType::Shape) {
 				return true;  // shape should not be inside kernels
 			}
 
@@ -125,7 +125,7 @@ void IR::SeparateOperationsIntoKernels() {
 		Node* node = it.get();
 		int current_depth = node->ComputeDepth();
 		int begin_depth = current_scope->begin->ComputeDepth();
-		Arguments indices = node->GetArguments(Arg::Type::Index);
+		Arguments indices = node->GetArguments(ArgType::Index);
 		bool ident = indices.empty();
 		bool loop_prev_iteration = false;
 
@@ -220,7 +220,7 @@ void IR::SeparateOperationsIntoKernels() {
 		// create kernel node before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
 			//create kernel node
-		 	Tensor& tensor = Tensor::Kernel(scope->shape_node->GetArguments(Arg::Type::Shape));
+		 	Tensor& tensor = Tensor::Kernel(scope->shape_node->GetArguments(ArgType::Shape));
 		 	Node* kernel_node = tensor.node_;
 		 	// make the scope nodes children of the kernel node
 		 	kernel_node->child = scope->begin;
@@ -253,7 +253,7 @@ void IR::PrintListing(string name, bool compact,
 
 bool BoundaryValid(const Node* input, const Node* output,
                    bool is_identity = true, int arg_index = -1,
-                   Arg::Type arg_type = Arg::Type::None) {
+                   ArgType arg_type = ArgType::None) {
 	//bool same_kernel = input->kernel_ == output->kernel_;
 	//bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
 	//if (output->op->HasAllTypes(OpType::Set) && !same_kernel) return false; // set is always within the same kernel
@@ -271,7 +271,7 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 	map<Node*, string> invalid_nodes;
 	//check if the IR is clusterized correctly
 	for (auto node = begin(); !node.end(); node.next()) {
-		Arguments indices = node->GetArguments(Arg::Type::Index);
+		Arguments indices = node->GetArguments(ArgType::Index);
 		bool identity = indices.empty();
 
 		Node* prev = node->prev;
@@ -303,8 +303,8 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 			//{
 			//	//check if no inputs are outside the kernel
 			//	if (from->kernel_ != to->kernel_ && 
-			//		input.type_ != Arg::Type::Memory && 
-			//		input.type_ != Arg::Type::Shape && from->name != "memory" &&
+			//		input.type_ != ArgType::Memory && 
+			//		input.type_ != ArgType::Shape && from->name != "memory" &&
 			//	    from->name != "const") {
 			//		invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is outside the kernel";
 			//	}
@@ -312,7 +312,7 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 			// check if inputs are before the node
 			if (from->index_ >= to->index_) {
-				if (input.type_ != Arg::Type::Shape) {
+				if (input.type_ != ArgType::Shape) {
 					invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" +
 										to_string(input.index_) + " is after the node";
 				}
@@ -326,9 +326,9 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 bool CannotMoveArgument(Arg& arg) {
 	Node* from = arg.from_->get();
 	Node* to = arg.to_->get();
-	return (arg.type_ == Arg::Type::Memory &&
+	return (arg.type_ == ArgType::Memory &&
 	        !to->op->HasAllTypes(OpType::Set)) ||
-	       (arg.type_ == Arg::Type::Shape && to->name != "memory") ||
+	       (arg.type_ == ArgType::Shape && to->name != "memory") ||
 	       from->name == "memory" ||
 	       (from->name == "const" && to->name == "memory"); //FIX THIS
 }
@@ -368,10 +368,10 @@ void IR::ReorderOperations() {
 bool CannotCopyArgument(Arg& arg) {
 	Node* from = arg.from_->get();
 	Node* to = arg.to_->get();
-	bool shape = arg.type_ == Arg::Type::Shape;
+	bool shape = arg.type_ == ArgType::Shape;
 	bool to_memory = to->name == "memory";
 	bool shape_not_memory = shape && !to_memory;
-	return arg.type_ == Arg::Type::Memory || shape_not_memory || from->op->HasAllTypes(OpType::Static) ||
+	return arg.type_ == ArgType::Memory || shape_not_memory || from->op->HasAllTypes(OpType::Static) ||
 	       from->name == "memory" || from->HasBeenModified();
 }
 
@@ -447,7 +447,7 @@ void IR::GetInputList() {
 			shape_memory_map[*node] = {};
 			//add shapes to the memory inputs
 			for (auto& arg : node->inputs_) {
-				if (arg.type_ == Arg::Type::Shape) {
+				if (arg.type_ == ArgType::Shape) {
 					shape_memory_map[*node][arg.index_] = arg.from_->get();
 				}
 			}
@@ -533,7 +533,7 @@ void IR::OptimizeKernels() {
 					}
 				}
 				//shape arguments can not be inside kernels
-				if (from_in_kernel && input.type_ == Arg::Type::Shape) {
+				if (from_in_kernel && input.type_ == ArgType::Shape) {
 					shape_args_to_copy.insert(&input);
 				}
 			}
@@ -542,7 +542,7 @@ void IR::OptimizeKernels() {
 		//go over kernel shape arguments
 		for (auto& arg : kernel->inputs_) {
 			bool from_in_kernel = arg.from_->get()->HasParent("kernel");
-			if (from_in_kernel && arg.type_ == Arg::Type::Shape) {
+			if (from_in_kernel && arg.type_ == ArgType::Shape) {
 				shape_args_to_copy.insert(&arg);
 			}
 		}
@@ -633,7 +633,7 @@ void IR::OptimizeOperations()
 		const string op = node->name;
 
 		//get inputs
-		map<int, const Tensor*> inputs = node->GetArgumentTensors(Arg::Type::Input);
+		map<int, const Tensor*> inputs = node->GetArgumentTensors(ArgType::Input);
 		ExecuteExpressionAfter(*node, [&]() {
 			const Tensor* result = nullptr;
 			if (op == "add") {
@@ -720,7 +720,7 @@ void IR::OptimizeOperations()
 }
 
 bool IsChangingInput(Arg* arg) {
-	return (arg->type_ == Arg::Type::Memory && arg->to_->get()->op->HasAllTypes(OpType::Modifier)) ||
+	return (arg->type_ == ArgType::Memory && arg->to_->get()->op->HasAllTypes(OpType::Modifier)) ||
 		   (arg->to_->get()->name == "loop_end"); //okay, this is stupid
 }
 
@@ -784,8 +784,8 @@ void IR::ComputeNodeCost()
 		bool is_memory = node->name == "memory";
 		unordered_map<Node*, float> input_costs;
 		for (auto& input : node->inputs_) {
-			if (input.type_ != Arg::Type::Memory &&
-			    (input.type_ != Arg::Type::Shape && !is_memory)) {
+			if (input.type_ != ArgType::Memory &&
+			    (input.type_ != ArgType::Shape && !is_memory)) {
 				input_costs[input.from_->get()] = input.from_->get()->cost_;
 			}
 		}
@@ -807,7 +807,7 @@ map<Node*, vector<Arg*>> IR::GetKernelOutputs(Node* kernel)
 		for (auto& output : node->outputs_) {
 			if (output->to_ == nullptr) continue;
 			// if is a shape or memory argument, then skip (shape is loaded on CPU)
-			if (output->type_ == Arg::Type::Shape) continue;
+			if (output->type_ == ArgType::Shape) continue;
 			Node* output_node = output->to_->get();
 			if (!output_node->HasParent(kernel)) {
 				outputs.push_back(output);
@@ -843,7 +843,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 			Node* mem;
 			// add memory node before this kernel
 			ExecuteExpressionBefore(kernel, [&]() {
-				mem = Tensor::Memory(output->GetArguments(Arg::Type::Shape), output->tensor_->type).node_;
+				mem = Tensor::Memory(output->GetArguments(ArgType::Shape), output->tensor_->type).node_;
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;
@@ -855,8 +855,8 @@ void IR::AddKernelGlobalMemoryOperations() {
 			// go over all outputs of this node and replace their input with the
 			// memory node
 			for (auto& arg_out : node_output[output]) {
-				if (arg_out->type_ != Arg::Type::Shape &&
-				    arg_out->type_ != Arg::Type::Memory) {
+				if (arg_out->type_ != ArgType::Shape &&
+				    arg_out->type_ != ArgType::Memory) {
 					// if not a memory or shape argument, then the memory needs to be
 					// loaded before the node
 					ExecuteExpressionBefore(arg_out->to_->get(), [&]() {
@@ -883,8 +883,8 @@ void IR::AddKernelGlobalMemoryOperations() {
 		bool is_memory = node->name == "memory";
 
 		for (auto& input : node->inputs_) {
-			if (input.type_ == Arg::Type::Memory ||
-			    (input.type_ == Arg::Type::Shape && !is_memory))
+			if (input.type_ == ArgType::Memory ||
+			    (input.type_ == ArgType::Shape && !is_memory))
 				continue;
 
 			if (input.from_->get()->name == "memory") {
@@ -1062,7 +1062,7 @@ void IR::FinalizeMemoryIndexing() {
 		if (shape_node == nullptr) continue;
 		// load kernel shape
 		map<int, const Tensor*> kernel_shape_map =
-		    shape_node->GetArgumentTensors(Arg::Type::Shape);
+		    shape_node->GetArgumentTensors(ArgType::Shape);
 		Tensors kernel_shape;
 		for (auto& shape : kernel_shape_map) {
 			kernel_shape.push_back(shape.second);
@@ -1097,20 +1097,20 @@ void IR::FinalizeMemoryIndexing() {
 				ExecuteExpressionBefore(*node, [&]() {
 					// get the input memory node
 					const Tensor* memory =
-					    node.get()->GetArgumentTensors(Arg::Type::Memory)[0];
+					    node.get()->GetArgumentTensors(ArgType::Memory)[0];
 
-					ArgMap memory_shape = memory->node_->GetArgumentMap(Arg::Type::Shape);
+					ArgMap memory_shape = memory->node_->GetArgumentMap(ArgType::Shape);
 
 					int memory_dim = MaxIndexCount(memory_shape);
 
 					// get the index nodes
 					map<int, const Tensor*> idx =
-					    node->GetArgumentTensors(Arg::Type::Index);
+					    node->GetArgumentTensors(ArgType::Index);
 
 					//just use the thread index if no index is provided
 					if (idx.empty() && indexing_mode_ == KernelIndexingMode::Linear) {
 						// add the thread index node edge
-						node->AddArgument(thread_index->node_, Arg::Type::Index, 0);
+						node->AddArgument(thread_index->node_, ArgType::Index, 0);
 						return;
 					}
 
@@ -1120,10 +1120,10 @@ void IR::FinalizeMemoryIndexing() {
 					// mirror, zero)
 
 					// remove the index node edges
-					node->RemoveArguments(Arg::Type::Index);
+					node->RemoveArguments(ArgType::Index);
 
 					// add the flat index node edge
-					node->AddArgument(flat_index->node_, Arg::Type::Index, 0);
+					node->AddArgument(flat_index->node_, ArgType::Index, 0);
 				});
 			}
 		}
@@ -1215,7 +1215,7 @@ Program* GenerateProgram(IR* ir)
 		// get the kernel type
 		map<Node*, int> variables;
 		map<Node*, int> memory_nodes;
-		ArgMap shape = kernel->GetArgumentMap(Arg::Type::Shape);
+		ArgMap shape = kernel->GetArgumentMap(ArgType::Shape);
 
 		int variable_index = 0;
 		int memory_index = 0;
@@ -1223,7 +1223,7 @@ Program* GenerateProgram(IR* ir)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpType::MemoryOp)) {
 				// get the memory node
-				const Tensor* memory = node->GetArgumentTensors(Arg::Type::Memory)[0];
+				const Tensor* memory = node->GetArgumentTensors(ArgType::Memory)[0];
 
 				if (!memory_nodes.contains(memory->node_)) {
 					memory_nodes[memory->node_] = memory_index++;
@@ -1232,7 +1232,7 @@ Program* GenerateProgram(IR* ir)
 
 			// get all input arguments
 			for (auto input : node->inputs_) {
-				if (input.type_ == Arg::Type::Input)
+				if (input.type_ == ArgType::Input)
 				{
 					Node* from = input.from_->get();
 					bool from_outside_kernel = !from->HasParent(kernel);

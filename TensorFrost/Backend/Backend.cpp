@@ -35,17 +35,11 @@ vector<TensorMemory*> ExecuteProgram(
 
 	vector<Node*> memory_inputs = program->ir_->memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map = program->ir_->shape_memory_map;
-	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
-	int output_count = (int)output_memory_map.size();
 
 	if (memory_inputs.size() != inputs.size()) {
 		throw std::runtime_error(
 		    "Invalid number of inputs for TensorProgram. Expected " +
 		    to_string(memory_inputs.size()) + ", got " + to_string(inputs.size()));
-	}
-
-	if (output_count == 0) {
-		throw std::runtime_error("TensorProgram does not do any computation: no outputs");
 	}
 
 	vector<uint> input_offsets;
@@ -113,6 +107,9 @@ vector<TensorMemory*> ExecuteProgram(
 		// add input memory offset
 		input_offsets.push_back(inputs[i]->frame->start);
 	}
+
+	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
+	int output_count = (int)output_memory_map.size();
 
 	uint* mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();
 	uint* in = input_offsets.data();
