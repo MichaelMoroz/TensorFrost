@@ -817,101 +817,125 @@ tf.initialize(tf.cpu)
 #res = mand()
 #resnp = res[0].numpy
 
+#
+##dynamic size QR decomposition
+#def QRDecomposition():
+#    A = tf.input([-1, -1], tf.float32)
+#
+#    m, n = A.shape
+#    Q = tf.zeros([m, n])
+#    R = tf.zeros([n, n])
+#
+#    j = tf.index(0, [m])
+#
+#    def loop_body(i):
+#        norm2 = tf.zeros([1], tf.float32)
+#        def loop_body1(it):
+#            norm2.set(norm2 + A[it, i] ** 2)
+#        tf.loop(loop_body1, 0, m, 1)
+#        R[i, i] = tf.sqrt(norm2)
+#        Q[j, i] = A[j, i] / R[i, i]
+#        
+#        t, = tf.index_grid([i+1], [n])
+#        dotprod = tf.zeros(t.shape, tf.float32)
+#        def loop_body2(it):
+#            dotprod.set(dotprod + Q[it, i] * A[it, t])
+#        tf.loop(loop_body2, 0, m, 1)
+#        R[i, t] = dotprod
+#        
+#        p, k = tf.index_grid([0, i+1], [m, n])
+#        A[p, k] -= Q[p, i] * R[i, k]
+#
+#        #p, k = tf.index_grid([0, i+1], [m, n])
+#        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
+#
+#    tf.loop(loop_body, 0, n-1, 1)
+#
+#    norm2 = tf.zeros([1], tf.float32)
+#    def loop_body1(it):
+#        norm2.set(norm2 + A[it, n-1] ** 2)
+#    tf.loop(loop_body1, 0, m, 1)
+#    R[n-1, n-1] = tf.sqrt(norm2)
+#    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+#
+#    return [Q, R]
+#
+#qr = tf.compile(QRDecomposition)
+#
+#def reverseBits(num, bit_count):
+#    reverse_num = tf.zeros([], tf.int32)
+#    def loop_body(i):
+#        tf.if_cond((num & (1 << i)) != 0, lambda: reverse_num.set(reverse_num | (1 << ((bit_count - 1) - i))))
+#    tf.loop(loop_body,  0, bit_count, 1)
+#    return reverse_num + ((num >> bit_count) << bit_count)
+#
+#def getIndexPair(i, it):
+#    k1 = reverseBits(2*i, it+1)
+#    k2 = k1 + (1 << it)
+#    return [k1, k2]
+#
+##in-place FFT implementation
+#def FFT():
+#    Signal = tf.input([-1], tf.float32)
+#    N = Signal.shape[0]
+#    
+#    it_num = tf.int(tf.floor(tf.log2(tf.float(N))))-1
+#    Re = tf.buffer([N], tf.float32)
+#    Im = tf.buffer([N], tf.float32)
+#
+#    i, = tf.indices([N/2])
+#    
+#    k1, k2 = getIndexPair(i, it_num)
+#    S1 = Signal[k1]
+#    S2 = Signal[k2]
+#    Re[2*i] = S1 + S2
+#    Im[2*i] = 0.0
+#    Re[2*i+1] = S1 - S2
+#    Im[2*i+1] = 0.0
+#    
+#    def fft_iteration(it):
+#        k1, k2 = getIndexPair(i, it)
+#        k3 = (k1 & ((1 << it) - 1)) * (1 << (it_num - it))
+#        alpha = - 2 * np.pi * tf.float(k3) / tf.float(N)
+#        Re1 = Re[k2]
+#        Im1 = Im[k2]
+#        Re2 = Re[k1]
+#        Im2 = Im[k1]
+#        C = tf.cos(alpha)
+#        S = tf.sin(alpha)
+#        m = C * Re1 - S * Im1
+#        n = S * Re1 + C * Im1
+#        Re[k1] = Re2 + m
+#        Im[k1] = Im2 + n
+#        Re[k2] = Re2 - m
+#        Im[k2] = Im2 - n
+#
+#    tf.loop(fft_iteration, 1, it_num+1, 1)
+#
+#    return [Re, Im]
+#
+#fft = tf.compile(FFT)
 
-#dynamic size QR decomposition
-def QRDecomposition():
-    A = tf.input([-1, -1], tf.float32)
+def GetAllSymbols():
+    symbols = tf.input([-1, -1], tf.int32)
+    N = symbols.shape[0]
+    symbol_count = tf.input([N], tf.int32)
 
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
+    counter = tf.zeros([1], tf.int32)
+    indeces = tf.buffer([N], tf.int32)
+    n, = symbol_count.indices
+    index = tf.scatterAddPrev(counter[0], symbol_count[n])
+    indeces[n] = index
 
-    j = tf.index(0, [m])
+    all_symbols = tf.buffer([counter[0]], tf.int32)
+          
+    n, = symbol_count.indices
 
-    def loop_body(i):
-        norm2 = tf.zeros([1], tf.float32)
-        def loop_body1(it):
-            norm2.set(norm2 + A[it, i] ** 2)
-        tf.loop(loop_body1, 0, m, 1)
-        R[i, i] = tf.sqrt(norm2)
-        Q[j, i] = A[j, i] / R[i, i]
-        
-        t, = tf.index_grid([i+1], [n])
-        dotprod = tf.zeros(t.shape, tf.float32)
-        def loop_body2(it):
-            dotprod.set(dotprod + Q[it, i] * A[it, t])
-        tf.loop(loop_body2, 0, m, 1)
-        R[i, t] = dotprod
-        
-        p, k = tf.index_grid([0, i+1], [m, n])
-        A[p, k] -= Q[p, i] * R[i, k]
+    def loop_body(it):
+        all_symbols[indeces[n] + it] = symbols[n, it]
 
-        #p, k = tf.index_grid([0, i+1], [m, n])
-        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
+    tf.loop(loop_body, 0, symbol_count[n], 1)
 
-    tf.loop(loop_body, 0, n-1, 1)
+    return [all_symbols]
 
-    norm2 = tf.zeros([1], tf.float32)
-    def loop_body1(it):
-        norm2.set(norm2 + A[it, n-1] ** 2)
-    tf.loop(loop_body1, 0, m, 1)
-    R[n-1, n-1] = tf.sqrt(norm2)
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-
-    return [Q, R]
-
-qr = tf.compile(QRDecomposition)
-
-def reverseBits(num, bit_count):
-    reverse_num = tf.zeros([], tf.int32)
-    def loop_body(i):
-        tf.if_cond((num & (1 << i)) != 0, lambda: reverse_num.set(reverse_num | (1 << ((bit_count - 1) - i))))
-    tf.loop(loop_body,  0, bit_count, 1)
-    return reverse_num + ((num >> bit_count) << bit_count)
-
-def getIndexPair(i, it):
-    k1 = reverseBits(2*i, it+1)
-    k2 = k1 + (1 << it)
-    return [k1, k2]
-
-#in-place FFT implementation
-def FFT():
-    Signal = tf.input([-1], tf.float32)
-    N = Signal.shape[0]
-    
-    it_num = tf.int(tf.floor(tf.log2(tf.float(N))))-1
-    Re = tf.buffer([N], tf.float32)
-    Im = tf.buffer([N], tf.float32)
-
-    i, = tf.indices([N/2])
-    
-    k1, k2 = getIndexPair(i, it_num)
-    S1 = Signal[k1]
-    S2 = Signal[k2]
-    Re[2*i] = S1 + S2
-    Im[2*i] = 0.0
-    Re[2*i+1] = S1 - S2
-    Im[2*i+1] = 0.0
-    
-    def fft_iteration(it):
-        k1, k2 = getIndexPair(i, it)
-        k3 = (k1 & ((1 << it) - 1)) * (1 << (it_num - it))
-        alpha = - 2 * np.pi * tf.float(k3) / tf.float(N)
-        Re1 = Re[k2]
-        Im1 = Im[k2]
-        Re2 = Re[k1]
-        Im2 = Im[k1]
-        C = tf.cos(alpha)
-        S = tf.sin(alpha)
-        m = C * Re1 - S * Im1
-        n = S * Re1 + C * Im1
-        Re[k1] = Re2 + m
-        Im[k1] = Im2 + n
-        Re[k2] = Re2 - m
-        Im[k2] = Im2 - n
-
-    tf.loop(fft_iteration, 1, it_num+1, 1)
-
-    return [Re, Im]
-
-fft = tf.compile(FFT)
+get_all_symbols = tf.compile(GetAllSymbols)

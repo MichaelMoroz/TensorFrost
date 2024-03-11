@@ -365,6 +365,10 @@ class NodeIterator {
 	Node* operator*() const { return currentNode; }
 
 	NodeIterator& forward() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
 		if (!currentNode->valid()) {
 			return *this;
 		}
@@ -386,6 +390,10 @@ class NodeIterator {
 
 	// first child, then next
 	NodeIterator& next() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
 		if (!currentNode->valid()) {
 			return *this;
 		}

@@ -725,10 +725,10 @@ bool IsChangingInput(Arg* arg) {
 }
 
 void IR::RemoveUnusedOperations() {
+	UpdateGraph();
+
 	// use depth first search to find all nodes that are used for the output nodes
 	unordered_set<Node*> used_nodes;
-
-	UpdateGraph();
 
 	std::function<void(Node*)> dfs = [&](Node* node) 
 	{
@@ -776,6 +776,8 @@ void IR::RemoveUnusedOperations() {
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 void IR::ComputeNodeCost()
@@ -900,7 +902,6 @@ void IR::AddKernelGlobalMemoryOperations() {
 
 void IR::AddMemoryDeallocation()
 {
-	UpdateGraph();
 	vector<Node*> memory_nodes = GetNodesOfType("memory");
 
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
@@ -936,6 +937,7 @@ void IR::AddMemoryDeallocation()
 			Tensor* deallocate = &Tensor::Deallocate(*memory->GetTensor());
 		});
 	}
+	UpdateGraph();
 }
 
 vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shape, int dims)
@@ -1196,9 +1198,10 @@ void IR::CompileIR()
 	RemoveUnusedKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();
-	AddMemoryDeallocation();
-	GetOutputList();
 	CheckIR("Remove Unused Operations 2", true, true);
+	AddMemoryDeallocation();
+	CheckIR("Add deallocation", true, true);
+	GetOutputList();
 	ComputeStatistics();
 }
 
