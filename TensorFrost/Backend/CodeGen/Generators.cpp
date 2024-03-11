@@ -111,7 +111,7 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Node* cluster,
 	}
 
 	// add closing brackets
-	for (int i = 0; i < prev_depth; i++) {
+	for (int i = prev_depth - 1; i >= 0; i--) {
 		lines.push_back(new Line(i, "}"));
 	}
 }
