@@ -32,7 +32,7 @@ class TensorMemoryManager {
 	virtual void Free(TensorMemory* memory) = 0;
 	virtual void Free(uint offset) = 0;
 
-	[[nodiscard]] uint32_t GetAllocatedSize() const {
+	uint32_t GetAllocatedSize() const {
 		return allocator.GetRequiredAllocatedStorage();
 	}
 
@@ -50,9 +50,9 @@ class TensorMemory {
 	             TensorMemoryManager* used_manager)
 	    : shape(shape), frame(frame), manager(used_manager) {}
 
-	[[nodiscard]] int GetSize() const { return GetLinearSize(shape); }
+	int GetSize() const { return GetLinearSize(shape); }
 
-	[[nodiscard]] vector<int> GetShape() const { return shape; }
+	vector<int> GetShape() const { return shape; }
 
 	~TensorMemory() { manager->Free(this); }
 };

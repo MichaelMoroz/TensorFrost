@@ -30,7 +30,7 @@ class TensorProgram {
 
 	void CreateProgram();
 
-	[[nodiscard]] vector<TensorMemory*> Evaluate(
+	vector<TensorMemory*> Evaluate(
 	    const vector<TensorMemory*>& input) const;
 
 	string PrintProperties() const;

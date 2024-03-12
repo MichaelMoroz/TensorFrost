@@ -58,7 +58,7 @@ class FrameAllocator {
 		}
 	}
 
-	[[nodiscard]] uint32_t GetRequiredAllocatedStorage() const {
+	uint32_t GetRequiredAllocatedStorage() const {
 		if (Frames_.empty()) return 0;
 		// Get the end of the last frame in the sorted map
 		return std::prev(Frames_.end())->second->end;

@@ -6,14 +6,11 @@ IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }
 
-ArgumentTypes Node::GetArgumentTypes()
-{
-	ArgumentTypes result = ArgumentTypes();
-	for (auto& input : inputs_) {
-		result[ArgID(input.type_, input.index_)] =
-		    input.from_->node_->GetTensor()->type;
-	}
-	return result;
+void ArgumentManager::AddArgument(Arg* arg) {
+	ArgID id = ArgID(arg->type_, arg->index_);
+	arguments_[id] = arg->from_->node_;
+	argument_types_[id] = arg->from_->node_->GetTensor()->type;
+	argument_counts_[id.first]++;
 }
 
 }  // namespace TensorFrost

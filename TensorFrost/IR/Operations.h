@@ -116,37 +116,37 @@ public:
 		}
 	}
 
-	[[nodiscard]] bool HasAllTypes(OpType type) const {
+	bool HasAllTypes(OpType type) const {
 		return std::find(op_types_.begin(), op_types_.end(), type) != op_types_.end();
 	}
 
 	template <typename... Args>
-	[[nodiscard]] bool HasAllTypes(OpType type, Args... args) const {
+	bool HasAllTypes(OpType type, Args... args) const {
 		return HasAllTypes(type) && HasAllTypes(args...);
 	}
 
-	[[nodiscard]] bool HasAnyType(OpType type) const {
+	bool HasAnyType(OpType type) const {
 		return HasAllTypes(type);
 	}
 
 	template <typename... Args>
-	[[nodiscard]] bool HasAnyType(OpType type, Args... args) const {
+	bool HasAnyType(OpType type, Args... args) const {
 		return HasAllTypes(type) || HasAnyType(args...);
 	}
 
-	[[nodiscard]] float GetCost() const { return cost_; }
+	float GetCost() const { return cost_; }
 
-	[[nodiscard]] string GetName() const { return name_; }
+	string GetName() const { return name_; }
 
-	[[nodiscard]] vector<pair<vector<DataType>, DataType>> GetOverloads() const {
+	vector<pair<vector<DataType>, DataType>> GetOverloads() const {
 		return overloads_;
 	}
 
-	[[nodiscard]] size_t GetInputCount() const {
+	size_t GetInputCount() const {
 		return overloads_[0].first.size();
 	}
 
-	[[nodiscard]] bool IsInputValid(const vector<DataType>& input_types) const {
+	bool IsInputValid(const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;
@@ -167,7 +167,7 @@ public:
 		return false;
 	}
 
-	[[nodiscard]] bool IsOutputValid(const DataType& output_type) const {
+	bool IsOutputValid(const DataType& output_type) const {
 		for (const auto& overload : overloads_) {
 			if (overload.second == output_type) {
 				return true;
@@ -176,7 +176,7 @@ public:
 		return false;
 	}
 
-	[[nodiscard]] DataType GetOutputType(
+	DataType GetOutputType(
 	    const vector<DataType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {

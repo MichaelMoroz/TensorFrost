@@ -40,7 +40,7 @@ class CodeGenerator {
 	CodeGenerator() = default;
 
 	virtual Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables) = 0;
-	virtual ArgumentNames GenerateArgumentNames(ArgumentMap args, map<Node*, int> variables) = 0;
+	virtual void GenerateArgumentNames(ArgumentManager& args, map<Node*, int> variables) = 0;
 
 	void GenerateKernelLines(const IR* ir, const Node* cluster,
 	                         const Kernel* kernel);

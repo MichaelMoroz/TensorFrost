@@ -23,7 +23,7 @@ class PyTensor {
 	explicit PyTensor(const Tensor* tensor) : tensor_(tensor) {}
 	~PyTensor() = default;
 
-	[[nodiscard]] const Tensor& Get() const { return *tensor_; }
+	const Tensor& Get() const { return *tensor_; }
 
 	explicit PyTensor(const TensorView& indexed_tensor) {
 		// load the elements of the indexed tensor

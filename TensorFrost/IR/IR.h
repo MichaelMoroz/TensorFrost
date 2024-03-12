@@ -32,7 +32,7 @@ class Lable {
 
 	Node* operator*() const { return node_; }
 	Node* operator->() const { return node_; }
-	[[nodiscard]] Node* get() const { return node_; }
+	Node* get() const { return node_; }
 };
 
 enum class ArgType {
@@ -41,6 +41,7 @@ enum class ArgType {
 	Shape,
 	Memory,
 	None,
+	Count,
 };
 
 class Arg {
@@ -66,10 +67,6 @@ class Arg {
 using ArgMap = map<int, const Arg*>;
 using Arguments = vector<Arg>;
 using ArgumentRefs = vector<const Arg*>;
-using ArgID = pair<ArgType, int>;
-using ArgumentTypes = map<ArgID, DataType>;
-using ArgumentMap = map<ArgID, Node*>;
-using ArgumentCount = map<ArgType, int>;
 using Tensors = vector<const Tensor*>;
 
 int MaxIndexCount(ArgMap& map);
@@ -80,6 +77,78 @@ enum class MemoryType {
 	Output,
 	Shape,
 	Constant,
+};
+
+
+using ArgID = pair<ArgType, int>;
+
+struct HashArgID {
+	size_t operator()(const ArgID& id) const {
+		return (int)id.first + id.second * (int)ArgType::Count;
+	}
+};
+
+class ArgumentManager {
+public:
+	unordered_map<ArgID, Node*, HashArgID> arguments_;
+	unordered_map<ArgID, DataType, HashArgID> argument_types_;
+	unordered_map<ArgType, int> argument_counts_;
+	unordered_map<ArgID, string, HashArgID> argument_names_;
+
+	ArgumentManager() {}
+
+	void AddArgument(Arg* arg);
+
+	void SetName(ArgID id, string name) {
+		argument_names_[id] = name;
+	}
+
+	bool Has(ArgType type, int index = 0) {
+		ArgID id = ArgID(type, index);
+		return arguments_.find(id) != arguments_.end();
+	}
+
+	Node* Get(ArgType type, int index = 0) {
+		ArgID id = ArgID(type, index);
+		auto Arg = arguments_.find(id);
+		if (Arg != arguments_.end()) {
+			return Arg->second;
+		} else {
+			throw std::runtime_error("Argument not found");
+		}
+	}
+
+	DataType Type(ArgType type, int index = 0) {
+		ArgID id = ArgID(type, index);
+		auto Arg = argument_types_.find(id);
+		if (Arg != argument_types_.end()) {
+			return Arg->second;
+		}
+		else {
+			throw std::runtime_error("Argument type not found");
+		}
+	}
+
+	int Count(ArgType type) {
+		auto Arg = argument_counts_.find(type);
+		if (Arg != argument_counts_.end()) {
+			return Arg->second;
+		}
+		else {
+			throw std::runtime_error("Argument count not found");
+		}
+	}
+
+	string Name(ArgType type, int index = 0) {
+		ArgID id = ArgID(type, index);
+		auto Arg = argument_names_.find(id);
+		if (Arg != argument_names_.end()) {
+			return Arg->second;
+		}
+		else {
+			throw std::runtime_error("Argument name not found");
+		}
+	}
 };
 
 class Node {
@@ -143,19 +212,19 @@ class Node {
 		is_static = set_static;
 		UpdateArgumentOutputs();
 		op = &FindOperation(name);
-		CheckClustering();
+		CheckNode();
     }
 
-	[[nodiscard]] const Tensor* GetTensor() const;
+	const Tensor* GetTensor() const;
 
-	[[nodiscard]] Lable* GetLable() const { return lable_; }
+	Lable* GetLable() const { return lable_; }
 
 	void SetAsModified()
 	{
 		has_been_modified_ = true;
 	}
 
-	[[nodiscard]] bool HasBeenModified() const
+	bool HasBeenModified() const
 	{
 		return has_been_modified_;
 	}
@@ -232,7 +301,7 @@ class Node {
 		return max_index;
 	}
 
-	[[nodiscard]] Arguments GetArguments(ArgType type) const {
+	Arguments GetArguments(ArgType type) const {
 		Arguments result = Arguments();
 		for (const auto& input : inputs_) {
 			if (input.type_ == type) {
@@ -256,26 +325,16 @@ class Node {
 		}
 		return result;
 	}
-
-	ArgumentMap GetArgumentMap() {
-		ArgumentMap result = ArgumentMap();
+	
+	ArgumentManager GetArgumentManager() {
+		ArgumentManager result = ArgumentManager();
 		for (auto& input : inputs_) {
-			result[ArgID(input.type_, input.index_)] = input.from_->node_;
+			result.AddArgument(&input);
 		}
 		return result;
 	}
 
-	ArgumentTypes GetArgumentTypes();
-
-	ArgumentCount GetArgumentCounts() {
-		ArgumentCount result = ArgumentCount();
-		for (auto& input : inputs_) {
-			result[input.type_]++;
-		}
-		return result;
-	}
-
-	[[nodiscard]] map<int, const Tensor*> GetArgumentTensors(
+	map<int, const Tensor*> GetArgumentTensors(
 	    ArgType type) const {
 		// get the arguments
 		Arguments arguments = GetArguments(type);
@@ -301,7 +360,7 @@ class Node {
 		inputs_.emplace_back(type, node->GetLable(), index);
 	}
 
-	void CheckClustering() const {
+	void CheckNode() const {
 		// must have operation
 		if (op == nullptr) {
 			throw std::runtime_error("Operation object not found");
@@ -675,7 +734,7 @@ public:
 		cursor = oldCursor;
 	}
 
-	[[nodiscard]] map<Node*, Node*> CopyComputation(
+	map<Node*, Node*> CopyComputation(
 	    const unordered_set<Node*>& targets) const;
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;

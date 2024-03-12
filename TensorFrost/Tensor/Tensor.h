@@ -224,7 +224,7 @@ class Tensor {
 		evaluation_context_ir_ = ir;
 	}
 
-	[[nodiscard]] string GetConstantString() const;
+	string GetConstantString() const;
 
 	Node* node_ = nullptr;
 	DataType type = DataType::Float;
@@ -243,7 +243,7 @@ class Tensor {
 		node_->SetMemoryType(memory_type, index);
 	}
 
-	[[nodiscard]] int GetDimension() const {
+	int GetDimension() const {
 		// find max dimension
 		int max_dim = -1;
 
@@ -256,7 +256,7 @@ class Tensor {
 		return max_dim + 1;
 	}
 
-	[[nodiscard]] Tensors GetShape() const {
+	Tensors GetShape() const {
 		Tensors result = Tensors();
 		// get max dimension
 		int max_dim = -1;
@@ -291,7 +291,7 @@ class Tensor {
 		return result;
 	}
 
-	[[nodiscard]] vector<int> TryGetShape() const {
+	vector<int> TryGetShape() const {
 		vector<int> result = vector<int>();
 		// get max dimension
 		int max_dim = -1;
@@ -463,7 +463,7 @@ class Tensor {
 		return output;
 	}
 
-	[[nodiscard]] Tensor& ThreadIndex() const {
+	Tensor& ThreadIndex() const {
 		Tensor& output = Static(
 		    "thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
 		output.type = DataType::Int;
@@ -485,7 +485,7 @@ class Tensor {
 		return MemoryOp("deallocate", &tensor, {});
 	}
 
-	[[nodiscard]] Tensor& Index(int dim) const {
+	Tensor& Index(int dim) const {
 		Tensor& output = Static("dim_id", node_->GetArguments(ArgType::Shape),
 		                        DataType::Int);
 		output.data = std::vector<uint>(1, dim);

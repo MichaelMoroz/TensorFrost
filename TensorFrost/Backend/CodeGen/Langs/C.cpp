@@ -30,55 +30,27 @@ class C_CodeGenerator : public CodeGenerator {
 
 	bool offset_array = true;
 
-	ArgumentNames GenerateArgumentNames(ArgumentMap args, map<Node*, int> variables) override {
-		ArgumentNames names;
-		for (auto& arg : args) {
+	void GenerateArgumentNames(ArgumentManager& args, map<Node*, int> variables) override {
+		for (auto& arg : args.arguments_) {
 			string name = GetNodeName(arg.second, true);
 			if (variables.contains(arg.second)) {
 				name = variable_name_ + "[" + to_string(variables[arg.second]) + "]";
 				name =
 				    "as" + type_names[arg.second->GetTensor()->type] + "(" + name + ")";
 			}
-			names[arg.first] = name;
+			args.SetName(arg.first, name);
 		}
-		return names;
 	}
 
 	Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables) override {
 		//TODO: Create argument manager class
-		ArgumentMap args = node->GetArgumentMap();
-		ArgumentNames names = GenerateArgumentNames(args, variables);
-		ArgumentTypes types = node->GetArgumentTypes();
-		ArgumentCount arg_count = node->GetArgumentCounts();
+		ArgumentManager args = node->GetArgumentManager();
+		GenerateArgumentNames(args, variables);
 		const Operation* op = node->op;
 		string name = node->var_name;
 
 		// get output type
 		DataType output_type = node->tensor_->type;
-
-		// lambda to get argument names
-		auto ArgName = [&](ArgType type, int index = 0) {
-			if (!names.contains(ArgID(type, index)))
-			{
-				throw std::runtime_error("Argument name not found");
-			}
-			return names[ArgID(type, index)];
-		};
-
-		auto HasArgument = [&](ArgType type, int index = 0) {
-			return args.contains(ArgID(type, index));
-		};
-
-		auto Argument = [&](ArgType type, int index = 0) { 
-			if (!args.contains(ArgID(type, index))) {
-				throw std::runtime_error("Argument not found");
-			}
-			return args[ArgID(type, index)];
-		};
-
-		auto Type = [&](ArgType type, int index = 0) {
-			return types[ArgID(type, index)];
-		};
 
 
 		// generate line
@@ -87,25 +59,24 @@ class C_CodeGenerator : public CodeGenerator {
 		string right = "";
 		bool needs_parenthesis = true;
 		if (op->name_ == "loop") {
-			left += "for (int " + name + " = " + ArgName(ArgType::Input, 0) + "; " + name +
-			        " < " + ArgName(ArgType::Input, 1) + "; " + name +
-			        " += " + ArgName(ArgType::Input, 2) + ")";
+			left += "for (int " + name + " = " + args.Name(ArgType::Input, 0) + "; " + name + " < " + args.Name(ArgType::Input, 1) + "; " + name +
+			        " += " + args.Name(ArgType::Input, 2) + ")";
 		}  else if (op->name_ == "if") {
-			left += "if (" + ArgName(ArgType::Input, 0) + ")";
+			left += "if (" + args.Name(ArgType::Input, 0) + ")";
 		}  else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 			if (offset_array)
 			{
-				address = offset_name_ + "[" + to_string(offsets[Argument(ArgType::Memory)]) + "]";
+				address = offset_name_ + "[" + to_string(offsets[args.Get(ArgType::Memory)]) + "]";
 			}
 			else
 			{
-				address = ArgName(ArgType::Memory);
+				address = args.Name(ArgType::Memory);
 			}
 			
 			//if has index (not a scalar)
-			if (HasArgument(ArgType::Index)) {
-				address += " + " + ArgName(ArgType::Index);
+			if (args.Has(ArgType::Index)) {
+				address += " + " + args.Name(ArgType::Index);
 			}
 			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {
@@ -124,11 +95,11 @@ class C_CodeGenerator : public CodeGenerator {
 				needs_parenthesis = false;
 			} else if (op->name_ == "store") {
 				expression += memory_expression + " = ";
-				if (Type(ArgType::Memory) != DataType::Uint) {
+				if (args.Type(ArgType::Memory) != DataType::Uint) {
 					expression += "asuint(";
 				}
-				expression += ArgName(ArgType::Input, 0);
-				if (Type(ArgType::Memory) != DataType::Uint) {
+				expression += args.Name(ArgType::Input, 0);
+				if (args.Type(ArgType::Memory) != DataType::Uint) {
 					expression += ")";
 				}
 				right += ";";
@@ -138,14 +109,14 @@ class C_CodeGenerator : public CodeGenerator {
 				if (output_type != DataType::None) {
 					left += type_names[output_type] + " " + name + " = ";
 				}
-				string input_type_name = type_names[Type(ArgType::Input)];
-				expression += op->code_ + "((" + input_type_name + "*)mem" +
-				              ", " + address + ", " + ArgName(ArgType::Input) + ")";
+				string input_type_name = type_names[args.Type(ArgType::Input)];
+				expression += op->code_ + "((" + input_type_name + "*)mem" + ", " +
+				              address + ", " + args.Name(ArgType::Input) + ")";
 				right += ";";
 			}
 		} else if (op->name_ == "set") {
-			left += ArgName(ArgType::Memory) + " = ";
-			expression += ArgName(ArgType::Input);
+			left += args.Name(ArgType::Memory) + " = ";
+			expression += args.Name(ArgType::Input);
 			right += ";";
 		} else if (op->name_ == "memory") {
 			left += "uint " + node->var_name + " = ";
@@ -183,7 +154,7 @@ class C_CodeGenerator : public CodeGenerator {
 			}
 		}
 		else if (op->name_ == "deallocate") {
-			left = "deallocate(" + ArgName(ArgType::Memory) + ")";
+			left = "deallocate(" + args.Name(ArgType::Memory) + ")";
 			right = ";";
 		} else {
 			if (output_type != DataType::None) {
@@ -193,19 +164,19 @@ class C_CodeGenerator : public CodeGenerator {
 
 			switch (op->op_types_[0]) { //TODO: properly support multiple op types
 				case OpType::Operator:
-					line += ArgName(ArgType::Input, 0) + " " + op->code_ + " " +
-					        ArgName(ArgType::Input, 1);
+					line += args.Name(ArgType::Input, 0) + " " + op->code_ + " " +
+					        args.Name(ArgType::Input, 1);
 					break;
 				case OpType::UnaryOperator:
-					line += op->code_ + ArgName(ArgType::Input, 0);
+					line += op->code_ + args.Name(ArgType::Input, 0);
 					break;
 				case OpType::Function:
 					line += op->code_ + "(";
-					for (int i = 0; i < arg_count[ArgType::Input]; i++) {
+					for (int i = 0; i < args.Count(ArgType::Input); i++) {
 						if (i != 0) {
 							line += ", ";
 						}
-						line += ArgName(ArgType::Input, i);
+						line += args.Name(ArgType::Input, i);
 					}
 					line += ")";
 					needs_parenthesis = false;
@@ -218,18 +189,19 @@ class C_CodeGenerator : public CodeGenerator {
 					needs_parenthesis = false;
 					break;
 				case OpType::TypeCast:
-					line += "(" + op->code_ + ")" + ArgName(ArgType::Input, 0);
+					line += "(" + op->code_ + ")" + args.Name(ArgType::Input, 0);
 					break;
 				case OpType::TypeReinterpret:
-					line += "*(" + op->code_ + "*)&" + ArgName(ArgType::Input, 0);
+					line += "*(" + op->code_ + "*)&" + args.Name(ArgType::Input, 0);
 					break;
 				case OpType::Constant:
 					line += node->GetTensor()->GetConstantString();
 					needs_parenthesis = false;
 					break;
 				case OpType::TernaryOperator:
-					line += ArgName(ArgType::Input, 0) + " ? " + ArgName(ArgType::Input, 1) +
-					        " : " + ArgName(ArgType::Input, 2);
+					line += args.Name(ArgType::Input, 0) + " ? " +
+					        args.Name(ArgType::Input, 1) + " : " +
+					        args.Name(ArgType::Input, 2);
 					break;
 				default:
 					line += "";
