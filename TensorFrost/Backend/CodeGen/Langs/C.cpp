@@ -52,32 +52,68 @@ class C_CodeGenerator : public CodeGenerator {
 		// get output type
 		DataType output_type = node->tensor_->type;
 
-
 		// generate line
 		string left = "";
 		string expression = "";
 		string right = "";
-		bool needs_parenthesis = true;
-		if (op->name_ == "loop") {
-			left += "for (int " + name + " = " + args.Name(ArgType::Input, 0) + "; " + name + " < " + args.Name(ArgType::Input, 1) + "; " + name +
-			        " += " + args.Name(ArgType::Input, 2) + ")";
-		}  else if (op->name_ == "if") {
-			left += "if (" + args.Name(ArgType::Input, 0) + ")";
-		}  else if (op->HasAllTypes(OpType::MemoryOp)) {
-			string address;
-			if (offset_array)
-			{
-				address = offset_name_ + "[" + to_string(offsets[args.Get(ArgType::Memory)]) + "]";
+
+		if (op->HasAllTypes(OpType::Special)) {
+			if (op->name_ == "loop") {
+				left += GenerateLoop(&args, name);
+			} else if (op->name_ == "if") {
+				left += GenerateIf(&args);
+			} else if (op->name_ == "memory") {
+				left += "uint " + node->var_name + " = ";
+				// if input memory type then just take the input and store it in the
+				// output
+				if (node->memory_type_ == MemoryType::Input ||
+					node->memory_type_ == MemoryType::Shape) {
+					expression += "in[" + to_string((*input_memory_index)++) + "]";
+					right += ";";
+				}
+				// if any other memory type - allocate it
+				else {
+					// get shape arguments
+					ArgMap args = node->GetArgumentMap(ArgType::Shape);
+					int dims = (int)args.size();
+			
+					string shape_arg = "{";
+					if (dims == 0) {
+						shape_arg += "1";
+					} else {
+						for (int j = 0; j < dims; j++) {
+							if (j != 0) {
+								shape_arg += ", ";
+							}
+							Node* shape_node = args[j]->from_->get();
+
+							shape_arg += "(uint)" + ReadVariable(shape_node);
+						}
+					}
+
+					shape_arg += "}";
+
+					expression += "allocate(alloc, mem, " + shape_arg + ")";
+					right += ";";
+				}
 			}
-			else
-			{
+			else if (op->name_ == "deallocate") {
+				left = "deallocate(" + args.Name(ArgType::Memory) + ")";
+				right = ";";
+			}
+		} else if (op->HasAllTypes(OpType::MemoryOp)) {
+			string address;
+
+			if (offset_array) {
+				address = offset_name_ + "[" + to_string(offsets[args.Get(ArgType::Memory)]) + "]";
+			} else {
 				address = args.Name(ArgType::Memory);
 			}
-			
-			//if has index (not a scalar)
+			// if has index (not a scalar)
 			if (args.Has(ArgType::Index)) {
 				address += " + " + args.Name(ArgType::Index);
 			}
+
 			string memory_expression = "mem[" + address + "]";
 			if (op->name_ == "load") {
 				left += type_names[output_type] + " " + name + " = ";
@@ -92,7 +128,6 @@ class C_CodeGenerator : public CodeGenerator {
 					expression += ")";
 				}
 				right += ";";
-				needs_parenthesis = false;
 			} else if (op->name_ == "store") {
 				expression += memory_expression + " = ";
 				if (args.Type(ArgType::Memory) != DataType::Uint) {
@@ -103,9 +138,7 @@ class C_CodeGenerator : public CodeGenerator {
 					expression += ")";
 				}
 				right += ";";
-			}
-			else if (op->HasAllTypes(OpType::Scatter))
-			{
+			} else if (op->HasAllTypes(OpType::Scatter)) {
 				if (output_type != DataType::None) {
 					left += type_names[output_type] + " " + name + " = ";
 				}
@@ -118,51 +151,13 @@ class C_CodeGenerator : public CodeGenerator {
 			left += args.Name(ArgType::Memory) + " = ";
 			expression += args.Name(ArgType::Input);
 			right += ";";
-		} else if (op->name_ == "memory") {
-			left += "uint " + node->var_name + " = ";
-			// if input memory type then just take the input and store it in the
-			// output
-			if (node->memory_type_ == MemoryType::Input ||
-				node->memory_type_ == MemoryType::Shape) {
-				expression += "in[" + to_string((*input_memory_index)++) + "]";
-				right += ";";
-			}
-			// if any other memory type - allocate it
-			else {
-				// get shape arguments
-				ArgMap args = node->GetArgumentMap(ArgType::Shape);
-				int dims = (int)args.size();
-			
-				string shape_arg = "{";
-				if (dims == 0) {
-					shape_arg += "1";
-				} else {
-					for (int j = 0; j < dims; j++) {
-						if (j != 0) {
-							shape_arg += ", ";
-						}
-						Node* shape_node = args[j]->from_->get();
-
-						shape_arg += "(uint)" + ReadVariable(shape_node);
-					}
-				}
-
-				shape_arg += "}";
-
-				expression += "allocate(alloc, mem, " + shape_arg + ")";
-				right += ";";
-			}
-		}
-		else if (op->name_ == "deallocate") {
-			left = "deallocate(" + args.Name(ArgType::Memory) + ")";
-			right = ";";
 		} else {
 			if (output_type != DataType::None) {
 				left += type_names[output_type] + " " + name + " = ";
 			}
 			string line;
 
-			switch (op->op_types_[0]) { //TODO: properly support multiple op types
+			switch (op->op_types_[0]) {
 				case OpType::Operator:
 					line += args.Name(ArgType::Input, 0) + " " + op->code_ + " " +
 					        args.Name(ArgType::Input, 1);
@@ -179,14 +174,12 @@ class C_CodeGenerator : public CodeGenerator {
 						line += args.Name(ArgType::Input, i);
 					}
 					line += ")";
-					needs_parenthesis = false;
 					break;
 				case OpType::Keyword:
 					line += op->code_;
 					break;
 				case OpType::DimensionIndex:
 					line += op->code_ + to_string(node->GetTensor()->data[0]);
-					needs_parenthesis = false;
 					break;
 				case OpType::TypeCast:
 					line += "(" + op->code_ + ")" + args.Name(ArgType::Input, 0);
@@ -196,7 +189,6 @@ class C_CodeGenerator : public CodeGenerator {
 					break;
 				case OpType::Constant:
 					line += node->GetTensor()->GetConstantString();
-					needs_parenthesis = false;
 					break;
 				case OpType::TernaryOperator:
 					line += args.Name(ArgType::Input, 0) + " ? " +
@@ -211,7 +203,7 @@ class C_CodeGenerator : public CodeGenerator {
 			right += ";";
 		}
 
-		return new Line(left, expression, right, name, needs_parenthesis, op->cost_);
+		return new Line(left, expression, right, name, op->cost_);
 	}
 };
 

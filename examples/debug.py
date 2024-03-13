@@ -915,3 +915,67 @@ def FFT():
     return [Re, Im]
 
 fft = tf.compile(FFT)
+
+block_size = 8
+
+def BlockMaxAbs(blocks, max_block_count):
+	block_max = tf.zeros([max_block_count], tf.float32)
+	b, = block_max.indices
+
+	def loop_body(it):
+		i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
+		block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
+
+	tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
+
+	block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
+	return block_max
+
+def Sparsify():
+	vol = tf.input([-1, -1, -1], tf.float32)
+	N, M, K = vol.shape
+
+	BX = N / block_size
+	BY = M / block_size
+	BZ = K / block_size
+	max_block_count = BX * BY * BZ
+	
+	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+	
+	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+
+	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+
+	blocks = vol[ii, jj, kk]*1.0
+
+	block_max = BlockMaxAbs(blocks, max_block_count)
+
+	counter = tf.zeros([1], tf.int32)
+	block_ids = tf.buffer([max_block_count], tf.int32)
+	b, = block_ids.indices
+
+	def if_body1():
+		index = tf.scatterAddPrev(counter[0], 1)
+		block_ids[index] = b
+	
+	#todo: compute threshold based on the block variance
+	tf.if_cond(block_max[b] > 1e-3, if_body1)
+	
+	non_empty_blocks = counter[0]
+	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
+	b, = tf.indices([non_empty_blocks])
+	
+	block_index = block_ids[b]
+	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
+	block_pos[b, 0] = bx
+	block_pos[b, 1] = by
+	block_pos[b, 2] = bz
+
+	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
+
+	block_index = block_ids[b]
+	reordered_blocks1 = blocks[block_index, i, j, k]
+
+	return [reordered_blocks1, block_pos]
+
+sparsifier = tf.compile(Sparsify)

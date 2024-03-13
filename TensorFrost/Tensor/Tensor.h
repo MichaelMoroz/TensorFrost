@@ -55,17 +55,17 @@ class Tensor {
 		return CompareShape(a->node_, b->node_).compatible;
 	}
 
-	static pair<Operation, DataType> GetOperation(const string& name,
+	static pair<const Operation*, DataType> GetOperation(const string& name,
 	                                              const Tensors& tensors) {
 		vector<DataType> input_types = vector<DataType>();
 		for (const auto& tensor : tensors) {
 			input_types.push_back(tensor->type);
 		}
 
-		const Operation& operation = FindOperation(name);
+		const Operation* operation = FindOperation(name);
 
 		// check if input is valid
-		if (!operation.IsInputValid(input_types)) {
+		if (!operation->IsInputValid(input_types)) {
 			string error = "Input types ";
 			for (const auto& type : input_types) {
 				error += DataTypeToString(type) + ", ";
@@ -82,9 +82,9 @@ class Tensor {
 			}
 		}
 
-		DataType output_type = operation.GetOutputType(input_types);
+		DataType output_type = operation->GetOutputType(input_types);
 
-		return pair<Operation, DataType>(operation, output_type);
+		return pair<const Operation*, DataType>(operation, output_type);
 	}
 
 	template <typename... Args>
@@ -99,7 +99,7 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<Operation, DataType> operation = GetOperation(op, tensors);
+		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
 		DataType output_type = operation.second;
 
 		// create argument list
@@ -141,10 +141,10 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<Operation, DataType> operation = GetOperation(op, tensors);
+		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
 		DataType output_type = operation.second;
 
-		if (operation.first.HasAllTypes(OpType::Modifier))
+		if (operation.first->HasAllTypes(OpType::Modifier))
 		{
 			memory->node_->SetAsModified();
 		}
@@ -194,9 +194,9 @@ class Tensor {
 			throw std::runtime_error("Static operation name cannot be empty");
 		}
 
-		const Operation& operation = FindOperation(op);
+		const Operation* operation = FindOperation(op);
 		// check if output is valid
-		if (!operation.IsOutputValid(type)) {
+		if (!operation->IsOutputValid(type)) {
 			throw std::runtime_error("Type " + DataTypeToString(type) +
 			                         " is not valid for operation " + op);
 		}

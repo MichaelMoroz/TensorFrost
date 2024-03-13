@@ -1,6 +1,7 @@
 #pragma once
 
 #include <initializer_list>
+#include <unordered_map>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -54,6 +55,8 @@ public:
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
 	vector<OpType> op_types_;
+
+	Operation() = default;
 
 	Operation(string name, initializer_list<string> oloads, float cost,
 	          string code = "", initializer_list <OpType> op_type = {})
@@ -199,7 +202,7 @@ public:
 	}
 };
 
-const Operation& FindOperation(const string& name);
+const Operation* FindOperation(const string& name);
 
 string DataTypeToString(DataType type);
 

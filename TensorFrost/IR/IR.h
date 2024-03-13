@@ -211,7 +211,7 @@ class Node {
 		lable_ = new Lable(this);
 		is_static = set_static;
 		UpdateArgumentOutputs();
-		op = &FindOperation(name);
+		op = FindOperation(name);
 		CheckNode();
     }
 

@@ -3,31 +3,71 @@
 
 namespace TensorFrost {
 
-map<DataType, string> type_names = {
+unordered_map<DataType, string> type_names = {
     {DataType::None, "void"}, {DataType::Bool, "bool"}, {DataType::Float, "float"},
     {DataType::Uint, "uint"}, {DataType::Int, "int"},
 };
 
 const vector<Operation> operations = {
-    Operation("host", {""}, 0, "", {OpType::Static}),
-    Operation("kernel", {""}, 0, "", {OpType::Static}),
+    //Scope operations
+    Operation("host", {""}, 0, "", {OpType::Static, OpType::Special}),
+    Operation("kernel", {""}, 0, "", {OpType::Static, OpType::Special}),
 
-    Operation("loop", {"iii_i"}, 100, "", {OpType::Static}),
-    Operation("if", {"b_"}, 100, "", {OpType::Static}),
-    Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
-    Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
-    Operation("group_barrier", {""}, 256, "", {OpType::Static}), // TODO implement in graph
+    //Control operations
+    Operation("loop", {"iii_i"}, 100, "", {OpType::Static, OpType::Special}),
+    Operation("if", {"b_"}, 100, "", {OpType::Static, OpType::Special}),
+    Operation("break", {""}, 0, "break",
+              {OpType::Keyword, OpType::Static}),
+    Operation("continue", {""}, 0, "continue",
+              {OpType::Keyword, OpType::Static}),
+    Operation("group_barrier", {""}, 256, "",
+              {OpType::Static}),  // TODO implement in graph
 
-    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory}),
-    Operation("deallocate", {""}, 0, "", {OpType::Memory}),
+    //Allocation operations
+    Operation("memory", {"_f", "_i", "_u"}, 0, "",
+              {OpType::Memory, OpType::Special}),
+    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special}),
 
+
+    //Algorithms (TODO: implement in graph)
+    //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //Operation("reduce", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //Operation("scan", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //Operation("reshape", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //Operation("transpose", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //Operation("dot", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+
+    // Memory operations
+    Operation("load", {"_f", "_u", "_i"}, 128, "",
+              {OpType::Load, OpType::MemoryOp}),
+    Operation("store", {"f_", "u_", "i_"}, 128, "",
+              {OpType::Store, OpType::MemoryOp, OpType::Modifier}),
+    Operation("set", {"f_", "u_", "i_"}, 1, "",
+              {OpType::Set, OpType::Modifier}),
+    Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedMin", {"u_", "i_", "f_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedMax", {"u_", "i_", "f_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedAnd", {"u_", "i_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedOr", {"u_", "i_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedXor", {"u_", "i_"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+    Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+
+    // Index operations
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
     Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
-    Operation("group_thread_id", {"_i"}, 0), //TODO implement in graph
-    Operation("group_id", {"_i"}, 0), //TODO implement in graph
-    Operation("group_count", {"_i"}, 1), //TODO implement in graph 
-    Operation("thread_count", {"_i"}, 1), //TODO implement in graph
-
+    Operation("group_thread_id", {"_i"}, 0),  // TODO implement in graph
+    Operation("group_id", {"_i"}, 0),         // TODO implement in graph
+    Operation("group_count", {"_i"}, 1),      // TODO implement in graph
+    Operation("thread_count", {"_i"}, 1),     // TODO implement in graph
+    
+    //Compute operations
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),
     Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", {OpType::Operator}),
@@ -92,49 +132,43 @@ const vector<Operation> operations = {
     Operation("pcgf", {"u_f"}, 34),
     Operation("pow", {"ff_f"}, 6),
     Operation("atan2", {"ff_f"}, 32),
-    Operation("mod", {"ff_f"}, 2),
+    Operation("modf", {"ff_f"}, 2),
     Operation("step", {"ff_f"}, 2),
     Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
     Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "",
               {OpType::TernaryOperator}),
-    Operation("load", {"_f", "_u", "_i"}, 128, "", {OpType::Load, OpType::MemoryOp}),
-    Operation("store", {"f_", "u_", "i_"}, 128, "",
-              {OpType::Store, OpType::MemoryOp, OpType::Modifier}),
-    Operation("set", {"f_", "u_", "i_"}, 1, "",
-              {OpType::Set, OpType::Modifier}),
-    Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedMin", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedMax", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedAnd", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedOr", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedXor", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
-    Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
     Operation("const", {"_f", "_u", "_i"}, 0, "", {OpType::Constant}),
 };
+
+unordered_map<string, const Operation*> CreateOperationMap() {
+    unordered_map<string, const Operation*> operation_map;
+    for (const auto& op : operations) {
+        if (operation_map.contains(op.name_)) {
+			throw runtime_error("Operation already exists: " + op.name_);
+		}
+		operation_map[op.name_] = &op;
+	}
+    return operation_map;
+}
+
+unordered_map<string, const Operation*> operation_map = CreateOperationMap();
 
 DataTypeList Types(initializer_list<DataType> elements) {
 	return DataTypeList(elements);
 }
 
-const Operation& FindOperation(const string& name) {
+const Operation* FindOperation(const string& name) {
 	if (name == "") {
 		throw runtime_error("Operation name is empty");
 	}
 
-	for (int i = 0; i < operations.size(); i++) {
-		if (operations[i].name_ == name) {
-			return operations[i];
-		}
+    auto it = operation_map.find(name);
+    if (it != operation_map.end()) {
+		return it->second;
 	}
+
 	throw runtime_error("Operation not found: " + name);
 }
 
