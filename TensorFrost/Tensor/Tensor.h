@@ -472,12 +472,6 @@ class Tensor {
 
 	static Tensor& Load(const Tensor& tensor,
 	                    const Tensors& indices = Tensors()) {
-		//Not valid if a store/scatter node wrote to the constant
-		if (tensor.node_->name == "const" && !tensor.node_->HasBeenModified()) {
-			Tensor& c = Constant(tensor.data[0]);
-			c.type = tensor.type;
-			return c;
-		}
 		return MemoryOp("load", &tensor, indices);
 	}
 

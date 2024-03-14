@@ -57,7 +57,7 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b) {
 }
 
 // returns true if the edge between given nodes is a boundary between kernels
-bool IsBoundary(const Node* input, const Node* output,
+bool IsBoundary(Node* input, Node* output,
                 ScopeType input_scope = ScopeType::None, bool is_identity = true,
                 int arg_index = -1, ArgType arg_type = ArgType::None) {
 	ShapeCompareResult result = CompareShape(input, output);
@@ -73,6 +73,8 @@ bool IsBoundary(const Node* input, const Node* output,
 	// memory should not be inside work kernels
 	bool is_output_memory = output->name == "memory";
 	bool is_output_scalar = result.b_dim == 0;
+
+	bool scalar_kernel = output->TryComputeShape() == 1;
 
 	switch (input_scope) { 
 		case ScopeType::None:
@@ -90,24 +92,26 @@ bool IsBoundary(const Node* input, const Node* output,
 			const Operation* input_op = input->op;
 			const Operation* output_op = output->op;
 
-			if (output_op->HasAnyType(OpType::Load)) {
-				return arg_type == ArgType::Memory && !is_identity;
-			}
+			if (!scalar_kernel) {
+				if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+					return arg_type == ArgType::Memory && !is_identity;
+				}
 
-			if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-			    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-				return arg_type == ArgType::Memory;
+				if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
+				    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
+					return arg_type == ArgType::Memory;
+				}
+
+				// if input has changed the memory and the output is a load then it is a
+				// boundary
+				if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
+				    output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+					return true;
+				}
 			}
 
 			if (arg_type == ArgType::Shape) {
 				return true;  // shape should not be inside kernels
-			}
-
-			// if input has changed the memory and the output is a load then it is a
-			// boundary
-			if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
-			    output_op->HasAnyType(OpType::Load)) {
-				return true;
 			}
 
 			break;
@@ -121,6 +125,9 @@ void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
 	vector<Scope*> kernels;
 	Scope* current_scope = new Scope(root->child);
+
+	map<Node*, string> boundary_nodes_debug;
+
 	for (auto it = begin(); !it.end(); it.next()) {
 		Node* node = it.get();
 		int current_depth = node->ComputeDepth();
@@ -162,8 +169,18 @@ void IR::SeparateOperationsIntoKernels() {
 			}
 		}
 		
+	
+
 		// if boundary, create new scope, else make this new end
 		if (boundary_nodes.size() > 0) {
+			string boundary_nodes_str = "Boundaries of this node: ";
+			int i = 0;
+			for (auto& [index, node] : boundary_nodes) {
+				if (i > 0) boundary_nodes_str += ", ";
+				boundary_nodes_str += node->var_name;
+				i++;
+			}
+			boundary_nodes_debug[node] = boundary_nodes_str;
 			
 			if (begin_depth > current_depth) {
 				Node* last_child = current_scope->begin->parent->GetLastChild();
@@ -211,9 +228,17 @@ void IR::SeparateOperationsIntoKernels() {
 		}
 	}
 
+
 	if (current_scope->type == ScopeType::Kernel) {
 		kernels.push_back(current_scope);
 	}
+
+#ifndef NDEBUG
+	string listing = PrintListing(boundary_nodes_debug);
+
+	cout << "Kernel genration boundaries: \n\n";
+	cout << listing << endl;
+#endif
 
 	// create kernel nodes for all kernel scopes
 	for (auto scope : kernels) {
@@ -235,20 +260,11 @@ void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
 }
 
-void IR::PrintListing(string name, bool compact,
-                      map<Node*, string> invalid_nodes) const {
+string IR::PrintListing(map<Node*, string> node_debug) const {
 #ifdef NDEBUG
-	return;
+	return "";
 #endif
-	string listing = GetOperationListing(*this, false, invalid_nodes) + "\n\n";
-
-	if (!invalid_nodes.empty()) {
-		listing += "Step [" + name + "] failed. ";
-		throw std::runtime_error(listing);
-	} else {
-		cout << "Step [" << name << "] completed successfully: \n" << endl;
-		cout << listing << endl;
-	}
+	return GetOperationListing(*this, false, node_debug) + "\n\n";
 }
 
 bool BoundaryValid(const Node* input, const Node* output,
@@ -320,7 +336,15 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 		}
 	}
 
-	PrintListing(name, false, invalid_nodes);
+	string listing = PrintListing(invalid_nodes);
+
+	if (!invalid_nodes.empty()) {
+		listing += "Step [" + name + "] failed. ";
+		throw std::runtime_error(listing);
+	} else {
+		cout << "Step [" << name << "] completed successfully: \n" << endl;
+		cout << listing << endl;
+	}
 }
 
 bool CannotMoveArgument(Arg& arg) {

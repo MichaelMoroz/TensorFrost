@@ -6,7 +6,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invalid) {
+string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug) {
 	// first give unique names to all the tensors
 	GenerateNodeNames(ir);
 	//ClusterProp clusters = ir.GetClusterProperties();
@@ -19,25 +19,9 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			if (node->name == "const") continue;
 		}
 
-		//if (node->kernel_ != prev_cluster) {
-		//	listing += "\n";
-		//	switch (node->kernel_->type_) {
-		//		case Scope::ScopeType::Host:
-		//			listing += "Host: \n";
-		//			break;
-		//		case Scope::ScopeType::Kernel:
-		//			listing += "Kernel: \n";
-		//			break;
-		//	}
-		//}
-
-		if (invalid.contains(node.get())) {
-			listing += "[ERROR] " + invalid[node.get()] + ": \n";
+		if (debug.contains(node.get())) {
+			listing += "[DEBUG] " + debug[node.get()] + ": \n";
 		}
-
-		//if (!compact && node->kernel_ != nullptr) {
-		//	listing += GetNodeName(node->kernel_->kernel_node_, false) + ": ";
-		//}
 
 		// indent
 		int depth = node.depth() - 1;
@@ -62,50 +46,36 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "  ";
 		}
 		prev_depth = depth;
-
-		Arguments inputs = node->GetArguments(ArgType::Input);
-		Arguments indices = node->GetArguments(ArgType::Index);
-		Arguments shape = node->GetArguments(ArgType::Shape);
-		Arguments memory = node->GetArguments(ArgType::Memory);
 		
 		if (node->tensor_->type != DataType::None) {
 			listing += DataTypeToString(node->tensor_->type) + " ";
 		}
 
 		if (node->tensor_->type != DataType::None) {
-			// 
 			//  the tensor name
 			listing += node->var_name + " = ";
 		}
 
 		listing += node->name + "(";
 
-		if (!memory.empty()) {
-			listing += "memory=[";
-			for (int i = 0; i < memory.size(); i++) {
-				if (i != 0) listing += ",";
-				listing += GetNodeName(memory[i].from_->get(), false);
-			}
-			listing += "], ";
-		}
+		ArgumentManager args = node->GetArgumentManager();
 
-		if (!inputs.empty()) {
-			listing += "inputs=[";
-			for (int i = 0; i < inputs.size(); i++) {
-				if (i != 0) listing += ",";
-				listing += GetNodeName(inputs[i].from_->get(), false);
+		auto ArgTypePrint = [&](string name, ArgType type) {
+			if (args.Has(type)) {
+				string arr = name + "=[";
+				for (int i = 0; i < args.Count(type); i++) {
+					if (i != 0) arr += ",";
+					arr += GetNodeName(args.Get(type, i), false);
+				}
+				arr += "], ";
+				return arr;
 			}
-			listing += "], ";
-		}
+			return string();
+		};
 
-		if (!indices.empty()) {
-			listing += "indices=[";
-			for (int i = 0; i < indices.size(); i++) {
-				if (i != 0) listing += ",";
-				listing += GetNodeName(indices[i].from_->get(), false);
-			}
-			listing += "], ";
-		}
+		listing += ArgTypePrint("memory", ArgType::Memory);
+		listing += ArgTypePrint("inputs", ArgType::Input);
+		listing += ArgTypePrint("indices", ArgType::Index);
 
 		if (!node->tensor_->data.empty()) {
 			listing += "data=[";
@@ -137,12 +107,12 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> invali
 			listing += "cost=" + to_string(node->cost_) + ", ";
 		}
 
-		listing += "shape=[";
-		for (int i = 0; i < shape.size(); i++) {
-			if (i != 0) listing += ",";
-			listing += GetNodeName(shape[i].from_->get(), false);
+		if (node->HasBeenModified())
+		{
+			listing += "modified, ";
 		}
-		listing += "]";
+
+		listing += ArgTypePrint("shape", ArgType::Shape);
 
 		listing += ")\n";
 	}

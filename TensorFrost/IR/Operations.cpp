@@ -27,6 +27,7 @@ const vector<Operation> operations = {
     Operation("memory", {"_f", "_i", "_u"}, 0, "",
               {OpType::Memory, OpType::Special}),
     Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special}),
+    Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
 
     //Algorithms (TODO: implement in graph)
@@ -38,6 +39,8 @@ const vector<Operation> operations = {
     //Operation("dot", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
 
     // Memory operations
+    Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
+    Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
     Operation("load", {"_f", "_u", "_i"}, 128, "",
               {OpType::Load, OpType::MemoryOp}),
     Operation("store", {"f_", "u_", "i_"}, 128, "",
@@ -137,8 +140,8 @@ const vector<Operation> operations = {
     Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
-    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "",
-              {OpType::TernaryOperator}),
+    Operation("smoothstep", {"fff_f"}, 10),
+    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "", {OpType::TernaryOperator}),
     Operation("const", {"_f", "_u", "_i"}, 0, "", {OpType::Constant}),
 };
 

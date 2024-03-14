@@ -818,164 +818,329 @@ tf.initialize(tf.cpu)
 #resnp = res[0].numpy
 
 
-#dynamic size QR decomposition
-def QRDecomposition():
-    A = tf.input([-1, -1], tf.float32)
+##dynamic size QR decomposition
+#def QRDecomposition():
+#    A = tf.input([-1, -1], tf.float32)
+#
+#    m, n = A.shape
+#    Q = tf.zeros([m, n])
+#    R = tf.zeros([n, n])
+#
+#    j = tf.index(0, [m])
+#
+#    def loop_body(i):
+#        norm2 = tf.zeros([1], tf.float32)
+#        def loop_body1(it):
+#            norm2.set(norm2 + A[it, i] ** 2)
+#        tf.loop(loop_body1, 0, m, 1)
+#        R[i, i] = tf.sqrt(norm2)
+#        Q[j, i] = A[j, i] / R[i, i]
+#        
+#        t, = tf.index_grid([i+1], [n])
+#        dotprod = tf.zeros(t.shape, tf.float32)
+#        def loop_body2(it):
+#            dotprod.set(dotprod + Q[it, i] * A[it, t])
+#        tf.loop(loop_body2, 0, m, 1)
+#        R[i, t] = dotprod
+#        
+#        p, k = tf.index_grid([0, i+1], [m, n])
+#        A[p, k] -= Q[p, i] * R[i, k]
+#
+#        #p, k = tf.index_grid([0, i+1], [m, n])
+#        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
+#
+#    tf.loop(loop_body, 0, n-1, 1)
+#
+#    norm2 = tf.zeros([1], tf.float32)
+#    def loop_body1(it):
+#        norm2.set(norm2 + A[it, n-1] ** 2)
+#    tf.loop(loop_body1, 0, m, 1)
+#    R[n-1, n-1] = tf.sqrt(norm2)
+#    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+#
+#    return [Q, R]
+#
+#qr = tf.compile(QRDecomposition)
+#
+#def reverseBits(num, bit_count):
+#    reverse_num = tf.zeros([], tf.int32)
+#    def loop_body(i):
+#        tf.if_cond((num & (1 << i)) != 0, lambda: reverse_num.set(reverse_num | (1 << ((bit_count - 1) - i))))
+#    tf.loop(loop_body,  0, bit_count, 1)
+#    return reverse_num + ((num >> bit_count) << bit_count)
+#
+#def getIndexPair(i, it):
+#    k1 = reverseBits(2*i, it+1)
+#    k2 = k1 + (1 << it)
+#    return [k1, k2]
+#
+##in-place FFT implementation
+#def FFT():
+#    Signal = tf.input([-1], tf.float32)
+#    N = Signal.shape[0]
+#    
+#    it_num = tf.int(tf.floor(tf.log2(tf.float(N))))-1
+#    Re = tf.buffer([N], tf.float32)
+#    Im = tf.buffer([N], tf.float32)
+#
+#    i, = tf.indices([N/2])
+#    
+#    k1, k2 = getIndexPair(i, it_num)
+#    S1 = Signal[k1]
+#    S2 = Signal[k2]
+#    Re[2*i] = S1 + S2
+#    Im[2*i] = 0.0
+#    Re[2*i+1] = S1 - S2
+#    Im[2*i+1] = 0.0
+#    
+#    def fft_iteration(it):
+#        k1, k2 = getIndexPair(i, it)
+#        k3 = (k1 & ((1 << it) - 1)) * (1 << (it_num - it))
+#        alpha = - 2 * np.pi * tf.float(k3) / tf.float(N)
+#        Re1 = Re[k2]
+#        Im1 = Im[k2]
+#        Re2 = Re[k1]
+#        Im2 = Im[k1]
+#        C = tf.cos(alpha)
+#        S = tf.sin(alpha)
+#        m = C * Re1 - S * Im1
+#        n = S * Re1 + C * Im1
+#        Re[k1] = Re2 + m
+#        Im[k1] = Im2 + n
+#        Re[k2] = Re2 - m
+#        Im[k2] = Im2 - n
+#
+#    tf.loop(fft_iteration, 1, it_num+1, 1)
+#
+#    return [Re, Im]
+#
+#fft = tf.compile(FFT)
+#
+#block_size = 8
+#
+#def BlockMaxAbs(blocks, max_block_count):
+#	block_max = tf.zeros([max_block_count], tf.float32)
+#	b, = block_max.indices
+#
+#	def loop_body(it):
+#		i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
+#		block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
+#
+#	tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
+#
+#	block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
+#	return block_max
+#
+#def Sparsify():
+#	vol = tf.input([-1, -1, -1], tf.float32)
+#	N, M, K = vol.shape
+#
+#	BX = N / block_size
+#	BY = M / block_size
+#	BZ = K / block_size
+#	max_block_count = BX * BY * BZ
+#	
+#	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+#	
+#	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
+#
+#	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
+#
+#	blocks = vol[ii, jj, kk]*1.0
+#
+#	block_max = BlockMaxAbs(blocks, max_block_count)
+#
+#	counter = tf.zeros([1], tf.int32)
+#	block_ids = tf.buffer([max_block_count], tf.int32)
+#	b, = block_ids.indices
+#
+#	def if_body1():
+#		index = tf.scatterAddPrev(counter[0], 1)
+#		block_ids[index] = b
+#	
+#	#todo: compute threshold based on the block variance
+#	tf.if_cond(block_max[b] > 1e-3, if_body1)
+#	
+#	non_empty_blocks = counter[0]
+#	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
+#	b, = tf.indices([non_empty_blocks])
+#	
+#	block_index = block_ids[b]
+#	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
+#	block_pos[b, 0] = bx
+#	block_pos[b, 1] = by
+#	block_pos[b, 2] = bz
+#
+#	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
+#
+#	block_index = block_ids[b]
+#	reordered_blocks1 = blocks[block_index, i, j, k]
+#
+#	return [reordered_blocks1, block_pos]
+#
+#sparsifier = tf.compile(Sparsify)
 
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
+def BuildHuffmanTree():
+    histogram = tf.input([-1], tf.int32)
+    N = histogram.shape[0]
 
-    j = tf.index(0, [m])
+    MAX_NODES = N * 2
 
-    def loop_body(i):
-        norm2 = tf.zeros([1], tf.float32)
-        def loop_body1(it):
-            norm2.set(norm2 + A[it, i] ** 2)
-        tf.loop(loop_body1, 0, m, 1)
-        R[i, i] = tf.sqrt(norm2)
-        Q[j, i] = A[j, i] / R[i, i]
+    #queue is (symbol, next, frequency)
+    tree = tf.const([MAX_NODES, 5], -1)
+    nodes = tf.zeros([MAX_NODES, 7], tf.int32)
+    stack = tf.buffer([MAX_NODES, 2], tf.int32)
+
+    index = tf.zeros([1], tf.int32)
+    node_index = tf.zeros([], tf.int32)
+    root = tf.zeros([], tf.int32)
+    left_node = tf.zeros([], tf.int32)
+    right_node = tf.zeros([], tf.int32)
+    this = tf.zeros([], tf.int32)
+    prev = tf.zeros([], tf.int32)
+
+    root.val = -1
+
+    def InsertIntoPriorityQueue(symbol, frequency, left = -1, right = -1):
+        this.val = root
+        prev.val = -1
+
+        def find_insert_position():
+            #find the position to insert the new node
+            def loop_body(it):
+                cond = (this < 0) | (frequency < nodes[this, 2])
+                tf.if_cond(cond, lambda: tf.break_loop())
+                prev.val = this
+                this.val = nodes[this, 1]
+
+            tf.loop(loop_body, 0, MAX_NODES, 1)
+            
+            def cond1():
+                nodes[prev, 1] = index
+            tf.if_cond(prev > -1, cond1)
+
+            #set the root to the new node if the current node is the first node
+            tf.if_cond((this == root) & (this > -1), lambda: root.set(index))
+
+        tf.if_cond(index > 0, find_insert_position)
+        tf.if_cond(index == 0, lambda: this.set(-1))
+        tf.if_cond(root < 0, lambda: root.set(index))
+
+        #insert the new node
+        nodes[index, 0] = symbol
+        nodes[index, 1] = this
+        nodes[index, 2] = frequency
+        nodes[index, 3] = left
+        nodes[index, 4] = right
+        index.val += 1
+
+
+    #initialize the queue with the histogram
+    def loop_body(it):
+        symbol_freq = histogram[it]
+        tf.if_cond(symbol_freq > 0, lambda: InsertIntoPriorityQueue(it, symbol_freq))
+
+    tf.loop(loop_body, 0, N, 1)
+
+    def PopFromPriorityQueue(out_index):
+        out_index.val = root
+        root.val = nodes[out_index, 1]
+
+    #build the huffman tree
+    def build_iteration(it):
+        #if no nodes left, break the loop
+        tf.if_cond(nodes[root, 1] < 0, lambda: tf.break_loop())
+
+        #pop the two nodes with the lowest frequency
+        PopFromPriorityQueue(left_node)
+        PopFromPriorityQueue(right_node)
+
+        #insert the new node with the sum of the frequencies of the two nodes
+        InsertIntoPriorityQueue(-1, nodes[left_node, 2] + nodes[right_node, 2], left_node, right_node)
+
+    tf.loop(build_iteration, 0, MAX_NODES, 1)
+
+    #build the tree buffer
+    index.val = 0
+    node_index.val = 0
+
+    def AddToStack(node, node_id):
+        stack[index, 0] = node
+        stack[index, 1] = node_id
+        index.val += 1
+
+    def PopFromStack():
+        index.val -= 1
+        return stack[index, 0], stack[index, 1]
+    
+    def AddNodeToTree(node, bits, code):
+        tree[node_index, 0] = nodes[node, 0]
+        tree[node_index, 1] = nodes[node, 2]
+        tree[node_index, 2] = -1
+        tree[node_index, 3] = bits
+        tree[node_index, 4] = code
+
+        AddToStack(node, node_index)
+        node_index.val += 1
         
-        t, = tf.index_grid([i+1], [n])
-        dotprod = tf.zeros(t.shape, tf.float32)
-        def loop_body2(it):
-            dotprod.set(dotprod + Q[it, i] * A[it, t])
-        tf.loop(loop_body2, 0, m, 1)
-        R[i, t] = dotprod
-        
-        p, k = tf.index_grid([0, i+1], [m, n])
-        A[p, k] -= Q[p, i] * R[i, k]
 
-        #p, k = tf.index_grid([0, i+1], [m, n])
-        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
+    #initialize the stack with the root
+    AddNodeToTree(root, 0, 0)
 
-    tf.loop(loop_body, 0, n-1, 1)
+    def build_tree_iteration(it):
+        #if no nodes left, break the loop
+        tf.if_cond(index == 0, lambda: tf.break_loop())
 
-    norm2 = tf.zeros([1], tf.float32)
-    def loop_body1(it):
-        norm2.set(norm2 + A[it, n-1] ** 2)
-    tf.loop(loop_body1, 0, m, 1)
-    R[n-1, n-1] = tf.sqrt(norm2)
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+        #pop the node from the stack
+        node, tree_id = PopFromStack()
 
-    return [Q, R]
+        #set the left and right nodes indices
+        tree[tree_id, 2] = node_index
+        #dont need to set the right node index since they are sequential
 
-qr = tf.compile(QRDecomposition)
+        cur_bits = tree[tree_id, 3]
+        cur_code = tree[tree_id, 4]
 
-def reverseBits(num, bit_count):
-    reverse_num = tf.zeros([], tf.int32)
-    def loop_body(i):
-        tf.if_cond((num & (1 << i)) != 0, lambda: reverse_num.set(reverse_num | (1 << ((bit_count - 1) - i))))
-    tf.loop(loop_body,  0, bit_count, 1)
-    return reverse_num + ((num >> bit_count) << bit_count)
+        #add the left and right nodes to the tree
+        left = nodes[node, 3]
+        right = nodes[node, 4]
+        tf.if_cond(left > -1, lambda: AddNodeToTree(left, cur_bits + 1, cur_code << 1))
+        tf.if_cond(right > -1, lambda: AddNodeToTree(right, cur_bits + 1, (cur_code << 1) | 1))
 
-def getIndexPair(i, it):
-    k1 = reverseBits(2*i, it+1)
-    k2 = k1 + (1 << it)
-    return [k1, k2]
+    tf.loop(build_tree_iteration, 0, MAX_NODES, 1)
 
-#in-place FFT implementation
-def FFT():
-    Signal = tf.input([-1], tf.float32)
-    N = Signal.shape[0]
+    dictionary = tf.zeros([N, 2], tf.int32)
+    i, = tf.indices([MAX_NODES])
+
+    def fill_dictionary():
+        symbol = tree[i, 0]
+        bits = tree[i, 3]
+        code = tree[i, 4]
+        dictionary[symbol, 0] = code
+        dictionary[symbol, 1] = bits
+
+    tf.if_cond(tree[i, 0] > -1, fill_dictionary)
+
+    tree_buffer = tf.zeros([MAX_NODES], tf.int32)
+    i, = tree_buffer.indices
+
+    is_leaf = tree[i, 0] > -1
+    #store either the symbol or the left node index
+    tree_buffer[i] = tf.select(is_leaf, (tree[i, 0] << 1) | 1, (tree[i, 2] << 1) | 0)
+
+    return [tree_buffer, dictionary]
     
-    it_num = tf.int(tf.floor(tf.log2(tf.float(N))))-1
-    Re = tf.buffer([N], tf.float32)
-    Im = tf.buffer([N], tf.float32)
 
-    i, = tf.indices([N/2])
-    
-    k1, k2 = getIndexPair(i, it_num)
-    S1 = Signal[k1]
-    S2 = Signal[k2]
-    Re[2*i] = S1 + S2
-    Im[2*i] = 0.0
-    Re[2*i+1] = S1 - S2
-    Im[2*i+1] = 0.0
-    
-    def fft_iteration(it):
-        k1, k2 = getIndexPair(i, it)
-        k3 = (k1 & ((1 << it) - 1)) * (1 << (it_num - it))
-        alpha = - 2 * np.pi * tf.float(k3) / tf.float(N)
-        Re1 = Re[k2]
-        Im1 = Im[k2]
-        Re2 = Re[k1]
-        Im2 = Im[k1]
-        C = tf.cos(alpha)
-        S = tf.sin(alpha)
-        m = C * Re1 - S * Im1
-        n = S * Re1 + C * Im1
-        Re[k1] = Re2 + m
-        Im[k1] = Im2 + n
-        Re[k2] = Re2 - m
-        Im[k2] = Im2 - n
+build_tree = tf.compile(BuildHuffmanTree)
 
-    tf.loop(fft_iteration, 1, it_num+1, 1)
+#generate a histogram
+histogram = np.arange(128) + np.random.randint(0, 15, 128)
+print(histogram)
 
-    return [Re, Im]
-
-fft = tf.compile(FFT)
-
-block_size = 8
-
-def BlockMaxAbs(blocks, max_block_count):
-	block_max = tf.zeros([max_block_count], tf.float32)
-	b, = block_max.indices
-
-	def loop_body(it):
-		i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
-		block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
-
-	tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
-
-	block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
-	return block_max
-
-def Sparsify():
-	vol = tf.input([-1, -1, -1], tf.float32)
-	N, M, K = vol.shape
-
-	BX = N / block_size
-	BY = M / block_size
-	BZ = K / block_size
-	max_block_count = BX * BY * BZ
-	
-	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
-	
-	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
-
-	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
-
-	blocks = vol[ii, jj, kk]*1.0
-
-	block_max = BlockMaxAbs(blocks, max_block_count)
-
-	counter = tf.zeros([1], tf.int32)
-	block_ids = tf.buffer([max_block_count], tf.int32)
-	b, = block_ids.indices
-
-	def if_body1():
-		index = tf.scatterAddPrev(counter[0], 1)
-		block_ids[index] = b
-	
-	#todo: compute threshold based on the block variance
-	tf.if_cond(block_max[b] > 1e-3, if_body1)
-	
-	non_empty_blocks = counter[0]
-	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
-	b, = tf.indices([non_empty_blocks])
-	
-	block_index = block_ids[b]
-	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
-	block_pos[b, 0] = bx
-	block_pos[b, 1] = by
-	block_pos[b, 2] = bz
-
-	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
-
-	block_index = block_ids[b]
-	reordered_blocks1 = blocks[block_index, i, j, k]
-
-	return [reordered_blocks1, block_pos]
-
-sparsifier = tf.compile(Sparsify)
+hist = tf.tensor(histogram)
+tree, dict = build_tree(hist)
+treenp = tree.numpy
+dictnp = dict.numpy
+print(treenp)
+print(treenp.shape)
+print(dictnp)

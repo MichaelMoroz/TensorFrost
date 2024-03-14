@@ -96,6 +96,9 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def("set",
 	              [](const PyTensor& t, const PyTensor& t2) { T(t).Set(T(t2)); });
 
+	py_tensor.def_property("val", [](const PyTensor& t) { return t; },
+	    [](PyTensor& t, const PyTensor& val) { T(t).Set(T(val)); });
+
 	// indexing
 	py_tensor.def("__getitem__", [](const PyTensor& t, const PyTensor& t1) {
 		Tensors indices;
@@ -119,6 +122,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		Tensors indices = TensorsFromTuple(indices_tuple);
 		Tensor::Store(t.Get(), T(t2), indices);
 	});
+
 	//py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
 	//                                const PyTensor& t2) {
 	//	// Handle multi-dimensional indices/slices

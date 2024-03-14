@@ -158,11 +158,11 @@ class Node {
 	string name;
 	float cost_ = -1.0f;
 	
-	Node *parent, *child, *prev, *next;
-    bool placeholder;
+	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
+    bool placeholder = true;
 
 	//only true after graph has been updated
-	Node *true_prev, *true_next;
+	Node *true_prev = nullptr, *true_next = nullptr;
 	
 	const Operation* op;
 	const Tensor* tensor_;
@@ -179,7 +179,7 @@ class Node {
 	bool has_been_modified_ = false;
 	bool is_static = false;
 
-	Node(Node* prev = nullptr, Node* parent = nullptr) : child(nullptr), next(nullptr), placeholder(true), parent(parent), prev(prev) {}
+	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev) {}
 
     bool valid() {
         return !placeholder;
@@ -228,6 +228,8 @@ class Node {
 	{
 		return has_been_modified_;
 	}
+
+	int TryComputeShape();
 
 	void UpdateArgumentOutputs() {
 		for (Arg& input : inputs_) {
@@ -388,7 +390,10 @@ class Node {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
 					// the previous iteration's modifier)
-					if (output_node->index_ < latest_node->index_ || (has_loop && output_node->HasParent(loop_node)))
+					// if the loop is scalar, then it doesn't matter
+					bool before_latest = output_node->index_ < latest_node->index_;
+					bool inside_loop = has_loop && output_node->HasParent(loop_node);
+					if (before_latest || inside_loop)
 					{
 						last_index = output_node->index_;
 						last_modifier = output_node;
@@ -549,7 +554,7 @@ class Scope
 		shape_dim = 0;
 		type = ScopeType::None;
 		for (auto node = NodeIterator(begin, begin);
-		     node->index_ <= end->index_; node.true_next()) {
+		     node.get() != nullptr && node->index_ <= end->index_; node.true_next()) {
 			UpdateShape(*node);
 			UpdateType(*node);
 		}
@@ -738,7 +743,7 @@ public:
 	    const unordered_set<Node*>& targets) const;
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
-	void PrintListing(string name, bool compact, map<Node*, string> invalid_nodes) const;
+	string PrintListing(map<Node*, string> node_debug) const;
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
