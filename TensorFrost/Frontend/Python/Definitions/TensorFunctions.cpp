@@ -124,18 +124,19 @@ void TensorFunctionsDefinition(py::module& m) {
 		}
 	}, py::arg("shape"), py::arg("type") = DataType::Float);
 
-	m.def("const", [](py::list shape, float value) {
+	m.def("const", [](float value, py::list shape) {
 		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
-	m.def("const", [](std::vector<int> shape, float value) {
+	m.def("const", [](float value, std::vector<int> shape) {
 		return PT(Tensor::Constant(shape, value));
-	});
-	m.def("const", [](py::list shape, int value) {
+	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
+
+	m.def("const", [](int value, py::list shape) {
 		return PT(Tensor::Constant(TensorsFromList(shape), value));
 	});
-	m.def("const", [](std::vector<int> shape, int value) {
+	m.def("const", [](int value, std::vector<int> shape) {
 		return PT(Tensor::Constant(shape, value));
-	});
+	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
 
 	m.def("input", [](std::vector<int> shape, DataType type) {
 		return PT(Tensor::Input(shape, type));

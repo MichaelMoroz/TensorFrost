@@ -53,7 +53,11 @@ PYBIND11_MODULE(TensorFrost, m) {
 		      InitializeBackend(backend_type, kernel_compile_options);
 	      }, py::arg("backend_type") = BackendType::CPU, py::arg("kernel_compile_options") = "", "Initialize the backend");
 
+#ifdef NDEBUG
 	py::print("TensorFrost module loaded!");
+#else
+	py::print("TensorFrost module loaded in debug mode! Expect slow performance.");
+#endif
 }
 
 }  // namespace TensorFrost

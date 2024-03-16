@@ -648,15 +648,15 @@ class Tensor {
 	}
 
 	Tensor& operator&(const Tensor& other) const {
-		return Op("band", this, &other);
+		return Op("and", this, &other);
 	}
 
 	Tensor& operator|(const Tensor& other) const {
-		return Op("bor", this, &other);
+		return Op("or", this, &other);
 	}
 
 	Tensor& operator^(const Tensor& other) const {
-		return Op("bxor", this, &other);
+		return Op("xor", this, &other);
 	}
 
 	Tensor& operator<<(const Tensor& other) const {

@@ -980,167 +980,67 @@ tf.initialize(tf.cpu)
 #
 #sparsifier = tf.compile(Sparsify)
 
-def BuildHuffmanTree():
-    histogram = tf.input([-1], tf.int32)
-    N = histogram.shape[0]
+def Sparsify2():
+	vol = tf.input([-1, -1, -1], tf.float32)
+	bbox = tf.input([2, 3], tf.int32)
+	block_size = tf.input([1], tf.int32)[0]*1
 
-    MAX_NODES = N * 2
+	N, M, K = vol.shape
 
-    #queue is (symbol, next, frequency)
-    tree = tf.const([MAX_NODES, 5], -1)
-    nodes = tf.zeros([MAX_NODES, 7], tf.int32)
-    stack = tf.buffer([MAX_NODES, 2], tf.int32)
+	BX = N / block_size
+	BY = M / block_size
+	BZ = K / block_size
+	max_block_count = BX * BY * BZ
+	
+	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+	
+	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
 
-    index = tf.zeros([1], tf.int32)
-    node_index = tf.zeros([], tf.int32)
-    root = tf.zeros([], tf.int32)
-    left_node = tf.zeros([], tf.int32)
-    right_node = tf.zeros([], tf.int32)
-    this = tf.zeros([], tf.int32)
-    prev = tf.zeros([], tf.int32)
+	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
 
-    root.val = -1
+	blocks = vol[ii, jj, kk]*1.0
 
-    def InsertIntoPriorityQueue(symbol, frequency, left = -1, right = -1):
-        this.val = root
-        prev.val = -1
+	def BlockMaxAbs(blocks, max_block_count):
+		block_max = tf.zeros([max_block_count], tf.float32)
+		b, = block_max.indices
 
-        def find_insert_position():
-            #find the position to insert the new node
-            def loop_body(it):
-                cond = (this < 0) | (frequency < nodes[this, 2])
-                tf.if_cond(cond, lambda: tf.break_loop())
-                prev.val = this
-                this.val = nodes[this, 1]
+		def loop_body(it):
+			i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
+			block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
 
-            tf.loop(loop_body, 0, MAX_NODES, 1)
-            
-            def cond1():
-                nodes[prev, 1] = index
-            tf.if_cond(prev > -1, cond1)
+		tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
 
-            #set the root to the new node if the current node is the first node
-            tf.if_cond((this == root) & (this > -1), lambda: root.set(index))
+		block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
+		return block_max
 
-        tf.if_cond(index > 0, find_insert_position)
-        tf.if_cond(index == 0, lambda: this.set(-1))
-        tf.if_cond(root < 0, lambda: root.set(index))
+	block_max = BlockMaxAbs(blocks, max_block_count)
 
-        #insert the new node
-        nodes[index, 0] = symbol
-        nodes[index, 1] = this
-        nodes[index, 2] = frequency
-        nodes[index, 3] = left
-        nodes[index, 4] = right
-        index.val += 1
+	counter = tf.zeros([1], tf.int32)
+	block_ids = tf.buffer([max_block_count], tf.int32)
+	b, = block_ids.indices
 
+	def if_body1():
+		index = tf.scatterAddPrev(counter[0], 1)
+		block_ids[index] = b
+	
+	#todo: compute threshold based on the block variance
+	tf.if_cond(block_max[b] > 1e-3, if_body1)
+	
+	non_empty_blocks = counter[0]
+	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
+	b, = tf.indices([non_empty_blocks])
+	
+	block_index = block_ids[b]
+	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
+	block_pos[b, 0] = bx + bbox[0, 0] / block_size
+	block_pos[b, 1] = by + bbox[0, 1] / block_size
+	block_pos[b, 2] = bz + bbox[0, 2] / block_size
 
-    #initialize the queue with the histogram
-    def loop_body(it):
-        symbol_freq = histogram[it]
-        tf.if_cond(symbol_freq > 0, lambda: InsertIntoPriorityQueue(it, symbol_freq))
+	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
 
-    tf.loop(loop_body, 0, N, 1)
+	block_index = block_ids[b]
+	reordered_blocks1 = blocks[block_index, i, j, k]
 
-    def PopFromPriorityQueue(out_index):
-        out_index.val = root
-        root.val = nodes[out_index, 1]
+	return [reordered_blocks1, block_pos]
 
-    #build the huffman tree
-    def build_iteration(it):
-        #if no nodes left, break the loop
-        tf.if_cond(nodes[root, 1] < 0, lambda: tf.break_loop())
-
-        #pop the two nodes with the lowest frequency
-        PopFromPriorityQueue(left_node)
-        PopFromPriorityQueue(right_node)
-
-        #insert the new node with the sum of the frequencies of the two nodes
-        InsertIntoPriorityQueue(-1, nodes[left_node, 2] + nodes[right_node, 2], left_node, right_node)
-
-    tf.loop(build_iteration, 0, MAX_NODES, 1)
-
-    #build the tree buffer
-    index.val = 0
-    node_index.val = 0
-
-    def AddToStack(node, node_id):
-        stack[index, 0] = node
-        stack[index, 1] = node_id
-        index.val += 1
-
-    def PopFromStack():
-        index.val -= 1
-        return stack[index, 0], stack[index, 1]
-    
-    def AddNodeToTree(node, bits, code):
-        tree[node_index, 0] = nodes[node, 0]
-        tree[node_index, 1] = nodes[node, 2]
-        tree[node_index, 2] = -1
-        tree[node_index, 3] = bits
-        tree[node_index, 4] = code
-
-        AddToStack(node, node_index)
-        node_index.val += 1
-        
-
-    #initialize the stack with the root
-    AddNodeToTree(root, 0, 0)
-
-    def build_tree_iteration(it):
-        #if no nodes left, break the loop
-        tf.if_cond(index == 0, lambda: tf.break_loop())
-
-        #pop the node from the stack
-        node, tree_id = PopFromStack()
-
-        #set the left and right nodes indices
-        tree[tree_id, 2] = node_index
-        #dont need to set the right node index since they are sequential
-
-        cur_bits = tree[tree_id, 3]
-        cur_code = tree[tree_id, 4]
-
-        #add the left and right nodes to the tree
-        left = nodes[node, 3]
-        right = nodes[node, 4]
-        tf.if_cond(left > -1, lambda: AddNodeToTree(left, cur_bits + 1, cur_code << 1))
-        tf.if_cond(right > -1, lambda: AddNodeToTree(right, cur_bits + 1, (cur_code << 1) | 1))
-
-    tf.loop(build_tree_iteration, 0, MAX_NODES, 1)
-
-    dictionary = tf.zeros([N, 2], tf.int32)
-    i, = tf.indices([MAX_NODES])
-
-    def fill_dictionary():
-        symbol = tree[i, 0]
-        bits = tree[i, 3]
-        code = tree[i, 4]
-        dictionary[symbol, 0] = code
-        dictionary[symbol, 1] = bits
-
-    tf.if_cond(tree[i, 0] > -1, fill_dictionary)
-
-    tree_buffer = tf.zeros([MAX_NODES], tf.int32)
-    i, = tree_buffer.indices
-
-    is_leaf = tree[i, 0] > -1
-    #store either the symbol or the left node index
-    tree_buffer[i] = tf.select(is_leaf, (tree[i, 0] << 1) | 1, (tree[i, 2] << 1) | 0)
-
-    return [tree_buffer, dictionary]
-    
-
-build_tree = tf.compile(BuildHuffmanTree)
-
-#generate a histogram
-histogram = np.arange(128) + np.random.randint(0, 15, 128)
-print(histogram)
-
-hist = tf.tensor(histogram)
-tree, dict = build_tree(hist)
-treenp = tree.numpy
-dictnp = dict.numpy
-print(treenp)
-print(treenp.shape)
-print(dictnp)
+sparsify2 = tf.compile(Sparsify2)

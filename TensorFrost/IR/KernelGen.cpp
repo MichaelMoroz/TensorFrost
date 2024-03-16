@@ -731,6 +731,16 @@ void IR::OptimizeOperations()
 					result = ApplyOP(inputs[0], inputs[1], /);
 				}
 			}
+			else if (op == "clamp")
+			{
+				// if all are constants, replace with result
+				if (isConstant(inputs[0]) && isConstant(inputs[1]) && isConstant(inputs[2])) {
+					// compute result
+					result = ApplyFUNC(inputs[0], inputs[1], max);
+					result = ApplyFUNC(result, inputs[2], min);
+				}
+			}
+
 
 			//TODO (Moroz): add more optimizations
 
