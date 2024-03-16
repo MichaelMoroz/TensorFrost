@@ -273,13 +273,7 @@ class Node {
 		return this;
 	}
 
-	Node* GetLastChild() {
-		Node* last_child = child;
-		while (last_child->next->valid()) {
-			last_child = last_child->next;
-		}
-		return last_child;
-	}
+	Node* GetLastChild();
 
 	bool HasParent(string name) {
 		return GetParent(name) != this;
@@ -410,7 +404,7 @@ class Node {
 void SwapLables(Node* a, Node* b);
 void CopyLable(Node* target, Node* copy);
 
-
+//NodeIterator is a depth first iterator that iterates through the child nodes of a root node
 class NodeIterator {
  public:
 	Node* currentNode;

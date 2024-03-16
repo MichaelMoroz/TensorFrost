@@ -40,4 +40,12 @@ ScopeType GetScopeType(const Node* node) {
 	return ScopeType::None;
 }
 
+Node* Node::GetLastChild() {
+	Node* last = nullptr;
+	for (NodeIterator it = NodeIterator(this); !it.end(); it.next()) {
+		last = it.get();
+	}
+	return last;
+}
+
 }  // namespace TensorFrost
