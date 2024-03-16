@@ -207,7 +207,7 @@ class C_CodeGenerator : public CodeGenerator {
 	}
 };
 
-string GenerateC(Program* program) {
+string GenerateCPP(Program* program) {
 	string all_kernels = R"(
 #include <cmath>
 #include <omp.h>
@@ -594,7 +594,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 
 	all_kernels += host_code + "}\n";
 
-	program->generated_code_ = all_kernels;
 	return all_kernels;
 }
 }  // namespace TensorFrost

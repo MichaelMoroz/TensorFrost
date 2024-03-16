@@ -127,7 +127,7 @@ using uint = unsigned int;
 using kernel_func = void (*)(uint*, uint*, uint*, uint*);
 using main_func = void (*)(uint*, uint*, uint*, uint(uint*&, uint*, uint dim), void(uint));
 
-void CompileAndLoadKernel(Program* program) {
+void CompileAndLoadKernelModule(Program* program) {
 #if defined(_WIN32)
 	char temp_path[MAX_PATH];
 	DWORD path_length = GetTempPath(MAX_PATH, temp_path);
@@ -152,11 +152,8 @@ void CompileAndLoadKernel(Program* program) {
 
 	cout << "Temp file: " << temp_file_name << endl;
 
-	// Generate C code
-	string source_code = GenerateC(program);
-
 	// Compile the library
-	CompileKernelLibrary(source_code, temp_path, temp_file_name);
+	CompileKernelLibrary(program->generated_code_, temp_path, temp_file_name);
 
 	// Load the library
 	#if defined(_WIN32)

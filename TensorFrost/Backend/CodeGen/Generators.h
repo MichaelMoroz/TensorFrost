@@ -11,7 +11,9 @@ namespace TensorFrost {
 string GetNodeName(const Node* node,  bool compact = false);
 void GenerateNodeNames(const IR& ir);
 
-string GenerateC(Program* program);
+string GenerateCPP(Program* program);
+
+void GenerateCode(Program* program);
 
 using ArgumentNames = map<ArgID, string>;
 

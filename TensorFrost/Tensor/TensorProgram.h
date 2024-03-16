@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <chrono>
 
 #include "Backend/Backend.h"
 #include "IR/KernelGen.h"
@@ -22,6 +23,8 @@ class TensorProgram {
 	Program* program;
 	string program_name = "TensorProgram";
 	bool debug = false;
+	float compile_time = 0.0f;
+	float external_compile_time = 0.0f;
 
 	explicit TensorProgram(EvaluateFunction evaluate)
 	    : evaluate_callback(std::move(evaluate)) {

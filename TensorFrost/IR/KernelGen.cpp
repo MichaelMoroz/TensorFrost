@@ -191,17 +191,9 @@ void IR::SeparateOperationsIntoKernels() {
 				// split the current scope using the last boundary node (highest index)
 				Node* boundary_node = boundary_nodes.rbegin()->second;
 				//find the nearest parent node of the scope end with the same parent as the boundary node
-				Node* parent = node;
+				Node* parent = node->GetCommonParent(boundary_node);
 				int boundary_depth = boundary_node->ComputeDepth();
-				bool is_different_depth = current_depth > boundary_depth;
-				if (is_different_depth) {
-					while (parent->parent != boundary_node->parent && parent != nullptr) {
-						parent = parent->parent;
-					}
-					if (parent == nullptr) {
-						throw std::runtime_error("Parent node not found");
-					}
-				} 
+
 				vector<Scope*> new_scopes =
 				    Scope::GetScopes(current_scope->begin, parent);
 				for (auto scope : new_scopes) {
@@ -649,10 +641,6 @@ Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float
 void IR::OptimizeOperations() 
 {
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->op->op_types_[0] != OpType::Operator) {
-			continue;
-		}
-
 		//get node operation
 		const string op = node->name;
 
@@ -741,7 +729,6 @@ void IR::OptimizeOperations()
 				}
 			}
 
-
 			//TODO (Moroz): add more optimizations
 
 			// if computed optimized result, replace all node references with it
@@ -754,8 +741,8 @@ void IR::OptimizeOperations()
 }
 
 bool IsChangingInput(Arg* arg) {
-	return (arg->type_ == ArgType::Memory && arg->to_->get()->op->HasAllTypes(OpType::Modifier)) ||
-		   (arg->to_->get()->name == "loop_end"); //okay, this is stupid
+	return arg->type_ == ArgType::Memory &&
+	       arg->to_->get()->op->HasAllTypes(OpType::Modifier);
 }
 
 void IR::RemoveUnusedOperations() {
@@ -964,10 +951,12 @@ void IR::AddMemoryDeallocation()
 			}
 		}
 
-		Node* last_output_kernel = last_output->GetParent("kernel");
+		// need to add deallication in the same scope as the allocation
+		Node* deallocation_point = last_output->GetCommonParent(memory);
+
 
 		// add deallocation node after the last time the memory is used
-		ExecuteExpressionAfter(last_output_kernel, [&]() {
+		ExecuteExpressionAfter(deallocation_point, [&]() {
 			Tensor* deallocate = &Tensor::Deallocate(*memory->GetTensor());
 		});
 	}

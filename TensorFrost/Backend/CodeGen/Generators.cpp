@@ -5,6 +5,10 @@
 namespace TensorFrost {
 using namespace std;
 
+void GenerateCode(Program* program) {
+	program->generated_code_ = GenerateCPP(program);
+}
+
 void GenerateNodeNames(const IR& ir) {
 	int var_index = 0;
 	int mem_index = 0;

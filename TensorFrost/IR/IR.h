@@ -273,6 +273,16 @@ class Node {
 		return this;
 	}
 
+	//get the parent that has a common parent with another node
+	Node* GetCommonParent(Node* other) {
+		for (Node* cur_parent = this; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent->parent == other->parent) {
+				return cur_parent;
+			}
+		}
+		throw std::runtime_error("No common parent found");
+	}
+
 	Node* GetLastChild();
 
 	bool HasParent(string name) {
@@ -421,6 +431,23 @@ class NodeIterator {
 	      root(const_cast<Node*>(node_root)) {}
 
 	Node* operator*() const { return currentNode; }
+
+	NodeIterator& up() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		if (root == currentNode) {
+			throw std::runtime_error("Already at root");
+		}
+
+		if (currentNode->parent != root) {
+			currentNode = currentNode->parent;
+		} else {
+			currentNode = currentNode->next;
+		}
+		return *this;
+	}
 
 	NodeIterator& forward() {
 		if (!currentNode) {

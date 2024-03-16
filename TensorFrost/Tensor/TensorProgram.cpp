@@ -7,6 +7,9 @@ namespace TensorFrost {
 void TensorProgram::CreateProgram() {
 	Tensor::SetEvaluationContext(nullptr);
 
+	//get current time
+	auto start = std::chrono::high_resolution_clock::now();
+
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
 	Tensors outputs = evaluate_callback();
@@ -23,7 +26,16 @@ void TensorProgram::CreateProgram() {
 
 	Tensor::SetEvaluationContext(nullptr);
 
-	CompileAndLoadKernel(program);
+	GenerateCode(program);
+
+	//get current time
+	auto end = std::chrono::high_resolution_clock::now();
+	compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / 1000000.0f;
+
+	CompileAndLoadKernelModule(program);
+
+	auto external_end = std::chrono::high_resolution_clock::now();
+	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;
 }
 
 vector<TensorMemory*> TensorProgram::Evaluate(
@@ -43,6 +55,8 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Kernel count: " + to_string(compute_kernels) + "\n";
 	properties += "  Intermediate buffers: " + to_string(ir.temp_memory_count) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
+	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
+	properties += "  Compiler time: " + to_string(external_compile_time) + " ms\n";
 	return properties;
 }
 
