@@ -5,9 +5,8 @@
 namespace TensorFrost {
 using namespace std;
 
-
-string GenerateCPP(Program* program) {
-	string all_kernels = R"(
+string GenerateHLSLKernel(Program* program, const Kernel* kernel) {
+	string final_source = R"(
 #include <cmath>
 #include <omp.h>
 #include <initializer_list>
@@ -255,144 +254,9 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 }
 
 )";
+
+    return final_source;
 	
-	GenerateNodeNames(*program->ir_);
-	int input_memory_index = 0;
-
-	// Generate code for each compute kernel
-	int kernel_count = 0;
-	map<Node*, string> dispatch_code;
-
-	for (auto& i : program->kernels_) {
-		Kernel* kernel = &i;
-		Node* kernel_node = kernel->node_;
-
-		string kernel_name = "kernel_" + to_string(kernel_count++);
-
-		// Generate kernel
-		vector<Node*> memory_nodes;
-		memory_nodes.resize(kernel->memory.size());
-		for (auto& memory : kernel->memory) {
-			memory_nodes[memory.second] = memory.first;
-		}
-
-		vector<Node*> variable_nodes;
-		variable_nodes.resize(kernel->variables.size());
-		for (auto& variable : kernel->variables) {
-			variable_nodes[variable.second] = variable.first;
-		}
-
-		string memory_args = "{";
-		for (int d = 0; d < memory_nodes.size(); d++) {
-			if (d != 0) {
-				memory_args += ", ";
-			}
-			memory_args += memory_nodes[d]->var_name;
-		}
-		memory_args += "}";
-
-		string variable_args = "{";
-		for (int d = 0; d < variable_nodes.size(); d++) {
-			if (d != 0) {
-				variable_args += ", ";
-			}
-			variable_args += "asuint(" + ReadVariable(variable_nodes[d]) + ")";
-		}
-		variable_args += "}";
-
-		string shape_args = "{";
-		for (int d = 0; d < i.dim; d++) {
-			if (d != 0) {
-				shape_args += ", ";
-			}
-			shape_args += "(uint)"+ReadVariable(i.shape[d]->from_->get());
-		}
-		shape_args += "}";
-
-		CodeGenerator generator;
-		generator.GenerateKernelLines(program->ir_, kernel_node, kernel);
-		string kernel_code = generator.GetFinalCode();
-		kernel->generated_code_ = kernel_code;
-
-		string loop = "";
-		const int block_size = 4;  // TODO chose automatically
-		switch (kernel->indexing_mode_) {
-			case KernelIndexingMode::Linear:
-				loop =
-					"  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
-				loop += "  {\n";
-				break;
-			case KernelIndexingMode::MultiDimensional:
-				for (int d = 0; d < i.dim; d++) {
-					loop += "  for (int dim" + to_string(d) + " = 0; dim" +
-						    to_string(d) + " < shape[" + to_string(d) + "]; dim" +
-						    to_string(d) + "++)\n";
-				}
-				loop += "  {\n";
-				break;
-			case KernelIndexingMode::MultiDimensionalBlocks:
-				for (int d = 0; d < i.dim; d++) {
-					loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
-						    " < shape[" + to_string(d) + "]; wg" + to_string(d) +
-						    "+= " + to_string(block_size) + ")\n";
-				}
-				for (int d = 0; d < i.dim; d++) {
-					loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
-						    "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
-						    to_string(block_size) + ", shape[" + to_string(d) +
-						    "]); dim" + to_string(d) + "++)\n";
-				}
-				loop += "  {\n";
-				break;
-			default:
-				throw std::runtime_error("Invalid indexing mode");
-				break;
-		}
-
-
-		all_kernels +=
-			"\n"
-			"void " +
-			kernel_name +
-			"(uint* var, uint* off, uint* mem, uint* shape)\n"
-			"{\n"
-			"  #pragma omp parallel for shared(mem) \n" +
-			loop + AddIndent(kernel_code, "    ") +
-			"  }\n"
-			"}\n";
-
-		dispatch_code[kernel_node] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
-	}
-
-	CodeGenerator generator;
-	generator.custom_generated_code_ = dispatch_code;
-	generator.input_memory_index = &input_memory_index;
-	generator.offset_array = false;
-	generator.GenerateKernelLines(program->ir_, program->ir_->root, &program->kernels_[0]);
-
-	string host_code =
-	    "\n"
-	    "extern \"C\" "
-#ifdef _WIN32
-	    "__declspec(dllexport)"
-#endif
-	    " void "
-	    "main"
-	    "(uint* in, uint* out, uint* mem, uint alloc(uint*&, uint*, uint dim), "
-	    "void deallocate(uint))\n"
-	    "{\n";
-
-	host_code += AddIndent(generator.GetFinalCode(), "  ");
-
-	//set output memories and deallocate
-	for (auto& memory : program->ir_->output_memory_map) {
-		int output_memory_index = memory.first;
-		string mem_name = memory.second->var_name;
-		host_code += "  out[" + to_string(output_memory_index) + "] = " + mem_name + ";\n";
-	}
-
-	all_kernels += host_code + "}\n";
-
-	return all_kernels;
 }
+
 }  // namespace TensorFrost

@@ -80,12 +80,18 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelLines(const IR* ir, const Kernel* kernel) {
+void CodeGenerator::GenerateKernelCode(const Kernel* kernel) {
+	variables = kernel->variables;
+	offsets = kernel->memory;
+	GenerateCode(kernel->root);
+}
+
+void CodeGenerator::GenerateCode(const Node* root) {
 	int variable_index = 0;
 	int memory_index = 0;
 	int prev_depth = 0;
 	// Translate each operation into HLSL
-	for (auto node = NodeIterator(kernel->node_); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
+	for (auto node = NodeIterator(root); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
 		if (node->name == "const" && !node->has_been_modified_) {
 			continue;
 		}
@@ -111,7 +117,7 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Kernel* kernel) {
 			line = new Line("", custom_generated_code_[*node], ";", "", false, 0);
 		} else {
 			// get node arguments
-			line = GenerateLine(*node, kernel->memory, kernel->variables);
+			line = GenerateLine(*node);
 		}
 
 		if (line == nullptr) {
@@ -130,7 +136,7 @@ void CodeGenerator::GenerateKernelLines(const IR* ir, const Kernel* kernel) {
 }
 
 
-string CodeGenerator::GetFinalCode() {
+string CodeGenerator::AssembleString() {
 	string code;
 	int indent = 0;
 	for (auto& line : lines) {
@@ -142,19 +148,6 @@ string CodeGenerator::GetFinalCode() {
 		code += line->right;
 		code += "\n";
 	}
-
-	// update names
-	//int i = 0;
-	//for (auto& line : lines) {
-	//	string old_name = line->name;
-	//	string new_name = "v" + to_string(i);
-	//	i++;
-	//	std::regex name_regex("\\b" + old_name +
-	//	                      "\\b");  // regex for whole word match
-	//	code = std::regex_replace(code, name_regex, new_name);
-	//	line->name = new_name;
-	//}
-
 	return code;
 }
 

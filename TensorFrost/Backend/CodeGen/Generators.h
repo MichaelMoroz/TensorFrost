@@ -47,17 +47,21 @@ class CodeGenerator {
 	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
 	    {DataType::Int, "int"},
 	};
-
+	
 	bool offset_array = true;
 	int* input_memory_index = nullptr;
 
 	CodeGenerator() = default;
 
-	void GenerateKernelLines(const IR* ir, const Kernel* kernel);
-	string GetFinalCode();
+	void GenerateKernelCode(const Kernel* kernel);
+	void GenerateCode(const Node* root);
+	string AssembleString();
 
 protected:
-	virtual void GenerateArgumentNames(ArgumentManager& args, map<Node*, int> variables)  {
+	map<Node*, int> offsets;
+	map<Node*, int> variables;
+
+	virtual void GenerateArgumentNames(ArgumentManager& args)  {
 		for (auto& arg : args.arguments_) {
 			string name = GetNodeName(arg.second, true);
 			if (variables.contains(arg.second)) {
@@ -69,10 +73,10 @@ protected:
 		}
 	}
 
-	virtual Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables)  {
+	virtual Line* GenerateLine(Node* node)  {
 		// TODO: Create argument manager class
 		ArgumentManager args = node->GetArgumentManager();
-		GenerateArgumentNames(args, variables);
+		GenerateArgumentNames(args);
 		const Operation* op = node->op;
 		string name = node->var_name;
 
