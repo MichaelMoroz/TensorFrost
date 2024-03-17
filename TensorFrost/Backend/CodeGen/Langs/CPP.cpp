@@ -5,7 +5,6 @@
 namespace TensorFrost {
 using namespace std;
 
-
 string GenerateCPP(Program* program) {
 	string final_source = R"(
 #include <cmath>
@@ -265,7 +264,6 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Node* kernel_node = kernel->node_;
 
 		string kernel_name = "kernel_" + to_string(kernel_count++);
 
@@ -361,7 +359,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 			"  }\n"
 			"}\n";
 
-		dispatch_code[kernel_node] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
+		dispatch_code[kernel->root] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
 
 	CodeGenerator generator;
