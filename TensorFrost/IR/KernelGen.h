@@ -13,7 +13,7 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 class Kernel {
  public:
 	KernelIndexingMode indexing_mode_;
-	Node* kernel_node_;
+	Node* node_;
 	map<Node*, int> variables;
 	map<Node*, int> memory;
 	ArgMap shape;

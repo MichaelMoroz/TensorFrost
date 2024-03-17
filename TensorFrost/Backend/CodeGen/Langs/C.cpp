@@ -5,207 +5,6 @@
 namespace TensorFrost {
 using namespace std;
 
-string ReadVariable(Node* node) {
-	if (node->name == "const") {
-		return to_string(node->GetTensor()->data[0]);
-	}
-	if (node->name == "memory") {
-		return "mem[" + node->var_name + "]";
-	}
-	return node->var_name;
-}
-
-class C_CodeGenerator : public CodeGenerator {
- public:
-	string offset_name_ = "off";
-	string variable_name_ = "var";
-
-	map<DataType, string> type_names = {
-	    {DataType::None, "void"},   {DataType::Bool, "bool"},
-	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
-	    {DataType::Int, "int"},
-	};
-
-	int* input_memory_index;
-
-	bool offset_array = true;
-
-	void GenerateArgumentNames(ArgumentManager& args, map<Node*, int> variables) override {
-		for (auto& arg : args.arguments_) {
-			string name = GetNodeName(arg.second, true);
-			if (variables.contains(arg.second)) {
-				name = variable_name_ + "[" + to_string(variables[arg.second]) + "]";
-				name =
-				    "as" + type_names[arg.second->GetTensor()->type] + "(" + name + ")";
-			}
-			args.SetName(arg.first, name);
-		}
-	}
-
-	Line* GenerateLine(Node* node, map<Node*, int> offsets, map<Node*, int> variables) override {
-		//TODO: Create argument manager class
-		ArgumentManager args = node->GetArgumentManager();
-		GenerateArgumentNames(args, variables);
-		const Operation* op = node->op;
-		string name = node->var_name;
-
-		// get output type
-		DataType output_type = node->tensor_->type;
-
-		// generate line
-		string left = "";
-		string expression = "";
-		string right = "";
-
-		if (op->HasAllTypes(OpType::Special)) {
-			if (op->name_ == "loop") {
-				left += GenerateLoop(&args, name);
-			} else if (op->name_ == "if") {
-				left += GenerateIf(&args);
-			} else if (op->name_ == "memory") {
-				left += "uint " + node->var_name + " = ";
-				// if input memory type then just take the input and store it in the
-				// output
-				if (node->memory_type_ == MemoryType::Input ||
-					node->memory_type_ == MemoryType::Shape) {
-					expression += "in[" + to_string((*input_memory_index)++) + "]";
-					right += ";";
-				}
-				// if any other memory type - allocate it
-				else {
-					// get shape arguments
-					ArgMap args = node->GetArgumentMap(ArgType::Shape);
-					int dims = (int)args.size();
-			
-					string shape_arg = "{";
-					if (dims == 0) {
-						shape_arg += "1";
-					} else {
-						for (int j = 0; j < dims; j++) {
-							if (j != 0) {
-								shape_arg += ", ";
-							}
-							Node* shape_node = args[j]->from_->get();
-
-							shape_arg += "(uint)" + ReadVariable(shape_node);
-						}
-					}
-
-					shape_arg += "}";
-
-					expression += "allocate(alloc, mem, " + shape_arg + ")";
-					right += ";";
-				}
-			}
-			else if (op->name_ == "deallocate") {
-				left = "deallocate(" + args.Name(ArgType::Memory) + ")";
-				right = ";";
-			}
-		} else if (op->HasAllTypes(OpType::MemoryOp)) {
-			string address;
-
-			if (offset_array) {
-				address = offset_name_ + "[" + to_string(offsets[args.Get(ArgType::Memory)]) + "]";
-			} else {
-				address = args.Name(ArgType::Memory);
-			}
-			// if has index (not a scalar)
-			if (args.Has(ArgType::Index)) {
-				address += " + " + args.Name(ArgType::Index);
-			}
-
-			string memory_expression = "mem[" + address + "]";
-			if (op->name_ == "load") {
-				left += type_names[output_type] + " " + name + " = ";
-				if (output_type == DataType::Float) {
-					expression += "asfloat(";
-				}
-				if (output_type == DataType::Int) {
-					expression += "asint(";
-				}
-				expression += memory_expression;
-				if (output_type != DataType::Uint) {
-					expression += ")";
-				}
-				right += ";";
-			} else if (op->name_ == "store") {
-				expression += memory_expression + " = ";
-				if (args.Type(ArgType::Memory) != DataType::Uint) {
-					expression += "asuint(";
-				}
-				expression += args.Name(ArgType::Input, 0);
-				if (args.Type(ArgType::Memory) != DataType::Uint) {
-					expression += ")";
-				}
-				right += ";";
-			} else if (op->HasAllTypes(OpType::Scatter)) {
-				if (output_type != DataType::None) {
-					left += type_names[output_type] + " " + name + " = ";
-				}
-				string input_type_name = type_names[args.Type(ArgType::Input)];
-				expression += op->code_ + "((" + input_type_name + "*)mem" + ", " +
-				              address + ", " + args.Name(ArgType::Input) + ")";
-				right += ";";
-			}
-		} else if (op->name_ == "set") {
-			left += args.Name(ArgType::Memory) + " = ";
-			expression += args.Name(ArgType::Input);
-			right += ";";
-		} else {
-			if (output_type != DataType::None) {
-				left += type_names[output_type] + " " + name + " = ";
-			}
-			string line;
-
-			switch (op->op_types_[0]) {
-				case OpType::Operator:
-					line += args.Name(ArgType::Input, 0) + " " + op->code_ + " " +
-					        args.Name(ArgType::Input, 1);
-					break;
-				case OpType::UnaryOperator:
-					line += op->code_ + args.Name(ArgType::Input, 0);
-					break;
-				case OpType::Function:
-					line += op->code_ + "(";
-					for (int i = 0; i < args.Count(ArgType::Input); i++) {
-						if (i != 0) {
-							line += ", ";
-						}
-						line += args.Name(ArgType::Input, i);
-					}
-					line += ")";
-					break;
-				case OpType::Keyword:
-					line += op->code_;
-					break;
-				case OpType::DimensionIndex:
-					line += op->code_ + to_string(node->GetTensor()->data[0]);
-					break;
-				case OpType::TypeCast:
-					line += "(" + op->code_ + ")" + args.Name(ArgType::Input, 0);
-					break;
-				case OpType::TypeReinterpret:
-					line += "*(" + op->code_ + "*)&" + args.Name(ArgType::Input, 0);
-					break;
-				case OpType::Constant:
-					line += node->GetTensor()->GetConstantString();
-					break;
-				case OpType::TernaryOperator:
-					line += args.Name(ArgType::Input, 0) + " ? " +
-					        args.Name(ArgType::Input, 1) + " : " +
-					        args.Name(ArgType::Input, 2);
-					break;
-				default:
-					line += "";
-					break;
-			}
-			expression += line;
-			right += ";";
-		}
-
-		return new Line(left, expression, right, name, op->cost_);
-	}
-};
 
 string GenerateCPP(Program* program) {
 	string all_kernels = R"(
@@ -466,7 +265,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 
 	for (auto& i : program->kernels_) {
 		Kernel* kernel = &i;
-		Node* kernel_node = kernel->kernel_node_;
+		Node* kernel_node = kernel->node_;
 
 		string kernel_name = "kernel_" + to_string(kernel_count++);
 
@@ -510,7 +309,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 		}
 		shape_args += "}";
 
-		C_CodeGenerator generator;
+		CodeGenerator generator;
 		generator.GenerateKernelLines(program->ir_, kernel_node, kernel);
 		string kernel_code = generator.GetFinalCode();
 		kernel->generated_code_ = kernel_code;
@@ -565,7 +364,7 @@ uint allocate(uint alloc(uint*&, uint*, uint dim), uint*& mem, std::initializer_
 		dispatch_code[kernel_node] = "dispatch(" + kernel_name + ", mem, " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
 
-	C_CodeGenerator generator;
+	CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
 	generator.input_memory_index = &input_memory_index;
 	generator.offset_array = false;
