@@ -979,313 +979,36 @@ tf.initialize(tf.cpu)
 #	return [reordered_blocks1, block_pos]
 #
 #sparsifier = tf.compile(Sparsify)
+def GetDensified(blocks, block_pos, bbox):
+    N, Bx, By, Bz = blocks.shape
 
-def Interleave(a):
-    return tf.select(a >= 0, 2 * a, - 2 * a - 1)
+    #compute volume size and allocate volume
+    Vx = (bbox[1, 0] - bbox[0, 0]) * Bx
+    Vy = (bbox[1, 1] - bbox[0, 1]) * By
+    Vz = (bbox[1, 2] - bbox[0, 2]) * Bz
+    volume = tf.zeros([Vx, Vy, Vz], tf.float32)
 
-def Deinterleave(a):
-    return tf.select(a % 2 == 0, a / 2, - (a + 1) / 2)
+    #compute volume position for each block
+    b, i, j, k = blocks.indices
+    x, y, z = (block_pos[b, 0] - bbox[0, 0]) * Bx + i, (block_pos[b, 1] - bbox[0, 1]) * By + j, (block_pos[b, 2] - bbox[0, 2]) * Bz + k
 
-block_size = 8
-SYMBOL_COUNT = 512
+    def set_value():
+        volume[x, y, z] = blocks[b, i, j, k]
 
-def HuffmanEncoder():
-    blocks = tf.input([-1, block_size, block_size, block_size], tf.int32)
-    N = blocks.shape[0]
+    #if voxel is inside the volume, set its value
+    is_inside = (x >= 0) & (x < Vx) & (y >= 0) & (y < Vy) & (z >= 0) & (z < Vz)
+    tf.if_cond(is_inside, set_value)
+
+    return volume
+
+def Densify():
+    blocks = tf.input([-1, -1, -1, -1], tf.float32)
+    N, Bx, By, Bz = blocks.shape
     block_pos = tf.input([N, 3], tf.int32)
-    block_max = tf.input([N], tf.int32)
+    bbox = tf.input([2, 3], tf.int32)
 
-    ######################################################
-    # Compute the total block coefficients and sort them #
-    ######################################################
+    volume = GetDensified(blocks, block_pos, bbox)
 
-    element_count = block_size * block_size * block_size
+    return [volume]
 
-    #initialize the key value buffer
-    block_id = tf.buffer([element_count, 2], tf.int32)
-    elem_id = tf.indices([element_count])[0]
-    block_id[elem_id, 0] = 0
-    block_id[elem_id, 1] = elem_id
-
-    #get keys for sorting
-    n, i, j, k = blocks.indices
-    tf.scatterAdd(block_id[i + j*block_size + k*block_size*block_size, 0], blocks[n, i, j, k])
-
-    log2N = tf.ceil(tf.log2(tf.float(element_count)))
-    Nround = tf.int(tf.exp2(log2N))
-    sort_id = tf.indices([Nround/2])[0]
-    steps = tf.int(log2N*(log2N + 1.0)/2.0)
-    
-    def sortingIteration(step):
-        def getBitonicElementPair(id, step):
-            j = tf.floor(tf.sqrt(tf.float(2*step) + 1.0) - 0.5)
-            n = tf.round(tf.float(step) - 0.5*j*(j+1.0))
-            B = tf.int(tf.round(tf.exp2(j-n)))
-            mask = tf.select(n < 0.5, 2*B - 1, B)
-            e1 = id%B + 2*B*(id/B)
-            e2 = e1 ^ mask
-            return e1, e2
-
-        e1, e2 = getBitonicElementPair(sort_id, step)
-
-        tf.if_cond((e1 >= element_count) | (e2 >= element_count), lambda: tf.continue_loop())
-
-        key1, key2 = block_id[e1, 0], block_id[e2, 0]
-        val1, val2 = block_id[e1, 1], block_id[e2, 1]
-        
-        def swap():
-            block_id[e1, 0] = key2
-            block_id[e2, 0] = key1
-            block_id[e1, 1] = val2
-            block_id[e2, 1] = val1
-        
-        #sort by descending order
-        tf.if_cond(key1 < key2, swap)
-
-    tf.loop(sortingIteration, 0, steps, 1)
-    
-    #############################################
-    # Get list of symbols and their frequencies #
-    #############################################
-
-    symbol_count = tf.buffer([N], tf.int32)
-    symbols = tf.buffer([N, 2*block_size*block_size*block_size+10], tf.int32)
-    histogram = tf.zeros([SYMBOL_COUNT], tf.int32)
-  
-    n, = tf.indices([N])
-
-    offset = tf.const(0)
-
-    def AddSymbol(symbol):
-        symbols[n, offset] = symbol
-        offset.set(offset + 1)
-        tf.scatterAdd(histogram[symbol], 1)
-    
-    #add block position
-    AddSymbol(block_pos[n, 0])
-    AddSymbol(block_pos[n, 1])
-    AddSymbol(block_pos[n, 2])
-
-    #add block max
-    block_max_int = tf.int(block_max[n])
-    AddSymbol(block_max_int & 0xFF)
-    AddSymbol((block_max_int >> 8) & 0xFF)
-
-    prev_index = tf.const(-1)
-    #add block coefficients
-    def loop_body(it):
-        i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
-        value = blocks[n, i, j, k]
-
-        def add_coef():
-            AddSymbol(it - prev_index - 1)
-            AddSymbol(Interleave(value) - 1)
-            prev_index.val = it
-
-        tf.if_cond(value != 0, add_coef)
-
-    tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
-    symbol_count[n] = offset
-
-    ###########################################
-    #  Build the Huffman tree and dictionary  #
-    ###########################################
-
-    MAX_NODES = SYMBOL_COUNT * 2
-    #nodes are (symbol, next, frequency, left, right)
-    tree = tf.const(-1, [MAX_NODES, 5])
-    nodes = tf.zeros([MAX_NODES, 5], tf.int32)
-    #stack is (queue_index, tree_index)
-    stack = tf.buffer([MAX_NODES, 2], tf.int32)
-
-    node_count = tf.buffer([1], tf.int32)
-    index = tf.zeros([1], tf.int32)
-    node_index = tf.const(0)
-    root = tf.const(0)
-    left_node = tf.const(0)
-    right_node = tf.const(0)
-    this = tf.const(0)
-    prev = tf.const(0)
-
-    root.val = -1
-
-    def InsertIntoPriorityQueue(symbol, frequency, left = -1, right = -1):
-        this.val = root
-        prev.val = -1
-
-        def find_insert_position():
-            #find the position to insert the new node
-            def loop_body(it):
-                cond = (this < 0) | (frequency < nodes[this, 2])
-                tf.if_cond(cond, lambda: tf.break_loop())
-                prev.val = this
-                this.val = nodes[this, 1]
-
-            tf.loop(loop_body, 0, MAX_NODES, 1)
-            
-            def cond1():
-                nodes[prev, 1] = index
-            tf.if_cond(prev > -1, cond1)
-
-            #set the root to the new node if the current node is the first node
-            tf.if_cond((this == root) & (this > -1), lambda: root.set(index))
-
-        tf.if_cond(index > 0, find_insert_position)
-        tf.if_cond(index == 0, lambda: this.set(-1))
-        tf.if_cond(root < 0, lambda: root.set(index))
-
-        #insert the new node
-        nodes[index, 0] = symbol
-        nodes[index, 1] = this
-        nodes[index, 2] = frequency
-        nodes[index, 3] = left
-        nodes[index, 4] = right
-        index.val += 1
-
-
-    #initialize the queue with the histogram
-    def loop_body(it):
-        symbol_freq = histogram[it]
-        tf.if_cond(symbol_freq > 0, lambda: InsertIntoPriorityQueue(it, symbol_freq))
-
-    tf.loop(loop_body, 0, SYMBOL_COUNT, 1)
-
-    def PopFromPriorityQueue(out_index):
-        out_index.val = root
-        root.val = nodes[out_index, 1]
-
-    #build the huffman tree
-    def build_iteration(it):
-        #if no nodes left, break the loop
-        tf.if_cond(nodes[root, 1] < 0, lambda: tf.break_loop())
-
-        #pop the two nodes with the lowest frequency
-        PopFromPriorityQueue(left_node)
-        PopFromPriorityQueue(right_node)
-
-        new_frequency = nodes[left_node, 2] + nodes[right_node, 2]
-
-        #insert the new node with the sum of the frequencies of the two nodes
-        InsertIntoPriorityQueue(-1, new_frequency, left_node, right_node)
-
-    tf.loop(build_iteration, 0, MAX_NODES, 1)
-
-    #build the tree buffer
-    index.val = 0
-    node_index.val = 0
-
-    def AddToStack(node, node_id):
-        stack[index, 0] = node
-        stack[index, 1] = node_id
-        index.val += 1
-
-    def PopFromStack():
-        index.val -= 1
-        return stack[index, 0], stack[index, 1]
-    
-    def AddNodeToTree(node, bits, code):
-        tree[node_index, 0] = nodes[node, 0]
-        tree[node_index, 1] = nodes[node, 2]
-        tree[node_index, 2] = -1
-        tree[node_index, 3] = bits
-        tree[node_index, 4] = code
-
-        AddToStack(node, node_index)
-        node_index.val += 1
-        
-
-    #initialize the stack with the root
-    AddNodeToTree(root, 0, 0)
-
-    def build_tree_iteration(it):
-        #if no nodes left, break the loop
-        tf.if_cond(index == 0, lambda: tf.break_loop())
-
-        #pop the node from the stack
-        node, tree_id = PopFromStack()
-
-        #set the left and right nodes indices
-        tree[tree_id, 2] = node_index
-        #dont need to set the right node index since they are sequential
-
-        cur_bits = tree[tree_id, 3]
-        cur_code = tree[tree_id, 4]
-
-        #add the left and right nodes to the tree
-        left = nodes[node, 3]
-        right = nodes[node, 4]
-        tf.if_cond(left > -1, lambda: AddNodeToTree(left, cur_bits + 1, cur_code << 1))
-        tf.if_cond(right > -1, lambda: AddNodeToTree(right, cur_bits + 1, (cur_code << 1) | 1))
-
-    tf.loop(build_tree_iteration, 0, MAX_NODES, 1)
-    node_count[0] = node_index
-
-    dictionary = tf.zeros([N, 2], tf.int32)
-    tree_buffer = tf.zeros([node_count[0]], tf.int32)
-    i, = tree_buffer.indices
-
-    def fill_dictionary():
-        symbol = tree[i, 0]
-        bits = tree[i, 3]
-        code = tree[i, 4]
-        dictionary[symbol, 0] = code
-        dictionary[symbol, 1] = bits
-
-    tf.if_cond(tree[i, 0] > -1, fill_dictionary)
-
-    is_leaf = tree[i, 0] > -1
-    #store either the symbol or the left node index
-    tree_buffer[i] = tf.select(is_leaf, (tree[i, 0] << 1) | 1, (tree[i, 2] << 1) | 0)
-
-    ###########################################
-    # Encode the symbols using the dictionary #
-    ###########################################
-
-    total_bits = tf.zeros([1], tf.int32)
-    block_bit_count = tf.buffer([N], tf.int32)
-    counter = tf.zeros([N], tf.int32)
-    n, = tf.indices([N])
-
-    #find the total number of bits per block
-    def loop_body(it):
-        symbol = symbols[n, it]
-        bits = dictionary[symbol, 1]
-        counter.val += bits
-
-    tf.loop(loop_body, 0, symbol_count[n], 1)
-    block_bit_count[n] = counter
-    block_offset = tf.scatterAddPrev(total_bits[0], counter)
-
-    total_size = (total_bits[0] + 31) / 32
-    data_buffer = tf.zeros([total_size], tf.uint32)
-    current_offset = block_offset[n]*1
-
-    def WriteDataAt(Output, bit_offset, data, data_bits):
-        word_index = bit_offset >> 5
-        word_bit = bit_offset & 31
-        data_bits_start = 32 - data_bits
-        data_bits_offset = data_bits_start - word_bit
-
-        def if_body1():
-            tf.scatterOr(Output[word_index], data << data_bits_offset)
-
-        def if_body2():
-            tf.scatterOr(Output[word_index], data >> (-data_bits_offset))
-            tf.scatterOr(Output[word_index + 1], data << (data_bits_offset + 32))
-
-        tf.if_cond(data_bits_offset >= 0, if_body1)
-        tf.if_cond(data_bits_offset < 0, if_body2)
-
-    #write the encoded symbols to the buffer
-    def loop_body2(it):
-        symbol = symbols[n, it]
-        code = tf.uint(dictionary[symbol, 0])
-        bits = dictionary[symbol, 1]
-        WriteDataAt(data_buffer, current_offset, code, bits)
-        current_offset.val += bits
-
-    tf.loop(loop_body2, 0, symbol_count[n], 1)
-
-    return [data_buffer, block_bit_count, block_offset, histogram, tree_buffer, dictionary, block_id]
-
-huffman_encoder = tf.compile(HuffmanEncoder)
+densify = tf.compile(Densify)

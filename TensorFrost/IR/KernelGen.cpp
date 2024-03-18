@@ -413,9 +413,9 @@ map<Node*, Node*> IR::CopyComputation(
 		return {};
 	}
 
-	if (nodes_to_copy.size() > 100) {
+	if (nodes_to_copy.size() > 256) {
 		throw std::runtime_error(
-		    "Copy Computation: Copying too many nodes, something is probably wrong");
+		    "Copy Computation: Copying too many nodes, something is probably wrong. Number of nodes to copy: " + to_string(nodes_to_copy.size()));
 	}
 
 	// copy the nodes
@@ -1078,6 +1078,41 @@ void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& ind
 	});
 }
 
+void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, KernelIndexingMode indexing_mode, TensorIndexingMode tensor_indexing_mode)
+{
+	// get the input memory node
+	const Tensor* memory = node->GetArgumentTensors(ArgType::Memory)[0];
+
+	ArgMap memory_shape = memory->node_->GetArgumentMap(ArgType::Shape);
+
+	int memory_dim = MaxIndexCount(memory_shape);
+
+	// get the index nodes
+	map<int, const Tensor*> idx = node->GetArgumentTensors(ArgType::Index);
+
+	// just use the thread index if no index is provided
+	if (idx.empty() && indexing_mode == KernelIndexingMode::Linear) {
+		if (thread_index == nullptr) {
+			throw runtime_error("Default thread index is not supported outside of a kernel");
+		}
+		// add the thread index node edge
+		node->AddArgument(thread_index->node_, ArgType::Index, 0);
+		return;
+	}
+
+	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim,
+	                                      tensor_indexing_mode);
+
+	// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
+	// mirror, zero)
+
+	// remove the index node edges
+	node->RemoveArguments(ArgType::Index);
+
+	// add the flat index node edge
+	node->AddArgument(flat_index->node_, ArgType::Index, 0);
+}
+
 void IR::FinalizeMemoryIndexing() {
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -1119,38 +1154,18 @@ void IR::FinalizeMemoryIndexing() {
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpType::MemoryOp)) {
-				ExecuteExpressionBefore(*node, [&]() {
-					// get the input memory node
-					const Tensor* memory =
-					    node.get()->GetArgumentTensors(ArgType::Memory)[0];
-
-					ArgMap memory_shape = memory->node_->GetArgumentMap(ArgType::Shape);
-
-					int memory_dim = MaxIndexCount(memory_shape);
-
-					// get the index nodes
-					map<int, const Tensor*> idx =
-					    node->GetArgumentTensors(ArgType::Index);
-
-					//just use the thread index if no index is provided
-					if (idx.empty() && indexing_mode_ == KernelIndexingMode::Linear) {
-						// add the thread index node edge
-						node->AddArgument(thread_index->node_, ArgType::Index, 0);
-						return;
-					}
-
-					Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, tensor_indexing_mode_);
-
-					// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
-					// mirror, zero)
-
-					// remove the index node edges
-					node->RemoveArguments(ArgType::Index);
-
-					// add the flat index node edge
-					node->AddArgument(flat_index->node_, ArgType::Index, 0);
-				});
+				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), thread_index, indices, indexing_mode_, tensor_indexing_mode_); });
 			}
+		}
+	}
+
+	//now compute address for all nodes that are not in a kernel
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpType::MemoryOp)) {
+			ExecuteExpressionBefore(node.get(), [&]() { 
+				vector<Tensor*> indices = {};
+				ComputeAddress(node.get(), nullptr, indices, indexing_mode_, tensor_indexing_mode_);
+			});
 		}
 	}
 }
