@@ -12,8 +12,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();
 			break;
-		case BackendType::WGPU:
-			throw std::runtime_error("WGPU backend not implemented yet");
+		case BackendType::Vulkan:
+			throw std::runtime_error("Vulkan backend not implemented yet");
 			break;
 	}
 }

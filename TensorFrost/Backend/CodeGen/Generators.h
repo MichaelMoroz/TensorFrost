@@ -153,15 +153,14 @@ protected:
 				right += ";";
 			} else if (op->name_ == "store") {
 				expression += memory_expression + " = ";
-				expression += (output_type != DataType::Uint) ? args.Name(ArgType::Input) : TypeReinterpret("uint", args.Name(ArgType::Input));
+				expression += (output_type == DataType::Uint) ? args.Name(ArgType::Input) : TypeReinterpret("uint", args.Name(ArgType::Input));
 				right += ";";
 			} else if (op->HasAllTypes(OpType::Scatter)) {
 				if (output_type != DataType::None) {
 					left += type_names[output_type] + " " + name + " = ";
 				}
 				string input_type_name = type_names[args.Type(ArgType::Input)];
-				expression += op->code_ + "((" + input_type_name + "*)mem" + ", " +
-				              address + ", " + args.Name(ArgType::Input) + ")";
+				expression += GenerateAtomicOp(op->name_, input_type_name, address, args.Name(ArgType::Input));
 				right += ";";
 			}
 		} else if (op->name_ == "set") {
@@ -223,35 +222,39 @@ protected:
 		return new Line(left, expression, right, name, op->cost_);
 	}
 
-	string GenerateLoop(ArgumentManager* args, const string& name)
+	virtual string GenerateLoop(ArgumentManager* args, const string& name)
 	{
 		string in1 = args->Name(ArgType::Input, 0), in2 = args->Name(ArgType::Input, 1), in3 = args->Name(ArgType::Input, 2);
 		return "for (int " + name + " = " + in1 + "; " + name + " < " + in2 + "; " + name + " += " + in3 + ")";
 	}
 
-	string GenerateIf(ArgumentManager* args)
+	virtual string GenerateIf(ArgumentManager* args)
 	{
 		return "if (" + args->Name(ArgType::Input, 0) + ")";
 	}
 
-	string TypeCast(string type_name, string input)
+	virtual string TypeCast(string type_name, string input)
 	{
 		return "(" + type_name + ")" + input;
 	}
 
-	string TypeReinterpret(string type_name, string input)
-	{
-		return "*(" + type_name + "*)&" + input;
+	virtual string TypeReinterpret(string type_name, string input) {
+		return "as" + type_name + "(" + input + ")";
 	}
 
-	string GenerateTypeCast(ArgumentManager* args, const string& type_name)
+	virtual string GenerateTypeCast(ArgumentManager* args, const string& type_name)
 	{
 		return TypeCast(type_name, args->Name(ArgType::Input, 0));
 	}
 
-	string GenerateTypeReinterpret(ArgumentManager* args, const string& type_name)
+	virtual string GenerateTypeReinterpret(ArgumentManager* args, const string& type_name)
 	{
 		return TypeReinterpret(type_name, args->Name(ArgType::Input, 0));
+	}
+
+	virtual string GenerateAtomicOp(const string& op, const string& input_type_name, const string& address, const string& input)
+	{
+		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}
 };
 

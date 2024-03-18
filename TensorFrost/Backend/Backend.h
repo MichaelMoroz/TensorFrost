@@ -21,7 +21,7 @@ extern TensorMemoryManager* global_memory_manager;
 
 enum class BackendType {
 	CPU,
-	WGPU,
+	Vulkan,
 };
 
 vector<TensorMemory*> ExecuteProgram(
