@@ -280,6 +280,11 @@ class Node {
 				return cur_parent;
 			}
 		}
+		for (Node* cur_parent = other; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (cur_parent->parent == this->parent) {
+				return cur_parent;
+			}
+		}
 		throw std::runtime_error("No common parent found");
 	}
 
@@ -778,6 +783,7 @@ public:
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
 	void AddKernelGlobalMemoryOperations();
+	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
 	                       Node* cluster, int dims, Tensors kernel_shape);

@@ -194,6 +194,10 @@ void IR::SeparateOperationsIntoKernels() {
 				Node* parent = node->GetCommonParent(boundary_node);
 				int boundary_depth = boundary_node->ComputeDepth();
 
+				if (boundary_depth > current_depth) {
+					parent = parent->next;
+				}
+
 				vector<Scope*> new_scopes =
 				    Scope::GetScopes(current_scope->begin, parent);
 				for (auto scope : new_scopes) {
@@ -413,7 +417,7 @@ map<Node*, Node*> IR::CopyComputation(
 		return {};
 	}
 
-	if (nodes_to_copy.size() > 256) {
+	if (nodes_to_copy.size() > 1024) {
 		throw std::runtime_error(
 		    "Copy Computation: Copying too many nodes, something is probably wrong. Number of nodes to copy: " + to_string(nodes_to_copy.size()));
 	}
@@ -544,7 +548,9 @@ void IR::OptimizeKernels() {
 					if (input_cost == -1.0) {
 						throw std::runtime_error("Cost has not been computed");
 					}
-					if (input_cost >= 0.0f && input_cost < 512.0f) {
+					bool cheap_enough = input_cost >= 0.0f && input_cost < 512.0f;
+					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
+					if (cheap_enough || has_only_one_output) {
 						args_to_copy.insert(&input);
 					}
 				}
@@ -921,6 +927,27 @@ void IR::AddKernelGlobalMemoryOperations() {
 	}
 }
 
+//check if all child nodes in a kernel have compatible shape to the kernel
+void IR::CheckKernelShapes()
+{
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	// go over all outputs of each kernel and create memory nodes to store the
+	// output
+	for (auto kernel : kernels) {
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			//check if the node has a shape argument
+			ShapeCompareResult result = CompareShape(kernel, node.get());
+			if (!result.compatible) {
+				throw std::runtime_error("Kernel " + kernel->var_name + " has incompatible shape with node " + node.get()->var_name);
+			}
+		}
+	}
+
+}
+
 void IR::AddMemoryDeallocation()
 {
 	vector<Node*> memory_nodes = GetNodesOfType("memory");
@@ -1214,6 +1241,7 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
 	SeparateOperationsIntoKernels();
+	CheckKernelShapes();
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);
