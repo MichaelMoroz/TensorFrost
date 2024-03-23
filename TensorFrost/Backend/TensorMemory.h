@@ -15,6 +15,21 @@ namespace TensorFrost {
 
 using namespace std;
 
+extern "C" {
+	struct TensorProp {
+		uint offset;
+		uint dim;
+		uint* shape;
+		DataType type;
+	};
+
+	typedef TensorProp alloc_func(uint*&, uint*, uint, DataType);
+	typedef void dealloc_func(TensorProp);
+  }
+
+using uint = unsigned int;
+using main_func = void(TensorProp*, TensorProp*, uint*, alloc_func, dealloc_func);
+
 int GetLinearSize(const vector<int>& shape);
 
 class TensorMemory;

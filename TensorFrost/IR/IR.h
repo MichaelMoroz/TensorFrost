@@ -75,7 +75,6 @@ enum class MemoryType {
 	None,
 	Input,
 	Output,
-	Shape,
 	Constant,
 };
 
@@ -135,7 +134,7 @@ public:
 			return Arg->second;
 		}
 		else {
-			throw std::runtime_error("Argument count not found");
+			return 0;
 		}
 	}
 
@@ -174,7 +173,7 @@ class Node {
 	Arguments inputs_;
 	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
-	int memory_index_ = 0;
+	int special_index_ = 0;
 
 	bool has_been_modified_ = false;
 	bool is_static = false;
@@ -299,7 +298,7 @@ class Node {
 			throw std::runtime_error("Memory type already set. Are you trying to output an input?");
 		}
 		memory_type_ = memory_type;
-		memory_index_ = index;
+		special_index_ = index;
 	}
 
 	int MaxIndex(ArgType type) const {

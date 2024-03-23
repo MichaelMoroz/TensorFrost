@@ -21,17 +21,15 @@ class TensorProgram {
 	EvaluateFunction evaluate_callback;
 	IR ir;
 	Program* program;
-	string program_name = "TensorProgram";
 	bool debug = false;
 	float compile_time = 0.0f;
 	float external_compile_time = 0.0f;
 
-	explicit TensorProgram(EvaluateFunction evaluate)
-	    : evaluate_callback(std::move(evaluate)) {
-		CreateProgram();
+	explicit TensorProgram(EvaluateFunction evaluate, string name) : evaluate_callback(std::move(evaluate)) {
+		CreateProgram(name);
 	}
 
-	void CreateProgram();
+	void CreateProgram(string name);
 
 	vector<TensorMemory*> Evaluate(
 	    const vector<TensorMemory*>& input) const;

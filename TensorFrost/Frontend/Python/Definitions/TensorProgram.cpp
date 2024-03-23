@@ -10,20 +10,23 @@ void TensorProgramDefinition(py::module& m,
 	m.def(
 	    "compile",
 	    [](const py::function& py_evaluate) {
-		    TensorProgram& program = *new TensorProgram([py_evaluate]() -> Tensors {
-			    py::gil_scoped_acquire acquire;
-			    py::object result = py_evaluate();
-			    auto py_outputs = py::cast<vector<PyTensor>>(result);
-			    Tensors outputs = Tensors();
-			    for (PyTensor output : py_outputs) {
-				    outputs.push_back(&output.Get());
-			    }
-			    return outputs;
-		    });
 		    // Extract the name of the Python function
 		    std::string func_name =
 		        py_evaluate.attr("__name__").cast<std::string>();
-			program.program_name = func_name;
+
+		    TensorProgram& program = *new TensorProgram(
+		        [py_evaluate]() -> Tensors {
+			        py::gil_scoped_acquire acquire;
+			        py::object result = py_evaluate();
+			        auto py_outputs = py::cast<vector<PyTensor>>(result);
+			        Tensors outputs = Tensors();
+			        for (PyTensor output : py_outputs) {
+				        outputs.push_back(&output.Get());
+			        }
+			        return outputs;
+		        },
+		        func_name);
+		    
 		    py::print(program.PrintProperties());
 			return &program;
 	    },

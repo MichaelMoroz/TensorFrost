@@ -4,7 +4,7 @@
 
 namespace TensorFrost {
 
-void TensorProgram::CreateProgram() {
+void TensorProgram::CreateProgram(string name) {
 	Tensor::SetEvaluationContext(nullptr);
 
 	//get current time
@@ -23,6 +23,7 @@ void TensorProgram::CreateProgram() {
 	}
 
 	program = GenerateProgram(&ir);
+	program->program_name = name;
 
 	Tensor::SetEvaluationContext(nullptr);
 
@@ -44,7 +45,7 @@ vector<TensorMemory*> TensorProgram::Evaluate(
 }
 
 string TensorProgram::PrintProperties() const { 
-	string properties = program_name + ":\n";
+	string properties = program->program_name + ":\n";
 	int compute_kernels = (int)program->kernels_.size();
 	int lines = 0;
 	string line;

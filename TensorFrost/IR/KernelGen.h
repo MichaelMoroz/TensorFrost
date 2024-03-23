@@ -28,11 +28,9 @@ class Program {
 	vector<Kernel> kernels_;
 	function<void()> unload_callback;
 	string generated_code_;
+	string program_name = "TensorProgram";
 
-	function<void(uint* in, uint* out, uint* mem,
-	              uint(uint*&, uint*, uint dim),
-	              void(uint))>
-	    execute_callback;
+	function<main_func> execute_callback;
 
 	explicit Program(IR* ir) : ir_(ir) {}
 

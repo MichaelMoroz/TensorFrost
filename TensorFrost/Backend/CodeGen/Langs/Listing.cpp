@@ -96,9 +96,6 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 			case MemoryType::Constant:
 				listing += "memory_type=constant, ";
 				break;
-			case MemoryType::Shape:
-				listing += "memory_type=input_shape, ";
-				break;
 			default:
 				break;
 		}

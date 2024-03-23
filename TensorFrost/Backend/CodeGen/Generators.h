@@ -13,6 +13,7 @@ void GenerateNodeNames(const IR& ir);
 
 string ReadVariable(Node* node);
 string GenerateCPP(Program* program);
+string GenerateCPPKernel(Program * program, const Kernel* kernel, const string& kernel_name);
 string GenerateHLSLKernel(Program* program, const Kernel* kernel);
 void GenerateCode(Program* program);
 
@@ -49,7 +50,6 @@ class CodeGenerator {
 	};
 	
 	bool offset_array = true;
-	int* input_memory_index = nullptr;
 
 	CodeGenerator() = default;
 
@@ -89,46 +89,50 @@ protected:
 		string right = "";
 
 		if (op->HasAllTypes(OpType::Special)) {
+			int dims = args.Count(ArgType::Shape);
+
+			string shape_arg = "{";
+			if (dims == 0) {
+				shape_arg += "1";
+			} else {
+				for (int j = 0; j < dims; j++) {
+					if (j != 0) {
+						shape_arg += ", ";
+					}
+					Node* shape_node = args.Get(ArgType::Shape, j);
+
+					shape_arg += "(uint)" + ReadVariable(shape_node);
+				}
+			}
+
+			shape_arg += "}";
+
 			if (op->name_ == "loop") {
 				left += GenerateLoop(&args, name);
 			} else if (op->name_ == "if") {
 				left += GenerateIf(&args);
 			} else if (op->name_ == "memory") {
-				left += "uint " + node->var_name + " = ";
+				left += "TensorProp " + node->var_name + " = ";
 				// if input memory type then just take the input and store it in the
 				// output
-				if (node->memory_type_ == MemoryType::Input ||
-				    node->memory_type_ == MemoryType::Shape) {
-					expression += "in[" + to_string((*input_memory_index)++) + "]";
+				if (node->memory_type_ == MemoryType::Input) {
+					expression += "check_tensor(in" + to_string(node->special_index_) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
 				else {
-					// get shape arguments
-					ArgMap args = node->GetArgumentMap(ArgType::Shape);
-					int dims = (int)args.size();
-
-					string shape_arg = "{";
-					if (dims == 0) {
-						shape_arg += "1";
-					} else {
-						for (int j = 0; j < dims; j++) {
-							if (j != 0) {
-								shape_arg += ", ";
-							}
-							Node* shape_node = args[j]->from_->get();
-
-							shape_arg += "(uint)" + ReadVariable(shape_node);
-						}
-					}
-
-					shape_arg += "}";
-
-					expression += "allocate(alloc, mem, " + shape_arg + ")";
+					expression += "allocate(" + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 			} else if (op->name_ == "deallocate") {
 				left = "deallocate(" + args.Name(ArgType::Memory) + ")";
+				right = ";";
+			}
+			else if (op->name_ == "input_shape")
+			{
+				Node* output_memory = node->outputs_[0]->to_->get();
+				left = "int " + node->var_name + " = ";
+				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
@@ -138,7 +142,7 @@ protected:
 				address = offset_name_ + "[" +
 				          to_string(offsets[args.Get(ArgType::Memory)]) + "]";
 			} else {
-				address = args.Name(ArgType::Memory);
+				address = args.Name(ArgType::Memory) + ".offset";
 			}
 			// if has index (not a scalar)
 			if (args.Has(ArgType::Index)) {

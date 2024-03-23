@@ -123,10 +123,6 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 	RunCompiler(tempPath, dllName);
 }
 
-using uint = unsigned int;
-using kernel_func = void (*)(uint*, uint*, uint*, uint*);
-using main_func = void (*)(uint*, uint*, uint*, uint(uint*&, uint*, uint dim), void(uint));
-
 void CompileAndLoadKernelModule(Program* program) {
 #if defined(_WIN32)
 	char temp_path[MAX_PATH];
@@ -183,10 +179,10 @@ void CompileAndLoadKernelModule(Program* program) {
 
 	// Load the main function
 	#if defined(_WIN32)
-	auto main_callback = reinterpret_cast<main_func>(
+	auto main_callback = reinterpret_cast<main_func*>(
 	    GetProcAddress(lib_handle, "main"));
 	#else
-	auto main_callback = reinterpret_cast<main_func>(
+	auto main_callback = reinterpret_cast<main_func*>(
 	    dlsym(lib_handle, "main"));
 	#endif
 
@@ -195,12 +191,7 @@ void CompileAndLoadKernelModule(Program* program) {
 	}
 
 	// Set the execute callback
-	program->execute_callback =
-	    [main_callback](uint* in, uint* out, uint* mem,
-	                                uint allocate(uint*&, uint*, uint dim),
-	                                void deallocate(uint)) {
-		main_callback(in, out, mem, allocate, deallocate);
-	};
+	program->execute_callback = *main_callback;
 
 	cout << "Successfully compiled and loaded kernel library." << endl;
 }

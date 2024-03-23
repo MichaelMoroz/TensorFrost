@@ -24,10 +24,10 @@ const vector<Operation> operations = {
               {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
-    Operation("memory", {"_f", "_i", "_u"}, 0, "",
-              {OpType::Memory, OpType::Special}),
-    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special}),
-    Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::Static}),
+    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
+    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::Static}),
+    Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::Static}), // TODO implement in graph
 
 
     //Algorithms (TODO: implement in graph)
@@ -175,5 +175,11 @@ string RemoveSpaces(string str) {
 	str.erase(remove(str.begin(), str.end(), ' '), str.end());
 	return str;
 }
+
+std::unordered_map<DataType, string> DataTypeNames = {
+    {DataType::Float, "Float"}, {DataType::Uint, "Uint"},
+    {DataType::Int, "Int"},     {DataType::Bool, "Bool"},
+    {DataType::None, "None"},
+};
 
 }  // namespace TensorFrost

@@ -14,13 +14,17 @@ namespace TensorFrost {
 
 using namespace std;
 
-enum class DataType {
-	Float,
-	Uint,
-	Int,
-	Bool,
-	None,
-};
+extern "C" {
+	enum DataType {
+		Float,
+		Uint,
+		Int,
+		Bool,
+		None,
+	};
+}
+
+extern std::unordered_map<DataType, string> DataTypeNames;
 
 enum class OpType {
 	Operator,

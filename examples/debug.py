@@ -204,58 +204,56 @@ tf.initialize(tf.cpu)
 #print("Computed: ", resnp[0, 0, 0], " Expected: ", v0)
 ##
 ##
-#S = 512
-#
-#def transpose(A):
-#    N, M = A.shape
-#    i, j = tf.indices([M, N])
-#    return A[j, i] * 1.0
-#
-#def matmul():
-#    A = tf.input([-1, -1], tf.float32)
-#    N, M = A.shape
-#    B = tf.input([M, -1], tf.float32)
-#    K = B.shape[1]
-#        
-#    Bt = transpose(B)
-#        
-#    #C = tf.zeros([N, K])
-#    #i, j, k = tf.indices([N, K, M])
-#    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
-#        
-#    C = tf.buffer([N, K])
-#        
-#    i, j = C.indices
-#        
-#    s = tf.zeros([N, K], tf.float32)
-#    def loop_body(k):
-#        s.set(s + A[i, k] * Bt[j, k])
-#         
-#    tf.loop(loop_body, 0, M, 1)
-#        
-#    C[i, j] = s
-#        
-#    return [C]
-#
-#mmul = tf.compile(matmul)
-#
-#Anp = np.random.rand(64, 32).astype(np.float32)
-#Bnp = np.random.rand(32, 48).astype(np.float32)
-#
-#A = tf.tensor(Anp)
-#B = tf.tensor(Bnp)
-#C, = mmul(A, B)
-#
-#Cnp = C.numpy
-#
-##compare to numpy
-#Cnp2 = Anp @ Bnp
-#
-#print(Cnp)
-#print(Cnp2)
-#
-#Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
-#print("Error:", Cerror)
+def transpose(A):
+    N, M = A.shape
+    i, j = tf.indices([M, N])
+    return A[j, i] * 1.0
+
+def matmul():
+    A = tf.input([-1, -1], tf.float32)
+    N, M = A.shape
+    B = tf.input([M, -1], tf.float32)
+    K = B.shape[1]
+        
+    Bt = transpose(B)
+        
+    #C = tf.zeros([N, K])
+    #i, j, k = tf.indices([N, K, M])
+    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
+        
+    C = tf.buffer([N, K])
+        
+    i, j = C.indices
+        
+    s = tf.zeros([N, K], tf.float32)
+    def loop_body(k):
+        s.set(s + A[i, k] * Bt[j, k])
+         
+    tf.loop(loop_body, 0, M, 1)
+        
+    C[i, j] = s
+        
+    return [C]
+
+mmul = tf.compile(matmul)
+
+Anp = np.random.rand(64, 32).astype(np.float32)
+Bnp = np.random.rand(32, 48).astype(np.float32)
+
+A = tf.tensor(Anp)
+B = tf.tensor(Bnp)
+C, = mmul(A, B)
+
+Cnp = C.numpy
+
+#compare to numpy
+Cnp2 = Anp @ Bnp
+
+print(Cnp)
+print(Cnp2)
+
+Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
+print("Error:", Cerror)
 #
 #N = 512 
 #M = 1024
@@ -979,36 +977,3 @@ tf.initialize(tf.cpu)
 #	return [reordered_blocks1, block_pos]
 #
 #sparsifier = tf.compile(Sparsify)
-def GetDensified(blocks, block_pos, bbox):
-    N, Bx, By, Bz = blocks.shape
-
-    #compute volume size and allocate volume
-    Vx = (bbox[1, 0] - bbox[0, 0]) * Bx
-    Vy = (bbox[1, 1] - bbox[0, 1]) * By
-    Vz = (bbox[1, 2] - bbox[0, 2]) * Bz
-    volume = tf.zeros([Vx, Vy, Vz], tf.float32)
-
-    #compute volume position for each block
-    b, i, j, k = blocks.indices
-    x, y, z = (block_pos[b, 0] - bbox[0, 0]) * Bx + i, (block_pos[b, 1] - bbox[0, 1]) * By + j, (block_pos[b, 2] - bbox[0, 2]) * Bz + k
-
-    def set_value():
-        volume[x, y, z] = blocks[b, i, j, k]
-
-    #if voxel is inside the volume, set its value
-    is_inside = (x >= 0) & (x < Vx) & (y >= 0) & (y < Vy) & (z >= 0) & (z < Vz)
-    tf.if_cond(is_inside, set_value)
-
-    return volume
-
-def Densify():
-    blocks = tf.input([-1, -1, -1, -1], tf.float32)
-    N, Bx, By, Bz = blocks.shape
-    block_pos = tf.input([N, 3], tf.int32)
-    bbox = tf.input([2, 3], tf.int32)
-
-    volume = GetDensified(blocks, block_pos, bbox)
-
-    return [volume]
-
-densify = tf.compile(Densify)

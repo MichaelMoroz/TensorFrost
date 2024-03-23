@@ -459,6 +459,7 @@ map<Node*, Node*> IR::CopyComputation(
 }
 
 void IR::GetInputList() {
+	int input_memory_index = 0;
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (node->memory_type_ == MemoryType::Input) {
 			//add shapes to the memory inputs
@@ -471,6 +472,9 @@ void IR::GetInputList() {
 					shape_memory_map[*node][arg.index_] = arg.from_->get();
 				}
 			}
+
+			//set input memory index
+			node->special_index_ = input_memory_index++;
 		}
 	}
 }
@@ -481,7 +485,7 @@ void IR::GetOutputList() {
 			if (node->name != "memory") {
 				throw std::runtime_error("Compilation error: output is not a memory node"); //all outputs should be memory nodes at this point
 			}
-			output_memory_map[node->memory_index_] = *node;
+			output_memory_map[node->special_index_] = *node;
 		}
 	}
 }
@@ -492,7 +496,7 @@ void IR::ComputeStatistics() {
 		{
 			if (node->memory_type_ == MemoryType::Output) {
 				output_memory_count++;
-			} else if (node->memory_type_ == MemoryType::Input || node->memory_type_ == MemoryType::Shape) {
+			} else if (node->memory_type_ == MemoryType::Input) {
 				input_memory_count++;
 			} else {
 				temp_memory_count++;
@@ -789,7 +793,7 @@ void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (!used_nodes.contains(node.get())) {
-			if (node->memory_type_ != MemoryType::Input && node->memory_type_ != MemoryType::Output && node->memory_type_ != MemoryType::Shape)
+			if (node->memory_type_ != MemoryType::Input && node->memory_type_ != MemoryType::Output)
 			{
 				nodes_to_remove.insert(node.get());
 			}
@@ -876,7 +880,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;
-					mem->memory_index_ = output->memory_index_;
+					mem->special_index_ = output->special_index_;
 					output->memory_type_ = MemoryType::None;
 				}
 			});
@@ -954,7 +958,7 @@ void IR::AddMemoryDeallocation()
 
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
 	for (auto memory : memory_nodes) {
-		if (memory->memory_type_ == MemoryType::Input || memory->memory_type_ == MemoryType::Shape || memory->memory_type_ == MemoryType::Output) {
+		if (memory->memory_type_ == MemoryType::Input || memory->memory_type_ == MemoryType::Output) {
 			continue;
 		}
 
