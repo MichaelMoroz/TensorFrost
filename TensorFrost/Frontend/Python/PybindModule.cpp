@@ -35,6 +35,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("vulkan") = BackendType::Vulkan;
+	m.attr("opengl") = BackendType::OpenGL;
 
 	PyTensorDefinition(m, py_tensor);
 	TensorViewDefinition(m, tensor_view);

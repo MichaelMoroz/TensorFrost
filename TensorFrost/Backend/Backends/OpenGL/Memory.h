@@ -7,23 +7,13 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <cstring>
 
-#include "IR/KernelGen.h"
-#include "TensorMemory.h"
+#include "../../TensorMemory.h"
 
 namespace TensorFrost {
 
+using namespace std;
 
-class KernelExecutor
-{
-	int global_kernel_id = 0;
- public:
-
-	KernelExecutor() = default;
-
-	int GenerateKernelID() { 
-		return global_kernel_id++; 
-	}
-};
 
 }  // namespace TensorFrost
