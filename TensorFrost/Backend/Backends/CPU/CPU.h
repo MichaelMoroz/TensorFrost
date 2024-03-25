@@ -2,4 +2,4 @@
 
 #include "KernelCompiler.h"
 #include "Memory.h"
-#include "CPUKernelExecutor.h"
+#include "KernelManager.h"

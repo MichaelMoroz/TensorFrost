@@ -28,6 +28,7 @@ extern "C" {
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
 	typedef void dispatch_func(int, TensorProp*, uint*, uint*);
+	typedef void cpu_dispatch_func(uint*, uint*, uint*, uint*);
 }
 
 using uint = unsigned int;

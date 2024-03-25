@@ -19,6 +19,7 @@ class Kernel {
 	ArgMap shape;
 	int dim = 0;
 
+	int kernel_id_;
 	string kernel_name_;
 	string generated_code_;
 };

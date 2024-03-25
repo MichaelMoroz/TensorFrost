@@ -10,7 +10,7 @@
 
 #include "Backends/CPU/CPU.h"
 #include "CodeGen/Generators.h"
-#include "KernelExecutor.h"
+#include "KernelManager.h"
 #include "TensorMemory.h"
 
 namespace TensorFrost {
@@ -24,7 +24,7 @@ enum class BackendType {
 };
 
 extern TensorMemoryManager* global_memory_manager;
-extern KernelExecutor* global_kernel_executor;
+extern KernelManager* global_kernel_manager;
 extern BackendType current_backend;
 
 vector<TensorMemory*> ExecuteProgram(

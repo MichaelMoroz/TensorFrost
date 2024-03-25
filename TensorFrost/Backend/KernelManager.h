@@ -14,12 +14,12 @@
 namespace TensorFrost {
 
 
-class KernelExecutor
+class KernelManager
 {
 	int global_kernel_id = 0;
  public:
 
-	KernelExecutor() = default;
+	KernelManager() = default;
 
 	int GenerateKernelID() { 
 		return global_kernel_id++; 

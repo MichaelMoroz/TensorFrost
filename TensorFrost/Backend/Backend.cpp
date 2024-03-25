@@ -14,6 +14,7 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 	switch (backendType) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();
+			global_kernel_manager = new CpuKernelManager();
 			break;
 		case BackendType::Vulkan:
 			throw std::runtime_error("Vulkan backend not implemented yet");

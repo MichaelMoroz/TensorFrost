@@ -342,8 +342,8 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 	map<Node*, string> dispatch_code;
 
 	for (auto& kernel : program->kernels_) {
-		int kernel_index = global_kernel_executor->GenerateKernelID();
-		kernel.kernel_name_ = "kernel_" + to_string(kernel_index);
+		kernel.kernel_id_ = global_kernel_manager->GenerateKernelID();
+		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel
 		vector<Node*> memory_nodes;
