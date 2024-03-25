@@ -17,12 +17,15 @@ namespace TensorFrost {
 
 using namespace std;
 
-extern TensorMemoryManager* global_memory_manager;
-
 enum class BackendType {
 	CPU,
 	Vulkan,
+	OpenGL,
 };
+
+extern TensorMemoryManager* global_memory_manager;
+extern KernelExecutor* global_kernel_executor;
+extern BackendType current_backend;
 
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs);

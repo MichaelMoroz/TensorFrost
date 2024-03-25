@@ -26,6 +26,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_type.value("bool", DataType::Bool);
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
+	backend_type.value("opengl", BackendType::OpenGL);
 
 	m.attr("float32") = DataType::Float;
 	m.attr("int32") = DataType::Int;

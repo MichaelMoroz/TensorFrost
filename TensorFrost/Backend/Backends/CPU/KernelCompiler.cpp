@@ -139,7 +139,7 @@ void CompileAndLoadKernelModule(Program* program) {
 	}
 #else
 	char temp_path[] = "/tmp/";
-	char filename_template[] = "/tmp/mytempXXXXXX";
+	char filename_template[] = "/tmp/tensorfrost_XXXXXX";
 	char* temp_file_name = mktemp(filename_template);
 	if (!temp_file_name) {
 		throw std::runtime_error("Compiler error: cannot create temp file");

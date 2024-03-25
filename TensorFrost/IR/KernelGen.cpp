@@ -487,6 +487,16 @@ void IR::GetOutputList() {
 			}
 			output_memory_map[node->special_index_] = *node;
 		}
+		if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				writebacks++;
+			}
+		}
+		else if (node->op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				readbacks++;
+			}
+		}
 	}
 }
 

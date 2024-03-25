@@ -56,6 +56,19 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return data;
 	}
 
+	uint ReadbackValue(const TensorMemory* mem, uint index) override {
+		return memory[mem->frame->start + index];
+	}
+
+	void Writeback(const TensorMemory* mem, const vector<uint>& data) override {
+		memcpy(memory.data() + mem->frame->start, data.data(),
+					       data.size() * sizeof(uint));
+	}
+
+	void WritebackValue(const TensorMemory* mem, uint index, uint value) override {
+		memory[mem->frame->start + index] = value;
+	}
+
 	void Free(TensorMemory* memory) override {
 		Frame* frame = memory->frame;
 		allocator.FreeFrame(*frame);

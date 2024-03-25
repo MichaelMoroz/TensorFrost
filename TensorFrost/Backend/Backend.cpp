@@ -8,12 +8,18 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 	if (!compilerOptions.empty()) {
 		kernel_compile_options = compilerOptions;
 	}
+
+	current_backend = backendType;
+
 	switch (backendType) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();
 			break;
 		case BackendType::Vulkan:
 			throw std::runtime_error("Vulkan backend not implemented yet");
+			break;
+		case BackendType::OpenGL:
+			throw std::runtime_error("OpenGL backend not implemented yet");
 			break;
 	}
 }
@@ -47,6 +53,18 @@ void Deallocator(TensorProp a) {
 	delete[] a.shape;
 }
 
+uint Readback(TensorProp a, uint b) {
+	global_memory_manager->ReadbackValue(global_memory_manager->allocated_by_offset[a.offset], b);
+}
+
+void Writeback(TensorProp a, uint b, uint c) {
+	global_memory_manager->WritebackValue(global_memory_manager->allocated_by_offset[a.offset], b, c);
+}
+
+void Dispatch(int kernel_id, TensorProp* inputs, uint* variables, uint* shape) {
+
+}
+
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs) {
 
@@ -71,7 +89,7 @@ vector<TensorMemory*> ExecuteProgram(
 	TensorProp* in = input_tensors.data();
 	TensorProp* out = new TensorProp[output_count];
 
-	program->execute_callback(in, out, mem, Allocator, Deallocator);
+	program->execute_callback(in, out, Allocator, Deallocator, Readback, Writeback, Dispatch);
 
 	vector<TensorMemory*> outputs;
 	outputs.resize(output_count);
