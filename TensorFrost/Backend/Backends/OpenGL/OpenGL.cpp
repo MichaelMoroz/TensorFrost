@@ -9,11 +9,6 @@ void StartOpenGL() {
 		throw std::runtime_error("Failed to initialize GLFW");
 	}
 
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
-	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-
 	global_window = glfwCreateWindow(800, 600, "TensorFrost", nullptr, nullptr);
 
 	if (!global_window) {
@@ -22,6 +17,15 @@ void StartOpenGL() {
 	}
 
 	glfwMakeContextCurrent(global_window);
+
+	int version = gladLoadGL(glfwGetProcAddress);
+	if (version == 0) {
+		throw std::runtime_error("Failed to load OpenGL");
+	}
+
+	// Successfully loaded OpenGL
+	printf("Loaded OpenGL %d.%d\n", GLAD_VERSION_MAJOR(version),
+	       GLAD_VERSION_MINOR(version));
 }
 
 void StopOpenGL() {
