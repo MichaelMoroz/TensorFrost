@@ -2,7 +2,7 @@
 
 namespace TensorFrost {
 
-TensorMemoryManager* global_memory_manager = nullptr;
+BackendType current_backend = BackendType::NotInitialized;
 
 void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 	if (!compilerOptions.empty()) {
@@ -38,15 +38,13 @@ TensorProp GetTensorProp(TensorMemory* tensor) {
 	return prop;
 }
 
-TensorProp Allocator(uint*& mem, uint* a, uint dim, DataType type) {
+TensorProp Allocator(uint* a, uint dim, DataType type) {
 	vector<int> shape;
 	for (uint i = 0; i < dim; i++) {
 		shape.push_back(a[i]);
 	}
 	TensorMemory* tensor = global_memory_manager->Allocate(shape, type);
-	TensorProp prop = GetTensorProp(tensor);
-	mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();
-	return prop;
+	return GetTensorProp(tensor);
 }
 
 void Deallocator(TensorProp a) { 
@@ -55,15 +53,15 @@ void Deallocator(TensorProp a) {
 }
 
 uint Readback(TensorProp a, uint b) {
-	global_memory_manager->ReadbackValue(global_memory_manager->allocated_by_offset[a.offset], b);
+	return global_memory_manager->ReadbackValue(global_memory_manager->allocated_by_offset[a.offset], b);
 }
 
 void Writeback(TensorProp a, uint b, uint c) {
 	global_memory_manager->WritebackValue(global_memory_manager->allocated_by_offset[a.offset], b, c);
 }
 
-void Dispatch(int kernel_id, TensorProp* inputs, uint* variables, uint* shape) {
-
+void Dispatch(DispatchInfo info) {
+	global_kernel_manager->DispatchKernel(info);
 }
 
 vector<TensorMemory*> ExecuteProgram(
@@ -86,7 +84,6 @@ vector<TensorMemory*> ExecuteProgram(
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
 	int output_count = (int)output_memory_map.size();
 
-	uint* mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();
 	TensorProp* in = input_tensors.data();
 	TensorProp* out = new TensorProp[output_count];
 

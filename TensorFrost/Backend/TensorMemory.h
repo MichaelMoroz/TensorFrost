@@ -23,12 +23,22 @@ extern "C" {
 		DataType type;
 	};
 
-	typedef TensorProp alloc_func(uint*&, uint*, uint, DataType);
+	struct DispatchInfo {
+		int kernel_id;
+		uint tensor_count;
+		TensorProp* tensors;
+		uint variable_count;
+		uint* variables;
+		uint dispatch_dim;
+		uint* dispatch_shape;
+	};
+
+	typedef TensorProp alloc_func(uint*, uint, DataType);
 	typedef void dealloc_func(TensorProp);
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
-	typedef void dispatch_func(int, TensorProp*, uint*, uint*);
-	typedef void cpu_dispatch_func(uint*, uint*, uint*, uint*);
+	typedef void dispatch_func(DispatchInfo);
+	typedef void cpu_dispatch_func(uint* var, uint* off, uint* mem, uint* shape);
 }
 
 using uint = unsigned int;
@@ -78,5 +88,7 @@ class TensorMemory {
 
 	~TensorMemory() { manager->Free(this); }
 };
+
+extern TensorMemoryManager* global_memory_manager;
 
 }  // namespace TensorFrost

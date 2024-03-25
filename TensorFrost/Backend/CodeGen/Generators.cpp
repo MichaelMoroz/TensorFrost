@@ -5,7 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-void GenerateKernel(Program* program, const Kernel* kernel) {
+void GenerateKernel(Program* program, Kernel* kernel) {
 	switch (current_backend) {
 		case BackendType::CPU:
 			GenerateCPPKernel(program, kernel);
@@ -19,10 +19,6 @@ void GenerateKernel(Program* program, const Kernel* kernel) {
 		default:
 			throw std::runtime_error("Backend not implemented");
 	}
-}
-
-void GenerateCode(Program* program) {
-	program->generated_code_ = GenerateHost(program);
 }
 
 void GenerateNodeNames(const IR& ir) {

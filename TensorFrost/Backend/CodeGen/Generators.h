@@ -10,14 +10,13 @@
 namespace TensorFrost {
 
 string GetNodeName(const Node* node,  bool compact = false);
+string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
-string ReadVariable(Node* node);
-string GenerateHost(Program* program);
-string GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);
-void GenerateKernel(Program* program, const Kernel* kernel);
-void GenerateCPPKernel(Program* program, const Kernel* kernel);
-void GenerateHLSLKernel(Program* program, const Kernel* kernel);
+void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);
+void GenerateKernel(Program* program, Kernel* kernel);
+void GenerateCPPKernel(Program* program, Kernel* kernel);
+void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
 using ArgumentNames = map<ArgID, string>;

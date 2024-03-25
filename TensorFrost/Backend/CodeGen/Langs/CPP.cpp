@@ -5,7 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GenerateHost(Program* program) {
+void GenerateCode(Program* program) {
 	string final_source = R"(
 #include <cmath>
 #include <omp.h>
@@ -229,12 +229,22 @@ extern "C" {
 		DataType type;
 	};
 
-	typedef TensorProp alloc_func(uint*&, uint*, uint, DataType);
+	struct DispatchInfo {
+		int kernel_id;
+		uint tensor_count;
+		TensorProp* tensors;
+		uint variable_count;
+		uint* variables;
+		uint dispatch_dim;
+		uint* dispatch_shape;
+	};
+
+	typedef TensorProp alloc_func(uint*, uint, DataType);
 	typedef void dealloc_func(TensorProp);
-	typedef void kernel_func(uint*, uint*, uint*, uint*);
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
-	typedef void dispatch_func(int, TensorProp*, uint*, uint*);
+	typedef void dispatch_func(DispatchInfo);
+	typedef void cpu_dispatch_func(uint*, uint*, uint*, uint*);
 }
 
 std::unordered_map<DataType, std::string> DataTypeNames = {
@@ -243,9 +253,11 @@ std::unordered_map<DataType, std::string> DataTypeNames = {
     {DataType::None, "None"},
 };
 
-uint* mem;
 alloc_func* alloc;
 dealloc_func* dealloc;
+readback_func* readback;
+writeback_func* writeback;
+dispatch_func* dispatch_ref;
 
 TensorProp allocate(std::initializer_list<uint> shape, DataType type)
 {
@@ -256,7 +268,7 @@ TensorProp allocate(std::initializer_list<uint> shape, DataType type)
 	shape_arr[i] = shape.begin()[i];
   }
 
-  TensorProp tensor = alloc(mem, shape_arr, shape.size(), type);
+  TensorProp tensor = alloc(shape_arr, shape.size(), type);
 
   delete[] shape_arr;
 
@@ -295,40 +307,45 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 
 uint ReadFromMemory(TensorProp tensor, uint index)
 {
-  return readback_func(tensor, index);
+  return readback(tensor, index);
 }
 
 void WriteToMemory(TensorProp tensor, uint index, uint value)
 {
-  writeback_func(tensor, index, value);
+  writeback(tensor, index, value);
 }
 
 void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape)
 {
-  uint* off_arr = new uint[tensors.size()];
-  uint* var_arr = new uint[var.size()];
-  uint* shape_arr = new uint[shape.size()];
+  DispatchInfo info;
+  info.kernel_id = kernel_id;
+  info.tensor_count = tensors.size();
+  info.tensors = new TensorProp[tensors.size()];
+  info.variable_count = var.size();
+  info.variables = new uint[var.size()];
+  info.dispatch_dim = shape.size();
+  info.dispatch_shape = new uint[shape.size()];
 
   for (int i = 0; i < tensors.size(); i++)
   {
-    off_arr[i] = tensors.begin()[i].offset;
+	info.tensors[i] = tensors.begin()[i];
   }
 
   for (int i = 0; i < var.size(); i++)
   {
-	var_arr[i] = var.begin()[i];
+	info.variables[i] = var.begin()[i];
   }
 
   for (int i = 0; i < shape.size(); i++)
   {
-	shape_arr[i] = shape.begin()[i];
+	info.dispatch_shape[i] = shape.begin()[i];
   }
 
-  dispatch_func(kernel_id, off_arr, var_arr, shape_arr);
+  dispatch_ref(info);
 
-  delete[] off_arr;
-  delete[] var_arr;
-  delete[] shape_arr;
+  delete[] info.tensors;
+  delete[] info.variables;
+  delete[] info.dispatch_shape;
 } 
 
 )";
@@ -391,12 +408,12 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 			final_source += kernel.generated_code_;
 		}
 
-		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel_index) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ")";
+		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
 
+	GenerateMain(program, dispatch_code, input_count, output_count);
 
-
-	final_source += GenerateMain(program, dispatch_code, input_count, output_count);
+	final_source += program->main_function_;
 
 	string host_code =
 	    "\n"
@@ -406,16 +423,13 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 #endif
 	    " void "
 	    "main"
-	    "(TensorProp* in, TensorProp* out, uint* mem_address, alloc_func "
-	    "allocation, "
-	    "dealloc_func deallocation, readback_func readback_func, writeback_func writeback_func, dispatch_func dispatch_func)\n"
+	    "(TensorProp* in, TensorProp* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
 	    "{\n"
-	    "  mem = mem_address;\n"
-	    "  alloc = allocation;\n"
-	    "  dealloc = deallocation;\n"
-	    "  readback_func = readback_func;\n"
-		"  writeback_func = writeback_func;\n"
-		"  dispatch_func = dispatch_func;\n"
+	    "  alloc = alloc_;\n"
+	    "  dealloc = dealloc_;\n"
+		"  readback = readback_; \n"
+		"  writeback = writeback_; \n"
+		"  dispatch_ref = dispatch_; \n"
 		"  auto outputs = " + program->program_name + "(";
 
 	for (int i = 0; i < input_count; i++) {
@@ -434,10 +448,10 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 
 	final_source += host_code;
 
-	return final_source;
+	program->generated_code_ = final_source;
 }
 
-string GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count) {
+void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count) {
 	CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
 	generator.is_kernel = false;
@@ -473,7 +487,7 @@ string GenerateMain(Program* program, map<Node*, string>& dispatch_code, int inp
 	}
 	main_code += "};\n}\n";
 
-	return main_code;
+	program->main_function_ = main_code;
 }
 
 void GenerateCPPKernel(Program* program, Kernel* kernel) {
@@ -517,6 +531,9 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	string kernel_source =
 	    "\n"
 	    "extern \"C\" "
+		#ifdef _WIN32
+		"__declspec(dllexport) "
+		#endif
 	    "void " +
 	    kernel->kernel_name_ +
 	    "(uint* var, uint* off, uint* mem, uint* shape)\n"

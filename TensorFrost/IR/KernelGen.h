@@ -30,6 +30,7 @@ class Program {
 	vector<Kernel> kernels_;
 	function<void()> unload_callback;
 	string generated_code_;
+	string main_function_;
 	string program_name = "TensorProgram";
 
 	function<main_func> execute_callback;

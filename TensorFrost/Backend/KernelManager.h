@@ -13,7 +13,6 @@
 
 namespace TensorFrost {
 
-
 class KernelManager
 {
 	int global_kernel_id = 0;
@@ -21,9 +20,13 @@ class KernelManager
 
 	KernelManager() = default;
 
+	virtual void DispatchKernel(DispatchInfo info) = 0;
+
 	int GenerateKernelID() { 
 		return global_kernel_id++; 
 	}
 };
+
+extern KernelManager* global_kernel_manager;
 
 }  // namespace TensorFrost

@@ -21,10 +21,9 @@ enum class BackendType {
 	CPU,
 	Vulkan,
 	OpenGL,
+	NotInitialized
 };
 
-extern TensorMemoryManager* global_memory_manager;
-extern KernelManager* global_kernel_manager;
 extern BackendType current_backend;
 
 vector<TensorMemory*> ExecuteProgram(
