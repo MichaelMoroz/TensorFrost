@@ -3,6 +3,9 @@ file(GLOB_RECURSE TENSORFROST_HEADER_LIST CONFIGURE_DEPENDS *.h *.hpp)
 
 pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_LIST})
 
+include_directories(external/glfw/include)
+target_link_libraries(TensorFrost PRIVATE glfw)
+
 target_include_directories(TensorFrost PRIVATE ${Python3_INCLUDE_DIRS})
 
 target_include_directories(TensorFrost PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -17,8 +20,6 @@ add_custom_command(
 add_custom_target(install_python_package ALL
     DEPENDS TensorFrost
 )
-
-target_link_libraries(TensorFrost glfw)
 
 set(DEBUG_PYTHON_SCRIPT "${CMAKE_SOURCE_DIR}/examples/debug.py")
 

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "Backends/CPU/CPU.h"
+#include "Backends/OpenGL/OpenGL.h"
 #include "CodeGen/Generators.h"
 #include "KernelManager.h"
 #include "TensorMemory.h"
