@@ -33,6 +33,31 @@ float pcgf(uint v)
 	return float(pcg(v)) / float(0xffffffffu)
 }
 
+float asfloat(uint x)
+{
+  return uintBitsToFloat(x);
+}
+
+uint asuint(float x)
+{
+  return floatBitsToUint(x);
+}
+
+uint asuint(int x)
+{
+  return intBitsToUint(x);
+}
+
+uint asuint(uint x)
+{
+  return x;
+}
+
+int asint(uint x)
+{
+  return intBitsToUint(x);
+}
+
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 uniform uint off[32];
