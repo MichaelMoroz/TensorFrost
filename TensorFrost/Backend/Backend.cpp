@@ -11,6 +11,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 
 	current_backend = backendType;
 
+	StartOpenGL();
+
 	switch (backendType) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();

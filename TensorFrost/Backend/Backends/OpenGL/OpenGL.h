@@ -5,3 +5,10 @@
 #include "Memory.h"
 #include "KernelManager.h"
 
+namespace TensorFrost {
+
+void StartOpenGL();
+
+void StopOpenGL();
+
+}  // namespace TensorFrost
