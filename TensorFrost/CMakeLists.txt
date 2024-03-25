@@ -18,6 +18,8 @@ add_custom_target(install_python_package ALL
     DEPENDS TensorFrost
 )
 
+target_link_libraries(TensorFrost glfw)
+
 set(DEBUG_PYTHON_SCRIPT "${CMAKE_SOURCE_DIR}/examples/debug.py")
 
 set_target_properties(TensorFrost PROPERTIES

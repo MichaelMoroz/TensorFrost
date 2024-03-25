@@ -21,8 +21,13 @@ set(CMAKE_PDB_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost
 set(PYBIND11_PYTHON_VERSION "3.10" CACHE STRING "Default Python version")
 find_package (Python3 ${PYBIND11_PYTHON_VERSION} EXACT COMPONENTS Interpreter Development)
 
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+
 # pybind11
 add_subdirectory(pybind11)
+add_subdirectory(glfw)
 add_subdirectory(TensorFrost)
 add_subdirectory(examples)
 
