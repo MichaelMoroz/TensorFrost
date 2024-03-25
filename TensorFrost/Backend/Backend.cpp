@@ -11,7 +11,7 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 
 	current_backend = backendType;
 
-	StartOpenGL();
+	
 
 	switch (backendType) {
 		case BackendType::CPU:
@@ -22,7 +22,9 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 			throw std::runtime_error("Vulkan backend not implemented yet");
 			break;
 		case BackendType::OpenGL:
-			throw std::runtime_error("OpenGL backend not implemented yet");
+			StartOpenGL();
+			//global_memory_manager = new OpenGLMemoryManager();
+			//global_kernel_manager = new OpenGLKernelManager();
 			break;
 	}
 }

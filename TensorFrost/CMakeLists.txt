@@ -3,8 +3,10 @@ file(GLOB_RECURSE TENSORFROST_HEADER_LIST CONFIGURE_DEPENDS *.h *.hpp)
 
 pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_LIST})
 
-include_directories(external/glfw/include)
+include_directories(glfw/include)
 target_link_libraries(TensorFrost PRIVATE glfw)
+include_directories(glad/include)
+target_link_libraries(TensorFrost PRIVATE glad)
 
 target_include_directories(TensorFrost PRIVATE ${Python3_INCLUDE_DIRS})
 
