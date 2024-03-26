@@ -5,8 +5,20 @@
 namespace TensorFrost {
 using namespace std;
 
-void GenerateCode(Program* program) {
-	program->generated_code_ = GenerateCPP(program);
+void GenerateKernel(Program* program, Kernel* kernel) {
+	switch (current_backend) {
+		case BackendType::CPU:
+			GenerateCPPKernel(program, kernel);
+			return;
+		case BackendType::Vulkan:
+			GenerateHLSLKernel(program, kernel);
+			return;
+		case BackendType::OpenGL:
+			GenerateGLSLKernel(program, kernel);
+			return;
+		default:
+			throw std::runtime_error("Backend not implemented");
+	}
 }
 
 void GenerateNodeNames(const IR& ir) {

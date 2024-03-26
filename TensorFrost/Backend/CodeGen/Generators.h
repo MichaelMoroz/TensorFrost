@@ -5,16 +5,19 @@
 #include <format>
 #include "IR/KernelGen.h"
 #include "Tensor/Tensor.h"
+#include "Backend/Backend.h"
 
 namespace TensorFrost {
 
 string GetNodeName(const Node* node,  bool compact = false);
+string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
-string ReadVariable(Node* node);
-string GenerateCPP(Program* program);
-string GenerateCPPKernel(Program * program, const Kernel* kernel, const string& kernel_name);
-string GenerateHLSLKernel(Program* program, const Kernel* kernel);
+void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);
+void GenerateKernel(Program* program, Kernel* kernel);
+void GenerateCPPKernel(Program* program, Kernel* kernel);
+void GenerateHLSLKernel(Program* program, Kernel* kernel);
+void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
 using ArgumentNames = map<ArgID, string>;
@@ -49,7 +52,7 @@ class CodeGenerator {
 	    {DataType::Int, "int"},
 	};
 	
-	bool offset_array = true;
+	bool is_kernel = true;
 
 	CodeGenerator() = default;
 
@@ -138,35 +141,65 @@ protected:
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 
-			if (offset_array) {
+			if (is_kernel) {
 				address = offset_name_ + "[" +
 				          to_string(offsets[args.Get(ArgType::Memory)]) + "]";
-			} else {
-				address = args.Name(ArgType::Memory) + ".offset";
-			}
-			// if has index (not a scalar)
-			if (args.Has(ArgType::Index)) {
-				address += " + " + args.Name(ArgType::Index);
-			}
-
-			string memory_expression = "mem[" + address + "]";
-			if (op->name_ == "load") {
-				string output_type_name = type_names[output_type];
-				left += output_type_name + " " + name + " = ";
-				expression += (output_type == DataType::Uint) ? memory_expression : TypeReinterpret(output_type_name, memory_expression);
-				right += ";";
-			} else if (op->name_ == "store") {
-				expression += memory_expression + " = ";
-				expression += (output_type == DataType::Uint) ? args.Name(ArgType::Input) : TypeReinterpret("uint", args.Name(ArgType::Input));
-				right += ";";
-			} else if (op->HasAllTypes(OpType::Scatter)) {
-				if (output_type != DataType::None) {
-					left += type_names[output_type] + " " + name + " = ";
+				// if has index (not a scalar)
+				if (args.Has(ArgType::Index)) {
+					address += " + " + args.Name(ArgType::Index);
 				}
-				string input_type_name = type_names[args.Type(ArgType::Input)];
-				expression += GenerateAtomicOp(op->name_, input_type_name, address, args.Name(ArgType::Input));
-				right += ";";
+
+				string memory_expression = "mem[" + address + "]";
+				if (op->name_ == "load") {
+					string output_type_name = type_names[output_type];
+					left += output_type_name + " " + name + " = ";
+					expression +=
+					    (output_type == DataType::Uint)
+					        ? memory_expression
+					        : TypeReinterpret(output_type_name, memory_expression);
+					right += ";";
+				} else if (op->name_ == "store") {
+					expression += memory_expression + " = ";
+					expression +=
+					    (output_type == DataType::Uint)
+					        ? args.Name(ArgType::Input)
+					        : TypeReinterpret("uint", args.Name(ArgType::Input));
+					right += ";";
+				} else if (op->HasAllTypes(OpType::Scatter)) {
+					if (output_type != DataType::None) {
+						left += type_names[output_type] + " " + name + " = ";
+					}
+					string input_type_name = type_names[args.Type(ArgType::Input)];
+					expression += GenerateAtomicOp(op->name_, input_type_name, address,
+					                               args.Name(ArgType::Input));
+					right += ";";
+				}
+			} else {
+				string tensor_name = args.Name(ArgType::Memory);
+				string address = "0";
+				if (args.Has(ArgType::Index)) {
+					address = args.Name(ArgType::Index);
+				}
+
+				if (op->name_ == "load") {
+					//do readback
+					string output_type_name = type_names[output_type];
+					left += output_type_name + " " + name + " = ";
+					string memory_expression = "ReadFromMemory(" + tensor_name + ", " + address + ")";
+					expression += (output_type == DataType::Uint)
+						? memory_expression
+						: TypeReinterpret(output_type_name, memory_expression);
+					right += ";";
+				} else if (op->name_ == "store") {
+					//do writeback
+					string memory_expression = "WriteToMemory(" + tensor_name + ", " + address + ", ";
+					expression += memory_expression + args.Name(ArgType::Input) + ")";
+					right += ";";
+				} else if (op->HasAllTypes(OpType::Scatter)) {
+					throw std::runtime_error("Scatter operation not supported in non-kernel mode");
+				}
 			}
+			
 		} else if (op->name_ == "set") {
 			left += args.Name(ArgType::Memory) + " = ";
 			expression += args.Name(ArgType::Input);
@@ -176,10 +209,13 @@ protected:
 				left += type_names[output_type] + " " + name + " = ";
 			}
 			string line;
-
+			string code = op->code_;
 			switch (op->op_types_[0]) {
 				case OpType::Operator:
-					line += args.Name(ArgType::Input, 0) + " " + op->code_ + " " +
+					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
+						code = code + code;
+					}
+					line += args.Name(ArgType::Input, 0) + " " + code + " " +
 					        args.Name(ArgType::Input, 1);
 					break;
 				case OpType::UnaryOperator:
@@ -200,6 +236,9 @@ protected:
 					break;
 				case OpType::DimensionIndex:
 					line += op->code_ + to_string(node->GetTensor()->data[0]);
+					break;
+				case OpType::Variable:
+					line += op->code_;
 					break;
 				case OpType::TypeCast:
 					line += GenerateTypeCast(&args, op->code_);

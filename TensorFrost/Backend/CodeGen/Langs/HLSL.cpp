@@ -17,7 +17,7 @@ class HLSLGenerator : public CodeGenerator {
 	}
 };
 
-string GenerateHLSLKernel(Program* program, const Kernel* kernel) {
+void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = R"(
 uint pcg(uint v)
 {
@@ -54,7 +54,7 @@ void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
 
 	final_source += "}\n";
 
-    return final_source;
+    kernel->generated_code_ = final_source;
 }
 
 }  // namespace TensorFrost

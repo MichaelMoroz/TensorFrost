@@ -837,6 +837,9 @@ public:
 	int output_memory_count = 0;
 	int temp_memory_count = 0;
 
+	int readbacks = 0;
+	int writebacks = 0;
+
 	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> output_memory_map;

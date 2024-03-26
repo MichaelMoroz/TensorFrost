@@ -487,6 +487,16 @@ void IR::GetOutputList() {
 			}
 			output_memory_map[node->special_index_] = *node;
 		}
+		if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				writebacks++;
+			}
+		}
+		else if (node->op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				readbacks++;
+			}
+		}
 	}
 }
 
@@ -1235,7 +1245,7 @@ void IR::CompileIR()
 	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
 
-	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
+	SetKernelIndexingMode(KernelIndexingMode::Linear);
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
 	CheckIR("Input", false, false);

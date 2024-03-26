@@ -173,4 +173,6 @@ void TensorMemoryDefinition(py::module& m,
 	    "Get the amount of memory currently used by the memory manager");
 }
 
+TensorMemory::~TensorMemory() { manager->Free(this); }
+
 }  // namespace TensorFrost

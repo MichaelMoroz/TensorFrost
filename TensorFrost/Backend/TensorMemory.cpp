@@ -10,4 +10,6 @@ int GetLinearSize(const vector<int>& shape) {
 	return size;
 }
 
+TensorMemoryManager* global_memory_manager = nullptr;
+
 }  // namespace TensorFrost

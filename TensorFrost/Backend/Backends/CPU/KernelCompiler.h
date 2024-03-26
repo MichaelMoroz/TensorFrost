@@ -20,7 +20,7 @@
 
 #include "Backend/Backends/CPU/Memory.h"
 #include "Backend/CodeGen/Generators.h"
-#include "Backend/KernelExecutor.h"
+#include "Backend/KernelManager.h"
 #include "Backend/TensorMemory.h"
 #include "IR/KernelGen.h"
 
