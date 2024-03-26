@@ -13,7 +13,27 @@ class GLSLGenerator : public CodeGenerator {
 
 	string GenerateAtomicOp(const string& op, const string& input_type_name, const string& address, const string& input)
 	{
-		return "atomic" + op + "(" + address + ", " + input + ")";
+		if (op == "InterlockedAdd") {
+			return "atomicAdd(mem[" + address + "], " + input + ")";
+		}
+		else if (op == "InterlockedMin") {
+			return "atomicMin(mem[" + address + "], " + input + ")";
+		}
+		else if (op == "InterlockedMax") {
+			return "atomicMax(mem[" + address + "], " + input + ")";
+		}
+		else if (op == "InterlockedAnd") {
+			return "atomicAnd(mem[" + address + "], " + input + ")";
+		}
+		else if (op == "InterlockedOr") {
+			return "atomicOr(mem[" + address + "], " + input + ")";
+		}
+		else if (op == "InterlockedXor") {
+			return "atomicXor(mem[" + address + "], " + input + ")";
+		}
+		else {
+			throw runtime_error("Unsupported atomic operation: " + op);
+		}
 	}
 };
 
@@ -60,9 +80,9 @@ int asint(uint x)
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-uniform uint off[32];
-uniform uint var[32];
-uniform uint dispatch_size;
+uniform int off[32];
+uniform int var[32];
+uniform int dispatch_size;
 
 layout(std430, binding = 0) buffer memory
 {

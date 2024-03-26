@@ -33,4 +33,6 @@ vector<TensorMemory*> ExecuteProgram(
 void InitializeBackend(BackendType backendType,
                        const string& compilerPath = "");
 
+void CompileKernels(Program* program);
+
 }  // namespace TensorFrost

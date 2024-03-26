@@ -1245,7 +1245,7 @@ void IR::CompileIR()
 	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
 
-	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
+	SetKernelIndexingMode(KernelIndexingMode::Linear);
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
 	CheckIR("Input", false, false);

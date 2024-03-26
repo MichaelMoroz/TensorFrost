@@ -34,6 +34,7 @@ void TensorProgram::CreateProgram(string name) {
 	compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / 1000000.0f;
 
 	CompileAndLoadKernelModule(program);
+	CompileKernels(program);
 
 	auto external_end = std::chrono::high_resolution_clock::now();
 	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;

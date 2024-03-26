@@ -9,6 +9,8 @@ void StartOpenGL() {
 		throw std::runtime_error("Failed to initialize GLFW");
 	}
 
+	//make window invisible
+	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	global_window = glfwCreateWindow(800, 600, "TensorFrost", nullptr, nullptr);
 
 	if (!global_window) {

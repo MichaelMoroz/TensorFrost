@@ -68,22 +68,6 @@ class CpuMemoryManager : public TensorMemoryManager {
 	void WritebackValue(const TensorMemory* mem, uint index, uint value) override {
 		memory[mem->frame->start + index] = value;
 	}
-
-	void Free(TensorMemory* memory) override {
-		Frame* frame = memory->frame;
-		allocator.FreeFrame(*frame);
-		allocated_by_offset.erase(frame->start);
-	}
-
-	void Free(uint offset) override { 
-		Free(allocated_by_offset[offset]);
-	}
-
-	~CpuMemoryManager() override {
-		for (auto& pair : allocated_by_offset) {
-			delete pair.second;
-		}
-	}
 };
 
 }  // namespace TensorFrost

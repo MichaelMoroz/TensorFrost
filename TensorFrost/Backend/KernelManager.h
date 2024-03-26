@@ -15,15 +15,16 @@ namespace TensorFrost {
 
 class KernelManager
 {
+	unordered_map<int, Kernel*> kernel_map;
 	int global_kernel_id = 0;
  public:
-
 	KernelManager() = default;
 
 	virtual void DispatchKernel(DispatchInfo info) = 0;
 
-	int GenerateKernelID() { 
-		return global_kernel_id++; 
+	void AddKernelID(Kernel* kernel) { 
+		kernel->kernel_id_ = global_kernel_id++; 
+		kernel_map[kernel->kernel_id_] = kernel;
 	}
 };
 

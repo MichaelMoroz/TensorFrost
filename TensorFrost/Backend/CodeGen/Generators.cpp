@@ -14,8 +14,8 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 			GenerateHLSLKernel(program, kernel);
 			return;
 		case BackendType::OpenGL:
-			//return GenerateGLSLKernel(program, kernel, kernel_name);
-			throw std::runtime_error("OpenGL backend not implemented");
+			GenerateGLSLKernel(program, kernel);
+			return;
 		default:
 			throw std::runtime_error("Backend not implemented");
 	}

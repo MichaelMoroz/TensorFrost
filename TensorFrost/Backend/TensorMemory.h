@@ -46,30 +46,7 @@ using main_func = void(TensorProp*, TensorProp*, alloc_func, dealloc_func, readb
 
 int GetLinearSize(const vector<int>& shape);
 
-class TensorMemory;
-
-class TensorMemoryManager {
- public:
-	FrameAllocator allocator;
-	map<uint, TensorMemory*> allocated_by_offset;
-
-	virtual TensorMemory* Allocate(const vector<int>& shape,
-	                               const DataType type = DataType::Float) = 0;
-	virtual TensorMemory* AllocateWithData(const vector<int>& shape, const vector<uint>& data,
-	    const DataType type = DataType::Float) = 0;
-	virtual vector<uint> Readback(const TensorMemory* memory) = 0;
-	virtual uint ReadbackValue(const TensorMemory* memory, uint index) = 0;
-	virtual void Writeback(const TensorMemory* memory, const vector<uint>& data) = 0;
-	virtual void WritebackValue(const TensorMemory* memory, uint index, uint value) = 0;
-	virtual void Free(TensorMemory* memory) = 0;
-	virtual void Free(uint offset) = 0;
-
-	uint32_t GetAllocatedSize() const {
-		return allocator.GetRequiredAllocatedStorage();
-	}
-
-	virtual ~TensorMemoryManager() = default;
-};
+class TensorMemoryManager;
 
 class TensorMemory {
  public:
@@ -86,8 +63,42 @@ class TensorMemory {
 
 	vector<int> GetShape() const { return shape; }
 
-	~TensorMemory() { manager->Free(this); }
+	~TensorMemory();
 };
+
+class TensorMemoryManager {
+ public:
+	FrameAllocator allocator;
+	map<uint, TensorMemory*> allocated_by_offset;
+
+	virtual TensorMemory* Allocate(const vector<int>& shape,
+	                               const DataType type = DataType::Float) = 0;
+	virtual TensorMemory* AllocateWithData(const vector<int>& shape, const vector<uint>& data,
+	    const DataType type = DataType::Float) = 0;
+	virtual vector<uint> Readback(const TensorMemory* memory) = 0;
+	virtual uint ReadbackValue(const TensorMemory* memory, uint index) = 0;
+	virtual void Writeback(const TensorMemory* memory, const vector<uint>& data) = 0;
+	virtual void WritebackValue(const TensorMemory* memory, uint index, uint value) = 0;
+	
+	void Free(TensorMemory* memory) {
+		Frame* frame = memory->frame;
+		allocator.FreeFrame(*frame);
+		allocated_by_offset.erase(frame->start);
+	}
+
+	void Free(uint offset) { Free(allocated_by_offset[offset]); }
+
+	~TensorMemoryManager() {
+		for (auto& pair : allocated_by_offset) {
+			delete pair.second;
+		}
+	}
+
+	uint32_t GetAllocatedSize() const {
+		return allocator.GetRequiredAllocatedStorage();
+	}
+};
+
 
 extern TensorMemoryManager* global_memory_manager;
 

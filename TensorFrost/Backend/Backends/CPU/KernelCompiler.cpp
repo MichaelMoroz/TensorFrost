@@ -210,7 +210,7 @@ void CompileAndLoadKernelModule(Program* program) {
 			}
 
 			((CpuKernelManager*)global_kernel_manager)
-			    ->AddKernel(&kernel, kernel_callback);
+			    ->AddKernelFunction(&kernel, kernel_callback);
 
 			cout << "Loaded kernel: " << kernel.kernel_name_ << endl;
 		}

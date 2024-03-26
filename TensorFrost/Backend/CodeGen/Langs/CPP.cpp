@@ -359,7 +359,7 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 	map<Node*, string> dispatch_code;
 
 	for (auto& kernel : program->kernels_) {
-		kernel.kernel_id_ = global_kernel_manager->GenerateKernelID();
+		global_kernel_manager->AddKernelID(&kernel);
 		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel
@@ -499,10 +499,20 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	const int block_size = 4;  // TODO chose automatically
 	switch (kernel->indexing_mode_) {
 		case KernelIndexingMode::Linear:
-			loop = "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+			loop = "  int elements = ";
+			for (int d = 0; d < kernel->dim; d++) {
+				loop += "shape[" + to_string(d) + "]";
+				if (d != kernel->dim - 1) {
+					loop += " * ";
+				}
+			}
+			loop += ";\n";
+			loop += "  #pragma omp parallel for\n";
+			loop += "  for (int thread_id = 0; thread_id < elements; thread_id++)\n";
 			loop += "  {\n";
 			break;
 		case KernelIndexingMode::MultiDimensional:
+			loop = "  #pragma omp parallel for\n";
 			for (int d = 0; d < kernel->dim; d++) {
 				loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) +
 				        " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
@@ -510,6 +520,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 			loop += "  {\n";
 			break;
 		case KernelIndexingMode::MultiDimensionalBlocks:
+			loop = "  #pragma omp parallel for\n";
 			for (int d = 0; d < kernel->dim; d++) {
 				loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
 				        " < shape[" + to_string(d) + "]; wg" + to_string(d) +
@@ -537,8 +548,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	    "void " +
 	    kernel->kernel_name_ +
 	    "(uint* var, uint* off, uint* mem, uint* shape)\n"
-	    "{\n"
-	    "  #pragma omp parallel for shared(mem) \n" +
+	    "{\n" +
 	    loop + AddIndent(kernel_code, "    ") +
 	    "  }\n"
 	    "}\n";

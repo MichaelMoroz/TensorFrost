@@ -17,6 +17,7 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input
 void GenerateKernel(Program* program, Kernel* kernel);
 void GenerateCPPKernel(Program* program, Kernel* kernel);
 void GenerateHLSLKernel(Program* program, Kernel* kernel);
+void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
 using ArgumentNames = map<ArgID, string>;
@@ -232,6 +233,9 @@ protected:
 					break;
 				case OpType::DimensionIndex:
 					line += op->code_ + to_string(node->GetTensor()->data[0]);
+					break;
+				case OpType::Variable:
+					line += op->code_;
 					break;
 				case OpType::TypeCast:
 					line += GenerateTypeCast(&args, op->code_);

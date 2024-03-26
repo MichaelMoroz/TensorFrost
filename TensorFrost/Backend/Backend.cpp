@@ -11,8 +11,6 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 
 	current_backend = backendType;
 
-	StartOpenGL();
-
 	switch (backendType) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();
@@ -22,10 +20,27 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 			throw std::runtime_error("Vulkan backend not implemented yet");
 			break;
 		case BackendType::OpenGL:
-			
-			//global_memory_manager = new OpenGLMemoryManager();
-			//global_kernel_manager = new OpenGLKernelManager();
+			StartOpenGL();
+			global_memory_manager = new OpenGLMemoryManager();
+			global_kernel_manager = new OpenGLKernelManager();
 			break;
+	}
+}
+
+void CompileKernels(Program* program) {
+	for(auto& kernel : program->kernels_) {
+		switch (current_backend) {
+			case BackendType::CPU:
+				//already in the host program
+				break;
+			case BackendType::Vulkan:
+				throw std::runtime_error("Vulkan backend not implemented yet");
+			case BackendType::OpenGL:
+				((OpenGLKernelManager*)global_kernel_manager)->CompileKernel(&kernel);
+				break;
+			default:
+				throw std::runtime_error("Backend not implemented");
+		}
 	}
 }
 
