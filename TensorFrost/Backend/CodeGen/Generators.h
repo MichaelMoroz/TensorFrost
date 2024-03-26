@@ -209,10 +209,13 @@ protected:
 				left += type_names[output_type] + " " + name + " = ";
 			}
 			string line;
-
+			string code = op->code_;
 			switch (op->op_types_[0]) {
 				case OpType::Operator:
-					line += args.Name(ArgType::Input, 0) + " " + op->code_ + " " +
+					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
+						code = code + code;
+					}
+					line += args.Name(ArgType::Input, 0) + " " + code + " " +
 					        args.Name(ArgType::Input, 1);
 					break;
 				case OpType::UnaryOperator:

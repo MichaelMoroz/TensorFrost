@@ -204,56 +204,6 @@ tf.initialize(tf.opengl)
 #print("Computed: ", resnp[0, 0, 0], " Expected: ", v0)
 ##
 ##
-def transpose(A):
-    N, M = A.shape
-    i, j = tf.indices([M, N])
-    return A[j, i] * 1.0
-
-def matmul():
-    A = tf.input([-1, -1], tf.float32)
-    N, M = A.shape
-    B = tf.input([M, -1], tf.float32)
-    K = B.shape[1]
-        
-    Bt = transpose(B)
-        
-    #C = tf.zeros([N, K])
-    #i, j, k = tf.indices([N, K, M])
-    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
-        
-    C = tf.buffer([N, K])
-        
-    i, j = C.indices
-        
-    s = tf.zeros([N, K], tf.float32)
-    def loop_body(k):
-        s.set(s + A[i, k] * Bt[j, k])
-         
-    tf.loop(loop_body, 0, M, 1)
-        
-    C[i, j] = s
-        
-    return [C]
-
-mmul = tf.compile(matmul)
-
-Anp = np.random.rand(64, 32).astype(np.float32)
-Bnp = np.random.rand(32, 48).astype(np.float32)
-
-A = tf.tensor(Anp)
-B = tf.tensor(Bnp)
-C, = mmul(A, B)
-
-Cnp = C.numpy
-
-#compare to numpy
-Cnp2 = Anp @ Bnp
-
-print(Cnp)
-print(Cnp2)
-
-Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
-print("Error:", Cerror)
 #
 #N = 512 
 #M = 1024
@@ -816,49 +766,49 @@ print("Error:", Cerror)
 #resnp = res[0].numpy
 
 
-##dynamic size QR decomposition
-#def QRDecomposition():
-#    A = tf.input([-1, -1], tf.float32)
-#
-#    m, n = A.shape
-#    Q = tf.zeros([m, n])
-#    R = tf.zeros([n, n])
-#
-#    j = tf.index(0, [m])
-#
-#    def loop_body(i):
-#        norm2 = tf.zeros([1], tf.float32)
-#        def loop_body1(it):
-#            norm2.set(norm2 + A[it, i] ** 2)
-#        tf.loop(loop_body1, 0, m, 1)
-#        R[i, i] = tf.sqrt(norm2)
-#        Q[j, i] = A[j, i] / R[i, i]
-#        
-#        t, = tf.index_grid([i+1], [n])
-#        dotprod = tf.zeros(t.shape, tf.float32)
-#        def loop_body2(it):
-#            dotprod.set(dotprod + Q[it, i] * A[it, t])
-#        tf.loop(loop_body2, 0, m, 1)
-#        R[i, t] = dotprod
-#        
-#        p, k = tf.index_grid([0, i+1], [m, n])
-#        A[p, k] -= Q[p, i] * R[i, k]
-#
-#        #p, k = tf.index_grid([0, i+1], [m, n])
-#        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
-#
-#    tf.loop(loop_body, 0, n-1, 1)
-#
-#    norm2 = tf.zeros([1], tf.float32)
-#    def loop_body1(it):
-#        norm2.set(norm2 + A[it, n-1] ** 2)
-#    tf.loop(loop_body1, 0, m, 1)
-#    R[n-1, n-1] = tf.sqrt(norm2)
-#    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-#
-#    return [Q, R]
-#
-#qr = tf.compile(QRDecomposition)
+#dynamic size QR decomposition
+def QRDecomposition():
+    A = tf.input([-1, -1], tf.float32)
+
+    m, n = A.shape
+    Q = tf.zeros([m, n])
+    R = tf.zeros([n, n])
+
+    j = tf.index(0, [m])
+
+    def loop_body(i):
+        norm2 = tf.zeros([1], tf.float32)
+        def loop_body1(it):
+            norm2.set(norm2 + A[it, i] ** 2)
+        tf.loop(loop_body1, 0, m, 1)
+        R[i, i] = tf.sqrt(norm2)
+        Q[j, i] = A[j, i] / R[i, i]
+        
+        t, = tf.index_grid([i+1], [n])
+        dotprod = tf.zeros(t.shape, tf.float32)
+        def loop_body2(it):
+            dotprod.set(dotprod + Q[it, i] * A[it, t])
+        tf.loop(loop_body2, 0, m, 1)
+        R[i, t] = dotprod
+        
+        p, k = tf.index_grid([0, i+1], [m, n])
+        A[p, k] -= Q[p, i] * R[i, k]
+
+        #p, k = tf.index_grid([0, i+1], [m, n])
+        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
+
+    tf.loop(loop_body, 0, n-1, 1)
+
+    norm2 = tf.zeros([1], tf.float32)
+    def loop_body1(it):
+        norm2.set(norm2 + A[it, n-1] ** 2)
+    tf.loop(loop_body1, 0, m, 1)
+    R[n-1, n-1] = tf.sqrt(norm2)
+    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+
+    return [Q, R]
+
+qr = tf.compile(QRDecomposition)
 #
 #def reverseBits(num, bit_count):
 #    reverse_num = tf.zeros([], tf.int32)
@@ -977,3 +927,78 @@ print("Error:", Cerror)
 #	return [reordered_blocks1, block_pos]
 #
 #sparsifier = tf.compile(Sparsify)
+
+#def transpose(A):
+#    N, M = A.shape
+#    i, j = tf.indices([M, N])
+#    return A[j, i] * 1.0
+#
+#def matmul():
+#    A = tf.input([-1, -1], tf.float32)
+#    N, M = A.shape
+#    B = tf.input([M, -1], tf.float32)
+#    K = B.shape[1]
+#        
+#    Bt = transpose(B)
+#        
+#    #C = tf.zeros([N, K])
+#    #i, j, k = tf.indices([N, K, M])
+#    #tf.scatterAdd(C[i, j], A[i, k] * Bt[j, k])
+#        
+#    C = tf.buffer([N, K])
+#        
+#    i, j = C.indices
+#        
+#    s = tf.zeros([N, K], tf.float32)
+#    def loop_body(k):
+#        s.set(s + A[i, k] * Bt[j, k])
+#         
+#    tf.loop(loop_body, 0, M, 1)
+#        
+#    C[i, j] = s
+#        
+#    return [C]
+#
+#mmul = tf.compile(matmul)
+#
+#Anp = np.random.rand(64, 32).astype(np.float32)
+#Bnp = np.random.rand(32, 48).astype(np.float32)
+#
+#A = tf.tensor(Anp)
+#B = tf.tensor(Bnp)
+#C, = mmul(A, B)
+#
+#Cnp = C.numpy
+#
+##compare to numpy
+#Cnp2 = Anp @ Bnp
+#
+#print(Cnp)
+#print(Cnp2)
+#
+#Cerror = np.linalg.norm(Cnp - Cnp2) / np.linalg.norm(Cnp2)
+#print("Error:", Cerror)
+
+#def Test():
+#	A = tf.input([-1, -1], tf.float32)
+#	B = tf.input(A.shape, tf.float32)
+#	C = A + B
+#	return [C]
+#
+#test = tf.compile(Test)
+#
+#A = np.array([[1, 2], [3, 4]]).astype(np.float32)
+#B = np.array([[5, 6], [7, 8]]).astype(np.float32)
+#
+#Atf = tf.tensor(A)
+#Btf = tf.tensor(B)
+#
+#C, = test(Atf, Btf)
+#
+#Cnp = C.numpy
+#
+#print(Cnp)
+#
+#Cnp2 = A + B
+#
+#print(Cnp2)

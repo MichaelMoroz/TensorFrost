@@ -30,7 +30,7 @@ class OpenGLKernelManager : public KernelManager {
 		if (!success) {
 			GLchar infoLog[512];
 			glGetShaderInfoLog(shader, 512, nullptr, infoLog);
-			std::cerr << "TensorFrost: Error compiling shader: " << infoLog << std::endl;
+			throw std::runtime_error("TensorFrost: Error compiling shader: " + source + "\n" + std::string(infoLog));
 		}
 
 		return shader;
@@ -48,7 +48,7 @@ class OpenGLKernelManager : public KernelManager {
 		if (!success) {
 			GLchar infoLog[512];
 			glGetProgramInfoLog(program, 512, nullptr, infoLog);
-			std::cerr << "TensorFrost: Error linking program: " << infoLog << std::endl;
+			throw std::runtime_error("TensorFrost: Error linking program: " + std::string(infoLog));
 		}
 
 		glDeleteShader(computeShader);
@@ -58,17 +58,49 @@ class OpenGLKernelManager : public KernelManager {
 	void CompileKernel(Kernel* kernel) 
 	{
 		if (kernel->indexing_mode_ != KernelIndexingMode::Linear) {
-			std::cerr << "TensorFrost: OpenGL backend only supports linear indexing mode" << std::endl;
+			throw std::runtime_error("OpenGL backend only supports linear indexing mode");
 			return;
 		}
+		cout << "Compiling kernel \n" << kernel->generated_code_ << endl;
+		//print out source if debug is enabled
 		GLuint program = createShaderProgram(kernel->generated_code_);
 		kernel_map[kernel->kernel_id_] = program;
+	}
+
+	//Get uniform location
+	GLint getUniformLocation(GLuint program, const std::string& name) {
+		GLint location = glGetUniformLocation(program, name.c_str());
+		if (location == -1) {
+			throw std::runtime_error("OpenGL error: uniform " + name + " not found");
+		}
+		return location;
+	}
+
+	//Get attribute location
+	GLint getAttribLocation(GLuint program, const std::string& name) {
+		GLint location = glGetAttribLocation(program, name.c_str());
+		if (location == -1) {
+			throw std::runtime_error("OpenGL error: attribute " + name + " not found");
+		}
+		return location;
 	}
 
 	void DispatchKernel(DispatchInfo info) override
 	{
 		GLuint program = kernel_map[info.kernel_id];
 		glUseProgram(program);
+
+		#ifndef NDEBUG
+		// validate the program
+		glValidateProgram(program);
+		GLint success;
+		glGetProgramiv(program, GL_VALIDATE_STATUS, &success);
+		if (!success) {
+			GLchar infoLog[512];
+			glGetProgramInfoLog(program, 512, nullptr, infoLog);
+			throw std::runtime_error("OpenGL error: program validation failed: " + std::string(infoLog));
+		}
+		#endif
 
 		//compute number of threads
 		int thread_count = 1;
@@ -89,15 +121,27 @@ class OpenGLKernelManager : public KernelManager {
 
 		// Set uniforms
 		// Set the number of threads
-		glUniform1i(glGetUniformLocation(program, "dispatch_size"), thread_count);
+		glUniform1i(getUniformLocation(program, "dispatch_size"), thread_count);
+
+		if (info.tensor_count == 0) throw std::runtime_error("No tensors provided to kernel");
+
 		// Set offsets uniform array
 		std::vector<int> offsets;
 		for (int i = 0; i < (int)info.tensor_count; i++) {
 			offsets.push_back(info.tensors[i].offset);
 		}
-		glUniform1iv(glGetUniformLocation(program, "off"), info.tensor_count, offsets.data());
-		// Set variables uniform array
-		glUniform1iv(glGetUniformLocation(program, "var"), info.variable_count, (int*)info.variables);
+		glUniform1iv(getUniformLocation(program, "off"), info.tensor_count, offsets.data());
+
+		if (info.variable_count > 0)
+		{
+			// Set variables uniform array
+			std::vector<int> variables;
+			for (int i = 0; i < (int)info.variable_count; i++) {
+				variables.push_back(info.variables[i]);
+			}
+			glUniform1iv(getUniformLocation(program, "var"), info.variable_count,
+			             variables.data());
+		}
 
 		// Dispatch the kernel
 		glDispatchCompute(work_group_count, 1, 1);
@@ -112,7 +156,7 @@ class OpenGLKernelManager : public KernelManager {
 		// Check for errors
 		GLenum error = glGetError();
 		if (error != GL_NO_ERROR) {
-			std::cerr << "OpenGL error: " << error << std::endl;
+			throw std::runtime_error("OpenGL error: " + std::to_string(error));
 		}
 
 		// Wait for the kernel to finish
