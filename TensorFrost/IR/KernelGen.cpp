@@ -163,6 +163,10 @@ void IR::SeparateOperationsIntoKernels() {
 			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
 				if (is_loop_boundary) {
 					latest = latest->GetParent("loop");
+					if (!current_scope->InScope(latest)) 
+					{
+						continue;
+					}
 					loop_prev_iteration = true;
 				}
 				boundary_nodes[latest->index_] = latest;
@@ -562,7 +566,7 @@ void IR::OptimizeKernels() {
 					if (input_cost == -1.0) {
 						throw std::runtime_error("Cost has not been computed");
 					}
-					bool cheap_enough = input_cost >= 0.0f && input_cost < 512.0f;
+					bool cheap_enough = input_cost >= 0.0f && input_cost < 1024.0f;
 					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
 					if (cheap_enough || has_only_one_output) {
 						args_to_copy.insert(&input);

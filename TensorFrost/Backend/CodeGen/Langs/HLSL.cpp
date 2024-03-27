@@ -11,7 +11,9 @@ class HLSLGenerator : public CodeGenerator {
 		return type_name + "(" + input + ")";
 	}
 
-	string GenerateAtomicOp(const string& op, const string& input_type_name, const string& address, const string& input)
+	string GenerateAtomicOp(const string& op, const string& input_type_name,
+	                        const string& output_type_name, const string& address,
+	                        const string& input)
 	{
 		return op + "(mem[" + address + "], " + input + ")";
 	}

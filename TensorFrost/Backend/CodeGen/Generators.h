@@ -169,8 +169,10 @@ protected:
 					if (output_type != DataType::None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
+					string output_type_name = type_names[output_type];
 					string input_type_name = type_names[args.Type(ArgType::Input)];
-					expression += GenerateAtomicOp(op->name_, input_type_name, address,
+					expression += GenerateAtomicOp(op->name_, input_type_name,
+					                               output_type_name, address,
 					                               args.Name(ArgType::Input));
 					right += ";";
 				}
@@ -295,7 +297,10 @@ protected:
 		return TypeReinterpret(type_name, args->Name(ArgType::Input, 0));
 	}
 
-	virtual string GenerateAtomicOp(const string& op, const string& input_type_name, const string& address, const string& input)
+	virtual string GenerateAtomicOp(const string& op,
+	                                const string& input_type_name,
+	                                const string& output_type_name,
+	                                const string& address, const string& input)
 	{
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}

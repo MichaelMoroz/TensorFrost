@@ -11,27 +11,27 @@ class GLSLGenerator : public CodeGenerator {
 		return type_name + "(" + input + ")";
 	}
 
-	string GenerateAtomicOp(const string& op, const string& input_type_name, const string& address, const string& input)
-	{
+	string GenerateAtomicOp(const string& op, const string& input_type_name,
+	                        const string& output_type_name,
+	                        const string& address, const string& input) {
 		if (op == "InterlockedAdd") {
-			return "atomicAdd(mem[" + address + "], " + input + ")";
+			return "atomicAdd(mem[" + address + "], uint(" + input + "))";
+		} else if (op == "InterlockedAdd_Prev") {
+			return output_type_name + "(atomicAdd(mem[" + address + "], uint(" + input +
+			       ")))";
+		} else if (op == "InterlockedMin") {
+			return "atomicMin(mem[" + address + "], uint(" + input + "))";
+		} else if (op == "InterlockedMax") {
+			return "atomicMax(mem[" + address + "], uint(" + input + "))";
+		} else if (op == "InterlockedAnd") {
+			return "atomicAnd(mem[" + address + "], uint(" + input + "))";
+		} else if (op == "InterlockedOr") {
+			return "atomicOr(mem[" + address + "], uint(" + input + "))";
+		} else if (op == "InterlockedXor") {
+			return "atomicXor(mem[" + address + "], uint(" + input + "))";
 		}
-		else if (op == "InterlockedMin") {
-			return "atomicMin(mem[" + address + "], " + input + ")";
-		}
-		else if (op == "InterlockedMax") {
-			return "atomicMax(mem[" + address + "], " + input + ")";
-		}
-		else if (op == "InterlockedAnd") {
-			return "atomicAnd(mem[" + address + "], " + input + ")";
-		}
-		else if (op == "InterlockedOr") {
-			return "atomicOr(mem[" + address + "], " + input + ")";
-		}
-		else if (op == "InterlockedXor") {
-			return "atomicXor(mem[" + address + "], " + input + ")";
-		}
-		else {
+		else
+		{
 			throw runtime_error("Unsupported atomic operation: " + op);
 		}
 	}
@@ -39,7 +39,7 @@ class GLSLGenerator : public CodeGenerator {
 
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = R"(
-#version 430 core
+#version 460
 
 uint pcg(uint v)
 {
@@ -83,6 +83,11 @@ float atan2(float y, float x)
   return atan(y, x);
 }
 
+float lerp(float a, float b, float t)
+{
+  return mix(a, b, t);
+}
+
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
 uniform int off[32];
@@ -100,7 +105,7 @@ void main()
   int block_id = int(gl_WorkGroupID.x);
   
   if (thread_id >= dispatch_size) {
-	return;
+    return;
   }
 
 )";
@@ -109,7 +114,7 @@ void main()
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
-	final_source += AddIndent(kernel_code, "    ");
+	final_source += AddIndent(kernel_code, "  ");
 
 	final_source += "}\n";
 

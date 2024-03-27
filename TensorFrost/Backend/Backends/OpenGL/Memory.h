@@ -15,7 +15,7 @@ namespace TensorFrost {
 
 class OpenGLMemoryManager : public TensorMemoryManager {
  public:
-	 const int DEFAULT_SIZE = 1024 * 1024 * 8;
+	 const int DEFAULT_SIZE = 1024 * 1024 * 32;
 	 GLuint memory;
 	 int mem_size;
 
@@ -25,35 +25,33 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 }
 
 	 GLuint CreateBuffer(int size) {
+		 GLint maxsize;
+		 glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxsize);
+
+		 if (size * sizeof(uint) > maxsize) {
+			 throw std::runtime_error("SSBO memory size exceeded, max size is " + std::to_string(maxsize));
+		 }
+
 		 GLuint buffer;
 		 glGenBuffers(1, &buffer);
 		 CheckError("glGenBuffers");
-
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffer);
 		 CheckError("glBindBuffer");
-
-		 glBufferData(GL_SHADER_STORAGE_BUFFER, size * sizeof(uint), nullptr, GL_DYNAMIC_COPY);
+		 glBufferData(GL_SHADER_STORAGE_BUFFER, size * sizeof(uint), nullptr, GL_DYNAMIC_DRAW);
 		 CheckError("glBufferData");
-
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-		 // No need to check error after unbinding
-
 		 return buffer;
 	 }
 
 	 void CopyBuffer(GLuint source, GLuint dest, int size) {
 		 glBindBuffer(GL_COPY_READ_BUFFER, source);
 		 CheckError("glBindBuffer - GL_COPY_READ_BUFFER");
-
 		 glBindBuffer(GL_COPY_WRITE_BUFFER, dest);
 		 CheckError("glBindBuffer - GL_COPY_WRITE_BUFFER");
-
 		 glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, 0, 0, size * sizeof(uint));
 		 CheckError("glCopyBufferSubData");
-
 		 glBindBuffer(GL_COPY_READ_BUFFER, 0);
 		 glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
-		 // No need to check error after unbinding
 	 }
 
 	 void DeleteBuffer(GLuint buffer) {
@@ -67,6 +65,8 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 DeleteBuffer(memory);
 		 memory = new_memory;
 		 mem_size = new_size;
+
+		 //throw std::runtime_error("Memory size exceeded, increased to " + std::to_string(new_size));
 	 }
 
 	 void SetDataAtOffset(uint offset, const std::vector<uint>& data) {
@@ -78,11 +78,10 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 CheckError("glBufferSubData");
 
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-		 // No need to check error after unbinding
 	 }
 
 	 void CheckError(const char* operation) {
-		 #ifdef NDEBUG
+		 #ifndef NDEBUG
 		 GLenum error = glGetError();
 		 if (error != GL_NO_ERROR) {
 			throw std::runtime_error(std::string(operation) + " failed with error code " + std::to_string(error));
@@ -151,6 +150,10 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 ~OpenGLMemoryManager() {
 		 DeleteBuffer(memory);
 	 }
+
+	 uint32_t GetAllocatedSize() const {
+		return mem_size;
+	}
 };
 
 

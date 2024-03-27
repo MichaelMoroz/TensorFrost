@@ -94,7 +94,7 @@ class TensorMemoryManager {
 		}
 	}
 
-	uint32_t GetAllocatedSize() const {
+	virtual uint32_t GetAllocatedSize() const {
 		return allocator.GetRequiredAllocatedStorage();
 	}
 };

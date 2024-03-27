@@ -127,8 +127,9 @@ class OpenGLKernelManager : public KernelManager {
 
 		// Set offsets uniform array
 		std::vector<int> offsets;
+		offsets.resize(32);
 		for (int i = 0; i < (int)info.tensor_count; i++) {
-			offsets.push_back(info.tensors[i].offset);
+			offsets[i] = info.tensors[i].offset;
 		}
 		glUniform1iv(getUniformLocation(program, "off"), info.tensor_count, offsets.data());
 
@@ -136,8 +137,9 @@ class OpenGLKernelManager : public KernelManager {
 		{
 			// Set variables uniform array
 			std::vector<int> variables;
+			variables.resize(32);
 			for (int i = 0; i < (int)info.variable_count; i++) {
-				variables.push_back(info.variables[i]);
+				variables[i] = info.variables[i];
 			}
 			glUniform1iv(getUniformLocation(program, "var"), info.variable_count,
 			             variables.data());

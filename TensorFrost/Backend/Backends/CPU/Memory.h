@@ -68,6 +68,10 @@ class CpuMemoryManager : public TensorMemoryManager {
 	void WritebackValue(const TensorMemory* mem, uint index, uint value) override {
 		memory[mem->frame->start + index] = value;
 	}
+
+	uint32_t GetAllocatedSize() const {
+		return memory.capacity();
+	}
 };
 
 }  // namespace TensorFrost
