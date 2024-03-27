@@ -1003,254 +1003,47 @@ tf.initialize(tf.cpu, "/Zi")
 #
 #print(Cnp2)
 
-#this sort is not a stable sort, beware
-#def BitonicSort():
-#    input = tf.input([-1, 2], tf.int32) #key, value
-#    N = input.shape[0]
-#
-#    output = tf.buffer([N, 2], tf.int32)
-#    i,j = output.indices
-#    output[i, j] = input[i, j]
-#
-#    log2N = tf.ceil(tf.log2(tf.float(N)))
-#    Nround = tf.int(tf.exp2(log2N))
-#    steps = tf.int(log2N*(log2N + 1.0)/2.0)
-#
-#    sort_id = tf.indices([Nround/2])[0]
-#    def sortingIteration(step):
-#        def getBitonicElementPair(id, step):
-#            j = tf.floor(tf.sqrt(tf.float(2*step) + 1.0) - 0.5)
-#            n = tf.round(tf.float(step) - 0.5*j*(j+1.0))
-#            B = tf.int(tf.round(tf.exp2(j-n)))
-#            mask = tf.select(n < 0.5, 2*B - 1, B)
-#            e1 = id%B + 2*B*(id/B)
-#            e2 = e1 ^ mask
-#            return e1, e2
-#
-#        e1, e2 = getBitonicElementPair(sort_id, step)
-#
-#        def sort():
-#            key1, key2 = output[e1, 0], output[e2, 0]
-#            val1, val2 = output[e1, 1], output[e2, 1]
-#
-#            def swap():
-#                output[e1, 0] = key2
-#                output[e2, 0] = key1
-#                output[e1, 1] = val2
-#                output[e2, 1] = val1
-#
-#            tf.if_cond(key1 > key2, swap)
-#
-#        tf.if_cond((e1 < N) & (e2 < N), sort)
-#
-#    tf.loop(sortingIteration, 0, steps, 1)
-#
-#    return [output]
-#
-#sort_program = tf.compile(BitonicSort)
+#dynamic size QR decomposition
+def QRDecomposition():
+    A = tf.input([-1, -1], tf.float32)
 
+    m, n = A.shape
+    Q = tf.zeros([m, n])
+    R = tf.zeros([n, n])
 
-print("Test1")
-density_scale = 1.0
-shadow_intensity = 2.0
+    j = tf.index(0, [m])
 
-light_dir = -0.577, -0.577, -0.577
+    def loop_body(i):
+        norm2 = tf.zeros([1], tf.float32)
+        def loop_body1(it):
+            norm2.set(norm2 + A[it, i] ** 2)
+        tf.loop(loop_body1, 0, m, 1)
+        R[i, i] = tf.sqrt(norm2)
+        Q[j, i] = A[j, i] / R[i, i]
+        
+        t, = tf.index_grid([i+1], [n])
+        dotprod = tf.zeros(t.shape, tf.float32)
+        def loop_body2(it):
+            dotprod.set(dotprod + Q[it, i] * A[it, t])
+        tf.loop(loop_body2, 0, m, 1)
+        R[i, t] = dotprod
+        
+        p, k = tf.index_grid([0, i+1], [m, n])
+        A[p, k] -= Q[p, i] * R[i, k]
 
-def GetDensified(blocks, block_pos, bbox):
-    N, Bx, By, Bz = blocks.shape
+        #p, k = tf.index_grid([0, i+1], [m, n])
+        #R[i, t] = (Q[p, i] * A[p, k]).sum(axis=0) #TODO: implement sum reduction
 
-    #compute volume size and allocate volume
-    Vx = (bbox[1, 0] - bbox[0, 0]) * Bx
-    Vy = (bbox[1, 1] - bbox[0, 1]) * By
-    Vz = (bbox[1, 2] - bbox[0, 2]) * Bz
-    volume = tf.zeros([Vx, Vy, Vz], tf.float32)
+    tf.loop(loop_body, 0, n-1, 1)
 
-    #compute volume position for each block
-    b, i, j, k = blocks.indices
-    x, y, z = (block_pos[b, 0] - bbox[0, 0]) * Bx + i, (block_pos[b, 1] - bbox[0, 1]) * By + j, (block_pos[b, 2] - bbox[0, 2]) * Bz + k
+    norm2 = tf.zeros([1], tf.float32)
+    def loop_body1(it):
+        norm2.set(norm2 + A[it, n-1] ** 2)
+    tf.loop(loop_body1, 0, m, 1)
+    R[n-1, n-1] = tf.sqrt(norm2)
+    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
 
-    def set_value():
-        volume[x, y, z] = blocks[b, i, j, k]
+    return [Q, R]
 
-    #if voxel is inside the volume, set its value
-    is_inside = (x >= 0) & (x < Vx) & (y >= 0) & (y < Vy) & (z >= 0) & (z < Vz)
-    tf.if_cond(is_inside, set_value)
+qr = tf.compile(QRDecomposition)
 
-    return volume
-print("Test2")
-def Trilinear(tex, x, y, z):
-    xi, yi, zi = tf.floor(x), tf.floor(y), tf.floor(z)
-    xf, yf, zf = x-xi, y-yi, z-zi
-    xi, yi, zi = tf.int(xi), tf.int(yi), tf.int(zi)
-    oxf, oyf, ozf = 1.0-xf, 1.0-yf, 1.0-zf
-    return tex[xi, yi, zi]*oxf*oyf*ozf + tex[xi+1, yi, zi]*xf*oyf*ozf + tex[xi, yi+1, zi]*oxf*yf*ozf + tex[xi+1, yi+1, zi]*xf*yf*ozf + tex[xi, yi, zi+1]*oxf*oyf*zf + tex[xi+1, yi, zi+1]*xf*oyf*zf + tex[xi, yi+1, zi+1]*oxf*yf*zf + tex[xi+1, yi+1, zi+1]*xf*yf*zf
-
-def spherical_to_cartesian(r, theta, phi):
-    # Convert spherical to Cartesian coordinates
-    x = r * tf.sin(theta) * tf.cos(phi)
-    y = r * tf.sin(theta) * tf.sin(phi)
-    z = r * tf.cos(theta)
-    return x, y, z
-
-def cross(a, b):
-    return a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]
-
-def dot(a, b):
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
-
-def normalize(a):
-    mag = tf.sqrt(dot(a, a))
-    return a[0] / mag, a[1] / mag, a[2] / mag
-
-def mul(a, b):
-    return a[0] * b, a[1] * b, a[2] * b
-
-def add(a, b):
-    return a[0] + b[0], a[1] + b[1], a[2] + b[2]
-
-def camera_axes(r, phi, theta):
-    # Camera position
-    cam = spherical_to_cartesian(r, theta+1e-4, phi+1e-4)
-    
-    # Forward vector (normalized vector from camera position to origin)
-    forward = mul(normalize(cam), -1.0)
-    
-    # Assuming Z is up
-    world_up = 0.0, 0.0, 1.0
-    
-    # Right vector (cross product of world up and forward vector)
-    right = cross(world_up, forward)
-    right = normalize(right)
-    
-    # Recalculate the up vector to ensure orthogonality
-    up = cross(forward, right)
-    up = normalize(up)
-    
-    return cam, up, forward, right
-
-def get_camera(u, v, dist, phi, theta):
-    cam, up, forward, right = camera_axes(dist, phi, theta)
-
-    dirx = forward[0] + u * right[0] + v * up[0]
-    diry = forward[1] + u * right[1] + v * up[1]
-    dirz = forward[2] + u * right[2] + v * up[2]
-
-    # normalize direction
-    direction = normalize((dirx, diry, dirz))
-
-    return cam, direction
-
-print("Test3")
-
-def volume_ray_marcher():
-    volume_blocks = tf.input([-1, -1, -1, -1], tf.float32)
-    N, Bx, By, Bz = volume_blocks.shape
-    block_pos = tf.input([N, 3], tf.int32)
-    bbox = tf.input([2, 3], tf.int32)
-    camera_params = tf.input([3], tf.float32)
-    camera_res = tf.input([2], tf.int32)
-
-    #volume_blocks = DownscaleBlocks(volume_blocks)
-    #volume_blocks = DownscaleBlocks(volume_blocks)
-    #volume_blocks = DownscaleBlocks(volume_blocks)
-    volume = GetDensified(volume_blocks, block_pos, bbox)
-
-    res_x, res_y, res_z = volume.shape
-    res_xf, res_yf, res_zf = tf.float(res_x), tf.float(res_y), tf.float(res_z)
-    
-    max_resf = tf.float(tf.max(res_x, tf.max(res_y, res_z)))
-
-    def ToVolumeSpace(x, y, z):
-        return (x + 1.0) * 0.5 * max_resf, (y + 1.0) * 0.5 * max_resf, (- z + 1.0) * 0.5 * max_resf
-
-    def FromVolumeSpace(x, y, z):
-        return x / max_resf * 2.0 - 1.0, y / max_resf * 2.0 - 1.0, 1.0 - z / max_resf * 2.0 
-
-    def SampleVolume(volume, x, y, z):
-        # convert to volume space [-1.0, 1.0] to [0, VS]
-        x, y, z = ToVolumeSpace(x, y, z)
-        #check if we are outside the volume
-        check = tf.float((x>0.0) & (x<res_xf-1.0) & (y>0.0) & (y<res_yf-1.0) & (z>0.0) & (z<res_zf-1.0))
-        tf.if_cond(check < 0.5, lambda: tf.continue_loop())
-        return tf.max(Trilinear(volume, x, y, z), 0.0) * check * density_scale
-
-    def MarchRay(volume, shape, cam, dir, dx=0.05, steps=64):
-        camx, camy, camz = cam
-        dirx, diry, dirz = dir
-        td = tf.zeros(shape, tf.float32)
-        density = tf.zeros(shape, tf.float32)
-        def loop_body(k):
-            px = camx + dirx * td
-            py = camy + diry * td
-            pz = camz + dirz * td
-            td.set(td + dx)
-            
-            rho = SampleVolume(volume, px, py, pz)
-
-            density.set(density + rho*dx)
-            tf.if_cond(density > 5.0, lambda: tf.break_loop())
-        tf.loop(loop_body, 0, steps, 1)
-        return density
-
-    def MarchColor(dens, shape, col, cam, dir, dx, dither):
-        camx, camy, camz = cam
-        dirx, diry, dirz = dir
-        colx, coly, colz = col
-        td = tf.zeros(shape, tf.float32)
-        cx = tf.zeros(shape, tf.float32)
-        cy = tf.zeros(shape, tf.float32)
-        cz = tf.zeros(shape, tf.float32)
-        density = tf.zeros(shape, tf.float32)
-        td.set(td + dither * dx)
-        def loop_body(k):
-            px = camx + dirx * td
-            py = camy + diry * td
-            pz = camz + dirz * td
-            td.set(td + dx)
-            
-            rho = SampleVolume(dens, px, py, pz)
-            crhox = SampleVolume(colx, px, py, pz)
-            crhoy = SampleVolume(coly, px, py, pz)
-            crhoz = SampleVolume(colz, px, py, pz)
-
-            opacity = tf.exp(-density) * rho * dx / density_scale
-            cx.set(cx + crhox * opacity)
-            cy.set(cy + crhoy * opacity)
-            cz.set(cz + crhoz * opacity)
-            density.set(density + rho*dx)
-            tf.if_cond(density > 5.0, lambda: tf.break_loop())
-
-        tf.loop(loop_body, 0, 350, 1)
-
-        return cx, cy, cz
-
-    # compute volume shadows
-    shadow = tf.buffer([res_x, res_y, res_z], tf.float32)
-    i,j,k = volume.indices
-    voxel_pos = FromVolumeSpace(tf.float(i), tf.float(j), tf.float(k))
-
-    def if_cond():
-        shadow[i,j,k] = tf.exp(-shadow_intensity*MarchRay(volume, volume.shape, voxel_pos, light_dir, 0.05, 16))
-    
-    tf.if_cond(volume > 0.0, if_cond)
-    # compute camera rays
-    N, M = camera_res[0], camera_res[1]
-    canvas = tf.zeros([N, M, 3], tf.float32)
-    i, j = tf.indices([N, M])
-    v, u = tf.float(i), tf.float(j)
-    v = (v - 0.5 * tf.float(N)) / tf.float(N)
-    u = (u - 0.5 * tf.float(M)) / tf.float(M)
-    cam, dir = get_camera(u, v, camera_params[0], camera_params[1], camera_params[2])
-
-    # main ray marching loop
-    dither = tf.pcgf(tf.uint(i * M + j))
-    cx, cy, cz = MarchColor(volume, i.shape, (shadow, shadow, shadow), cam, dir, 0.0085, dither)
-
-    canvas[i, j, 0] = cx
-    canvas[i, j, 1] = cy
-    canvas[i, j, 2] = cz
-    
-    return [canvas]
-
-print("Test5")
-raymarch = tf.compile(volume_ray_marcher)
