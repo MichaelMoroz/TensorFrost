@@ -6,26 +6,6 @@ pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_
 # Add GLFW
 target_link_libraries(TensorFrost PRIVATE glfw)
 
-
-# Add GLAD
-# Check if jinja2 is installed
-execute_process(
-    COMMAND ${Python3_EXECUTABLE} -c "import jinja2"
-    RESULT_VARIABLE JINJA2_NOT_FOUND
-)
-
-# If jinja2 is not found, install it
-if(JINJA2_NOT_FOUND)
-    message(STATUS "Installing jinja2 using pip")
-    execute_process(
-        COMMAND ${Python3_EXECUTABLE} -m pip install jinja2
-        RESULT_VARIABLE PIP_INSTALL_RESULT
-    )
-    if(NOT PIP_INSTALL_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to install jinja2")
-    endif()
-endif()
-
 glad_add_library(glad_gl_core_46 SHARED API gl:core=4.6)
 target_link_libraries(TensorFrost PRIVATE glad_gl_core_46)
 
