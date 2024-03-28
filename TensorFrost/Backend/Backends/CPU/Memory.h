@@ -70,7 +70,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 	}
 
 	uint32_t GetAllocatedSize() const {
-		return memory.capacity();
+		return (uint32_t)memory.capacity();
 	}
 };
 

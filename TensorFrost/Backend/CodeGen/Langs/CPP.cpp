@@ -352,8 +352,8 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 
 
 	GenerateNodeNames(*program->ir_);
-	int input_count = program->ir_->memory_inputs.size();
-	int output_count = program->ir_->output_memory_map.size();
+	int input_count = (int)program->ir_->memory_inputs.size();
+	int output_count = (int)program->ir_->output_memory_map.size();
 
 	// Generate code for each compute kernel
 	map<Node*, string> dispatch_code;

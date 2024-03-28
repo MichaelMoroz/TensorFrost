@@ -1099,11 +1099,24 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 									" for kernel of size " + to_string(dims));
 			}
 
-			// swap the dim node with the corresponding index node
-			CopyLable(node.get(), indices[dim]->node_);
-
 			// remove the dim node
 			nodes_to_remove.insert(node.get());
+		}
+		else
+		{
+			//go over node inputs and replace dim nodes with index nodes
+			for (auto& input : node->inputs_) {
+				if (input.from_->get()->name == "dim_id") {
+					int dim = input.from_->get()->GetTensor()->data[0];
+					if (dim >= dims) {
+						throw runtime_error("Invalid dimension index " + to_string(dim) +
+																	" for kernel of size " + to_string(dims));
+					}
+
+					// replace the dim node with the index node
+					input.from_ = indices[dim]->node_->GetLable();
+				}
+			}
 		}
 	}
 
