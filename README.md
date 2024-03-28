@@ -1,13 +1,13 @@
-# 🥶 TensorFrost (v0.2.0) 🥶
+# 🥶 TensorFrost (v0.3.0) 🥶
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 The main idea of this library is to compile optimal fused kernels for the GPU given a set of numpy-ish functions, including other more complex things like loops and conditionals (also TODO)
 
 Currently working platforms:
-| Backend/OS | CPU | CUDA | Vulkan |
-|------------|-----|------|--------|
-| Windows    | 🚧   | ⛔    | ⛔      |
-| Linux      | 🚧   | ⛔    | ⛔      |
+| Backend/OS | CPU | OpenGL | CUDA | Vulkan |
+|------------|-----|--------|------|--------|
+| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
+| Linux      | 🚧  |  ⛔   |  ⛔  |  ⛔   |
 
 ## Examples
 
@@ -48,7 +48,7 @@ You can either call `clean_rebuild.bat %PYTHON_VERSION%` to build the wheel pack
 ## Usage
 
 ### Setup
-For the library to work you need a C++ compiler that supports C++17 (Currently only Microsoft Visual Studio Compiler).
+For the library to work you need a C++ compiler that supports C++17 (Currently only Microsoft Visual Studio Compiler on Windows, and gcc on Linux)
 
 First you need to import the library:
 ```python
@@ -57,7 +57,7 @@ import TensorFrost as tf
 
 Then you need to initialize the library with the device you want to use and the kernel compiler flags (different for each platform):
 ```python
-tf.initialize(tf.cpu, "/O2 /fp:fast /openmp") # Windows + MSVC (currently the only working compiler out of the box)
+tf.initialize(tf.cpu) # Windows + MSVC (currently the only working compiler out of the box)
 ```
 
 TensorFrost will find any available MSVC installation and use it to compile the kernels. If you want to use a different compiler, you can specify the path to the compiler executable (TODO).
@@ -201,7 +201,6 @@ TODO
 
 TODO
 
-
 ## Roadmap 
 
 Core features:
@@ -231,6 +230,7 @@ Platforms:
 
 Backends:
 - [x] CPU (using user-provided compiler)
+- [x] OpenGL (most basic GPU backend, works meh)
 - [ ] ISPC (for better CPU utilization)
 - [ ] Vulkan
 - [ ] CUDA
