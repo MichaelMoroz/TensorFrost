@@ -171,6 +171,19 @@ void TensorMemoryDefinition(py::module& m,
 	m.def(
 	    "used_memory", []() { return global_memory_manager->GetAllocatedSize(); },
 	    "Get the amount of memory currently used by the memory manager");
+
+	m.def("show_window", [](int width, int height, string title) {
+		ShowWindow(width, height, title.c_str());
+		}, "Show the memory manager window");
+
+	m.def("hide_window", []() { HideWindow(); }, "Hide the memory manager window");
+
+	m.def("render_frame", [](const TensorMemory& t) {
+		RenderFrame(t);
+		}, "Render a frame from the tensor memory");
+
+	m.def("window_should_close", []() { return WindowShouldClose(); },
+	    "Check if the window should close");
 }
 
 TensorMemory::~TensorMemory() { manager->Free(this); }

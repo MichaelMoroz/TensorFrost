@@ -52,7 +52,7 @@ void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
-	final_source += AddIndent(kernel_code, "    ");
+	final_source += AddIndent(kernel_code, "  ");
 
 	final_source += "}\n";
 

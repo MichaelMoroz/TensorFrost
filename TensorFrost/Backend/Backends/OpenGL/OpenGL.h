@@ -12,4 +12,11 @@ void StartOpenGL();
 
 void StopOpenGL();
 
+void ShowWindow(int width, int height, const char* title);
+void HideWindow();
+
+void RenderFrame(const TensorMemory& tensor);
+
+bool WindowShouldClose();
+
 }  // namespace TensorFrost

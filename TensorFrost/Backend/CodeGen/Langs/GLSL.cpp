@@ -41,50 +41,41 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = R"(
 #version 460
 
-uint pcg(uint v)
-{
+uint pcg(uint v) {
   uint state = v * 747796405u + 2891336453u;
   uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
   return (word >> 22u) ^ word;
 }
 
-float pcgf(uint v)
-{
+float pcgf(uint v) {
   return float(pcg(v)) / float(0xffffffffu);
 }
 
-float asfloat(uint x)
-{
+float asfloat(uint x) {
   return uintBitsToFloat(x);
 }
 
-uint asuint(float x)
-{
+uint asuint(float x) {
   return floatBitsToUint(x);
 }
 
-uint asuint(int x)
-{
+uint asuint(int x) {
   return uint(x);
 }
 
-uint asuint(uint x)
-{
+uint asuint(uint x) {
   return x;
 }
 
-int asint(uint x)
-{
+int asint(uint x) {
   return int(x);
 }
 
-float atan2(float y, float x)
-{
+float atan2(float y, float x) {
   return atan(y, x);
 }
 
-float lerp(float a, float b, float t)
-{
+float lerp(float a, float b, float t) {
   return mix(a, b, t);
 }
 
@@ -94,13 +85,11 @@ uniform int off[32];
 uniform int var[32];
 uniform int dispatch_size;
 
-layout(std430, binding = 0) buffer memory
-{
+layout(std430, binding = 0) buffer memory {
   uint mem[];
 };
 
-void main()
-{
+void main() {
   int thread_id = int(gl_GlobalInvocationID.x);
   int block_id = int(gl_WorkGroupID.x);
   
