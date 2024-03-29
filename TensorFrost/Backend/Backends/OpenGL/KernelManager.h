@@ -147,6 +147,8 @@ class OpenGLKernelManager : public KernelManager {
 
 		// Dispatch the kernel
 		glDispatchCompute(work_group_count, 1, 1);
+
+		// Wait for the kernel to finish
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 		// Unbind the memory buffer
@@ -160,9 +162,26 @@ class OpenGLKernelManager : public KernelManager {
 		if (error != GL_NO_ERROR) {
 			throw std::runtime_error("OpenGL error: " + std::to_string(error));
 		}
+	}
 
-		// Wait for the kernel to finish
-		glFinish();
+	void FreeKernel(int kernel_id)
+	{
+		GLuint program = kernel_map[kernel_id];
+		glDeleteProgram(program);
+		kernel_map.erase(kernel_id);
+	}
+
+	void FreeAllKernels()
+	{
+		for (auto& kernel : kernel_map) {
+			glDeleteProgram(kernel.second);
+		}
+		kernel_map.clear();
+	}
+
+	~OpenGLKernelManager()
+	{
+		FreeAllKernels();
 	}
 };
 

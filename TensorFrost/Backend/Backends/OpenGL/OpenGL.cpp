@@ -74,6 +74,8 @@ GLuint quad_program = 0;
 
 GLFWwindow* global_window = nullptr;
 
+bool window_open = false;
+
 void GLAPIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
                               GLenum severity, GLsizei length,
                               const GLchar* message, const void* userParam) {
@@ -81,6 +83,18 @@ void GLAPIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
 	std::cerr << "OpenGL Debug: source=" << source << ", type=" << type
 	          << ", id=" << id << ", severity=" << severity << endl;
 	std::cerr << "Message: " << message << endl << endl;
+}
+
+
+// Window close callback function
+void WindowCloseCallback(GLFWwindow* window) {
+	window_open = false;
+
+	// Instead of closing, hide the window
+	glfwHideWindow(window);
+
+	// Prevent the window from closing
+	glfwSetWindowShouldClose(window, GLFW_FALSE);
 }
 
 void StartOpenGL() {
@@ -98,6 +112,7 @@ void StartOpenGL() {
 	}
 
 	glfwMakeContextCurrent(global_window);
+
 
 	int version = gladLoadGL(glfwGetProcAddress);
 	if (version == 0) {
@@ -121,6 +136,8 @@ void StartOpenGL() {
 
 	// Create the shader program
 	quad_program = CreateProgram(vertex_shader, fragment_shader);
+
+	glfwSetWindowCloseCallback(global_window, WindowCloseCallback);
 }
 
 void StopOpenGL() {
@@ -130,19 +147,25 @@ void StopOpenGL() {
 }
 
 void ShowWindow(int width, int height, const char* title) {
+	window_open = true;
+
 	glfwSetWindowSize(global_window, width, height);
 	glfwSetWindowTitle(global_window, title);
 	glfwShowWindow(global_window);
+
+	//reset viewport
+	glViewport(0, 0, width, height);
 }
 
 void HideWindow() {
+	window_open = false;
 	glfwHideWindow(global_window);
 }
 
 void RenderFrame(const TensorMemory& tensor) {
 	//check if tensor is 2d + 3 channels
-	if (tensor.shape.size() != 3 && tensor.shape[2] != 3) {
-		throw std::runtime_error("Tensor must be 2D with 3 channels to render");
+	if (tensor.shape.size() != 3 || tensor.shape[2] != 3) {
+		//throw std::runtime_error("Tensor must be 2D with 3 channels to render");
 	}
 
 	// Clear the screen
@@ -165,14 +188,20 @@ void RenderFrame(const TensorMemory& tensor) {
 	// Draw the quad
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+	glUseProgram(0);
+
 	// Swap the buffers
 	glfwSwapBuffers(global_window);
 	glfwPollEvents();
-
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
-	glUseProgram(0);
 }
 
-bool WindowShouldClose() { return glfwWindowShouldClose(global_window); }
+bool WindowShouldClose() { return !window_open; }
+
+pair<int, int> GetMousePosition() {
+	double x, y;
+	glfwGetCursorPos(global_window, &x, &y);
+	return {x, y};
+}
 
 }  // namespace TensorFrost

@@ -5,6 +5,15 @@ namespace TensorFrost {
 BackendType current_backend = BackendType::NotInitialized;
 
 void InitializeBackend(BackendType backendType, const string& compilerOptions) {
+	if (global_kernel_manager != nullptr) {
+		delete global_kernel_manager;
+		global_kernel_manager = nullptr;
+	}
+	if (global_memory_manager != nullptr) {
+		delete global_memory_manager;
+		global_memory_manager = nullptr;
+	}
+
 	if (!compilerOptions.empty()) {
 		kernel_compile_options = compilerOptions;
 	}

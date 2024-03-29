@@ -184,6 +184,9 @@ void TensorMemoryDefinition(py::module& m,
 
 	m.def("window_should_close", []() { return WindowShouldClose(); },
 	    "Check if the window should close");
+
+	m.def("get_mouse_position", []() { return GetMousePosition(); },
+	    "Get the current mouse position");
 }
 
 TensorMemory::~TensorMemory() { manager->Free(this); }

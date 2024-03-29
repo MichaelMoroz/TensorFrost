@@ -19,4 +19,6 @@ void RenderFrame(const TensorMemory& tensor);
 
 bool WindowShouldClose();
 
+pair<int, int> GetMousePosition();
+
 }  // namespace TensorFrost
