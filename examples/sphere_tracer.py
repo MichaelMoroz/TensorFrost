@@ -5,127 +5,166 @@ import time
 tf.initialize(tf.opengl)
 
 S = 1024
-eps = 0.005
+eps = 0.001
 m_pow = 8.0
-max_depth = 6.0
-min_dist = 0.001
+max_depth = 50.0
+min_angle = 0.0005
 
-def mandelbulb(px, py, pz):
-    wx, wy, wz = tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32)
-    wx.set(px), wy.set(py), wz.set(pz)
-    m = wx*wx + wy*wy + wz*wz
-    dz = tf.zeros(px.shape, tf.float32)
-    dz.set(1.0)
-    #orbit trap
-    cx, cy, cz = tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32)
-    cx.set(tf.abs(wx)), cy.set(tf.abs(wy)), cz.set(tf.abs(wz))
-    def loop_body(i):
-        dz.set(m_pow * m ** (0.5*(m_pow - 1.0)) * dz + 1.0)
-        r = tf.sqrt(wx*wx + wy*wy + wz*wz)
-        b = m_pow * tf.acos(wy/r)
-        a = m_pow * tf.atan2(wx, wz)
-        c = r ** m_pow
-        wx.set(px + c * tf.sin(b) * tf.sin(a))
-        wy.set(py + c * tf.cos(b))
-        wz.set(pz + c * tf.sin(b) * tf.cos(a))
-        cx.set(tf.min(cx, tf.abs(wx)))
-        cy.set(tf.min(cy, tf.abs(wy)))
-        cz.set(tf.min(cz, tf.abs(wz)))
-        m.set(wx*wx + wy*wy + wz*wz)
-        tf.if_cond(m > 256.0, lambda: tf.break_loop())
+class vec3:
+    def __init__(self, x, y, z):
+        self.x = x
+        self.y = y
+        self.z = z
 
-    tf.loop(loop_body, 0, 4, 1)
-    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / dz
-    return sdf, cx, cy, cz
-
-def calcNormal(px, py, pz):
-    sdf = mandelbulb(px, py, pz)[0]
-    sdfx = mandelbulb(px + eps, py, pz)[0]
-    sdfy = mandelbulb(px, py + eps, pz)[0]
-    sdfz = mandelbulb(px, py, pz + eps)[0]
-    nx = sdfx - sdf
-    ny = sdfy - sdf
-    nz = sdfz - sdf
-    mag = tf.sqrt(nx*nx + ny*ny + nz*nz)
-    return nx/mag, ny/mag, nz/mag
-
-def MarchRay(shape, cam, dir, steps=128):
-    camx, camy, camz = cam
-    dirx, diry, dirz = dir
-
-    td = tf.zeros(shape, tf.float32)
-    def loop_body(k):
-        px = camx + dirx * td
-        py = camy + diry * td
-        pz = camz + dirz * td
-        sdf = mandelbulb(px, py, pz)[0]
-        td.set(td + sdf)
-        tf.if_cond((sdf < min_dist) | (td > max_depth), lambda: tf.break_loop())
-
-    tf.loop(loop_body, 0, steps, 1)
-    return camx + dirx * td, camy + diry * td, camz + dirz * td, td
-
-light_dir_x = -0.577
-light_dir_y = -0.577
-light_dir_z = -0.577
-
-def spherical_to_cartesian(r, theta, phi):
-    # Convert spherical to Cartesian coordinates
-    x = r * tf.sin(theta) * tf.cos(phi)
-    y = r * tf.sin(theta) * tf.sin(phi)
-    z = r * tf.cos(theta)
-    return x, y, z
+    def vec3(x, y, z):
+        return vec3(x, y, z)
+    
+    def zero(shape):
+        return vec3(tf.zeros(shape, tf.float32), tf.zeros(shape, tf.float32), tf.zeros(shape, tf.float32))
+    
+    def zero_like(val):
+        return vec3.zero(val.x.shape)
+    
+    def const(val, shape):
+        return vec3(tf.const(val, shape, tf.float32), tf.const(val, shape, tf.float32), tf.const(val, shape, tf.float32))
+    
+    def copy(val):
+        vec = vec3.zero(val.x.shape)
+        vec.set(val)
+        return vec
+    
+    def set(self, other):
+        self.x.val = other.x
+        self.y.val = other.y
+        self.z.val = other.z
+    
+    def __add__(self, other):
+        return vec3(self.x + other.x, self.y + other.y, self.z + other.z)
+    
+    def __radd__(self, other):
+        return vec3(other.x + self.x, other.y + self.y, other.z + self.z)
+    
+    def __sub__(self, other):
+        return vec3(self.x - other.x, self.y - other.y, self.z - other.z)
+    
+    def __rsub__(self, other):
+        return vec3(other.x - self.x, other.y - self.y, other.z - self.z)
+    
+    def __mul__(self, other):
+        return vec3(self.x * other, self.y * other, self.z * other)
+    
+    def __rmul__(self, other):
+        return vec3(self.x * other, self.y * other, self.z * other)
+    
+    def __truediv__(self, other):
+        return vec3(self.x / other, self.y / other, self.z / other)
+    
+    def __neg__(self):
+        return vec3(-self.x, -self.y, -self.z)
+    
+    def __abs__(self):
+        return vec3(tf.abs(self.x), tf.abs(self.y), tf.abs(self.z))
+    
+    def __pow__(self, other):
+        return vec3(self.x ** other, self.y ** other, self.z ** other)
+    
+    def __rpow__(self, other):
+        return vec3(other ** self.x, other ** self.y, other ** self.z)
+    
+def dot(a, b):
+    return a.x * b.x + a.y * b.y + a.z * b.z
 
 def cross(a, b):
-    return a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]
+    return vec3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x)
 
-def dot(a, b):
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+def length(a):
+    return tf.sqrt(dot(a, a))
 
 def normalize(a):
-    mag = tf.sqrt(dot(a, a))
-    return a[0] / mag, a[1] / mag, a[2] / mag
+    return a / length(a)
 
-def mul(a, b):
-    return a[0] * b, a[1] * b, a[2] * b
+def min(a, b):
+    return vec3(tf.min(a.x, b.x), tf.min(a.y, b.y), tf.min(a.z, b.z))
 
-def add(a, b):
-    return a[0] + b[0], a[1] + b[1], a[2] + b[2]
+def max(a, b):
+    return vec3(tf.max(a.x, b.x), tf.max(a.y, b.y), tf.max(a.z, b.z))
 
-def camera_axes(r, phi, theta):
-    # Camera position
-    cam = spherical_to_cartesian(r, theta+1e-4, phi+1e-4)
-    
-    # Forward vector (normalized vector from camera position to origin)
-    forward = mul(normalize(cam), -1.0)
-    
-    # Assuming Z is up
-    world_up = 0.0, 0.0, 1.0
-    
-    # Right vector (cross product of world up and forward vector)
-    right = cross(world_up, forward)
-    right = normalize(right)
-    
-    # Recalculate the up vector to ensure orthogonality
-    up = cross(forward, right)
-    up = normalize(up)
-    
-    return cam, up, forward, right
+def clamp(a, low, high):
+    return vec3(tf.clamp(a.x, low, high), tf.clamp(a.y, low, high), tf.clamp(a.z, low, high))
 
-def get_camera(u, v, dist, phi, theta):
-    cam, up, forward, right = camera_axes(dist, phi, theta)
+def mandelbulb(p):
+    w = vec3.copy(p)
+    m = dot(w,w)
+    dz = tf.const(1.0, p.x.shape)
+    col = vec3.copy(abs(w))
+    def loop_body(i):
+        dz.val = m_pow * m ** (0.5*(m_pow - 1.0)) * dz + 1.0
+        r = length(w)
+        b = m_pow * tf.acos(w.y/r)
+        a = m_pow * tf.atan2(w.x, w.z)
+        c = r ** m_pow
+        w.set(vec3(p.x + c * tf.sin(b) * tf.sin(a), p.y + c * tf.cos(b), p.z + c * tf.sin(b) * tf.cos(a)))
+        col.set(min(col, abs(w)))
+        m.val = dot(w,w)
+        tf.if_cond(m > 256.0, lambda: tf.break_loop())
 
-    dirx = forward[0] + u * right[0] + v * up[0]
-    diry = forward[1] + u * right[1] + v * up[1]
-    dirz = forward[2] + u * right[2] + v * up[2]
+    tf.loop(loop_body, 0, 3, 1)
+    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / dz
+    return sdf, col
 
-    # normalize direction
-    direction = normalize((dirx, diry, dirz))
+def calcNormal(p):
+    sdf = mandelbulb(p)[0]
+    sdfx = mandelbulb(p + vec3(eps, 0.0, 0.0))[0]
+    sdfy = mandelbulb(p + vec3(0.0, eps, 0.0))[0]
+    sdfz = mandelbulb(p + vec3(0.0, 0.0, eps))[0]
+    return normalize(vec3(sdfx - sdf, sdfy - sdf, sdfz - sdf))
 
-    return cam, direction
+def MarchRay(ro, rd, steps=128):
+    td = tf.zeros([])
+    def loop_body(k):
+        sdf = mandelbulb(ro + rd * td)[0]
+        td.val += sdf
+        tf.if_cond((sdf < min_angle * td) | (td > max_depth), lambda: tf.break_loop())
+
+    tf.loop(loop_body, 0, steps, 1)
+    return td
+
+def MarchSoftShadow(ro, rd, w, steps=256):
+    td = tf.zeros([])
+    psdf = tf.const(1e10, [])
+    res = tf.const(1.0, [])
+    def loop_body(k):
+        sdf = mandelbulb(ro + rd * td)[0]
+
+        y = sdf * sdf / (2.0 * psdf)
+        d = tf.sqrt(sdf * sdf - y * y)
+        res.val = tf.min(res, d / (w * tf.max(0.0, td - y)))
+        psdf.val = sdf
+
+        td.val += sdf
+        tf.if_cond((sdf < min_angle * td) | (td > max_depth), lambda: tf.break_loop())
+
+    tf.loop(loop_body, 0, steps, 1)
+
+    res = tf.clamp(res, 0.0, 1.0)
+    return res * res * (3.0 - 2.0 * res)
+
+light_dir = vec3(0.577, 0.577, 0.577)
+
+def get_ray(u, v, camera, shape):
+    pos = vec3.zero(shape)
+    dir = vec3.zero(shape)
+    pos.set(vec3(camera[0, 0], camera[0, 1], camera[0, 2]))
+    cam_f = vec3(camera[3, 0], camera[3, 1], camera[3, 2])
+    cam_u = vec3(camera[2, 0], camera[2, 1], camera[2, 2])
+    cam_v = vec3(camera[1, 0], camera[1, 1], camera[1, 2])
+    dir.set(cam_f + cam_u * u + cam_v * v)
+    return pos, normalize(dir)
 
 def ray_marcher():
-    camera_params = tf.input([3], tf.float32)
+    # Camera parameters (pos, cam_axis_x, cam_axis_y, cam_axis_z)
+    camera = tf.input([4,3], tf.float32)
+    
     N, M = S, S
     canvas = tf.zeros([N, M, 3], tf.float32)
     i, j = tf.indices([N, M])
@@ -134,19 +173,25 @@ def ray_marcher():
     v = (v - 0.5 * tf.float(N)) / tf.float(min_res)
     u = (u - 0.5 * tf.float(M)) / tf.float(min_res)
 
-    cam, dir = get_camera(u, v, camera_params[0], camera_params[1], camera_params[2])
+    ro, rd = get_ray(u, v, camera, i.shape)
     
-    px, py, pz, td = MarchRay(i.shape, cam, dir)
+    td = MarchRay(ro, rd)
 
     def if_body():
+        hit = ro + rd * td
+
         # Lighting
-        norm = calcNormal(px, py, pz)
-        sdf, m, cx, cy = mandelbulb(px, py, pz)
-        r, g, b = tf.clamp(m, 0.6, 1.0), tf.clamp(cx, 0.6, 1.0), tf.clamp(cy, 0.6, 1.0)
-        col = dot(norm, (light_dir_x, light_dir_y, light_dir_z)) * 0.5 + 0.5
-        canvas[i, j, 0] = col * r
-        canvas[i, j, 1] = col * g
-        canvas[i, j, 2] = col * b
+        norm = calcNormal(hit)
+        #sdf, col = mandelbulb(hit)
+        #col1 = clamp(col, 0.6, 1.0)
+        
+        #shooting shadow ray
+        hit += norm * min_angle * td
+        shadow = MarchSoftShadow(hit, light_dir, 0.06) + 0.1
+        b = shadow * (dot(norm, light_dir) * 0.5 + 0.5)
+        canvas[i, j, 0] = b
+        canvas[i, j, 1] = b
+        canvas[i, j, 2] = b
 
     tf.if_cond(td < max_depth, if_body)
     
@@ -154,28 +199,118 @@ def ray_marcher():
 
 raymarch = tf.compile(ray_marcher)
 
+#print(raymarch.list_operations())
 
-def render_mandelbulb(phi, theta):
-    cam_params = tf.tensor( np.array([3.0, phi, theta], dtype=np.float32) )
+def normalize(v):
+    """Normalize a vector."""
+    norm = np.linalg.norm(v)
+    return v / norm if norm > 0 else v
 
-    img, = raymarch(cam_params)
+def quaternion_multiply(q1, q2):
+    """Multiply two quaternions."""
+    w1, x1, y1, z1 = q1
+    w2, x2, y2, z2 = q2
+    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
+    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
+    y = w1*y2 + y1*w2 + z1*x2 - x1*z2
+    z = w1*z2 + z1*w2 + x1*y2 - y1*x2
+    return np.array([w, x, y, z])
+
+def quaternion_to_matrix(q):
+    """Convert a quaternion into a rotation matrix."""
+    w, x, y, z = q
+    return np.array([
+        [1 - 2*y*y - 2*z*z,     2*x*y - 2*z*w,     2*x*z + 2*y*w],
+        [    2*x*y + 2*z*w, 1 - 2*x*x - 2*z*z,     2*y*z - 2*x*w],
+        [    2*x*z - 2*y*w,     2*y*z + 2*x*w, 1 - 2*x*x - 2*y*y]
+    ])
+
+class Camera:
+    def __init__(self, position, quaternion):
+        self.position = np.array(position, dtype=np.float32)
+        self.quaternion = np.array(quaternion, dtype=np.float32)
+
+    def move_forward(self, distance):
+        """Move the camera forward."""
+        forward = quaternion_to_matrix(self.quaternion)[2, :]  # z axis
+        self.position += normalize(forward) * distance
+
+    def move_right(self, distance):
+        """Move the camera right."""
+        right = quaternion_to_matrix(self.quaternion)[1, :]  # y axis
+        self.position += normalize(right) * distance
+    
+    def move_up(self, distance):
+        """Move the camera up."""
+        up = quaternion_to_matrix(self.quaternion)[0, :]
+        self.position += normalize(up) * distance
+
+    def rotate_left(self, angle):
+        """Rotate the camera around its y axis."""
+        right = quaternion_to_matrix(self.quaternion)[1, :]
+        q = np.array([np.cos(angle/2), right[0]*np.sin(angle/2), right[1]*np.sin(angle/2), right[2]*np.sin(angle/2)])
+        self.quaternion = quaternion_multiply(self.quaternion, q)
+
+    def rotate_up(self, angle):
+        """Rotate the camera around its x axis."""
+        up = quaternion_to_matrix(self.quaternion)[0, :]
+        q = np.array([np.cos(angle/2), up[0]*np.sin(angle/2), up[1]*np.sin(angle/2), up[2]*np.sin(angle/2)])
+        self.quaternion = quaternion_multiply(self.quaternion, q)
+
+    def rotate_roll(self, angle):
+        """Rotate the camera around its z axis."""
+        forward = quaternion_to_matrix(self.quaternion)[2, :]
+        q = np.array([np.cos(angle/2), forward[0]*np.sin(angle/2), forward[1]*np.sin(angle/2), forward[2]*np.sin(angle/2)])
+        self.quaternion = quaternion_multiply(self.quaternion, q)
+
+    def get_camera_axis_matrix(self):
+        """Get the camera axis matrix."""
+        return quaternion_to_matrix(self.quaternion)
+    
+    def get_camera_matrix(self):
+        """Get the camera matrix."""
+        return np.stack([self.position, *self.get_camera_axis_matrix()])
+
+
+def render_mandelbulb(camera):
+    camera_matrix_tf = tf.tensor(camera.get_camera_matrix())
+
+    img, = raymarch(camera_matrix_tf)
 
     return img
 
 tf.show_window(S, S, "Sphere tracer")
 
-import time
+camera = Camera([0, 0, -2], [1, 0, 0, 0])
+pmx, pmy = tf.get_mouse_position()
 
-init_time = time.time()
+angular_speed = 0.005
+camera_speed = 0.005
 
 while not tf.window_should_close():
     mx, my = tf.get_mouse_position()
-    cur_time = time.time() - init_time
 
-    phi = mx * 2.0 * np.pi / S
-    theta = my * np.pi / S
+    if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+        camera.rotate_up((mx - pmx) * angular_speed)
+        camera.rotate_left((my - pmy) * angular_speed)
 
-    img = render_mandelbulb(phi, theta)
+    if tf.is_key_pressed(tf.KEY_W):
+        camera.move_forward(camera_speed)
+    if tf.is_key_pressed(tf.KEY_S):
+        camera.move_forward(-camera_speed)
+
+    if tf.is_key_pressed(tf.KEY_A):
+        camera.move_right(-camera_speed)
+    if tf.is_key_pressed(tf.KEY_D):
+        camera.move_right(camera_speed)
+
+    if tf.is_key_pressed(tf.KEY_Q):
+        camera.rotate_roll(-angular_speed*2)
+    if tf.is_key_pressed(tf.KEY_E):
+        camera.rotate_roll(angular_speed*2)
+
+    img = render_mandelbulb(camera)
     tf.render_frame(img)
-
-tf.hide_window()
+    
+    pmx, pmy = mx, my
+    
