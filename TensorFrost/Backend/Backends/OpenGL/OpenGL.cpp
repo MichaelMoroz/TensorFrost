@@ -204,4 +204,10 @@ pair<int, int> GetMousePosition() {
 	return {x, y};
 }
 
+bool IsMouseButtonPressed(int button) {
+	return glfwGetMouseButton(global_window, button) == GLFW_PRESS;
+}
+
+bool IsKeyPressed(int key) { return glfwGetKey(global_window, key) == GLFW_PRESS; }
+
 }  // namespace TensorFrost

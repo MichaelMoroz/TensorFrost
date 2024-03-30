@@ -1,13 +1,50 @@
 # 🥶 TensorFrost (v0.3.0) 🥶
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
-The main idea of this library is to compile optimal fused kernels for the GPU given a set of numpy-ish functions, including other more complex things like loops and conditionals (also TODO)
-
 Currently working platforms:
 | Backend/OS | CPU | OpenGL | CUDA | Vulkan |
 |------------|-----|--------|------|--------|
 | Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
 | Linux      | 🚧  |  ⛔   |  ⛔  |  ⛔   |
+
+Under the hood, TensorFrost objects are basically operations that have shape (which are not tensors yet!), some operations can have children operations like loop/if, 
+the compilation process first tries to segment the IR into parts that can be broadcast into the same shape, these parts create proto-kernels, some proto-kernels can be children to loops and if's as well if the stuff under the loop cant be fused, like in the case of iterative algorithms (qr/fft/sorting/jacobi).
+These proto-kernels are optimized then to minimize the amount of links between them, if a computation is cheaper to do again rather than store/load from memory - then it does that.
+After minimizing links between protokernels, it creates actual tensors for inputs and outputs of these kernels, and replaces the links with load/store operations, and you get final list of kernel operations and memory allocations which is translated into C++ code and compiled into a shared library like  [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/qr.ipynb):
+
+```c++
+std::tuple<TensorProp, TensorProp> QRDecomposition(TensorProp in0)
+{
+  int v1_0 = in0.shape[0];
+  int v1_1 = in0.shape[1];
+  TensorProp m0 = check_tensor(in0, "m0", {(uint)v1_0, (uint)v1_1}, DataType::Float);
+  TensorProp m1 = allocate({(uint)v1_0, (uint)v1_1}, DataType::Float);
+  dispatch(0, {m1}, {}, {(uint)v1_0, (uint)v1_1});
+  TensorProp m2 = allocate({(uint)v1_1, (uint)v1_1}, DataType::Float);
+  dispatch(1, {m2}, {}, {(uint)v1_1, (uint)v1_1});
+  int v5_1 = v1_1 - 1;
+  for (int v5_4 = 0; v5_4 < v5_1; v5_4 += 1)
+  {
+    dispatch(2, {m0, m2}, {asuint(v1_0), asuint(v1_1), asuint(v5_4)}, {(uint)1});
+    dispatch(3, {m0, m2, m1}, {asuint(v1_0), asuint(v1_1), asuint(v5_4)}, {(uint)v1_0});
+    int v12_1 = v5_4 + 1;
+    int v12_2 = v1_1 - v12_1;
+    dispatch(4, {m1, m0, m2}, {asuint(v5_4), asuint(v1_0), asuint(v1_1)}, {(uint)v12_2});
+    int v16_1 = v5_4 + 1;
+    int v16_2 = v1_1 - v16_1;
+    dispatch(5, {m0, m1, m2}, {asuint(v5_4), asuint(v1_1), asuint(v1_0)}, {(uint)v1_0, (uint)v16_2});
+  }
+  dispatch(6, {m0, m2}, {asuint(v1_0), asuint(v1_1)}, {(uint)1});
+  dispatch(7, {m0, m2, m1}, {asuint(v1_1), asuint(v1_0)}, {(uint)v1_0});
+  return {m1, m2};
+}
+```
+
+One important distinction of TensorFrost compared to JAX is that it can compile programs that are shape agnostic (JAX cant have argument value dependent shapes!) , so it can be reused for any shaped input (however with same dimensionality though). 
+This is important if you want have the computation to be portable, and be possible to easily include it in a native application, or if you want to have a program that can be used for different shapes of data (like in the case of neural networks).
+
+In some sense, you could say that TensorFrost goes with a bottom up approach of kernel fusion, instead of trying to fuse already existing kernels (however that is also planned in the future for premade hand optimized kernels).
+
 
 ## Examples
 

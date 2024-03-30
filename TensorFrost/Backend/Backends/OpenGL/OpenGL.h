@@ -21,4 +21,7 @@ bool WindowShouldClose();
 
 pair<int, int> GetMousePosition();
 
+bool IsMouseButtonPressed(int button);
+bool IsKeyPressed(int key);
+
 }  // namespace TensorFrost
