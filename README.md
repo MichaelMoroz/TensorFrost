@@ -7,8 +7,7 @@ Currently working platforms:
 | Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
 | Linux      | 🚧  |  ⛔   |  ⛔  |  ⛔   |
 
-Under the hood, TensorFrost objects are basically operations that have shape (which are not tensors yet!), some operations can have children operations like loop/if, 
-the compilation process first tries to segment the IR into parts that can be broadcast into the same shape, these parts create proto-kernels, some proto-kernels can be children to loops and if's as well if the stuff under the loop cant be fused, like in the case of iterative algorithms (qr/fft/sorting/jacobi).
+Under the hood, TensorFrost objects are basically operations that have shape (which are not tensors yet!), some operations can have children operations like loop/if, the compilation process first tries to segment the IR into parts that can be broadcast into the same shape, these parts create proto-kernels, some proto-kernels can be children to loops and if's as well if the stuff under the loop cant be fused, like in the case of iterative algorithms (qr/fft/sorting/jacobi).
 These proto-kernels are optimized then to minimize the amount of links between them, if a computation is cheaper to do again rather than store/load from memory - then it does that.
 After minimizing links between protokernels, it creates actual tensors for inputs and outputs of these kernels, and replaces the links with load/store operations, and you get final list of kernel operations and memory allocations which is translated into C++ code and compiled into a shared library like  [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/qr.ipynb):
 
