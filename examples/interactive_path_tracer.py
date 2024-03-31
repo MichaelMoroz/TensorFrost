@@ -114,6 +114,9 @@ def lerp(a, b, t):
 def abs(a):
     return vec3(tf.abs(a.x), tf.abs(a.y), tf.abs(a.z))
 
+def reflect(i, n):
+    return i - n * 2.0 * dot(n, i)
+
 def sky_color(dir):
     fsun = vec3(0.577, 0.577, 0.577)
     Br = 0.0025
@@ -154,11 +157,21 @@ def mengerFold(z):
     z.y += k3 * -1.0
     z.z += k3 * 1.0
 
-iFracScale = 1.81
-iFracAng1 = -4.84
-iFracAng2 = -2.99
-iFracShift = vec3(-2.905, 0.765, -4.165)
-iFracCol = vec3(0.251, 0.337, 0.161)
+#iFracScale = 1.81
+#iFracAng1 = -4.84
+#iFracAng2 = -2.99
+#iFracShift = vec3(-2.905, 0.765, -4.165)
+#iFracCol = vec3(0.251, 0.337, 0.161)
+    
+#//Too many trees
+#Level(1.9073f, -9.83f, -1.16f, vec3(-3.508, -3.593, 3.295),vec3(-0.34, 0.12, -0.08),
+#      vec4(-3.40191, 4.14347, -3.48312, 0.04),vec4(3.40191, 4.065, 3.48312, 0.04),false),
+
+iFracScale = 1.9073
+iFracAng1 = -9.83
+iFracAng2 = -1.16
+iFracShift = vec3(-3.508, -3.593, 3.295)
+iFracCol = vec3(0.34, 0.12, 0.08)
 
 def fractal(p):
     aZ = [np.sin(iFracAng1), np.cos(iFracAng1)]
@@ -315,16 +328,32 @@ def ray_marcher():
     def udir():
         rx = 2.0 * np.pi * rand()
         ry = tf.acos(2.0 * rand() - 1.0)
-        c = tf.cos(rx)
-        s = tf.sin(rx)
-        return vec3(c * s, s * s, c)
+        cx, sx = tf.cos(rx), tf.sin(rx)
+        cy, sy = tf.cos(ry), tf.sin(ry)
+        return vec3(cx * sy, sx * sy, cy)
     
+    def normal_rand():
+        #box-muller transform
+        u1 = rand()
+        u2 = rand()
+        r = tf.sqrt(-2.0 * tf.log(u1))
+        theta = 2.0 * np.pi * u2
+        return r * tf.cos(theta), r * tf.sin(theta)
+
     def hemisphere_dir(normal):
         return normalize(normal + udir())
     
-    u, v = ij_to_uv(i, j)
+    def random_reflection(normal, dir, roughness):
+        rx, ry = normal_rand()
+        rz, rw = normal_rand()
+        random_normal = normal + roughness * vec3(rx, ry, rz)
+        return normalize(reflect(dir, random_normal))
     
-    cam_pos, cam_dir = get_ray(u, v, camera, i.shape)
+    u, v = ij_to_uv(i, j)
+    u_off = rand() / tf.float(M)
+    v_off = rand() / tf.float(N)
+    
+    cam_pos, cam_dir = get_ray(u + u_off, v + v_off, camera, i.shape)
 
     ro = vec3.copy(cam_pos)
     rd = vec3.copy(cam_dir)
@@ -332,18 +361,16 @@ def ray_marcher():
     emis = vec3.zero(i.shape)
     atten = vec3.const(1.0, i.shape)
     first_depth = tf.const(0.0)
-    first_hit = vec3.zero(i.shape)
 
     def path_tracing_iteration(bounce):
         td = MarchRay(ro, rd)
         hit = ro + rd * td
         tf.if_cond(bounce == 0, lambda: first_depth.set(td))
-        tf.if_cond(bounce == 0, lambda: first_hit.set(hit))
 
         def if_body():
             norm = calcNormal(hit)
             sdf, col = map(hit)
-            col = clamp(col, 0.9, 1.0)
+            col = clamp(col, 0.0, 1.0)
             
             #shooting shadow ray
             shadow = MarchSoftShadow(hit, light_dir, 0.05)
@@ -353,6 +380,7 @@ def ray_marcher():
 
             #next ray
             rd.set(hemisphere_dir(norm))
+            #rd.set(random_reflection(norm, rd, 0.2))
             ro.set(hit + norm * 0.01)
 
         def else_body():
@@ -369,6 +397,8 @@ def ray_marcher():
     final_color = emis ** (1.0 / 2.2)
 
     #find previous frame color
+    cam_pos, cam_dir = get_ray(u, v, camera, i.shape)
+    first_hit = cam_pos + cam_dir * first_depth
     u, v = project(first_hit, prevcamera)
     pi, pj = uv_to_ij(u, v)
 
@@ -377,9 +407,8 @@ def ray_marcher():
     prev_first_depth = prev_depth[pixi, pixj]
     prev_ro, prev_rd = get_ray(u, v, prevcamera, i.shape)
     prev_hit = prev_ro + prev_rd * prev_first_depth
-    prev_td = distance(cam_pos, prev_hit)
-    
-    accum = tf.select(reject, 0.0, 0.96) * tf.lerp(smoothstep(-10.0*first_depth*min_angle, -5.0*first_depth*min_angle, first_depth - prev_td), 1.0, 0.4)
+    ang_distance = distance(normalize(prev_hit - cam_pos),normalize(first_hit - cam_pos))
+    accum = tf.select(reject, 0.0, 0.96) * smoothstep(10e-4, 1e-4, ang_distance)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)
@@ -446,7 +475,7 @@ def render_image(img, depth, envmap, camera, prev_camera, frame_id):
 
 tf.show_window(W, H, "Path Tracer")
 
-camera = Camera([0, 4, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
+camera = Camera([0, 4.5, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
 pmx, pmy = tf.get_mouse_position()
 
 angular_speed = 0.005
@@ -459,9 +488,8 @@ frame_id = 0
 #load a hdr environment map using imageio
 envmap = imageio.imread(os.path.join(current_dir, "garden_smol.hdr"))
 envmap = np.flipud(envmap)
-envmap = 0.5*envmap / np.max(envmap)
+envmap = 0.6*envmap / np.max(envmap)
 envmap = np.array(envmap, dtype=np.float32)
-print(envmap.shape)
 envmap = tf.tensor(envmap)
 
 while not tf.window_should_close():
