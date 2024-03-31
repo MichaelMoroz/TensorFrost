@@ -87,6 +87,9 @@ def cross(a, b):
 def length(a):
     return tf.sqrt(dot(a, a))
 
+def distance(a, b):
+    return length(a - b)
+
 def normalize(a):
     return a / length(a)
 
@@ -137,7 +140,7 @@ def mandelbulb(p):
     dz = tf.const(1.0)
     def loop_body(i):
         dz.val = m_pow * m ** (0.5*(m_pow - 1.0)) * dz + 1.0
-        r = length(w)+1e-6
+        r = length(w) + 1e-5
         b = m_pow * tf.acos(w.y/r)
         a = m_pow * tf.atan2(w.x, w.z)
         c = r ** m_pow
@@ -147,7 +150,7 @@ def mandelbulb(p):
         tf.if_cond(m > 256.0, lambda: tf.break_loop())
 
     tf.loop(loop_body, 0, 5, 1)
-    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / dz
+    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / (dz + 1e-5)
     return sdf, col
 
 def map(p):
@@ -234,15 +237,21 @@ def CubicIterpCH(tex, x, y, ch):
 
     return valueY
 
+def smoothstep(a, b, x):
+    t = tf.clamp((x - a) / (b - a), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
 def ray_marcher():
     N, M = H, W
     prev_frame = tf.input([N, M, 3], tf.float32)
+    prev_depth = tf.input([N, M], tf.float32)
     # Camera parameters (pos, cam_axis_x, cam_axis_y, cam_axis_z)
     camera = tf.input([4,3], tf.float32)
     prevcamera = tf.input([4,3], tf.float32)
     frame_id = tf.input([1], tf.int32)[0]
    
     canvas = tf.buffer([N, M, 3], tf.float32)
+    depth_buffer = tf.buffer([N, M], tf.float32)
     i, j = tf.indices([N, M])
     min_res = tf.min(N, M)
 
@@ -274,17 +283,20 @@ def ray_marcher():
     
     u, v = ij_to_uv(i, j)
     
-    ro, rd = get_ray(u, v, camera, i.shape)
+    cam_pos, cam_dir = get_ray(u, v, camera, i.shape)
+
+    ro = vec3.copy(cam_pos)
+    rd = vec3.copy(cam_dir)
 
     emis = vec3.zero(i.shape)
     atten = vec3.const(1.0, i.shape)
-    #first_depth = tf.const(0.0)
+    first_depth = tf.const(0.0)
     first_hit = vec3.zero(i.shape)
 
     def path_tracing_iteration(bounce):
         td = MarchRay(ro, rd)
         hit = ro + rd * td
-        #tf.if_cond(bounce == 0, lambda: first_depth.set(td))
+        tf.if_cond(bounce == 0, lambda: first_depth.set(td))
         tf.if_cond(bounce == 0, lambda: first_hit.set(hit))
 
         def if_body():
@@ -293,9 +305,9 @@ def ray_marcher():
             col = clamp(col, 0.9, 1.0)
             
             #shooting shadow ray
-            shadow = MarchSoftShadow(hit, light_dir, 0.05)
-            illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
-            emis.set(emis + mul(atten, illum))
+            #shadow = MarchSoftShadow(hit, light_dir, 0.05)
+            #illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
+            #emis.set(emis + mul(atten, illum))
             atten.set(mul(atten, col))
 
             #next ray
@@ -318,14 +330,21 @@ def ray_marcher():
     #find previous frame color
     u, v = project(first_hit, prevcamera)
     pi, pj = uv_to_ij(u, v)
+
+    reject = (pi < 0.0) | (pi >= tf.float(N)) | (pj < 0.0) | (pj >= tf.float(M))
+    pixi, pixj = tf.int(tf.round(pi)), tf.int(tf.round(pj))
+    prev_first_depth = prev_depth[pixi, pixj]
+    prev_ro, prev_rd = get_ray(u, v, prevcamera, i.shape)
+    prev_hit = prev_ro + prev_rd * prev_first_depth
+    prev_td = distance(cam_pos, prev_hit)
     
-    accum = 0.9
+    accum = tf.select(reject, 0.0, 0.9) * smoothstep(-6.0*first_depth*min_angle, -3.0*first_depth*min_angle, first_depth - prev_td)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)
-    
+    depth_buffer[i, j] = first_depth
 
-    return [canvas]
+    return [canvas, depth_buffer]
 
 raymarch = tf.compile(ray_marcher)
 
@@ -377,12 +396,12 @@ class Camera:
         """Get the camera matrix."""
         return np.stack([self.position, *quaternion_to_matrix(self.quaternion)])
 
-def render_image(img, camera, prev_camera, frame_id):
+def render_image(img, depth, camera, prev_camera, frame_id):
     camera_matrix_tf = tf.tensor(camera)
     prev_camera_matrix_tf = tf.tensor(prev_camera)
     frame_id_tf = tf.tensor(np.array([frame_id], dtype=np.int32))
-    img, = raymarch(img, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf)
-    return img
+    img, depth = raymarch(img, depth, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf)
+    return img, depth
 
 tf.show_window(W, H, "Path Tracer")
 
@@ -393,6 +412,7 @@ angular_speed = 0.005
 camera_speed = 0.005
 prev_cam_mat = camera.get_camera_matrix()
 img = tf.tensor(np.zeros((H, W, 3), dtype=np.float32))
+depth = tf.tensor(np.zeros((H, W), dtype=np.float32))
 frame_id = 0
 
 while not tf.window_should_close():
@@ -418,7 +438,7 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     cam_mat = camera.get_camera_matrix()
-    img = render_image(img, cam_mat, prev_cam_mat, frame_id)
+    img, depth = render_image(img, depth, cam_mat, prev_cam_mat, frame_id)
     tf.render_frame(img)
     
     pmx, pmy = mx, my
