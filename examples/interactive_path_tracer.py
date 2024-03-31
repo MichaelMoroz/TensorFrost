@@ -1,6 +1,9 @@
 import TensorFrost as tf
 import numpy as np
 import time
+import os
+import imageio
+current_dir = os.path.dirname(os.path.abspath(__file__))
 
 tf.initialize(tf.opengl)
 
@@ -8,7 +11,7 @@ W = 1920
 H = 1080
 eps = 0.0001
 m_pow = 8.0
-max_depth = 50.0
+max_depth = 150.0
 min_angle = 0.0005
 
 class vec3:
@@ -91,7 +94,7 @@ def distance(a, b):
     return length(a - b)
 
 def normalize(a):
-    return a / length(a)
+    return a / (length(a) + 1e-5)
 
 def min(a, b):
     return vec3(tf.min(a.x, b.x), tf.min(a.y, b.y), tf.min(a.z, b.z))
@@ -107,6 +110,9 @@ def exp(a):
 
 def lerp(a, b, t):
     return a + (b - a) * t
+
+def abs(a):
+    return vec3(tf.abs(a.x), tf.abs(a.y), tf.abs(a.z))
 
 def sky_color(dir):
     fsun = vec3(0.577, 0.577, 0.577)
@@ -133,28 +139,46 @@ def sky_color(dir):
     sky_col = 0.4 * clamp(sky_col, 0.0, 1000.0)
     return sky_col ** 1.5
 
-def mandelbulb(p):
-    w = vec3.copy(p)
-    col = vec3.copy(abs(w))
-    m = dot(w,w)
-    dz = tf.const(1.0)
-    def loop_body(i):
-        dz.val = m_pow * m ** (0.5*(m_pow - 1.0)) * dz + 1.0
-        r = length(w) + 1e-5
-        b = m_pow * tf.acos(w.y/r)
-        a = m_pow * tf.atan2(w.x, w.z)
-        c = r ** m_pow
-        w.set(vec3(p.x + c * tf.sin(b) * tf.sin(a), p.y + c * tf.cos(b), p.z + c * tf.sin(b) * tf.cos(a)))
-        col.set(min(col, abs(w)))
-        m.val = dot(w,w)
-        tf.if_cond(m > 256.0, lambda: tf.break_loop())
+def sdBox(p, b):
+    d = abs(p) - b
+    return tf.min(tf.max(d.x, tf.max(d.y, d.z)), 0.0) + length(max(d, vec3(0.0, 0.0, 0.0)))
 
-    tf.loop(loop_body, 0, 5, 1)
-    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / (dz + 1e-5)
-    return sdf, col
+def mengerFold(z):
+    k1 = tf.min(z.x - z.y, 0.0)
+    z.x += k1 * -1.0
+    z.y += k1 * 1.0
+    k2 = tf.min(z.x - z.z, 0.0)
+    z.x += k2 * -1.0
+    z.z += k2 * 1.0
+    k3 = tf.min(z.y - z.z, 0.0)
+    z.y += k3 * -1.0
+    z.z += k3 * 1.0
+
+iFracScale = 1.81
+iFracAng1 = -4.84
+iFracAng2 = -2.99
+iFracShift = vec3(-2.905, 0.765, -4.165)
+iFracCol = vec3(0.251, 0.337, 0.161)
+
+def fractal(p):
+    aZ = [np.sin(iFracAng1), np.cos(iFracAng1)]
+    aX = [np.sin(iFracAng2), np.cos(iFracAng2)]
+    scale = tf.const(1.0)
+    orbit = vec3.zero_like(p)
+    for i in range(11):
+        p = abs(p)
+        p.x, p.y = p.x * aZ[1] + p.y * aZ[0], p.x * -aZ[0] + p.y * aZ[1]
+        mengerFold(p)
+        p.y, p.z = p.y * aX[1] + p.z * aX[0], p.y * -aX[0] + p.z * aX[1]
+        p *= iFracScale
+        scale *= iFracScale
+        p += iFracShift
+        orbit = max(orbit, mul(p, iFracCol))
+
+    return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
 
 def map(p):
-    return mandelbulb(p)
+    return fractal(p)
 
 def calcNormal(p):
     sdf = map(p)[0]
@@ -237,6 +261,13 @@ def CubicIterpCH(tex, x, y, ch):
 
     return valueY
 
+def BilinearCH(tex, x, y, ch):
+    xi, yi = tf.floor(x), tf.floor(y)
+    xf, yf = x-xi, y-yi
+    xi, yi = tf.int(xi), tf.int(yi)
+    oxf, oyf = 1.0-xf, 1.0-yf
+    return tex[xi, yi, ch] * oxf * oyf + tex[xi+1, yi, ch] * xf * oyf + tex[xi, yi+1, ch] * oxf * yf + tex[xi+1, yi+1, ch] * xf * yf
+
 def smoothstep(a, b, x):
     t = tf.clamp((x - a) / (b - a), 0.0, 1.0)
     return t * t * (3.0 - 2.0 * t)
@@ -245,6 +276,16 @@ def ray_marcher():
     N, M = H, W
     prev_frame = tf.input([N, M, 3], tf.float32)
     prev_depth = tf.input([N, M], tf.float32)
+    environment_map = tf.input([-1, -1, 3], tf.float32)
+    env_shape = environment_map.shape
+
+    def sample_background(dir):
+        u = 0.5 + tf.atan2(dir.x, dir.z) / (2.0 * np.pi)
+        v = 0.5 + tf.asin(dir.y) / np.pi
+        pix_i = v * tf.float(env_shape[0] - 1)
+        pix_j = u * tf.float(env_shape[1] - 1)
+        return vec3(BilinearCH(environment_map, pix_i, pix_j, 0), BilinearCH(environment_map, pix_i, pix_j, 1), BilinearCH(environment_map, pix_i, pix_j, 2))
+
     # Camera parameters (pos, cam_axis_x, cam_axis_y, cam_axis_z)
     camera = tf.input([4,3], tf.float32)
     prevcamera = tf.input([4,3], tf.float32)
@@ -305,9 +346,9 @@ def ray_marcher():
             col = clamp(col, 0.9, 1.0)
             
             #shooting shadow ray
-            #shadow = MarchSoftShadow(hit, light_dir, 0.05)
-            #illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
-            #emis.set(emis + mul(atten, illum))
+            shadow = MarchSoftShadow(hit, light_dir, 0.05)
+            illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
+            emis.set(emis + mul(atten, illum))
             atten.set(mul(atten, col))
 
             #next ray
@@ -315,7 +356,7 @@ def ray_marcher():
             ro.set(hit + norm * 0.01)
 
         def else_body():
-            sky = sky_color(rd)
+            sky = sample_background(rd)
             emis.set(emis + mul(atten, sky))
             tf.break_loop()
         
@@ -338,7 +379,7 @@ def ray_marcher():
     prev_hit = prev_ro + prev_rd * prev_first_depth
     prev_td = distance(cam_pos, prev_hit)
     
-    accum = tf.select(reject, 0.0, 0.9) * smoothstep(-6.0*first_depth*min_angle, -3.0*first_depth*min_angle, first_depth - prev_td)
+    accum = tf.select(reject, 0.0, 0.96) * tf.lerp(smoothstep(-10.0*first_depth*min_angle, -5.0*first_depth*min_angle, first_depth - prev_td), 1.0, 0.4)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)
@@ -396,24 +437,32 @@ class Camera:
         """Get the camera matrix."""
         return np.stack([self.position, *quaternion_to_matrix(self.quaternion)])
 
-def render_image(img, depth, camera, prev_camera, frame_id):
+def render_image(img, depth, envmap, camera, prev_camera, frame_id):
     camera_matrix_tf = tf.tensor(camera)
     prev_camera_matrix_tf = tf.tensor(prev_camera)
     frame_id_tf = tf.tensor(np.array([frame_id], dtype=np.int32))
-    img, depth = raymarch(img, depth, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf)
+    img, depth = raymarch(img, depth, envmap, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf)
     return img, depth
 
 tf.show_window(W, H, "Path Tracer")
 
-camera = Camera([0, 0, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
+camera = Camera([0, 4, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
 pmx, pmy = tf.get_mouse_position()
 
 angular_speed = 0.005
-camera_speed = 0.005
+camera_speed = 0.01
 prev_cam_mat = camera.get_camera_matrix()
 img = tf.tensor(np.zeros((H, W, 3), dtype=np.float32))
 depth = tf.tensor(np.zeros((H, W), dtype=np.float32))
 frame_id = 0
+
+#load a hdr environment map using imageio
+envmap = imageio.imread(os.path.join(current_dir, "garden_smol.hdr"))
+envmap = np.flipud(envmap)
+envmap = 0.5*envmap / np.max(envmap)
+envmap = np.array(envmap, dtype=np.float32)
+print(envmap.shape)
+envmap = tf.tensor(envmap)
 
 while not tf.window_should_close():
     mx, my = tf.get_mouse_position()
@@ -438,7 +487,7 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     cam_mat = camera.get_camera_matrix()
-    img, depth = render_image(img, depth, cam_mat, prev_cam_mat, frame_id)
+    img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id)
     tf.render_frame(img)
     
     pmx, pmy = mx, my
