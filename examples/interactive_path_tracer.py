@@ -117,34 +117,34 @@ def abs(a):
 def reflect(i, n):
     return i - n * 2.0 * dot(n, i)
 
-def sky_color(dir):
-    fsun = vec3(0.577, 0.577, 0.577)
-    Br = 0.0025
-    Bm = 0.0003
-    g = 0.9800
-    nitrogen = vec3(0.650, 0.570, 0.475)
-    Kr = Br * nitrogen ** -4.0
-    Km = Bm * nitrogen ** -0.84
-
-    brightnees = tf.exp(-tf.sqrt(tf.pow(tf.abs(tf.min(5.0 * (dir.y - 0.1), 0.0)), 2.0) + 0.1))
-    dir.y = tf.max(dir.y, 0.0)
-    dir = normalize(dir)
-
-    mu = dot(normalize(dir), normalize(fsun))
-    exp1 = tf.exp(-((dir.y + fsun.y * 4.0) * (tf.exp(-dir.y * 16.0) + 0.1) / 80.0) / Br) * (tf.exp(-dir.y * 16.0) + 0.1)
-    exp2 = exp(- Kr * exp1 / Br)
-    val1 = exp2 * tf.exp(-dir.y * tf.exp(-dir.y * 8.0) * 4.0) * tf.exp(-dir.y * 2.0) * 4.0
-    val2 = (1.0 - tf.exp(fsun.y)) * 0.2
-    extinction = lerp(val1, vec3(val2,val2,val2), -fsun.y * 0.2 + 0.5)
-    b0 = (1.0 - g * g) / (2.0 + g * g) / tf.pow(1.0 + g * g - 2.0 * g * mu, 1.5)
-    b1 = (Kr + Km * b0) * brightnees * 3.0 / (8.0 * 3.14) * (1.0 + mu * mu) / (Br + Bm)
-    sky_col = vec3(extinction.x * b1.x, extinction.y * b1.y, extinction.z * b1.z)
-    sky_col = 0.4 * clamp(sky_col, 0.0, 1000.0)
-    return sky_col ** 1.5
-
 def sdBox(p, b):
     d = abs(p) - b
     return tf.min(tf.max(d.x, tf.max(d.y, d.z)), 0.0) + length(max(d, vec3(0.0, 0.0, 0.0)))
+
+
+class Level:
+    def __init__(self, scale, ang1, ang2, shift, col):
+        self.scale = scale
+        self.ang1 = ang1
+        self.ang2 = ang2
+        self.shift = shift
+        self.col = col
+    
+levels = [
+    Level(1.8, -0.12, 0.5, vec3(-2.12, -2.75, 0.49), vec3(0.42, 0.38, 0.19)),
+    Level(1.9073, -9.83, -1.16, vec3(-3.508, -3.593, 3.295), vec3(-0.34, 0.12, -0.08)),
+    Level(2.02, -1.57, 1.62, vec3(-3.31, 6.19, 1.53), vec3(0.12, -0.09, -0.09)),
+    Level(1.66, 1.52, 0.19, vec3(-3.83, -1.94, -1.09), vec3(0.42, 0.38, 0.19)),
+    Level(1.58, -1.45, 3.95, vec3(-1.55, -0.13, -2.52), vec3(-1.17, -0.4, -1.0)),
+    Level(1.81, -4.84, -2.99, vec3(-2.905, 0.765, -4.165), vec3(0.251, 0.337, 0.161)),
+    Level(1.88, 1.52, 4.91, vec3(-4.54, -1.26, 0.1), vec3(-1.0, 0.3, -0.43)),
+    Level(2.08, -4.79, 3.16, vec3(-7.43, 5.96, -6.23), vec3(0.16, 0.38, 0.15)),
+    Level(2.0773, -9.66, -1.34, vec3(-1.238, -1.533, 1.085), vec3(0.42, 0.38, 0.19)),
+    Level(2.0773, -9.66, -1.34, vec3(-1.238, -1.533, 1.085), vec3(0.42, 0.38, 0.19)),
+    Level(1.4731, 0.0, 0.0, vec3(-10.27, 3.28, -1.90), vec3(1.17, 0.07, 1.27))
+]
+
+cur_level = levels[7]
 
 def mengerFold(z):
     k1 = tf.min(z.x - z.y, 0.0)
@@ -157,25 +157,9 @@ def mengerFold(z):
     z.y += k3 * -1.0
     z.z += k3 * 1.0
 
-#iFracScale = 1.81
-#iFracAng1 = -4.84
-#iFracAng2 = -2.99
-#iFracShift = vec3(-2.905, 0.765, -4.165)
-#iFracCol = vec3(0.251, 0.337, 0.161)
-    
-#//Too many trees
-#Level(1.9073f, -9.83f, -1.16f, vec3(-3.508, -3.593, 3.295),vec3(-0.34, 0.12, -0.08),
-#      vec4(-3.40191, 4.14347, -3.48312, 0.04),vec4(3.40191, 4.065, 3.48312, 0.04),false),
-
-iFracScale = 1.9073
-iFracAng1 = -9.83
-iFracAng2 = -1.16
-iFracShift = vec3(-3.508, -3.593, 3.295)
-iFracCol = vec3(0.34, 0.12, 0.08)
-
 def fractal(p):
-    aZ = [np.sin(iFracAng1), np.cos(iFracAng1)]
-    aX = [np.sin(iFracAng2), np.cos(iFracAng2)]
+    aZ = [tf.sin(cur_level.ang1), tf.cos(cur_level.ang1)]
+    aX = [tf.sin(cur_level.ang2), tf.cos(cur_level.ang2)]
     scale = tf.const(1.0)
     orbit = vec3.zero_like(p)
     for i in range(11):
@@ -183,23 +167,23 @@ def fractal(p):
         p.x, p.y = p.x * aZ[1] + p.y * aZ[0], p.x * -aZ[0] + p.y * aZ[1]
         mengerFold(p)
         p.y, p.z = p.y * aX[1] + p.z * aX[0], p.y * -aX[0] + p.z * aX[1]
-        p *= iFracScale
-        scale *= iFracScale
-        p += iFracShift
-        orbit = max(orbit, mul(p, iFracCol))
+        p = p * cur_level.scale + cur_level.shift
+        scale = scale * cur_level.scale
+        orbit = max(orbit, mul(p, cur_level.col))
 
     return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
 
 def map(p):
     return fractal(p)
 
-def calcNormal(p):
-    sdf = map(p)[0]
-    sdfx = map(p + vec3(eps, 0.0, 0.0))[0]
-    sdfy = map(p + vec3(0.0, eps, 0.0))[0]
-    sdfz = map(p + vec3(0.0, 0.0, eps))[0]
-    return normalize(vec3(sdfx - sdf, sdfy - sdf, sdfz - sdf))
-
+def calcNormal(p, dx):
+    dx = tf.max(dx, 1e-4)
+    normal = (vec3(1.0, -1.0, -1.0) * map(p + vec3(1.0, -1.0, -1.0) * dx)[0] +
+              vec3(-1.0, -1.0, 1.0) * map(p + vec3(-1.0, -1.0, 1.0) * dx)[0] +
+              vec3(-1.0, 1.0, -1.0) * map(p + vec3(-1.0, 1.0, -1.0) * dx)[0] +
+              vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
+    return normalize(normal)
+                   
 def MarchRay(ro, rd, steps=256):
     td = tf.zeros([])
     def loop_body(k):
@@ -209,25 +193,6 @@ def MarchRay(ro, rd, steps=256):
 
     tf.loop(loop_body, 0, steps, 1)
     return td
-
-def MarchSoftShadow(ro, rd, w, steps=64):
-    td = tf.const(0.0)
-    psdf = tf.const(1e10)
-    res = tf.const(1.0)
-    it = tf.const(0)
-    def loop_body(k):
-        sdf = map(ro + rd * td)[0]
-        y = tf.select(k == 0, 0.0, sdf * sdf / (2.0 * psdf))
-        d = tf.sqrt(sdf * sdf - y * y)
-        res.val = tf.min(res, d / (w * tf.max(1e-6, td - y)))
-        psdf.val = sdf
-        td.val += sdf
-        it.val = k
-        tf.if_cond((td > max_depth) | (res < 0.001), lambda: tf.break_loop())
-
-    tf.loop(loop_body, 0, steps, 1)
-    res = tf.select(it == steps - 1, 0.0, tf.clamp(res, 0.0, 1.0))
-    return res * res * (3.0 - 2.0 * res)
 
 light_dir = vec3(0.577, 0.577, 0.577)
 focal_length = 1.0
@@ -368,20 +333,24 @@ def ray_marcher():
         tf.if_cond(bounce == 0, lambda: first_depth.set(td))
 
         def if_body():
-            norm = calcNormal(hit)
+            dx = td*min_angle
+            norm = calcNormal(hit, dx)
             sdf, col = map(hit)
             col = clamp(col, 0.0, 1.0)
             
             #shooting shadow ray
-            shadow = MarchSoftShadow(hit, light_dir, 0.05)
+            new_hit = hit + norm * dx
+            light_dir_sph = light_dir + udir() * 0.03
+            shadow_td = MarchRay(new_hit, light_dir_sph, 48)
+            shadow = tf.select(shadow_td >= max_depth, 1.0, 0.0)
             illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
             emis.set(emis + mul(atten, illum))
             atten.set(mul(atten, col))
 
             #next ray
             rd.set(hemisphere_dir(norm))
-            #rd.set(random_reflection(norm, rd, 0.2))
-            ro.set(hit + norm * 0.01)
+            #rd.set(random_reflection(norm, rd, 0.25))
+            ro.set(new_hit)
 
         def else_body():
             sky = sample_background(rd)
@@ -408,7 +377,7 @@ def ray_marcher():
     prev_ro, prev_rd = get_ray(u, v, prevcamera, i.shape)
     prev_hit = prev_ro + prev_rd * prev_first_depth
     ang_distance = distance(normalize(prev_hit - cam_pos),normalize(first_hit - cam_pos))
-    accum = tf.select(reject, 0.0, 0.96) * smoothstep(10e-4, 1e-4, ang_distance)
+    accum = tf.select(reject, 0.0, 0.96) * smoothstep(3e-4, 1e-4, ang_distance)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)
@@ -475,7 +444,7 @@ def render_image(img, depth, envmap, camera, prev_camera, frame_id):
 
 tf.show_window(W, H, "Path Tracer")
 
-camera = Camera([0, 4.5, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
+camera = Camera([0, 6.5, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
 pmx, pmy = tf.get_mouse_position()
 
 angular_speed = 0.005
@@ -488,7 +457,7 @@ frame_id = 0
 #load a hdr environment map using imageio
 envmap = imageio.imread(os.path.join(current_dir, "garden_smol.hdr"))
 envmap = np.flipud(envmap)
-envmap = 0.6*envmap / np.max(envmap)
+envmap = 0.3*envmap / np.max(envmap)
 envmap = np.array(envmap, dtype=np.float32)
 envmap = tf.tensor(envmap)
 
