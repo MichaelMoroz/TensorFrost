@@ -246,10 +246,6 @@ def BilinearCH(tex, x, y, ch):
     oxf, oyf = 1.0-xf, 1.0-yf
     return tex[xi, yi, ch] * oxf * oyf + tex[xi+1, yi, ch] * xf * oyf + tex[xi, yi+1, ch] * oxf * yf + tex[xi+1, yi+1, ch] * xf * yf
 
-def smoothstep(a, b, x):
-    t = tf.clamp((x - a) / (b - a), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
 def ray_marcher():
     N, M = H, W
     prev_frame = tf.input([N, M, 3], tf.float32)
@@ -377,7 +373,7 @@ def ray_marcher():
     prev_ro, prev_rd = get_ray(u, v, prevcamera, i.shape)
     prev_hit = prev_ro + prev_rd * prev_first_depth
     ang_distance = distance(normalize(prev_hit - cam_pos),normalize(first_hit - cam_pos))
-    accum = tf.select(reject, 0.0, 0.96) * smoothstep(3e-4, 1e-4, ang_distance)
+    accum = tf.select(reject, 0.0, 0.96) * tf.smoothstep(3e-4, 1e-4, ang_distance)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)

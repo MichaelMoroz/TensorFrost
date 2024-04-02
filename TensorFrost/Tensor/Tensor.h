@@ -738,6 +738,10 @@ class Tensor {
 		return Op("lerp", &x, &y, &a);
 	}
 
+	static Tensor& smoothstep(const Tensor& a, const Tensor& b, const Tensor& x) {
+		return Op("smoothstep", &a, &b, &x);
+	}
+
 	static Tensor& select(const Tensor& cond, const Tensor& x, const Tensor& y) {
 		return Op("ternary", &cond, &x, &y);
 	}

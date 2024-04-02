@@ -97,6 +97,10 @@ void WindowCloseCallback(GLFWwindow* window) {
 	glfwSetWindowShouldClose(window, GLFW_FALSE);
 }
 
+void WindowSizeCallback(GLFWwindow* window, int width, int height) {
+	glViewport(0, 0, width, height);
+}
+
 void StartOpenGL() {
 	if (!glfwInit()) {
 		throw std::runtime_error("Failed to initialize GLFW");
@@ -138,6 +142,7 @@ void StartOpenGL() {
 	quad_program = CreateProgram(vertex_shader, fragment_shader);
 
 	glfwSetWindowCloseCallback(global_window, WindowCloseCallback);
+	glfwSetWindowSizeCallback(global_window, WindowSizeCallback);
 }
 
 void StopOpenGL() {

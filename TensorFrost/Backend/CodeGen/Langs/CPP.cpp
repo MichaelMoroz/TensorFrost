@@ -80,6 +80,12 @@ inline float lerp(float a, float b, float t)
   return a + (b - a) * t;
 }
 
+inline float smoothstep(float a, float b, float t)
+{
+  t = clamp((t - a) / (b - a), 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
+}
+
 inline void InterlockedAdd(int* memory, int address, int value)
 {
   std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);

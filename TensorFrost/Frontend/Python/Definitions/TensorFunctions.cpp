@@ -61,6 +61,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);
 	TERNARY_FUNCTION(select);
+	TERNARY_FUNCTION(smoothstep);
 
 	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
