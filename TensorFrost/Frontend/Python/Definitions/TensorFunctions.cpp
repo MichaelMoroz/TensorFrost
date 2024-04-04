@@ -56,6 +56,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);
 	BINARY_FUNCTION(atan2);
+	BINARY_FUNCTION(modf);
 
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);

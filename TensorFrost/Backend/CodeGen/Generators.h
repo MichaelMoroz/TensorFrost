@@ -224,7 +224,7 @@ protected:
 					line += op->code_ + args.Name(ArgType::Input, 0);
 					break;
 				case OpType::Function:
-					line += op->code_ + "(";
+					line += GetFunctionName(op->code_) + "(";
 					for (int i = 0; i < args.Count(ArgType::Input); i++) {
 						if (i != 0) {
 							line += ", ";
@@ -303,6 +303,11 @@ protected:
 	                                const string& address, const string& input)
 	{
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
+	}
+
+	virtual string GetFunctionName(const string& name)
+	{
+		return name;
 	}
 };
 

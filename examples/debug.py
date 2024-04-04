@@ -1003,180 +1003,116 @@ tf.initialize(tf.opengl)
 #
 #print(Cnp2)
 
-eps = 0.005
-m_pow = 8.0
-max_depth = 6.0
-min_dist = 0.005
+block_size = 16
 
-def mandelbulb(px, py, pz):
-    wx, wy, wz = tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32)
-    wx.set(px), wy.set(py), wz.set(pz)
-    m = wx*wx + wy*wy + wz*wz
-    dz = tf.zeros(px.shape, tf.float32)
-    dz.set(1.0)
-    #orbit trap
-    cx, cy, cz = tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32), tf.zeros(px.shape, tf.float32)
-    cx.set(tf.abs(wx)), cy.set(tf.abs(wy)), cz.set(tf.abs(wz))
-    def loop_body(i):
-        dz.set(m_pow * m ** (0.5*(m_pow - 1.0)) * dz + 1.0)
-        r = tf.sqrt(wx*wx + wy*wy + wz*wz)
-        b = m_pow * tf.acos(wy/r)
-        a = m_pow * tf.atan2(wx, wz)
-        c = r ** m_pow
-        wx.set(px + c * tf.sin(b) * tf.sin(a))
-        wy.set(py + c * tf.cos(b))
-        wz.set(pz + c * tf.sin(b) * tf.cos(a))
-        cx.set(tf.min(cx, tf.abs(wx)))
-        cy.set(tf.min(cy, tf.abs(wy)))
-        cz.set(tf.min(cz, tf.abs(wz)))
-        m.set(wx*wx + wy*wy + wz*wz)
-        tf.if_cond(m > 256.0, lambda: tf.break_loop())
+def PrefixSum(sizes, N):
+    group_size = 128
+    groups = (N + group_size - 1) / group_size
 
-    tf.loop(loop_body, 0, 2, 1)
-    sdf = 0.25 * tf.log(m) * tf.sqrt(m) / dz
-    return sdf, cx, cy, cz
+    sums = tf.buffer([groups], tf.int32)
+    group_scans = tf.buffer([groups], tf.int32)
+    offsets = tf.buffer([N], tf.int32)
+    gid, = sums.indices
 
-def calcNormal(px, py, pz):
-    sdf = mandelbulb(px, py, pz)[0]
-    sdfx = mandelbulb(px + eps, py, pz)[0]
-    sdfy = mandelbulb(px, py + eps, pz)[0]
-    sdfz = mandelbulb(px, py, pz + eps)[0]
-    nx = sdfx - sdf
-    ny = sdfy - sdf
-    nz = sdfz - sdf
-    mag = tf.sqrt(nx*nx + ny*ny + nz*nz)
-    return nx/mag, ny/mag, nz/mag
+    counter = tf.zeros([], tf.int32)
+    def sum_loop(i):
+        index = gid * group_size + i
+        tf.if_cond(index >= N, lambda: tf.break_loop())
+        counter.set(counter + sizes[index])
+    tf.loop(sum_loop, 0, group_size, 1)
+    sums[gid] = counter
 
-def MarchRay(shape, cam, dir, steps=64):
-    camx, camy, camz = cam
-    dirx, diry, dirz = dir
+    scan = tf.zeros([1], tf.int32)
+    def scan_loop(i):
+        scan.set(scan + sums[i])
+        group_scans[i] = scan
+    tf.loop(scan_loop, 0, groups, 1)
 
-    td = tf.zeros(shape, tf.float32)
-    def loop_body(k):
-        px = camx + dirx * td
-        py = camy + diry * td
-        pz = camz + dirz * td
-        sdf = mandelbulb(px, py, pz)[0]
-        td.set(td + sdf)
-        tf.if_cond((sdf < min_dist) | (td > max_depth), lambda: tf.break_loop())
+    local_scan = tf.select(gid > 0, group_scans[gid - 1], 0)
+    def local_scan_loop(i):
+        index = gid * group_size + i
+        tf.if_cond(index >= N, lambda: tf.break_loop())
+        local_scan.set(local_scan + sizes[index])
+        offsets[index] = local_scan
+    tf.loop(local_scan_loop, 0, group_size, 1)
 
-    tf.loop(loop_body, 0, steps, 1)
-    return camx + dirx * td, camy + diry * td, camz + dirz * td, td
+    return offsets
 
-light_dir_x = -0.577
-light_dir_y = -0.577
-light_dir_z = -0.577
 
-def spherical_to_cartesian(r, theta, phi):
-    # Convert spherical to Cartesian coordinates
-    x = r * tf.sin(theta) * tf.cos(phi)
-    y = r * tf.sin(theta) * tf.sin(phi)
-    z = r * tf.cos(theta)
-    return x, y, z
+def Sparsify2():
+	vol = tf.input([-1, -1, -1, -1], tf.float32)
+	bbox = tf.input([2, 3], tf.int32)
+	block_size = tf.input([1], tf.int32)[0]*1
 
-def cross(a, b):
-    return a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]
+	N, M, K, CH = vol.shape
 
-def dot(a, b):
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+	BX = N / block_size
+	BY = M / block_size
+	BZ = K / block_size
+	max_block_count = BX * BY * BZ
+	
+	b, i, j, k = tf.indices([max_block_count, block_size, block_size, block_size])
+	
+	bx, by, bz = b % BX, (b / BX) % BY, b / (BX * BY)
 
-def normalize(a):
-    mag = tf.sqrt(dot(a, a))
-    return a[0] / mag, a[1] / mag, a[2] / mag
+	ii, jj, kk = i + bx * block_size, j + by * block_size, k + bz * block_size
 
-def mul(a, b):
-    return a[0] * b, a[1] * b, a[2] * b
+	blocks = vol[ii, jj, kk, 0] * 1.0
 
-def add(a, b):
-    return a[0] + b[0], a[1] + b[1], a[2] + b[2]
+	def BlockMaxAbs(blocks, max_block_count):
+		block_max = tf.zeros([max_block_count], tf.float32)
+		b, = block_max.indices
 
-def camera_axes(r, phi, theta):
-    # Camera position
-    cam = spherical_to_cartesian(r, theta+1e-4, phi+1e-4)
-    
-    # Forward vector (normalized vector from camera position to origin)
-    forward = mul(normalize(cam), -1.0)
-    
-    # Assuming Z is up
-    world_up = 0.0, 0.0, 1.0
-    
-    # Right vector (cross product of world up and forward vector)
-    right = cross(world_up, forward)
-    right = normalize(right)
-    
-    # Recalculate the up vector to ensure orthogonality
-    up = cross(forward, right)
-    up = normalize(up)
-    
-    return cam, up, forward, right
+		def loop_body(it):
+			i, j, k = it%block_size, (it/block_size)%block_size, it/(block_size*block_size)
+			block_max.set(tf.max(block_max, tf.abs(blocks[b, i, j, k])))
 
-def get_camera(u, v, dist, phi, theta):
-    cam, up, forward, right = camera_axes(dist, phi, theta)
+		tf.loop(loop_body, 0, block_size*block_size*block_size, 1)
 
-    dirx = forward[0] + u * right[0] + v * up[0]
-    diry = forward[1] + u * right[1] + v * up[1]
-    dirz = forward[2] + u * right[2] + v * up[2]
+		block_max = block_max + 1e-7; #float(block_size*block_size*block_size)
+		return block_max
 
-    # normalize direction
-    direction = normalize((dirx, diry, dirz))
+	block_max = BlockMaxAbs(blocks, max_block_count)
 
-    return cam, direction
+	#counter = tf.zeros([1], tf.int32)
+	#coeff_ids = tf.zeros([max_block_count], tf.int32)
+	#b, = coeff_ids.indices
+#
+	#def if_body1():
+	#	index = tf.scatterAddPrev(counter[0], 1)
+	#	coeff_ids[index] = b
+	#
+	##todo: compute threshold based on the block variance
+	#tf.if_cond(block_max[b] > 1e-3, if_body1)
 
-def ray_marcher():
-    camera_params = tf.input([3], tf.float32)
-    camera_res = tf.input([2], tf.int32)
-    N, M = camera_res[0], camera_res[1]
-    canvas = tf.zeros([N, M, 3], tf.float32)
-    i, j = tf.indices([N, M])
-    min_res = tf.min(N, M)
-    v, u = tf.float(i), tf.float(j)
-    v = (v - 0.5 * tf.float(N)) / tf.float(min_res)
-    u = (u - 0.5 * tf.float(M)) / tf.float(min_res)
+	coeff_ids = tf.zeros([max_block_count], tf.int32)
+	b, = coeff_ids.indices
 
-    cam, dir = get_camera(u, v, camera_params[0], camera_params[1], camera_params[2])
-    
-    px, py, pz, td = MarchRay(i.shape, cam, dir)
+	is_non_empty = block_max[b] > 1e-3
+	new_indices = PrefixSum(tf.select(is_non_empty, 1, 0), max_block_count)
+	
+	offset = tf.select(b > 0, new_indices[b-1], 0)
+	def if_body2():
+		coeff_ids[offset] = b
+	tf.if_cond(is_non_empty, if_body2)
 
-    def if_body():
-        # Lighting
-        norm = calcNormal(px, py, pz)
-        sdf, m, cx, cy = mandelbulb(px, py, pz)
-        r, g, b = tf.clamp(m, 0.6, 1.0), tf.clamp(cx, 0.6, 1.0), tf.clamp(cy, 0.6, 1.0)
-        col = dot(norm, (light_dir_x, light_dir_y, light_dir_z)) * 0.5 + 0.5
-        canvas[i, j, 0] = col * r
-        canvas[i, j, 1] = col * g
-        canvas[i, j, 2] = col * b
+	non_empty_blocks = tf.max(1, new_indices[coeff_ids.shape[0] - 1])
+	
+	
+	block_pos = tf.buffer([non_empty_blocks, 3], tf.int32)
+	b, = tf.indices([non_empty_blocks])
+	
+	block_index = coeff_ids[b]
+	bx, by, bz = block_index % BX, (block_index / BX) % BY, block_index / (BX * BY)
+	block_pos[b, 0] = bx + bbox[0, 0]
+	block_pos[b, 1] = by + bbox[0, 1]
+	block_pos[b, 2] = bz + bbox[0, 2]
 
-    tf.if_cond(td < max_depth, if_body)
-    
-    return [canvas]
+	b, i, j, k = tf.indices([non_empty_blocks, block_size, block_size, block_size])
 
-raymarch = tf.compile(ray_marcher)
+	block_index = coeff_ids[b]
+	reordered_blocks1 = blocks[block_index, i, j, k]
 
-S = 1024
+	return [reordered_blocks1, block_pos]
 
-def render_mandelbulb(phi, theta, resolution=512):
-    cam_params = tf.tensor( np.array([3.0, phi, theta], dtype=np.float32) )
-    res = tf.tensor( np.array([resolution, resolution], dtype=np.int32) )
-
-    img, = raymarch(cam_params, res)
-
-    return img
-
-tf.show_window(S, S, "Sphere tracer")
-
-import time
-
-init_time = time.time()
-
-while not tf.window_should_close():
-    mx, my = tf.get_mouse_position()
-    cur_time = time.time() - init_time
-
-    phi = mx * 2.0 * np.pi / S
-    theta = my * np.pi / S
-
-    img = render_mandelbulb(phi, theta, S)
-    tf.render_frame(img)
-
-tf.hide_window()
+sparsify2 = tf.compile(Sparsify2)

@@ -6,6 +6,12 @@ namespace TensorFrost {
 using namespace std;
 
 class GLSLGenerator : public CodeGenerator {
+	unordered_map<string, string> function_name_map_ = {
+		{"modf", "mod"},
+		{"atan2", "atan"},
+		{"lerp", "mix"},
+	};
+
  public:
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
@@ -34,6 +40,16 @@ class GLSLGenerator : public CodeGenerator {
 		{
 			throw runtime_error("Unsupported atomic operation: " + op);
 		}
+	}
+
+	string GetFunctionName(const string& name) override {
+		// Check if the function name is in the map
+		if (function_name_map_.find(name) != function_name_map_.end()) {
+			return function_name_map_[name];
+		}
+
+		// If not, return the original name
+		return name;
 	}
 };
 
@@ -69,14 +85,6 @@ uint asuint(uint x) {
 
 int asint(uint x) {
   return int(x);
-}
-
-float atan2(float y, float x) {
-  return atan(y, x);
-}
-
-float lerp(float a, float b, float t) {
-  return mix(a, b, t);
 }
 
 layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;

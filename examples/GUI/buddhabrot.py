@@ -105,7 +105,7 @@ frame = np.zeros([S, S, 3], np.float32)
 frame_tf = tf.tensor(frame)
 frame_id = tf.tensor(np.array([0], np.int32))
 
-tf.show_window(S, S, "Mandelbrot")
+tf.show_window(S, S, "Buddhabrot")
 
 init_time = time.time()
 

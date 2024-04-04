@@ -11,7 +11,7 @@ W = 1920
 H = 1080
 eps = 0.0001
 m_pow = 8.0
-max_depth = 150.0
+max_depth = 1200.0
 min_angle = 0.0005
 
 class vec3:
@@ -121,6 +121,8 @@ def sdBox(p, b):
     d = abs(p) - b
     return tf.min(tf.max(d.x, tf.max(d.y, d.z)), 0.0) + length(max(d, vec3(0.0, 0.0, 0.0)))
 
+def mod(a, b):
+    return vec3(tf.modf(a.x, b.x), tf.modf(a.y, b.y), tf.modf(a.z, b.z))
 
 class Level:
     def __init__(self, scale, ang1, ang2, shift, col):
@@ -144,7 +146,7 @@ levels = [
     Level(1.4731, 0.0, 0.0, vec3(-10.27, 3.28, -1.90), vec3(1.17, 0.07, 1.27))
 ]
 
-cur_level = levels[7]
+cur_level = levels[10]
 
 def mengerFold(z):
     k1 = tf.min(z.x - z.y, 0.0)
@@ -173,8 +175,26 @@ def fractal(p):
 
     return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
 
+def city_fractal(p):
+    p = vec3.copy(p)
+    angle = np.pi / 7.0
+    rM = [np.cos(angle), np.sin(angle), -np.sin(angle), np.cos(angle)]
+    sd = p.y + 8.0
+    t = 100.0
+    #effectively unrolled
+    while t > 0.05:
+        p.x, p.z = p.x * rM[0] + p.z * rM[1], p.x * rM[2] + p.z * rM[3]
+        p.y += t * 0.72
+        p = vec3(0.92, 0.52, 0.7) * t - abs(mod(p, vec3(t,t,t)*2) - vec3(t, t, t))
+        minDistance = tf.min(p.x, tf.min(p.y, p.z))
+        sd = tf.max(sd, minDistance)
+        t /= 4.0
+
+    return sd
+
 def map(p):
-    return fractal(p)
+    return city_fractal(p), vec3(1.0, 1.0, 1.0)
+    #return fractal(p)
 
 def calcNormal(p, dx):
     dx = tf.max(dx, 1e-4)
@@ -184,8 +204,8 @@ def calcNormal(p, dx):
               vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
     return normalize(normal)
                    
-def MarchRay(ro, rd, steps=256):
-    td = tf.zeros([])
+def MarchRay(ro, rd, steps=1024):
+    td = tf.const(0.0)
     def loop_body(k):
         sdf = map(ro + rd * td)[0]
         td.val += sdf
@@ -337,7 +357,7 @@ def ray_marcher():
             #shooting shadow ray
             new_hit = hit + norm * dx
             light_dir_sph = light_dir + udir() * 0.03
-            shadow_td = MarchRay(new_hit, light_dir_sph, 48)
+            shadow_td = MarchRay(new_hit, light_dir_sph, 128)
             shadow = tf.select(shadow_td >= max_depth, 1.0, 0.0)
             illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
             emis.set(emis + mul(atten, illum))
@@ -345,7 +365,7 @@ def ray_marcher():
 
             #next ray
             rd.set(hemisphere_dir(norm))
-            #rd.set(random_reflection(norm, rd, 0.25))
+            #rd.set(random_reflection(norm, rd, 0.001))
             ro.set(new_hit)
 
         def else_body():
@@ -440,11 +460,11 @@ def render_image(img, depth, envmap, camera, prev_camera, frame_id):
 
 tf.show_window(W, H, "Path Tracer")
 
-camera = Camera([0, 6.5, -2], axis_angle_quaternion([0, 0, 1], -np.pi/2))
+camera = Camera([0, 6.5, -5], axis_angle_quaternion([0, 0, 1], -np.pi/2))
 pmx, pmy = tf.get_mouse_position()
 
 angular_speed = 0.005
-camera_speed = 0.01
+camera_speed = 0.1
 prev_cam_mat = camera.get_camera_matrix()
 img = tf.tensor(np.zeros((H, W, 3), dtype=np.float32))
 depth = tf.tensor(np.zeros((H, W), dtype=np.float32))
@@ -453,7 +473,7 @@ frame_id = 0
 #load a hdr environment map using imageio
 envmap = imageio.imread(os.path.join(current_dir, "garden_smol.hdr"))
 envmap = np.flipud(envmap)
-envmap = 0.3*envmap / np.max(envmap)
+envmap = 0.6*envmap / np.max(envmap)
 envmap = np.array(envmap, dtype=np.float32)
 envmap = tf.tensor(envmap)
 

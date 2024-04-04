@@ -730,6 +730,10 @@ class Tensor {
 		return Op("mod", &x, &y);
 	}
 
+	static Tensor& modf(const Tensor& x, const Tensor& y) {
+		return Op("modf", &x, &y);
+	}
+
 	static Tensor& atan2(const Tensor& x, const Tensor& y) {
 		return Op("atan2", &x, &y);
 	}

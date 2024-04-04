@@ -542,6 +542,8 @@ void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
 	}
 }
 
+#define MAX_KERNEL_COPY_COST 2048.0f
+
 void IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -566,7 +568,7 @@ void IR::OptimizeKernels() {
 					if (input_cost == -1.0) {
 						throw std::runtime_error("Cost has not been computed");
 					}
-					bool cheap_enough = input_cost >= 0.0f && input_cost < 1024.0f;
+					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
 					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
 					if (cheap_enough || has_only_one_output) {
 						args_to_copy.insert(&input);
@@ -594,6 +596,8 @@ void IR::OptimizeKernels() {
 	}
 }
 
+#define MAX_HOST_COPY_COST 8192.0f
+
 void IR::OptimizeHost() {
 	ComputeNodeCost();
 
@@ -614,8 +618,13 @@ void IR::OptimizeHost() {
 				if (input_cost == -1.0) {
 					throw std::runtime_error("Cost has not been computed");
 				}
-				if (input_cost >= 0.0f && input_cost < 512.0f) {
+				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
+				bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
+
+				if (cheap_enough || has_only_one_output) {
 					args_to_copy.insert(&input);
+				} else {
+					throw std::runtime_error("Host optimization: Copy cost too high for node " + node->name + " with cost " + to_string(input_cost));
 				}
 			}
 		}
