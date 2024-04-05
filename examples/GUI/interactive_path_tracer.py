@@ -2,7 +2,7 @@ import TensorFrost as tf
 import numpy as np
 import time
 import os
-import imageio
+import cv2
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
 tf.initialize(tf.opengl)
@@ -275,7 +275,7 @@ def ray_marcher():
 
     def sample_background(dir):
         u = 0.5 + tf.atan2(dir.x, dir.z) / (2.0 * np.pi)
-        v = 0.5 + tf.asin(dir.y) / np.pi
+        v = 0.5 - tf.asin(dir.y) / np.pi
         pix_i = v * tf.float(env_shape[0] - 1)
         pix_j = u * tf.float(env_shape[1] - 1)
         return vec3(BilinearCH(environment_map, pix_i, pix_j, 0), BilinearCH(environment_map, pix_i, pix_j, 1), BilinearCH(environment_map, pix_i, pix_j, 2))
@@ -470,12 +470,11 @@ img = tf.tensor(np.zeros((H, W, 3), dtype=np.float32))
 depth = tf.tensor(np.zeros((H, W), dtype=np.float32))
 frame_id = 0
 
-#load a hdr environment map using imageio
-envmap = imageio.imread(os.path.join(current_dir, "garden_smol.hdr"))
-envmap = np.flipud(envmap)
-envmap = 0.6*envmap / np.max(envmap)
-envmap = np.array(envmap, dtype=np.float32)
+#use cv2 to load the environment map
+envmap = cv2.imread(os.path.join(current_dir, "garden_smol.hdr"), cv2.IMREAD_ANYCOLOR | cv2.IMREAD_ANYDEPTH)
+envmap = cv2.cvtColor(envmap, cv2.COLOR_BGR2RGB)
 envmap = tf.tensor(envmap)
+
 
 while not tf.window_should_close():
     mx, my = tf.get_mouse_position()
