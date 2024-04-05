@@ -265,13 +265,20 @@ readback_func* readback;
 writeback_func* writeback;
 dispatch_func* dispatch_ref;
 
-TensorProp allocate(std::initializer_list<uint> shape, DataType type)
+TensorProp allocate(std::string name, std::initializer_list<uint> shape, DataType type)
 {
   uint* shape_arr = new uint[shape.size()];
+  uint size = 1;
 
   for (int i = 0; i < shape.size(); i++)
   {
-	shape_arr[i] = shape.begin()[i];
+    shape_arr[i] = shape.begin()[i];
+	size *= shape_arr[i];
+  }
+
+  if (size == 0)
+  {
+	throw std::runtime_error("Cannot allocate tensor with size 0 for " + name + " of type " + DataTypeNames[type]);
   }
 
   TensorProp tensor = alloc(shape_arr, shape.size(), type);

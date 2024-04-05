@@ -89,8 +89,13 @@ class TensorMemoryManager {
 	void Free(uint offset) { Free(allocated_by_offset[offset]); }
 
 	~TensorMemoryManager() {
+		vector<TensorMemory*> to_delete;
 		for (auto& pair : allocated_by_offset) {
-			delete pair.second;
+			to_delete.push_back(pair.second);
+		}
+
+		for (auto& memory : to_delete) {
+			Free(memory);
 		}
 	}
 

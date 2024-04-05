@@ -124,7 +124,7 @@ protected:
 				}
 				// if any other memory type - allocate it
 				else {
-					expression += "allocate(" + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					expression += "allocate(\"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 			} else if (op->name_ == "deallocate") {
@@ -157,14 +157,14 @@ protected:
 					    (output_type == DataType::Uint)
 					        ? memory_expression
 					        : TypeReinterpret(output_type_name, memory_expression);
-					right += ";";
+					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->name_ == "store") {
 					expression += memory_expression + " = ";
 					expression +=
 					    (output_type == DataType::Uint)
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
-					right += ";";
+					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->HasAllTypes(OpType::Scatter)) {
 					if (output_type != DataType::None) {
 						left += type_names[output_type] + " " + name + " = ";
@@ -174,7 +174,7 @@ protected:
 					expression += GenerateAtomicOp(op->name_, input_type_name,
 					                               output_type_name, address,
 					                               args.Name(ArgType::Input));
-					right += ";";
+					right += "; // " + args.Name(ArgType::Memory);
 				}
 			} else {
 				string tensor_name = args.Name(ArgType::Memory);

@@ -5,13 +5,18 @@ namespace TensorFrost {
 BackendType current_backend = BackendType::NotInitialized;
 
 void InitializeBackend(BackendType backendType, const string& compilerOptions) {
-	if (global_kernel_manager != nullptr) {
-		delete global_kernel_manager;
-		global_kernel_manager = nullptr;
-	}
-	if (global_memory_manager != nullptr) {
-		delete global_memory_manager;
-		global_memory_manager = nullptr;
+	if (current_backend != BackendType::NotInitialized) {
+		cout << "Warning: Backend already initialized, stopping current backend\n" << endl;
+
+		switch (current_backend) {
+			case BackendType::CPU:
+				break;
+			case BackendType::Vulkan:
+				break;
+			case BackendType::OpenGL:
+				StopOpenGL();
+				break;
+		}
 	}
 
 	if (!compilerOptions.empty()) {

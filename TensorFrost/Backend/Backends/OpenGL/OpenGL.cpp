@@ -146,8 +146,10 @@ void StartOpenGL() {
 }
 
 void StopOpenGL() {
+	glfwDestroyWindow(global_window);
 	glfwTerminate();
 
+	glDeleteProgram(quad_program);
 	global_window = nullptr;
 }
 
