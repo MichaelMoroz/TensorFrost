@@ -12,10 +12,6 @@ T1 = MAX_ITER // 50
 T2 = MAX_ITER // 10
 T3 = MAX_ITER
 
-def smoothstep(edge0, edge1, x):
-    t = tf.clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0)
-    return t * t * (3.0 - 2.0 * t)
-
 def mandelbrot():
     prev_frame = tf.input([S, S, 3], tf.float32)
     frame_id = tf.input([1], tf.int32)
@@ -93,9 +89,9 @@ def mandelbrot():
     norm = float(MAX_ITER * SAMPLES) / 12.0
 
     fid =  tf.float(frame_id[0])
-    canvas[i, j, 0] = (smoothstep(0.0, 1.0, 2.5 * (rx/norm) ** 0.9) * 0.4 + prev_frame[i, j, 0] * 0.6)
-    canvas[i, j, 1] = (smoothstep(0.0, 1.0, 2.5 * (ry/norm) ** 0.65) * 0.4 + prev_frame[i, j, 1] * 0.6)
-    canvas[i, j, 2] = (smoothstep(0.0, 1.0, 2.5 * (rz/norm) ** 0.5) * 0.4 + prev_frame[i, j, 2] * 0.6)
+    canvas[i, j, 0] = (tf.smoothstep(0.0, 1.0, 2.5 * (rx/norm) ** 0.9) * 0.4 + prev_frame[i, j, 0] * 0.6)
+    canvas[i, j, 1] = (tf.smoothstep(0.0, 1.0, 2.5 * (ry/norm) ** 0.65) * 0.4 + prev_frame[i, j, 1] * 0.6)
+    canvas[i, j, 2] = (tf.smoothstep(0.0, 1.0, 2.5 * (rz/norm) ** 0.5) * 0.4 + prev_frame[i, j, 2] * 0.6)
 
     return [canvas, frame_id + 1]
 
