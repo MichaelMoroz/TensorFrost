@@ -25,9 +25,9 @@ set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
-add_subdirectory(pybind11)
-add_subdirectory(glfw)
-add_subdirectory(glad/cmake)
+add_subdirectory(external/pybind11)
+add_subdirectory(external/glfw)
+add_subdirectory(external/glad/cmake)
 add_subdirectory(TensorFrost)
 add_subdirectory(examples)
 
