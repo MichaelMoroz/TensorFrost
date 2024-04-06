@@ -56,11 +56,13 @@ void TensorFunctionsDefinition(py::module& m) {
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);
 	BINARY_FUNCTION(atan2);
+	BINARY_FUNCTION(modf);
 
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);
 	TERNARY_FUNCTION(select);
+	TERNARY_FUNCTION(smoothstep);
 
 	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::ScatterAdd(*t.value, T(t2), t.indices);

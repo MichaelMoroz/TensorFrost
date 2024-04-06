@@ -2,19 +2,59 @@
 
 namespace TensorFrost {
 
-TensorMemoryManager* global_memory_manager = nullptr;
+BackendType current_backend = BackendType::NotInitialized;
 
 void InitializeBackend(BackendType backendType, const string& compilerOptions) {
+	if (current_backend != BackendType::NotInitialized) {
+		cout << "Warning: Backend already initialized, stopping current backend\n" << endl;
+
+		switch (current_backend) {
+			case BackendType::CPU:
+				break;
+			case BackendType::Vulkan:
+				break;
+			case BackendType::OpenGL:
+				StopOpenGL();
+				break;
+		}
+	}
+
 	if (!compilerOptions.empty()) {
 		kernel_compile_options = compilerOptions;
 	}
+
+	current_backend = backendType;
+
 	switch (backendType) {
 		case BackendType::CPU:
 			global_memory_manager = new CpuMemoryManager();
+			global_kernel_manager = new CpuKernelManager();
 			break;
 		case BackendType::Vulkan:
 			throw std::runtime_error("Vulkan backend not implemented yet");
 			break;
+		case BackendType::OpenGL:
+			StartOpenGL();
+			global_memory_manager = new OpenGLMemoryManager();
+			global_kernel_manager = new OpenGLKernelManager();
+			break;
+	}
+}
+
+void CompileKernels(Program* program) {
+	for(auto& kernel : program->kernels_) {
+		switch (current_backend) {
+			case BackendType::CPU:
+				//already in the host program
+				break;
+			case BackendType::Vulkan:
+				throw std::runtime_error("Vulkan backend not implemented yet");
+			case BackendType::OpenGL:
+				((OpenGLKernelManager*)global_kernel_manager)->CompileKernel(&kernel);
+				break;
+			default:
+				throw std::runtime_error("Backend not implemented");
+		}
 	}
 }
 
@@ -31,20 +71,30 @@ TensorProp GetTensorProp(TensorMemory* tensor) {
 	return prop;
 }
 
-TensorProp Allocator(uint*& mem, uint* a, uint dim, DataType type) {
+TensorProp Allocator(uint* a, uint dim, DataType type) {
 	vector<int> shape;
 	for (uint i = 0; i < dim; i++) {
 		shape.push_back(a[i]);
 	}
 	TensorMemory* tensor = global_memory_manager->Allocate(shape, type);
-	TensorProp prop = GetTensorProp(tensor);
-	mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();
-	return prop;
+	return GetTensorProp(tensor);
 }
 
 void Deallocator(TensorProp a) { 
 	global_memory_manager->Free(a.offset); 
 	delete[] a.shape;
+}
+
+uint Readback(TensorProp a, uint b) {
+	return global_memory_manager->ReadbackValue(global_memory_manager->allocated_by_offset[a.offset], b);
+}
+
+void Writeback(TensorProp a, uint b, uint c) {
+	global_memory_manager->WritebackValue(global_memory_manager->allocated_by_offset[a.offset], b, c);
+}
+
+void Dispatch(DispatchInfo info) {
+	global_kernel_manager->DispatchKernel(info);
 }
 
 vector<TensorMemory*> ExecuteProgram(
@@ -67,11 +117,10 @@ vector<TensorMemory*> ExecuteProgram(
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
 	int output_count = (int)output_memory_map.size();
 
-	uint* mem = ((CpuMemoryManager*)global_memory_manager)->memory.data();
 	TensorProp* in = input_tensors.data();
 	TensorProp* out = new TensorProp[output_count];
 
-	program->execute_callback(in, out, mem, Allocator, Deallocator);
+	program->execute_callback(in, out, Allocator, Deallocator, Readback, Writeback, Dispatch);
 
 	vector<TensorMemory*> outputs;
 	outputs.resize(output_count);

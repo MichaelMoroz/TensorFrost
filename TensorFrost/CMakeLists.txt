@@ -3,6 +3,15 @@ file(GLOB_RECURSE TENSORFROST_HEADER_LIST CONFIGURE_DEPENDS *.h *.hpp)
 
 pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_LIST})
 
+# Add GLFW
+target_link_libraries(TensorFrost PRIVATE glfw)
+
+glad_add_library(glad_gl_core_46 SHARED API gl:core=4.6)
+target_link_libraries(TensorFrost PRIVATE glad_gl_core_46)
+
+glad_add_library(glad_vulkan_12 REPRODUCIBLE LOADER API vulkan=1.2)
+target_link_libraries(TensorFrost PRIVATE glad_vulkan_12)
+
 target_include_directories(TensorFrost PRIVATE ${Python3_INCLUDE_DIRS})
 
 target_include_directories(TensorFrost PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

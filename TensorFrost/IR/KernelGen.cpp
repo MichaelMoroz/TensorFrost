@@ -163,6 +163,10 @@ void IR::SeparateOperationsIntoKernels() {
 			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
 				if (is_loop_boundary) {
 					latest = latest->GetParent("loop");
+					if (!current_scope->InScope(latest)) 
+					{
+						continue;
+					}
 					loop_prev_iteration = true;
 				}
 				boundary_nodes[latest->index_] = latest;
@@ -487,6 +491,16 @@ void IR::GetOutputList() {
 			}
 			output_memory_map[node->special_index_] = *node;
 		}
+		if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				writebacks++;
+			}
+		}
+		else if (node->op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				readbacks++;
+			}
+		}
 	}
 }
 
@@ -528,6 +542,8 @@ void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
 	}
 }
 
+#define MAX_KERNEL_COPY_COST 2048.0f
+
 void IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -552,7 +568,7 @@ void IR::OptimizeKernels() {
 					if (input_cost == -1.0) {
 						throw std::runtime_error("Cost has not been computed");
 					}
-					bool cheap_enough = input_cost >= 0.0f && input_cost < 512.0f;
+					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
 					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
 					if (cheap_enough || has_only_one_output) {
 						args_to_copy.insert(&input);
@@ -580,6 +596,8 @@ void IR::OptimizeKernels() {
 	}
 }
 
+#define MAX_HOST_COPY_COST 8192.0f
+
 void IR::OptimizeHost() {
 	ComputeNodeCost();
 
@@ -600,8 +618,13 @@ void IR::OptimizeHost() {
 				if (input_cost == -1.0) {
 					throw std::runtime_error("Cost has not been computed");
 				}
-				if (input_cost >= 0.0f && input_cost < 512.0f) {
+				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
+				bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
+
+				if (cheap_enough || has_only_one_output) {
 					args_to_copy.insert(&input);
+				} else {
+					throw std::runtime_error("Host optimization: Copy cost too high for node " + node->name + " with cost " + to_string(input_cost));
 				}
 			}
 		}
@@ -1085,11 +1108,24 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 									" for kernel of size " + to_string(dims));
 			}
 
-			// swap the dim node with the corresponding index node
-			CopyLable(node.get(), indices[dim]->node_);
-
 			// remove the dim node
 			nodes_to_remove.insert(node.get());
+		}
+		else
+		{
+			//go over node inputs and replace dim nodes with index nodes
+			for (auto& input : node->inputs_) {
+				if (input.from_->get()->name == "dim_id") {
+					int dim = input.from_->get()->GetTensor()->data[0];
+					if (dim >= dims) {
+						throw runtime_error("Invalid dimension index " + to_string(dim) +
+																	" for kernel of size " + to_string(dims));
+					}
+
+					// replace the dim node with the index node
+					input.from_ = indices[dim]->node_->GetLable();
+				}
+			}
 		}
 	}
 
@@ -1235,7 +1271,7 @@ void IR::CompileIR()
 	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
 
-	SetKernelIndexingMode(KernelIndexingMode::MultiDimensional);
+	SetKernelIndexingMode(KernelIndexingMode::Linear);
 	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
 	CheckIR("Input", false, false);

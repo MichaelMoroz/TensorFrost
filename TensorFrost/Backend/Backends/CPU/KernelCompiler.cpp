@@ -139,7 +139,7 @@ void CompileAndLoadKernelModule(Program* program) {
 	}
 #else
 	char temp_path[] = "/tmp/";
-	char filename_template[] = "/tmp/mytempXXXXXX";
+	char filename_template[] = "/tmp/tensorfrost_XXXXXX";
 	char* temp_file_name = mktemp(filename_template);
 	if (!temp_file_name) {
 		throw std::runtime_error("Compiler error: cannot create temp file");
@@ -192,6 +192,29 @@ void CompileAndLoadKernelModule(Program* program) {
 
 	// Set the execute callback
 	program->execute_callback = *main_callback;
+
+	// load cpu kernel functions
+	if (current_backend == BackendType::CPU)
+	{
+		for (auto& kernel : program->kernels_) {
+			#if defined(_WIN32)
+			auto kernel_callback = reinterpret_cast<cpu_dispatch_func*>(
+				GetProcAddress(lib_handle, kernel.kernel_name_.c_str()));
+			#else
+			auto kernel_callback = reinterpret_cast<cpu_dispatch_func*>(
+				dlsym(lib_handle, kernel.kernel_name_.c_str()));
+			#endif
+
+			if (!kernel_callback) {
+				throw std::runtime_error("Compiler error: cannot load kernel function");
+			}
+
+			((CpuKernelManager*)global_kernel_manager)
+			    ->AddKernelFunction(&kernel, kernel_callback);
+
+			cout << "Loaded kernel: " << kernel.kernel_name_ << endl;
+		}
+	}
 
 	cout << "Successfully compiled and loaded kernel library." << endl;
 }

@@ -34,6 +34,7 @@ void TensorProgram::CreateProgram(string name) {
 	compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / 1000000.0f;
 
 	CompileAndLoadKernelModule(program);
+	CompileKernels(program);
 
 	auto external_end = std::chrono::high_resolution_clock::now();
 	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;
@@ -55,6 +56,8 @@ string TensorProgram::PrintProperties() const {
 	}
 	properties += "  Kernel count: " + to_string(compute_kernels) + "\n";
 	properties += "  Intermediate buffers: " + to_string(ir.temp_memory_count) + "\n";
+	properties += "  Host readbacks: " + to_string(ir.readbacks) + "\n";
+	properties += "  Host writes: " + to_string(ir.writebacks) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
 	properties += "  Compiler time: " + to_string(external_compile_time) + " ms\n";

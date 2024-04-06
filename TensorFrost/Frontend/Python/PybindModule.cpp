@@ -11,6 +11,7 @@ void TensorFunctionsDefinition(py::module&);
 void TensorProgramDefinition(py::module&, py::class_<TensorProgram>&);
 void TensorMemoryDefinition(py::module& m,
                             py::class_<TensorMemory>& py_tensor_mem);
+void WindowDefinitions(py::module& m);
 
 PYBIND11_MODULE(TensorFrost, m) {
 	auto data_type = py::enum_<DataType>(m, "DataType");
@@ -26,6 +27,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_type.value("bool", DataType::Bool);
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
+	backend_type.value("opengl", BackendType::OpenGL);
 
 	m.attr("float32") = DataType::Float;
 	m.attr("int32") = DataType::Int;
@@ -34,6 +36,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("vulkan") = BackendType::Vulkan;
+	m.attr("opengl") = BackendType::OpenGL;
 
 	PyTensorDefinition(m, py_tensor);
 	TensorViewDefinition(m, tensor_view);
@@ -47,6 +50,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	TensorFunctionsDefinition(m);
 	TensorProgramDefinition(m, tensor_program);
 	TensorMemoryDefinition(m, py_tensor_mem);
+	WindowDefinitions(m);
 
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options) {

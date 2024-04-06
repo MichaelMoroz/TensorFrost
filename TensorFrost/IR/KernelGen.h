@@ -19,6 +19,8 @@ class Kernel {
 	ArgMap shape;
 	int dim = 0;
 
+	int kernel_id_;
+	string kernel_name_;
 	string generated_code_;
 };
 
@@ -28,6 +30,7 @@ class Program {
 	vector<Kernel> kernels_;
 	function<void()> unload_callback;
 	string generated_code_;
+	string main_function_;
 	string program_name = "TensorProgram";
 
 	function<main_func> execute_callback;

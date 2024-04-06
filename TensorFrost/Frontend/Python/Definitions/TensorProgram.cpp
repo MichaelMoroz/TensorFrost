@@ -73,6 +73,14 @@ void TensorProgramDefinition(py::module& m,
 		string code = program.program->generated_code_;
 		return py::str(code);
 	});
+
+	tensor_program.def("get_kernels", [](TensorProgram& program) {
+		vector<string> kernel_source;
+		for (auto& kernel : program.program->kernels_) {
+			kernel_source.push_back(kernel.generated_code_);
+		}
+		return kernel_source;
+	});
 }
 
 }  // namespace TensorFrost

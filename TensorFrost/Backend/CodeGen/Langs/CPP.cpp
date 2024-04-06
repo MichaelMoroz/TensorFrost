@@ -5,7 +5,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GenerateCPP(Program* program) {
+void GenerateCode(Program* program) {
 	string final_source = R"(
 #include <cmath>
 #include <omp.h>
@@ -78,6 +78,12 @@ inline float clamp(float x, float a, float b)
 inline float lerp(float a, float b, float t)
 {
   return a + (b - a) * t;
+}
+
+inline float smoothstep(float a, float b, float t)
+{
+  t = clamp((t - a) / (b - a), 0.0f, 1.0f);
+  return t * t * (3.0f - 2.0f * t);
 }
 
 inline void InterlockedAdd(int* memory, int address, int value)
@@ -229,9 +235,22 @@ extern "C" {
 		DataType type;
 	};
 
-	typedef TensorProp alloc_func(uint*&, uint*, uint, DataType);
+	struct DispatchInfo {
+		int kernel_id;
+		uint tensor_count;
+		TensorProp* tensors;
+		uint variable_count;
+		uint* variables;
+		uint dispatch_dim;
+		uint* dispatch_shape;
+	};
+
+	typedef TensorProp alloc_func(uint*, uint, DataType);
 	typedef void dealloc_func(TensorProp);
-	typedef void kernel_func(uint*, uint*, uint*, uint*);
+	typedef uint readback_func(TensorProp, uint);
+	typedef void writeback_func(TensorProp, uint, uint);
+	typedef void dispatch_func(DispatchInfo);
+	typedef void cpu_dispatch_func(uint*, uint*, uint*, uint*);
 }
 
 std::unordered_map<DataType, std::string> DataTypeNames = {
@@ -240,48 +259,29 @@ std::unordered_map<DataType, std::string> DataTypeNames = {
     {DataType::None, "None"},
 };
 
-uint* mem;
 alloc_func* alloc;
 dealloc_func* dealloc;
+readback_func* readback;
+writeback_func* writeback;
+dispatch_func* dispatch_ref;
 
-void dispatch(kernel_func* kernel, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape)
+TensorProp allocate(std::string name, std::initializer_list<uint> shape, DataType type)
 {
-  uint* off_arr = new uint[tensors.size()];
-  uint* var_arr = new uint[var.size()];
   uint* shape_arr = new uint[shape.size()];
-
-  for (int i = 0; i < tensors.size(); i++)
-  {
-    off_arr[i] = tensors.begin()[i].offset;
-  }
-
-  for (int i = 0; i < var.size(); i++)
-  {
-	var_arr[i] = var.begin()[i];
-  }
+  uint size = 1;
 
   for (int i = 0; i < shape.size(); i++)
   {
-	shape_arr[i] = shape.begin()[i];
+    shape_arr[i] = shape.begin()[i];
+	size *= shape_arr[i];
   }
 
-  kernel(var_arr, off_arr, mem, shape_arr);
-
-  delete[] off_arr;
-  delete[] var_arr;
-  delete[] shape_arr;
-} 
-
-TensorProp allocate(std::initializer_list<uint> shape, DataType type)
-{
-  uint* shape_arr = new uint[shape.size()];
-
-  for (int i = 0; i < shape.size(); i++)
+  if (size == 0)
   {
-	shape_arr[i] = shape.begin()[i];
+	throw std::runtime_error("Cannot allocate tensor with size 0 for " + name + " of type " + DataTypeNames[type]);
   }
 
-  TensorProp tensor = alloc(mem, shape_arr, shape.size(), type);
+  TensorProp tensor = alloc(shape_arr, shape.size(), type);
 
   delete[] shape_arr;
 
@@ -318,31 +318,73 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 	return tensor;
 }
 
+uint ReadFromMemory(TensorProp tensor, uint index)
+{
+  return readback(tensor, index);
+}
+
+void WriteToMemory(TensorProp tensor, uint index, uint value)
+{
+  writeback(tensor, index, value);
+}
+
+void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape)
+{
+  DispatchInfo info;
+  info.kernel_id = kernel_id;
+  info.tensor_count = tensors.size();
+  info.tensors = new TensorProp[tensors.size()];
+  info.variable_count = var.size();
+  info.variables = new uint[var.size()];
+  info.dispatch_dim = shape.size();
+  info.dispatch_shape = new uint[shape.size()];
+
+  for (int i = 0; i < tensors.size(); i++)
+  {
+	info.tensors[i] = tensors.begin()[i];
+  }
+
+  for (int i = 0; i < var.size(); i++)
+  {
+	info.variables[i] = var.begin()[i];
+  }
+
+  for (int i = 0; i < shape.size(); i++)
+  {
+	info.dispatch_shape[i] = shape.begin()[i];
+  }
+
+  dispatch_ref(info);
+
+  delete[] info.tensors;
+  delete[] info.variables;
+  delete[] info.dispatch_shape;
+} 
+
 )";
-	
+
+
 	GenerateNodeNames(*program->ir_);
-	int input_count = program->ir_->memory_inputs.size();
-	int output_count = program->ir_->output_memory_map.size();
+	int input_count = (int)program->ir_->memory_inputs.size();
+	int output_count = (int)program->ir_->output_memory_map.size();
 
 	// Generate code for each compute kernel
-	int kernel_count = 0;
 	map<Node*, string> dispatch_code;
 
-	for (auto& i : program->kernels_) {
-		Kernel* kernel = &i;
-
-		string kernel_name = "kernel_" + to_string(kernel_count++);
+	for (auto& kernel : program->kernels_) {
+		global_kernel_manager->AddKernelID(&kernel);
+		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel
 		vector<Node*> memory_nodes;
-		memory_nodes.resize(kernel->memory.size());
-		for (auto& memory : kernel->memory) {
+		memory_nodes.resize(kernel.memory.size());
+		for (auto& memory : kernel.memory) {
 			memory_nodes[memory.second] = memory.first;
 		}
 
 		vector<Node*> variable_nodes;
-		variable_nodes.resize(kernel->variables.size());
-		for (auto& variable : kernel->variables) {
+		variable_nodes.resize(kernel.variables.size());
+		for (auto& variable : kernel.variables) {
 			variable_nodes[variable.second] = variable.first;
 		}
 
@@ -365,24 +407,68 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 		variable_args += "}";
 
 		string shape_args = "{";
-		for (int d = 0; d < i.dim; d++) {
+		for (int d = 0; d < kernel.dim; d++) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
-			shape_args += "(uint)"+ReadVariable(i.shape[d]->from_->get());
+			shape_args += "(uint)" + ReadVariable(kernel.shape[d]->from_->get());
 		}
 		shape_args += "}";
 
-		final_source += GenerateCPPKernel(program, kernel, kernel_name);
+		GenerateKernel(program, &kernel);
 
-		dispatch_code[kernel->root] = "dispatch(" + kernel_name + ", " + memory_args + ", " + variable_args + ", " + shape_args + ")";
+		if (current_backend == BackendType::CPU) {
+			final_source += kernel.generated_code_;
+		}
+
+		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ")";
 	}
 
+	GenerateMain(program, dispatch_code, input_count, output_count);
+
+	final_source += program->main_function_;
+
+	string host_code =
+	    "\n"
+	    "extern \"C\" "
+#ifdef _WIN32
+	    "__declspec(dllexport)"
+#endif
+	    "int "
+	    "main"
+	    "(TensorProp* in, TensorProp* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
+	    "{\n"
+	    "  alloc = alloc_;\n"
+	    "  dealloc = dealloc_;\n"
+		"  readback = readback_; \n"
+		"  writeback = writeback_; \n"
+		"  dispatch_ref = dispatch_; \n"
+		"  auto outputs = " + program->program_name + "(";
+
+	for (int i = 0; i < input_count; i++) {
+		host_code += "in[" + to_string(i) + "]";
+		if (i != input_count - 1) {
+			host_code += ", ";
+		}
+	}
+	host_code += ");\n";
+
+	for (int i = 0; i < output_count; i++) {
+		host_code += "  out[" + to_string(i) + "] = std::get<" + to_string(i) + ">(outputs);\n";
+	}
+
+	host_code += "  return 0;\n}\n";
+
+	final_source += host_code;
+
+	program->generated_code_ = final_source;
+}
+
+void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count) {
 	CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
-	generator.offset_array = false;
+	generator.is_kernel = false;
 	generator.GenerateCode(program->ir_->root);
-
 
 	string main_code = "\nstd::tuple<";
 	for (int i = 0; i < output_count; i++) {
@@ -414,45 +500,10 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 	}
 	main_code += "};\n}\n";
 
-	final_source += main_code;
-
-	string host_code =
-	    "\n"
-	    "extern \"C\" "
-#ifdef _WIN32
-	    "__declspec(dllexport)"
-#endif
-	    " void "
-	    "main"
-	    "(TensorProp* in, TensorProp* out, uint* mem_address, alloc_func "
-	    "allocation, "
-	    "dealloc_func deallocation)\n"
-	    "{\n"
-	    "  mem = mem_address;\n"
-	    "  alloc = allocation;\n"
-	    "  dealloc = deallocation;\n"
-		"  auto outputs = " + program->program_name + "(";
-
-	for (int i = 0; i < input_count; i++) {
-		host_code += "in[" + to_string(i) + "]";
-		if (i != input_count - 1) {
-			host_code += ", ";
-		}
-	}
-	host_code += ");\n";
-
-	for (int i = 0; i < output_count; i++) {
-		host_code += "  out[" + to_string(i) + "] = std::get<" + to_string(i) + ">(outputs);\n";
-	}
-
-	host_code += "}\n";
-
-	final_source += host_code;
-
-	return final_source;
+	program->main_function_ = main_code;
 }
 
-string GenerateCPPKernel(Program* program, const Kernel* kernel, const string& kernel_name) {
+void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	CodeGenerator generator;
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
@@ -461,10 +512,20 @@ string GenerateCPPKernel(Program* program, const Kernel* kernel, const string& k
 	const int block_size = 4;  // TODO chose automatically
 	switch (kernel->indexing_mode_) {
 		case KernelIndexingMode::Linear:
-			loop = "  for (int thread_id = 0; thread_id < shape[0]; thread_id++)\n";
+			loop = "  int elements = ";
+			for (int d = 0; d < kernel->dim; d++) {
+				loop += "shape[" + to_string(d) + "]";
+				if (d != kernel->dim - 1) {
+					loop += " * ";
+				}
+			}
+			loop += ";\n";
+			loop += "  #pragma omp parallel for\n";
+			loop += "  for (int thread_id = 0; thread_id < elements; thread_id++)\n";
 			loop += "  {\n";
 			break;
 		case KernelIndexingMode::MultiDimensional:
+			loop = "  #pragma omp parallel for\n";
 			for (int d = 0; d < kernel->dim; d++) {
 				loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) +
 				        " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
@@ -472,6 +533,7 @@ string GenerateCPPKernel(Program* program, const Kernel* kernel, const string& k
 			loop += "  {\n";
 			break;
 		case KernelIndexingMode::MultiDimensionalBlocks:
+			loop = "  #pragma omp parallel for\n";
 			for (int d = 0; d < kernel->dim; d++) {
 				loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
 				        " < shape[" + to_string(d) + "]; wg" + to_string(d) +
@@ -492,16 +554,19 @@ string GenerateCPPKernel(Program* program, const Kernel* kernel, const string& k
 
 	string kernel_source =
 	    "\n"
+	    "extern \"C\" "
+		#ifdef _WIN32
+		"__declspec(dllexport) "
+		#endif
 	    "void " +
-	    kernel_name +
+	    kernel->kernel_name_ +
 	    "(uint* var, uint* off, uint* mem, uint* shape)\n"
-	    "{\n"
-	    "  #pragma omp parallel for shared(mem) \n" +
+	    "{\n" +
 	    loop + AddIndent(kernel_code, "    ") +
 	    "  }\n"
 	    "}\n";
 
-	return kernel_source;
+	kernel->generated_code_ = kernel_source;
 }
 
 }  // namespace TensorFrost

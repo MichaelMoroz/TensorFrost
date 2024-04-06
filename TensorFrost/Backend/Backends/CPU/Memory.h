@@ -56,20 +56,21 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return data;
 	}
 
-	void Free(TensorMemory* memory) override {
-		Frame* frame = memory->frame;
-		allocator.FreeFrame(*frame);
-		allocated_by_offset.erase(frame->start);
+	uint ReadbackValue(const TensorMemory* mem, uint index) override {
+		return memory[mem->frame->start + index];
 	}
 
-	void Free(uint offset) override { 
-		Free(allocated_by_offset[offset]);
+	void Writeback(const TensorMemory* mem, const vector<uint>& data) override {
+		memcpy(memory.data() + mem->frame->start, data.data(),
+					       data.size() * sizeof(uint));
 	}
 
-	~CpuMemoryManager() override {
-		for (auto& pair : allocated_by_offset) {
-			delete pair.second;
-		}
+	void WritebackValue(const TensorMemory* mem, uint index, uint value) override {
+		memory[mem->frame->start + index] = value;
+	}
+
+	uint32_t GetAllocatedSize() const {
+		return (uint32_t)memory.capacity();
 	}
 };
 

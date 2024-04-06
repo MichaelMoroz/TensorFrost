@@ -9,25 +9,30 @@
 #include <vector>
 
 #include "Backends/CPU/CPU.h"
+#include "Backends/OpenGL/OpenGL.h"
 #include "CodeGen/Generators.h"
-#include "KernelExecutor.h"
+#include "KernelManager.h"
 #include "TensorMemory.h"
 
 namespace TensorFrost {
 
 using namespace std;
 
-extern TensorMemoryManager* global_memory_manager;
-
 enum class BackendType {
 	CPU,
 	Vulkan,
+	OpenGL,
+	NotInitialized
 };
+
+extern BackendType current_backend;
 
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs);
 
 void InitializeBackend(BackendType backendType,
                        const string& compilerPath = "");
+
+void CompileKernels(Program* program);
 
 }  // namespace TensorFrost

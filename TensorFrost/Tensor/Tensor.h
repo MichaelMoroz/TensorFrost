@@ -730,12 +730,20 @@ class Tensor {
 		return Op("mod", &x, &y);
 	}
 
+	static Tensor& modf(const Tensor& x, const Tensor& y) {
+		return Op("modf", &x, &y);
+	}
+
 	static Tensor& atan2(const Tensor& x, const Tensor& y) {
 		return Op("atan2", &x, &y);
 	}
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {
 		return Op("lerp", &x, &y, &a);
+	}
+
+	static Tensor& smoothstep(const Tensor& a, const Tensor& b, const Tensor& x) {
+		return Op("smoothstep", &a, &b, &x);
 	}
 
 	static Tensor& select(const Tensor& cond, const Tensor& x, const Tensor& y) {

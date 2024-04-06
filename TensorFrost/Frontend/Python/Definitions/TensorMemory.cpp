@@ -19,14 +19,13 @@ void TensorMemoryDefinition(py::module& m,
 	m.def(
 	    "tensor",
 	    [](std::variant<py::array_t<float>, py::array_t<int>> arr) {
-			if (std::holds_alternative<py::array_t<float>>(arr))
-			{
+		    if (std::holds_alternative<py::array_t<float>>(arr)) {
 			    py::array_t<float> arr_f = std::get<py::array_t<float>>(arr);
 			    py::buffer_info info = arr_f.request();
 
 			    // Get the shape
 			    std::vector<int> shape;
-				for (int i = 0; i < info.ndim; i++) {
+			    for (int i = 0; i < info.ndim; i++) {
 				    shape.push_back((int)info.shape[i]);
 			    }
 
@@ -36,19 +35,18 @@ void TensorMemoryDefinition(py::module& m,
 
 			    // Define a recursive lambda function for multi-dimensional iteration
 			    std::function<void(const int, std::vector<int>&)> iter_dims;
-				iter_dims = [&iter_dims, &info, &data](const int dim,
-					std::vector<int>& indices) {
-						if (dim == info.ndim) {
+			    iter_dims = [&iter_dims, &info, &data](const int dim,
+			                                           std::vector<int>& indices) {
+				    if (dim == info.ndim) {
 					    // Calculate the actual memory address using strides
 					    char* ptr = static_cast<char*>(info.ptr);
-						for (int i = 0; i < info.ndim; ++i) {
+					    for (int i = 0; i < info.ndim; ++i) {
 						    ptr += indices[i] * info.strides[i];
 					    }
 					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-						}
-						else {
-							for (indices[dim] = 0; indices[dim] < info.shape[dim];
-								++indices[dim]) {
+				    } else {
+					    for (indices[dim] = 0; indices[dim] < info.shape[dim];
+					         ++indices[dim]) {
 						    iter_dims(dim + 1, indices);
 					    }
 				    }
@@ -59,11 +57,10 @@ void TensorMemoryDefinition(py::module& m,
 			    iter_dims(0, start_indices);
 
 			    // Allocate the memory
-			    return global_memory_manager->AllocateWithData(shape, data, DataType::Float);
-		    }
-			else if (std::holds_alternative<py::array_t<int>>(arr))
-			{
-				py::array_t<int> arr_i = std::get<py::array_t<int>>(arr);
+			    return global_memory_manager->AllocateWithData(shape, data,
+			                                                   DataType::Float);
+		    } else if (std::holds_alternative<py::array_t<int>>(arr)) {
+			    py::array_t<int> arr_i = std::get<py::array_t<int>>(arr);
 			    py::buffer_info info = arr_i.request();
 
 			    // Get the shape
@@ -78,19 +75,18 @@ void TensorMemoryDefinition(py::module& m,
 
 			    // Define a recursive lambda function for multi-dimensional iteration
 			    std::function<void(const int, std::vector<int>&)> iter_dims;
-				iter_dims = [&iter_dims, &info, &data](const int dim,
-					std::vector<int>& indices) {
-						if (dim == info.ndim) {
+			    iter_dims = [&iter_dims, &info, &data](const int dim,
+			                                           std::vector<int>& indices) {
+				    if (dim == info.ndim) {
 					    // Calculate the actual memory address using strides
 					    char* ptr = static_cast<char*>(info.ptr);
-						for (int i = 0; i < info.ndim; ++i) {
+					    for (int i = 0; i < info.ndim; ++i) {
 						    ptr += indices[i] * info.strides[i];
 					    }
 					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-						}
-						else {
-							for (indices[dim] = 0; indices[dim] < info.shape[dim];
-								++indices[dim]) {
+				    } else {
+					    for (indices[dim] = 0; indices[dim] < info.shape[dim];
+					         ++indices[dim]) {
 						    iter_dims(dim + 1, indices);
 					    }
 				    }
@@ -101,11 +97,11 @@ void TensorMemoryDefinition(py::module& m,
 			    iter_dims(0, start_indices);
 
 			    // Allocate the memory
-			    return global_memory_manager->AllocateWithData(shape, data, DataType::Int);
-			}
-			else {
+			    return global_memory_manager->AllocateWithData(shape, data,
+			                                                   DataType::Int);
+		    } else {
 			    throw std::runtime_error("Unsupported data type");
-			}
+		    }
 	    },
 	    "Create a TensorMemory from a numpy array");
 
@@ -118,9 +114,10 @@ void TensorMemoryDefinition(py::module& m,
 	// to numpy array
 	py_tensor_mem.def_property_readonly(
 	    "numpy",
-	    [](const TensorMemory& t) -> std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>> {
-			if (t.type == DataType::Float)
-			{
+	    [](const TensorMemory& t)
+	        -> std::variant<py::array_t<float>, py::array_t<int>,
+	                        py::array_t<uint>> {
+		    if (t.type == DataType::Float) {
 			    // create the numpy array
 			    py::array_t<float> arr(t.GetShape());
 
@@ -132,39 +129,34 @@ void TensorMemoryDefinition(py::module& m,
 			    }
 
 			    return arr;
-			}
-			else if (t.type == DataType::Int)
-			{
+		    } else if (t.type == DataType::Int) {
 			    // create the numpy array
 			    py::array_t<int> arr(t.GetShape());
 
 			    // copy the data
 			    std::vector<uint> data = global_memory_manager->Readback(&t);
 			    int* ptr = static_cast<int*>(arr.request().ptr);
-				for (int i = 0; i < data.size(); i++) {
+			    for (int i = 0; i < data.size(); i++) {
 				    ptr[i] = *(reinterpret_cast<int*>(&data[i]));
 			    }
 
 			    return arr;
-			}
-			else if (t.type == DataType::Uint)
-			{
+		    } else if (t.type == DataType::Uint) {
 			    // create the numpy array
 			    py::array_t<uint> arr(t.GetShape());
 
-				// copy the data
-				std::vector<uint> data = global_memory_manager->Readback(&t);
+			    // copy the data
+			    std::vector<uint> data = global_memory_manager->Readback(&t);
 			    uint* ptr = static_cast<uint*>(arr.request().ptr);
 
-				for (int i = 0; i < data.size(); i++) {
+			    for (int i = 0; i < data.size(); i++) {
 				    ptr[i] = data[i];
 			    }
 
-				return arr;
-			}
-			else {
+			    return arr;
+		    } else {
 			    throw std::runtime_error("Unsupported data type");
-			}
+		    }
 	    },
 	    "Readback data from tensor memory to a numpy array");
 
@@ -172,5 +164,7 @@ void TensorMemoryDefinition(py::module& m,
 	    "used_memory", []() { return global_memory_manager->GetAllocatedSize(); },
 	    "Get the amount of memory currently used by the memory manager");
 }
+
+TensorMemory::~TensorMemory() { manager->Free(this); }
 
 }  // namespace TensorFrost
