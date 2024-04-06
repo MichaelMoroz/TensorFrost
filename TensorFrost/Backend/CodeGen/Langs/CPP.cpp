@@ -434,7 +434,7 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 #ifdef _WIN32
 	    "__declspec(dllexport)"
 #endif
-	    " void "
+	    "int "
 	    "main"
 	    "(TensorProp* in, TensorProp* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
 	    "{\n"
@@ -457,7 +457,7 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 		host_code += "  out[" + to_string(i) + "] = std::get<" + to_string(i) + ">(outputs);\n";
 	}
 
-	host_code += "}\n";
+	host_code += "  return 0;\n}\n";
 
 	final_source += host_code;
 
