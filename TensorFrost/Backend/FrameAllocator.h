@@ -1,5 +1,9 @@
 #pragma once
 
+#ifdef linux
+#include <cstdint>
+#endif
+
 #include <algorithm>
 #include <functional>
 #include <iostream>
