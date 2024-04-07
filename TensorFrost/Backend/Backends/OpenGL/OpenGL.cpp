@@ -71,10 +71,9 @@ GLuint CreateProgram(const string& vertexSource, const string& fragmentSource) {
 }
 
 GLuint quad_program = 0;
-
 GLFWwindow* global_window = nullptr;
-
 bool window_open = false;
+ImGuiIO* io;
 
 void GLAPIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
                               GLenum severity, GLsizei length,
@@ -99,6 +98,17 @@ void WindowCloseCallback(GLFWwindow* window) {
 
 void WindowSizeCallback(GLFWwindow* window, int width, int height) {
 	glViewport(0, 0, width, height);
+}
+
+void ImguiNewFrame() {
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+}
+
+void ImguiRender() {
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
 void StartOpenGL() {
@@ -143,6 +153,20 @@ void StartOpenGL() {
 
 	glfwSetWindowCloseCallback(global_window, WindowCloseCallback);
 	glfwSetWindowSizeCallback(global_window, WindowSizeCallback);
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	io = &ImGui::GetIO(); (void)*io;
+	io->ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io->ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	
+	ImGui_ImplGlfw_InitForOpenGL(global_window, true);
+	ImGui_ImplOpenGL3_Init("#version 430");
+
+	ImguiNewFrame();
 }
 
 void StopOpenGL() {
@@ -168,6 +192,7 @@ void HideWindow() {
 	window_open = false;
 	glfwHideWindow(global_window);
 }
+
 
 void RenderFrame(const TensorMemory& tensor) {
 	//check if tensor is 2d + 3 channels
@@ -198,23 +223,55 @@ void RenderFrame(const TensorMemory& tensor) {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
 	glUseProgram(0);
 
+	ImguiRender();
+
 	// Swap the buffers
 	glfwSwapBuffers(global_window);
 	glfwPollEvents();
+
+	ImguiNewFrame();
 }
 
 bool WindowShouldClose() { return !window_open; }
 
-pair<int, int> GetMousePosition() {
+pair<double, double> GetMousePosition() {
 	double x, y;
 	glfwGetCursorPos(global_window, &x, &y);
 	return {x, y};
 }
 
 bool IsMouseButtonPressed(int button) {
+	//if pressed in imgui, return false
+	if (io->WantCaptureMouse) {
+		return false;
+	}
 	return glfwGetMouseButton(global_window, button) == GLFW_PRESS;
 }
 
-bool IsKeyPressed(int key) { return glfwGetKey(global_window, key) == GLFW_PRESS; }
+bool IsKeyPressed(int key) {
+	return glfwGetKey(global_window, key) == GLFW_PRESS;
+}
+
+void ImGuiBegin(std::string name) {
+	ImGui::Begin(name.c_str());
+}
+
+void ImGuiEnd() {
+	ImGui::End();
+}
+
+void ImGuiText(std::string text) {
+	ImGui::Text(text.c_str());
+}
+
+void ImGuiSlider(std::string text, int* value, int min, int max) {
+	ImGui::SliderInt(text.c_str(), value, min, max);
+}
+
+void ImGuiSlider(std::string text, float* value, float min, float max) {
+	ImGui::SliderFloat(text.c_str(), value, min, max);
+}
+
+bool ImGuiButton(std::string text) { return ImGui::Button(text.c_str()); }
 
 }  // namespace TensorFrost

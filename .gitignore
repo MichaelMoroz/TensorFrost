@@ -43,3 +43,4 @@ dist/
 temp/
 .vscode/settings.json
 vc140.pdb
+imgui.ini

@@ -37,6 +37,32 @@ void WindowDefinitions(py::module& m) {
 	    "is_key_pressed", [](int key) { return IsKeyPressed(key); },
 	    "Check if a key is pressed");
 
+	m.def(
+	    "imgui_begin", [](string name) { ImGuiBegin(name); },
+	    "Begin a new ImGui window");
+
+	m.def("imgui_end", []() { ImGuiEnd(); }, "End the current ImGui window");
+
+	m.def(
+	    "imgui_text", [](string text) { ImGuiText(text); },
+	    "Add text to the current ImGui window");
+
+	m.def("imgui_slider",
+		[](string text, int* value, int min, int max) {
+		      ImGuiSlider(text, value, min, max);
+			  return *value;
+	      },
+			      "Add a slider to the current ImGui window");
+
+	m.def("imgui_slider", [](string text, float* value, float min, float max) {
+		      ImGuiSlider(text, value, min, max);
+			  return *value;
+	      },
+					      "Add a slider to the current ImGui window");
+
+	m.def("imgui_button", [](string text) { return ImGuiButton(text); },
+			      "Add a button to the current ImGui window");
+
 	m.attr("MOUSE_BUTTON_0") = GLFW_MOUSE_BUTTON_1;
 	m.attr("MOUSE_BUTTON_1") = GLFW_MOUSE_BUTTON_2;
 	m.attr("MOUSE_BUTTON_2") = GLFW_MOUSE_BUTTON_3;

@@ -16,6 +16,16 @@ target_include_directories(TensorFrost PRIVATE ${Python3_INCLUDE_DIRS})
 
 target_include_directories(TensorFrost PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
+#add imgui headers
+target_include_directories(TensorFrost PRIVATE ${CMAKE_SOURCE_DIR}/external/imgui)
+target_include_directories(TensorFrost PRIVATE ${CMAKE_SOURCE_DIR}/external/imgui/backends)
+
+#add imgui sources
+file(GLOB IMGUI_SOURCE_LIST ${CMAKE_SOURCE_DIR}/external/imgui/*.cpp)
+file(GLOB IMGUI_BACKEND_SOURCE_LIST ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_glfw.cpp ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_opengl3.cpp)
+
+target_sources(TensorFrost PRIVATE ${IMGUI_SOURCE_LIST} ${IMGUI_BACKEND_SOURCE_LIST})
+
 add_custom_command(
     TARGET TensorFrost
     POST_BUILD
