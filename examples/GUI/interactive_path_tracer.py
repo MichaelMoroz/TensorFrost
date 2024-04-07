@@ -175,45 +175,6 @@ def fractal(p):
 
     return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
 
-def city_fractal(p):
-    p = vec3.copy(p)
-    angle = np.pi / 7.0
-    rM = [np.cos(angle), np.sin(angle), -np.sin(angle), np.cos(angle)]
-    sd = p.y + 8.0
-    t = 100.0
-    #effectively unrolled
-    while t > 0.05:
-        p.x, p.z = p.x * rM[0] + p.z * rM[1], p.x * rM[2] + p.z * rM[3]
-        p.y += t * 0.72
-        p = vec3(0.92, 0.52, 0.7) * t - abs(mod(p, vec3(t,t,t)*2) - vec3(t, t, t))
-        minDistance = tf.min(p.x, tf.min(p.y, p.z))
-        sd = tf.max(sd, minDistance)
-        t /= 4.0
-
-    return sd
-
-def map(p):
-    return city_fractal(p), vec3(1.0, 1.0, 1.0)
-    #return fractal(p)
-
-def calcNormal(p, dx):
-    dx = tf.max(dx, 1e-4)
-    normal = (vec3(1.0, -1.0, -1.0) * map(p + vec3(1.0, -1.0, -1.0) * dx)[0] +
-              vec3(-1.0, -1.0, 1.0) * map(p + vec3(-1.0, -1.0, 1.0) * dx)[0] +
-              vec3(-1.0, 1.0, -1.0) * map(p + vec3(-1.0, 1.0, -1.0) * dx)[0] +
-              vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
-    return normalize(normal)
-                   
-def MarchRay(ro, rd, steps=1024):
-    td = tf.const(0.0)
-    def loop_body(k):
-        sdf = map(ro + rd * td)[0]
-        td.val += sdf
-        tf.if_cond((sdf < min_angle * td) | (td > max_depth), lambda: tf.break_loop())
-
-    tf.loop(loop_body, 0, steps, 1)
-    return td
-
 light_dir = vec3(0.577, 0.577, 0.577)
 focal_length = 1.0
 
@@ -284,7 +245,7 @@ def ray_marcher():
     camera = tf.input([4,3], tf.float32)
     prevcamera = tf.input([4,3], tf.float32)
     frame_id = tf.input([1], tf.int32)[0]
-    params = tf.input([4], tf.float32)
+    params = tf.input([-1], tf.float32)
    
     canvas = tf.buffer([N, M, 3], tf.float32)
     depth_buffer = tf.buffer([N, M], tf.float32)
@@ -343,6 +304,45 @@ def ray_marcher():
     emis = vec3.zero(i.shape)
     atten = vec3.const(1.0, i.shape)
     first_depth = tf.const(0.0)
+
+    def city_fractal(p):
+        p = vec3.copy(p)
+        angle = params[3]
+        rM = [tf.cos(angle), tf.sin(angle), -tf.sin(angle), tf.cos(angle)]
+        sd = p.y + 8.0
+        t = 100.0
+        #effectively unrolled
+        while t > 0.05:
+            p.x, p.z = p.x * rM[0] + p.z * rM[1], p.x * rM[2] + p.z * rM[3]
+            p.y += t * 0.72
+            p = vec3(0.92, 0.52, 0.7) * t - abs(mod(p, vec3(t,t,t)*2) - vec3(t, t, t))
+            minDistance = tf.min(p.x, tf.min(p.y, p.z))
+            sd = tf.max(sd, minDistance)
+            t /= 4.0
+
+        return sd
+
+    def map(p):
+        return city_fractal(p), vec3(1.0, 1.0, 1.0)
+        #return fractal(p)
+
+    def calcNormal(p, dx):
+        dx = tf.max(dx, 1e-4)
+        normal = (vec3(1.0, -1.0, -1.0) * map(p + vec3(1.0, -1.0, -1.0) * dx)[0] +
+                vec3(-1.0, -1.0, 1.0) * map(p + vec3(-1.0, -1.0, 1.0) * dx)[0] +
+                vec3(-1.0, 1.0, -1.0) * map(p + vec3(-1.0, 1.0, -1.0) * dx)[0] +
+                vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
+        return normalize(normal)
+                    
+    def MarchRay(ro, rd, steps=1024):
+        td = tf.const(0.0)
+        def loop_body(k):
+            sdf = map(ro + rd * td)[0]
+            td.val += sdf
+            tf.if_cond((sdf < min_angle * td) | (td > max_depth), lambda: tf.break_loop())
+
+        tf.loop(loop_body, 0, steps, 1)
+        return td
 
     def path_tracing_iteration(bounce):
         td = MarchRay(ro, rd)
@@ -480,6 +480,7 @@ envmap = tf.tensor(envmap)
 direct_light = 1.0
 indirect_light = 1.0
 accum = 0.95
+fractal_angle = np.pi / 7.5
 
 prev_time = time.time()
 smooth_delta_time = 0.0
@@ -511,6 +512,7 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     tf.imgui_begin("Path tracer controls")
+    fractal_angle = tf.imgui_slider("Fractal angle", fractal_angle, 0.0, np.pi/2)
     direct_light = tf.imgui_slider("Direct light", direct_light, 0.0, 10.0)
     indirect_light = tf.imgui_slider("Indirect light", indirect_light, 0.0, 10.0)
     accum = tf.imgui_slider("Accumulation", accum, 0.0, 1.0)
@@ -518,7 +520,7 @@ while not tf.window_should_close():
     tf.imgui_end()
 
     cam_mat = camera.get_camera_matrix()
-    params = np.array([direct_light, indirect_light, accum, 0.0], dtype=np.float32)
+    params = np.array([direct_light, indirect_light, accum, fractal_angle], dtype=np.float32)
     img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id, params)
     tf.render_frame(img)
     
