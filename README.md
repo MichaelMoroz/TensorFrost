@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.3.0)
+# 🔢🥶 TensorFrost (v0.3.1)
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 Currently working platforms:

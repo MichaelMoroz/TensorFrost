@@ -284,6 +284,7 @@ def ray_marcher():
     camera = tf.input([4,3], tf.float32)
     prevcamera = tf.input([4,3], tf.float32)
     frame_id = tf.input([1], tf.int32)[0]
+    params = tf.input([4], tf.float32)
    
     canvas = tf.buffer([N, M, 3], tf.float32)
     depth_buffer = tf.buffer([N, M], tf.float32)
@@ -359,7 +360,7 @@ def ray_marcher():
             light_dir_sph = light_dir + udir() * 0.03
             shadow_td = MarchRay(new_hit, light_dir_sph, 128)
             shadow = tf.select(shadow_td >= max_depth, 1.0, 0.0)
-            illum = col * shadow * tf.max(dot(norm, light_dir), 0.0)
+            illum = col * shadow * tf.max(dot(norm, light_dir), 0.0) * params[0]
             emis.set(emis + mul(atten, illum))
             atten.set(mul(atten, col))
 
@@ -369,7 +370,7 @@ def ray_marcher():
             ro.set(new_hit)
 
         def else_body():
-            sky = sample_background(rd)
+            sky = sample_background(rd) * params[1]
             emis.set(emis + mul(atten, sky))
             tf.break_loop()
         
@@ -393,7 +394,7 @@ def ray_marcher():
     prev_ro, prev_rd = get_ray(u, v, prevcamera, i.shape)
     prev_hit = prev_ro + prev_rd * prev_first_depth
     ang_distance = distance(normalize(prev_hit - cam_pos),normalize(first_hit - cam_pos))
-    accum = tf.select(reject, 0.0, 0.96) * tf.smoothstep(3e-4, 1e-4, ang_distance)
+    accum = tf.select(reject, 0.0, params[2]) * tf.smoothstep(3e-4, 1e-4, ang_distance)
     canvas[i, j, 0] = tf.lerp(final_color.x, CubicIterpCH(prev_frame, pi, pj, 0), accum)
     canvas[i, j, 1] = tf.lerp(final_color.y, CubicIterpCH(prev_frame, pi, pj, 1), accum)
     canvas[i, j, 2] = tf.lerp(final_color.z, CubicIterpCH(prev_frame, pi, pj, 2), accum)
@@ -451,11 +452,12 @@ class Camera:
         """Get the camera matrix."""
         return np.stack([self.position, *quaternion_to_matrix(self.quaternion)])
 
-def render_image(img, depth, envmap, camera, prev_camera, frame_id):
+def render_image(img, depth, envmap, camera, prev_camera, frame_id, params):
     camera_matrix_tf = tf.tensor(camera)
     prev_camera_matrix_tf = tf.tensor(prev_camera)
     frame_id_tf = tf.tensor(np.array([frame_id], dtype=np.int32))
-    img, depth = raymarch(img, depth, envmap, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf)
+    params_tf = tf.tensor(params)
+    img, depth = raymarch(img, depth, envmap, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf, params_tf)
     return img, depth
 
 tf.show_window(W, H, "Path Tracer")
@@ -475,9 +477,19 @@ envmap = cv2.imread(os.path.join(current_dir, "garden_smol.hdr"), cv2.IMREAD_ANY
 envmap = cv2.cvtColor(envmap, cv2.COLOR_BGR2RGB)
 envmap = tf.tensor(envmap)
 
+direct_light = 1.0
+indirect_light = 1.0
+accum = 0.95
+
+prev_time = time.time()
+smooth_delta_time = 0.0
 
 while not tf.window_should_close():
     mx, my = tf.get_mouse_position()
+    cur_time = time.time()
+
+    delta_time = cur_time - prev_time
+    smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
 
     if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
         camera.rotate_axis(0, (mx - pmx) * angular_speed)
@@ -498,11 +510,19 @@ while not tf.window_should_close():
     if tf.is_key_pressed(tf.KEY_E):
         camera.rotate_axis(2, -angular_speed*2)
 
+    tf.imgui_begin("Path tracer controls")
+    direct_light = tf.imgui_slider("Direct light", direct_light, 0.0, 10.0)
+    indirect_light = tf.imgui_slider("Indirect light", indirect_light, 0.0, 10.0)
+    accum = tf.imgui_slider("Accumulation", accum, 0.0, 1.0)
+    tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
+    tf.imgui_end()
+
     cam_mat = camera.get_camera_matrix()
-    img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id)
+    params = np.array([direct_light, indirect_light, accum, 0.0], dtype=np.float32)
+    img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id, params)
     tf.render_frame(img)
     
     pmx, pmy = mx, my
     prev_cam_mat = cam_mat
     frame_id += 1
-    
+    prev_time = cur_time
