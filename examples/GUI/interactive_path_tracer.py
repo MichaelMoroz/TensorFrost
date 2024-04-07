@@ -159,22 +159,6 @@ def mengerFold(z):
     z.y += k3 * -1.0
     z.z += k3 * 1.0
 
-def fractal(p):
-    aZ = [tf.sin(cur_level.ang1), tf.cos(cur_level.ang1)]
-    aX = [tf.sin(cur_level.ang2), tf.cos(cur_level.ang2)]
-    scale = tf.const(1.0)
-    orbit = vec3.zero_like(p)
-    for i in range(11):
-        p = abs(p)
-        p.x, p.y = p.x * aZ[1] + p.y * aZ[0], p.x * -aZ[0] + p.y * aZ[1]
-        mengerFold(p)
-        p.y, p.z = p.y * aX[1] + p.z * aX[0], p.y * -aX[0] + p.z * aX[1]
-        p = p * cur_level.scale + cur_level.shift
-        scale = scale * cur_level.scale
-        orbit = max(orbit, mul(p, cur_level.col))
-
-    return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
-
 light_dir = vec3(0.577, 0.577, 0.577)
 focal_length = 1.0
 
@@ -305,9 +289,28 @@ def ray_marcher():
     atten = vec3.const(1.0, i.shape)
     first_depth = tf.const(0.0)
 
+    def fractal(p):
+        dangle1 = params[3]
+        dangle2 = params[4]
+        aZ = [tf.sin(cur_level.ang1 + dangle1), tf.cos(cur_level.ang1 + dangle1)]
+        aX = [tf.sin(cur_level.ang2 + dangle2), tf.cos(cur_level.ang2 + dangle2)]
+        scale = tf.const(1.0)
+        orbit = vec3.zero_like(p)
+        for i in range(11):
+            p = abs(p)
+            p.x, p.y = p.x * aZ[1] + p.y * aZ[0], p.x * -aZ[0] + p.y * aZ[1]
+            mengerFold(p)
+            p.y, p.z = p.y * aX[1] + p.z * aX[0], p.y * -aX[0] + p.z * aX[1]
+            p = p * cur_level.scale + cur_level.shift
+            scale = scale * cur_level.scale
+            orbit = max(orbit, mul(p, cur_level.col))
+
+        return sdBox(p, vec3(6.0, 6.0, 6.0)) / scale, clamp(orbit, 0.0, 1.0)
+
     def city_fractal(p):
         p = vec3.copy(p)
         angle = params[3]
+        scale = params[4]
         rM = [tf.cos(angle), tf.sin(angle), -tf.sin(angle), tf.cos(angle)]
         sd = p.y + 8.0
         t = 100.0
@@ -315,7 +318,7 @@ def ray_marcher():
         while t > 0.05:
             p.x, p.z = p.x * rM[0] + p.z * rM[1], p.x * rM[2] + p.z * rM[3]
             p.y += t * 0.72
-            p = vec3(0.92, 0.52, 0.7) * t - abs(mod(p, vec3(t,t,t)*2) - vec3(t, t, t))
+            p = vec3(0.92, 0.52, scale) * t - abs(mod(p, vec3(t,t,t)*2) - vec3(t, t, t))
             minDistance = tf.min(p.x, tf.min(p.y, p.z))
             sd = tf.max(sd, minDistance)
             t /= 4.0
@@ -377,7 +380,7 @@ def ray_marcher():
         tf.if_cond(td < max_depth, if_body)
         tf.if_cond(td >= max_depth, else_body)
 
-    tf.loop(path_tracing_iteration, 0, 3, 1)
+    tf.loop(path_tracing_iteration, 0, tf.int(params[5]), 1)
     
 
     final_color = emis ** (1.0 / 2.2)
@@ -481,6 +484,8 @@ direct_light = 1.0
 indirect_light = 1.0
 accum = 0.95
 fractal_angle = np.pi / 7.5
+fractal_scale = 0.72
+bounces = 3
 
 prev_time = time.time()
 smooth_delta_time = 0.0
@@ -512,15 +517,20 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     tf.imgui_begin("Path tracer controls")
+    tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
+    tf.imgui_text("FPS: {:.2f}".format(1.0 / np.maximum(smooth_delta_time, 1e-5)))
+    tf.imgui_text("Camera position: ({:.2f}, {:.2f}, {:.2f})".format(*camera.position))
+    tf.imgui_text("Camera quaternion: ({:.2f}, {:.2f}, {:.2f}, {:.2f})".format(*camera.quaternion))
     fractal_angle = tf.imgui_slider("Fractal angle", fractal_angle, 0.0, np.pi/2)
+    fractal_scale = tf.imgui_slider("Fractal scale", fractal_scale, 0.0, 1.0)
     direct_light = tf.imgui_slider("Direct light", direct_light, 0.0, 10.0)
     indirect_light = tf.imgui_slider("Indirect light", indirect_light, 0.0, 10.0)
+    bounces = tf.imgui_slider("Bounces", bounces, 1, 10)
     accum = tf.imgui_slider("Accumulation", accum, 0.0, 1.0)
-    tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
     tf.imgui_end()
 
     cam_mat = camera.get_camera_matrix()
-    params = np.array([direct_light, indirect_light, accum, fractal_angle], dtype=np.float32)
+    params = np.array([direct_light, indirect_light, accum, fractal_angle, fractal_scale, bounces], dtype=np.float32)
     img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id, params)
     tf.render_frame(img)
     
