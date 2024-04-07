@@ -71,10 +71,9 @@ GLuint CreateProgram(const string& vertexSource, const string& fragmentSource) {
 }
 
 GLuint quad_program = 0;
-
 GLFWwindow* global_window = nullptr;
-
 bool window_open = false;
+ImGuiIO io;
 
 void GLAPIENTRY DebugCallback(GLenum source, GLenum type, GLuint id,
                               GLenum severity, GLsizei length,
@@ -143,6 +142,18 @@ void StartOpenGL() {
 
 	glfwSetWindowCloseCallback(global_window, WindowCloseCallback);
 	glfwSetWindowSizeCallback(global_window, WindowSizeCallback);
+
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	io = ImGui::GetIO(); (void)io;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+	// Setup Dear ImGui style
+	ImGui::StyleColorsDark();
+	
+	ImGui_ImplGlfw_InitForOpenGL(global_window, true);
+	ImGui_ImplOpenGL3_Init("#version 430");
 }
 
 void StopOpenGL() {
@@ -170,6 +181,39 @@ void HideWindow() {
 }
 
 void RenderFrame(const TensorMemory& tensor) {
+	glfwPollEvents();
+
+	// Start the Dear ImGui frame
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
+
+	
+    static float f = 0.0f;
+	static int counter = 0;
+
+	static float current_time = 0.0f;
+	static float last_time = 0.0f;
+	static float smooth_delta = 0.0f;
+
+	current_time = glfwGetTime();
+
+	float frame_time = current_time - last_time;
+	smooth_delta = 0.95f * smooth_delta + 0.05f * frame_time;
+
+	ImGui::Begin("Hello, world!");  // Create a window called "Hello, world!" and append into it.
+	ImGui::Text("This is some useful text.");  // Display some text (you can use a format strings too)
+	ImGui::SliderFloat("float", &f, 0.0f, 1.0f);  // Edit 1 float using a slider from 0.0f to 1.0f
+
+	if (ImGui::Button("Button"))  // Buttons return true when clicked (most widgets return true when edited/activated)
+		counter++;
+
+	ImGui::SameLine();
+	ImGui::Text("counter = %d", counter);
+	ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+	            1000.0f * smooth_delta, 1.0 / smooth_delta);
+	ImGui::End();
+
 	//check if tensor is 2d + 3 channels
 	if (tensor.shape.size() != 3 || tensor.shape[2] != 3) {
 		//throw std::runtime_error("Tensor must be 2D with 3 channels to render");
@@ -198,9 +242,14 @@ void RenderFrame(const TensorMemory& tensor) {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
 	glUseProgram(0);
 
+	// Render the ImGui frame
+	ImGui::Render();
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 	// Swap the buffers
 	glfwSwapBuffers(global_window);
-	glfwPollEvents();
+
+	last_time = current_time;
 }
 
 bool WindowShouldClose() { return !window_open; }
