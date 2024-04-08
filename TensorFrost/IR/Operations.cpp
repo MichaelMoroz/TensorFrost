@@ -10,8 +10,8 @@ unordered_map<DataType, string> type_names = {
 
 const vector<Operation> operations = {
     //Scope operations
-    Operation("host", {""}, 0, "", {OpType::Static, OpType::Special}),
-    Operation("kernel", {""}, 0, "", {OpType::Static, OpType::Special}),
+    Operation("host", {""}, 0, "", {OpType::Static, OpType::Special, OpType::HostOnly}),
+    Operation("kernel", {""}, 0, "", {OpType::Static, OpType::Special, OpType::HostOnly}),
 
     //Control operations
     Operation("loop", {"iii_i"}, 100, "", {OpType::Static, OpType::Special}),
@@ -24,9 +24,9 @@ const vector<Operation> operations = {
               {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
-    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}),
+    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
-    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special}),
+    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
 

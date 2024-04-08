@@ -88,7 +88,7 @@ class TensorMemoryManager {
 
 	void Free(uint offset) { Free(allocated_by_offset[offset]); }
 
-	~TensorMemoryManager() {
+	void FreeAll() {
 		vector<TensorMemory*> to_delete;
 		for (auto& pair : allocated_by_offset) {
 			to_delete.push_back(pair.second);
@@ -97,6 +97,10 @@ class TensorMemoryManager {
 		for (auto& memory : to_delete) {
 			Free(memory);
 		}
+	}
+
+	~TensorMemoryManager() {
+		FreeAll();
 	}
 
 	virtual uint32_t GetAllocatedSize() const {

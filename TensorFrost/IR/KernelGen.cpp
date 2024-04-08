@@ -71,7 +71,8 @@ bool IsBoundary(Node* input, Node* output,
 	}
 
 	// memory should not be inside work kernels
-	bool is_output_memory = output->name == "memory";
+	bool is_output_host_only = output->op->HasAllTypes(OpType::HostOnly);
+	bool is_input_host_only = input->op->HasAllTypes(OpType::HostOnly);
 	bool is_output_scalar = result.b_dim == 0;
 
 	bool scalar_kernel = output->TryComputeShape() == 1;
@@ -80,13 +81,13 @@ bool IsBoundary(Node* input, Node* output,
 		case ScopeType::None:
 			return false;
 		case ScopeType::Host:
-			if (!is_output_scalar && !is_output_memory) {
+			if (!is_output_scalar && !is_output_host_only) {
 				return true; // host should not have non-scalar operations
 			}
 			break;
 		case ScopeType::Kernel:
-			if (is_output_memory) {
-				return true; // kernel should not have memory operations
+			if (is_output_host_only || is_input_host_only) {
+				return true; // kernel should not have host operations
 			}
 
 			const Operation* input_op = input->op;
@@ -129,6 +130,10 @@ void IR::SeparateOperationsIntoKernels() {
 	map<Node*, string> boundary_nodes_debug;
 
 	for (auto it = begin(); !it.end(); it.next()) {
+		if (it->HasParent("kernel")) {
+			continue;
+		}
+
 		Node* node = it.get();
 		int current_depth = node->ComputeDepth();
 		int begin_depth = current_scope->begin->ComputeDepth();
@@ -173,7 +178,10 @@ void IR::SeparateOperationsIntoKernels() {
 			}
 		}
 		
-	
+		if (current_scope->type == ScopeType::Host) {
+			current_scope = new Scope(node);
+			continue;
+		}
 
 		// if boundary, create new scope, else make this new end
 		if (boundary_nodes.size() > 0) {

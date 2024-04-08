@@ -42,6 +42,8 @@ Tensors TensorsFromTuple(const py::tuple& tuple);
 PyTensors PyTensorsFromList(const py::list& list);
 Tensors TensorsFromList(const py::list& list);
 PyTensors PyTensorsFromTensors(const Tensors& tensors);
+Tensors TensorsFromVector(const std::vector<PyTensor*>& tensors);
+PyTensors PyTensorsFromVector(const std::vector<Tensor*>& tensors);
 
 vector<TensorMemory*> TensorMemoryFromTuple(const py::tuple& tuple);
 vector<TensorMemory*> TensorMemoryFromList(const py::list& list);

@@ -221,10 +221,36 @@ void TensorFunctionsDefinition(py::module& m) {
 			true_body();
 		};
 		Tensor::If(T(condition), f);
-	});
+	}, py::arg("condition"), py::arg("true_body"));
+
+	m.def("if_cond", [](const PyTensor& condition, const py::function& true_body, const py::function& false_body) {
+		std::function<void()> f1 = [&true_body]() {
+			py::gil_scoped_acquire acquire;
+			true_body();
+		};
+		std::function<void()> f2 = [&false_body]() {
+			py::gil_scoped_acquire acquire;
+			false_body();
+		};
+		Tensor::If(T(condition), f1, f2);
+	}, py::arg("condition"), py::arg("true_body"), py::arg("false_body"));
 
 	m.def("break_loop", []() { Tensor::Break(); });
 	m.def("continue_loop", []() { Tensor::Continue(); });
+
+
+	m.def("kernel", [](py::list shape, const py::function& body) {
+		// wrap the function to convert the PyTensor to Tensor
+		std::function<void(const vector<Tensor*>&)> f2 = [&body](const vector<Tensor*>& tensors) {
+			py::gil_scoped_acquire acquire;
+			PyTensors py_tensors = PyTensorsFromVector(tensors);
+			body(py_tensors);
+		};
+
+		Tensors shape_tensors = TensorsFromList(shape);
+
+		Tensor::Kernel(shape_tensors, f2);
+	}, py::arg("shape"), py::arg("body"));
 }
 
 }  // namespace TensorFrost

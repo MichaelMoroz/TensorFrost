@@ -18,7 +18,7 @@ void TensorMemoryDefinition(py::module& m,
 	// "constructor" from numpy array
 	m.def(
 	    "tensor",
-	    [](std::variant<py::array_t<float>, py::array_t<int>> arr) {
+	    [](std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>> arr) {
 		    if (std::holds_alternative<py::array_t<float>>(arr)) {
 			    py::array_t<float> arr_f = std::get<py::array_t<float>>(arr);
 			    py::buffer_info info = arr_f.request();
@@ -99,6 +99,48 @@ void TensorMemoryDefinition(py::module& m,
 			    // Allocate the memory
 			    return global_memory_manager->AllocateWithData(shape, data,
 			                                                   DataType::Int);
+			}
+			else if (std::holds_alternative<py::array_t<uint>>(arr)) {
+			    py::array_t<uint> arr_u = std::get<py::array_t<uint>>(arr);
+			    py::buffer_info info = arr_u.request();
+
+			    // Get the shape
+			    std::vector<int> shape;
+				for (int i = 0; i < info.ndim; i++) {
+				    shape.push_back((int)info.shape[i]);
+			    }
+
+			    // Create the data vector
+			    std::vector<uint> data;
+			    data.reserve(info.size);
+
+			    // Define a recursive lambda function for multi-dimensional iteration
+			    std::function<void(const int, std::vector<int>&)> iter_dims;
+				iter_dims = [&iter_dims, &info, &data](const int dim,
+					std::vector<int>& indices) {
+						if (dim == info.ndim) {
+					    // Calculate the actual memory address using strides
+					    char* ptr = static_cast<char*>(info.ptr);
+						for (int i = 0; i < info.ndim; ++i) {
+						    ptr += indices[i] * info.strides[i];
+					    }
+					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
+						}
+						else {
+							for (indices[dim] = 0; indices[dim] < info.shape[dim];
+								++indices[dim]) {
+						    iter_dims(dim + 1, indices);
+					    }
+				    }
+			    };
+
+			    // Start the multi-dimensional iteration
+			    std::vector<int> start_indices(info.ndim, 0);
+			    iter_dims(0, start_indices);
+
+			    // Allocate the memory
+			    return global_memory_manager->AllocateWithData(shape, data,
+								                                                   DataType::Uint);
 		    } else {
 			    throw std::runtime_error("Unsupported data type");
 		    }
@@ -163,6 +205,9 @@ void TensorMemoryDefinition(py::module& m,
 	m.def(
 	    "used_memory", []() { return global_memory_manager->GetAllocatedSize(); },
 	    "Get the amount of memory currently used by the memory manager");
+
+	m.def("free_memory", []() { global_memory_manager->FreeAll(); },
+			      "Free all memory allocated by the memory manager");
 }
 
 TensorMemory::~TensorMemory() { manager->Free(this); }

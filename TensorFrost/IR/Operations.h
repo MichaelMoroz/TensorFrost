@@ -45,6 +45,8 @@ enum class OpType {
 	Constant,
 	MemoryOp,
 	Static, //can not be removed or copied
+	HostOnly,
+	KernelOnly,
 	Modifier,
 };
 

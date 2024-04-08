@@ -544,9 +544,9 @@ class Scope
 
 	void UpdateType(Node* node) {
 		// if the end node is a memory node, it must be on the cpu
-		if (node->name == "memory") {
+		if (node->op->HasAllTypes(OpType::HostOnly)) {
 			if (type == ScopeType::Kernel) {
-				throw std::runtime_error("Memory node in kernel scope");
+				throw std::runtime_error("Host node in kernel scope");
 			}
 			type = ScopeType::Host;
 		} else if (shape_dim > 0 || node->scope_type_ == ScopeType::Kernel) { // non-scalars must be in a kernel

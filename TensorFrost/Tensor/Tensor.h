@@ -447,6 +447,12 @@ class Tensor {
 		return Input(GetShapeTensors(shape), type);
 	}
 
+	static Tensor& Index(Arguments shape, int dim) {
+		Tensor& output = Static("dim_id", shape, DataType::Int);
+		output.data = std::vector<uint>(1, dim);
+		output.type = DataType::Int;
+		return output;
+	}
 	static Tensor& Index(Tensors shape, int dim) {
 		Tensor& output = Static("dim_id", shape, DataType::Int);
 		output.data = std::vector<uint>(1, dim);
@@ -559,13 +565,24 @@ class Tensor {
 		});
 	}
 
-	static Tensor& Kernel(const Arguments& shape, const std::function<void()>& body) {
+	static void If(const Tensor& condition, const std::function<void()>& true_body,
+		const std::function<void()>& false_body) {
+		If(condition, true_body);
+		If(!condition, false_body);
+	}
+
+	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, DataType::None);
 
 		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
+			//create indices
+			vector<Tensor*> indices;
+			for (int i = 0; i < shape.size(); i++) {
+				indices.push_back(&Index(shape, i));
+			}
 			// create the body
-			body();
+			body(indices);
 		});
 
 		return kernel;
@@ -593,7 +610,7 @@ class Tensor {
 
 	Tensor& operator-() const { return Op("neg", this); }
 	Tensor& operator!() const { return Op("not", this); }
-	Tensor& operator~() const { return Op("bnot", this); }
+	Tensor& operator~() const { return Op("not", this); }
 
 	Tensor& operator+(const Tensor& other) const {
 		return Op("add", this, &other);
