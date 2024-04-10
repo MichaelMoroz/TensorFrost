@@ -22,16 +22,25 @@ enum class BackendType {
 	CPU,
 	Vulkan,
 	OpenGL,
+	CodeGen,
 	NotInitialized
 };
 
+enum class CodeGenLang {
+	CPP,
+	HLSL,
+	GLSL,
+	None,
+};
+
 extern BackendType current_backend;
+extern CodeGenLang current_kernel_lang;
+extern CodeGenLang current_main_lang;
 
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs);
 
-void InitializeBackend(BackendType backendType,
-                       const string& compilerPath = "");
+void InitializeBackend(BackendType backendType, const string& compilerPath, CodeGenLang kernelType);
 
 void CompileKernels(Program* program);
 

@@ -6,18 +6,18 @@ namespace TensorFrost {
 using namespace std;
 
 void GenerateKernel(Program* program, Kernel* kernel) {
-	switch (current_backend) {
-		case BackendType::CPU:
+	switch (current_kernel_lang) {
+		case CodeGenLang::CPP:
 			GenerateCPPKernel(program, kernel);
 			return;
-		case BackendType::Vulkan:
+		case CodeGenLang::HLSL:
 			GenerateHLSLKernel(program, kernel);
 			return;
-		case BackendType::OpenGL:
+		case CodeGenLang::GLSL:
 			GenerateGLSLKernel(program, kernel);
 			return;
 		default:
-			throw std::runtime_error("Backend not implemented");
+			throw std::runtime_error("Code generation for this language is not implemented yet");
 	}
 }
 

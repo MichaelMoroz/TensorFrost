@@ -3,8 +3,10 @@
 namespace TensorFrost {
 
 BackendType current_backend = BackendType::NotInitialized;
+CodeGenLang current_kernel_lang = CodeGenLang::CPP;
+CodeGenLang current_main_lang = CodeGenLang::CPP;
 
-void InitializeBackend(BackendType backendType, const string& compilerOptions) {
+void InitializeBackend(BackendType backendType, const string& compilerOptions, CodeGenLang kernelType) {
 	if (current_backend != BackendType::NotInitialized) {
 		cout << "Warning: Backend already initialized, stopping current backend\n" << endl;
 
@@ -27,17 +29,25 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions) {
 
 	switch (backendType) {
 		case BackendType::CPU:
+		case BackendType::CodeGen:
+			current_kernel_lang = CodeGenLang::CPP;
 			global_memory_manager = new CpuMemoryManager();
 			global_kernel_manager = new CpuKernelManager();
 			break;
 		case BackendType::Vulkan:
 			throw std::runtime_error("Vulkan backend not implemented yet");
+			current_kernel_lang = CodeGenLang::GLSL;
 			break;
 		case BackendType::OpenGL:
 			StartOpenGL();
+			current_kernel_lang = CodeGenLang::GLSL;
 			global_memory_manager = new OpenGLMemoryManager();
 			global_kernel_manager = new OpenGLKernelManager();
 			break;
+	}
+
+	if (kernelType != CodeGenLang::None) {
+		current_kernel_lang = kernelType;
 	}
 }
 
@@ -99,6 +109,10 @@ void Dispatch(DispatchInfo info) {
 
 vector<TensorMemory*> ExecuteProgram(
     Program* program, vector<TensorMemory*> inputs) {
+
+	if (current_backend == BackendType::CodeGen) {
+		throw std::runtime_error("Cannot execute program with code generation backend");
+	}
 
 	int memory_input_count = (int)program->ir_->memory_inputs.size();
 

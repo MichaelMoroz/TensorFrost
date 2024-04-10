@@ -13,9 +13,15 @@ class HLSLGenerator : public CodeGenerator {
 
 	string GenerateAtomicOp(const string& op, const string& input_type_name,
 	                        const string& output_type_name, const string& address,
-	                        const string& input)
+	                        const string& input, const string& output) override
 	{
-		return op + "(mem[" + address + "], " + input + ")";
+		if (op == "InterlockedAdd_Prev") {
+			return "0; InterlockedAdd(mem[" + address + "], " + input + ", " + output + ")";
+		}
+		else
+		{
+			return op + "(mem[" + address + "], " + input + ")";
+		}
 	}
 };
 
@@ -37,7 +43,9 @@ RWStructuredBuffer<uint> mem : register(u0);
 
 struct UBO
 {
-	uint var[32];
+	int off[32];
+	int var[32];
+	int dispatch_size;
 };
 
 cbuffer ubo : register(b1) { UBO ubo; }
@@ -45,7 +53,12 @@ cbuffer ubo : register(b1) { UBO ubo; }
 [numthreads(256, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
 {
-	int thread_id = dtid.x;
+  int thread_id = dtid.x;
+  
+  if (thread_id >= dispatch_size) {
+    return;
+  }
+
 )";
 
 	HLSLGenerator generator;

@@ -33,8 +33,11 @@ void TensorProgram::CreateProgram(string name) {
 	auto end = std::chrono::high_resolution_clock::now();
 	compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / 1000000.0f;
 
-	CompileAndLoadKernelModule(program);
-	CompileKernels(program);
+	if (current_backend != BackendType::CodeGen) // no need to compile if we are in codegen mode
+	{
+		CompileAndLoadKernelModule(program);
+		CompileKernels(program);
+	}
 
 	auto external_end = std::chrono::high_resolution_clock::now();
 	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;

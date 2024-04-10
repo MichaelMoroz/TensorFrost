@@ -372,7 +372,7 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 	map<Node*, string> dispatch_code;
 
 	for (auto& kernel : program->kernels_) {
-		global_kernel_manager->AddKernelID(&kernel);
+		global_kernel_manager->AddKernelID(program, &kernel);
 		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel

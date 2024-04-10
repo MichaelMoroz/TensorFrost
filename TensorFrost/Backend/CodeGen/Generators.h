@@ -173,7 +173,7 @@ protected:
 					string input_type_name = type_names[args.Type(ArgType::Input)];
 					expression += GenerateAtomicOp(op->name_, input_type_name,
 					                               output_type_name, address,
-					                               args.Name(ArgType::Input));
+					                               args.Name(ArgType::Input), name);
 					right += "; // " + args.Name(ArgType::Memory);
 				}
 			} else {
@@ -300,7 +300,7 @@ protected:
 	virtual string GenerateAtomicOp(const string& op,
 	                                const string& input_type_name,
 	                                const string& output_type_name,
-	                                const string& address, const string& input)
+	                                const string& address, const string& input, const string& output)
 	{
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}

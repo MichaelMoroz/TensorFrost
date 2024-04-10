@@ -19,7 +19,7 @@ class GLSLGenerator : public CodeGenerator {
 
 	string GenerateAtomicOp(const string& op, const string& input_type_name,
 	                        const string& output_type_name,
-	                        const string& address, const string& input) {
+	                        const string& address, const string& input, const string& output) override {
 		if (op == "InterlockedAdd") {
 			return "atomicAdd(mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {

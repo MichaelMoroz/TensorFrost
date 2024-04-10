@@ -16,6 +16,7 @@ void WindowDefinitions(py::module& m);
 PYBIND11_MODULE(TensorFrost, m) {
 	auto data_type = py::enum_<DataType>(m, "DataType");
 	auto backend_type = py::enum_<BackendType>(m, "BackendType");
+	auto code_gen_lang = py::enum_<CodeGenLang>(m, "CodeGenLang");
 	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
 	auto tensor_view = py::class_<TensorView>(m, "TensorView");
 	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
@@ -28,6 +29,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
 	backend_type.value("opengl", BackendType::OpenGL);
+	backend_type.value("codegen", BackendType::CodeGen);
+	code_gen_lang.value("cpp", CodeGenLang::CPP);
+	code_gen_lang.value("glsl", CodeGenLang::GLSL);
+	code_gen_lang.value("hlsl", CodeGenLang::HLSL);
 
 	m.attr("float32") = DataType::Float;
 	m.attr("int32") = DataType::Int;
@@ -37,6 +42,11 @@ PYBIND11_MODULE(TensorFrost, m) {
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("vulkan") = BackendType::Vulkan;
 	m.attr("opengl") = BackendType::OpenGL;
+	m.attr("codegen") = BackendType::CodeGen;
+
+	m.attr("cpp_lang") = CodeGenLang::CPP;
+	m.attr("glsl_lang") = CodeGenLang::GLSL;
+	m.attr("hlsl_lang") = CodeGenLang::HLSL;
 
 	PyTensorDefinition(m, py_tensor);
 	TensorViewDefinition(m, tensor_view);
@@ -53,9 +63,9 @@ PYBIND11_MODULE(TensorFrost, m) {
 	WindowDefinitions(m);
 
 	m.def("initialize",
-	      [](BackendType backend_type, const std::string& kernel_compile_options) {
-		      InitializeBackend(backend_type, kernel_compile_options);
-	      }, py::arg("backend_type") = BackendType::CPU, py::arg("kernel_compile_options") = "", "Initialize the backend");
+	      [](BackendType backend_type, const std::string& kernel_compile_options, CodeGenLang kernel_lang) {
+		      InitializeBackend(backend_type, kernel_compile_options, kernel_lang);
+	      }, py::arg("backend_type") = BackendType::CPU, py::arg("kernel_compile_options") = "", py::arg("kernel_lang") = CodeGenLang::None, "Initialize the backend");
 
 #ifdef NDEBUG
 	py::print("TensorFrost module loaded!");
