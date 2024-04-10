@@ -53,7 +53,7 @@ uint pcg(uint v)
 
 float pcgf(uint v)
 {
-	return float(pcg(v)) / float(0xffffffffu)
+	return float(pcg(v)) / float(0xffffffffu);
 }
 
 RWStructuredBuffer<uint> mem : register(u0);
