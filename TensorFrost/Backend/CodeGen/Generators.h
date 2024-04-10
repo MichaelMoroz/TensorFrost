@@ -13,6 +13,9 @@ string GetNodeName(const Node* node,  bool compact = false);
 string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
+string GetCPPHeader();
+string GetHLSLHeader();
+string GetGLSLHeader();
 void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);
 void GenerateKernel(Program* program, Kernel* kernel);
 void GenerateCPPKernel(Program* program, Kernel* kernel);
@@ -43,9 +46,6 @@ class CodeGenerator {
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
 
-	string offset_name_ = "off";
-	string variable_name_ = "var";
-
 	map<DataType, string> type_names = {
 	    {DataType::None, "void"},   {DataType::Bool, "bool"},
 	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
@@ -68,7 +68,8 @@ protected:
 		for (auto& arg : args.arguments_) {
 			string name = GetNodeName(arg.second, true);
 			if (variables.contains(arg.second)) {
-				name = variable_name_ + "[" + to_string(variables[arg.second]) + "]";
+				name = GetName("var") + "[" +
+				       to_string(variables[arg.second]) + "]";
 				name =
 				    "as" + type_names[arg.second->GetTensor()->type] + "(" + name + ")";
 			}
@@ -142,14 +143,14 @@ protected:
 			string address;
 
 			if (is_kernel) {
-				address = offset_name_ + "[" +
+				address = GetName("off") + "[" +
 				          to_string(offsets[args.Get(ArgType::Memory)]) + "]";
 				// if has index (not a scalar)
 				if (args.Has(ArgType::Index)) {
 					address += " + " + args.Name(ArgType::Index);
 				}
 
-				string memory_expression = "mem[" + address + "]";
+				string memory_expression = GetName("mem") + "[" + address + "]";
 				if (op->name_ == "load") {
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
@@ -187,14 +188,14 @@ protected:
 					//do readback
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
-					string memory_expression = "ReadFromMemory(" + tensor_name + ", " + address + ")";
+					string memory_expression = GetName("ReadFromMemory") + "(" + tensor_name + ", " + address + ")";
 					expression += (output_type == DataType::Uint)
 						? memory_expression
 						: TypeReinterpret(output_type_name, memory_expression);
 					right += ";";
 				} else if (op->name_ == "store") {
 					//do writeback
-					string memory_expression = "WriteToMemory(" + tensor_name + ", " + address + ", ";
+					string memory_expression = GetName("WriteToMemory") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
 				} else if (op->HasAllTypes(OpType::Scatter)) {
@@ -224,7 +225,7 @@ protected:
 					line += op->code_ + args.Name(ArgType::Input, 0);
 					break;
 				case OpType::Function:
-					line += GetFunctionName(op->code_) + "(";
+					line += GetName(op->code_) + "(";
 					for (int i = 0; i < args.Count(ArgType::Input); i++) {
 						if (i != 0) {
 							line += ", ";
@@ -305,7 +306,7 @@ protected:
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}
 
-	virtual string GetFunctionName(const string& name)
+	virtual string GetName(const string& name)
 	{
 		return name;
 	}

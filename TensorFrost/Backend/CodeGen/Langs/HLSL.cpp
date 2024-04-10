@@ -6,6 +6,13 @@ namespace TensorFrost {
 using namespace std;
 
 class HLSLGenerator : public CodeGenerator {
+	unordered_map<string, string> name_map_ = {
+	    {"off", "ubo.off"},
+	    {"var", "ubo.var"},
+	    {"dispatch_size", "ubo.dispatch_size"},
+
+	};
+
  public:
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
@@ -23,10 +30,20 @@ class HLSLGenerator : public CodeGenerator {
 			return op + "(mem[" + address + "], " + input + ")";
 		}
 	}
+
+	string GetName(const string& name) override {
+		// Check if the function name is in the map
+		if (name_map_.find(name) != name_map_.end()) {
+			return name_map_[name];
+		}
+
+		// If not, return the original name
+		return name;
+	}
 };
 
-void GenerateHLSLKernel(Program* program, Kernel* kernel) {
-	string final_source = R"(
+string GetHLSLHeader() { 
+	return R"(
 uint pcg(uint v)
 {
 	uint state = v * 747796405u + 2891336453u;
@@ -50,12 +67,20 @@ struct UBO
 
 cbuffer ubo : register(b1) { UBO ubo; }
 
+)";
+}
+
+void GenerateHLSLKernel(Program* program, Kernel* kernel) {
+	string final_source = GetHLSLHeader();
+
+	final_source += R"(
+
 [numthreads(256, 1, 1)]
 void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
 {
   int thread_id = dtid.x;
   
-  if (thread_id >= dispatch_size) {
+  if (thread_id >= ubo.dispatch_size) {
     return;
   }
 

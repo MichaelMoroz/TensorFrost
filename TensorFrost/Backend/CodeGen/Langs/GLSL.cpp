@@ -6,7 +6,7 @@ namespace TensorFrost {
 using namespace std;
 
 class GLSLGenerator : public CodeGenerator {
-	unordered_map<string, string> function_name_map_ = {
+	unordered_map<string, string> name_map_ = {
 		{"modf", "mod"},
 		{"atan2", "atan"},
 		{"lerp", "mix"},
@@ -42,10 +42,10 @@ class GLSLGenerator : public CodeGenerator {
 		}
 	}
 
-	string GetFunctionName(const string& name) override {
+	string GetName(const string& name) override {
 		// Check if the function name is in the map
-		if (function_name_map_.find(name) != function_name_map_.end()) {
-			return function_name_map_[name];
+		if (name_map_.find(name) != name_map_.end()) {
+			return name_map_[name];
 		}
 
 		// If not, return the original name
@@ -53,8 +53,9 @@ class GLSLGenerator : public CodeGenerator {
 	}
 };
 
-void GenerateGLSLKernel(Program* program, Kernel* kernel) {
-	string final_source = R"(
+string GetGLSLHeader()
+{
+	return R"(
 #version 460
 
 uint pcg(uint v) {
@@ -87,8 +88,6 @@ int asint(uint x) {
   return int(x);
 }
 
-layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
-
 uniform int off[32];
 uniform int var[32];
 uniform int dispatch_size;
@@ -96,7 +95,14 @@ uniform int dispatch_size;
 layout(std430, binding = 0) buffer memory {
   uint mem[];
 };
+)";
+}
 
+void GenerateGLSLKernel(Program* program, Kernel* kernel) {
+	string final_source = GetGLSLHeader();
+
+	final_source += R"(
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
   int thread_id = int(gl_GlobalInvocationID.x);
   int block_id = int(gl_WorkGroupID.x);

@@ -93,6 +93,18 @@ void TensorProgramDefinition(py::module& m,
 	m.def("get_all_generated_kernels", []() {
 		return global_kernel_manager->GetAllKernels();
 	});
+
+	m.def("get_cpp_header", []() {
+		return GetCPPHeader();
+	});
+
+	m.def("get_glsl_header", []() {
+		return GetGLSLHeader();
+	});
+
+	m.def("get_hlsl_header", []() {
+		return GetHLSLHeader();
+	});
 }
 
 }  // namespace TensorFrost

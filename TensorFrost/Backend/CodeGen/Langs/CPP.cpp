@@ -5,8 +5,10 @@
 namespace TensorFrost {
 using namespace std;
 
-void GenerateCode(Program* program) {
-	string final_source = R"(
+
+
+string GetCPPHeader() {
+	string header = R"(
 #include <cmath>
 #include <omp.h>
 #include <initializer_list>
@@ -363,6 +365,12 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 
 )";
 
+	return header;
+}
+
+
+void GenerateCode(Program* program) {
+	string final_source = GetCPPHeader();
 
 	GenerateNodeNames(*program->ir_);
 	int input_count = (int)program->ir_->memory_inputs.size();
@@ -463,8 +471,8 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
 
 	program->generated_code_ = final_source;
 }
-
-void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count) {
+void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
+                  int input_count, int output_count) {
 	CodeGenerator generator;
 	generator.custom_generated_code_ = dispatch_code;
 	generator.is_kernel = false;
