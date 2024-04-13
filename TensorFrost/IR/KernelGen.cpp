@@ -1274,6 +1274,99 @@ void IR::RemoveUnusedKernels()
 	}
 }
 
+Tensor* ComputeSum(const Tensor* array, int axis) {
+	//Get shape of the array
+	Tensors shape = array->GetShape();
+
+	if (axis < 0)
+	{
+		axis = (int)shape.size() + axis;
+	}
+
+	//Get the number of dimensions
+	int dims = (int)shape.size();
+
+	Tensors sum_shape = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			continue;
+		}
+		sum_shape.push_back(shape[i]);
+	}
+
+	//get indices for all dimensions but the last
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims - 1; i++) {
+		indices.push_back(&Tensor::Index(sum_shape, i));
+	}
+
+	// if no dimensions, then add constant 1
+	if (sum_shape.empty()) {
+		sum_shape.push_back(&Tensor::Constant(1));
+	}
+
+	//create zero constant 
+	Tensor* sum = &Tensor::Constant(sum_shape, 0, array->type);
+
+	//create a loop over the last dimension
+	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
+	             [&](const Tensor& i) {
+		//get the index for the last dimension
+		Tensors load_index = Tensors();
+		for (int id = 0, d = 0; d < dims; d++) {
+			if (d == axis)
+			{
+				load_index.push_back(&i);
+			}
+			else
+			{
+				load_index.push_back(indices[id++]);
+			}
+		}
+		//load the value
+		Tensor* value = &Tensor::Load(*array, load_index);
+
+		//add the value to the sum
+		sum->Set(*sum + *value);
+	});
+
+	return sum;
+}
+
+void IR::InsertAlgorithmicPrimitives() {
+	UpdateGraph();
+	// get all nodes for each type
+	vector<Node*> nodes = GetNodesOfType("sum");
+
+	unordered_set<Node*> nodes_to_remove;
+
+	// replace all nodes with the algorithmic primitive
+	for (auto node : nodes) {
+		//compute the sum after the node
+		ExecuteExpressionAfter(node, [&]() {
+			//get the input tensor
+			const Tensor* input = node->GetArgumentTensors(ArgType::Input)[0];
+
+			//get sum axis
+			int axis = (int)node->tensor_->data[0];
+
+			//compute the sum
+			Tensor* sum = ComputeSum(input, axis);
+
+			//replace the node with the sum
+			node->MakeOutputsUseGivenNode(sum->node_);
+		});
+
+		//mark the node for removal
+		nodes_to_remove.insert(node);
+	}
+
+	// remove all nodes that are not used
+	for (auto* node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
 void IR::CompileIR() 
 {
 	// TODO (Moroz): Make sure that shape works with non-const tensors
@@ -1288,6 +1381,8 @@ void IR::CompileIR()
 	CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
+	InsertAlgorithmicPrimitives();
+	CheckIR("Insert Algorithmic Primitives", false, false);
 	SeparateOperationsIntoKernels();
 	CheckKernelShapes();
 	CheckIR("Separate Operations Into Kernels", false, false);

@@ -197,8 +197,8 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def(
 	    "sum",
-	    [](const PyTensor& t, int dim) { return PT(Tensor::Sum(T(t), dim)); },
-	    py::arg("t"), py::arg("dim") = -1);
+	    [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
 
 	m.def(
 	    "loop",

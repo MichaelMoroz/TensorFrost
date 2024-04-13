@@ -274,4 +274,10 @@ void ImGuiSlider(std::string text, float* value, float min, float max) {
 
 bool ImGuiButton(std::string text) { return ImGui::Button(text.c_str()); }
 
+void StartDebugRegion(const std::string& name) {
+	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, name.size(), name.c_str());
+}
+
+void EndDebugRegion() { glPopDebugGroup(); }
+
 }  // namespace TensorFrost

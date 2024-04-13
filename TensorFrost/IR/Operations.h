@@ -47,6 +47,7 @@ enum class OpType {
 	Static, //can not be removed or copied
 	HostOnly,
 	KernelOnly,
+	Algorithm,
 	Modifier,
 };
 

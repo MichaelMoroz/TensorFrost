@@ -261,6 +261,11 @@ class Node {
 		return false;
 	}
 
+	void MakeOutputsUseGivenNode(Node* replacement) {
+		for (Arg* output : outputs_) {
+			output->from_ = replacement->GetLable();
+		}
+	}
 
 	Node* GetParent(string name)
 	{
@@ -436,6 +441,37 @@ class NodeIterator {
 
 	Node* operator*() const { return currentNode; }
 
+	
+	NodeIterator& go_to_next() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->next;
+
+		return *this;
+	}
+
+	NodeIterator& go_to_parent() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->parent;
+
+		return *this;
+	}
+
+	NodeIterator& go_to_child() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->child;
+
+		return *this;
+	}
+
 	NodeIterator& up() {
 		if (!currentNode) {
 			throw std::runtime_error("Invalid node");
@@ -446,9 +482,9 @@ class NodeIterator {
 		}
 
 		if (currentNode->parent != root) {
-			currentNode = currentNode->parent;
+		    go_to_parent();
 		} else {
-			currentNode = currentNode->next;
+			go_to_next();
 		}
 		return *this;
 	}
@@ -473,7 +509,7 @@ class NodeIterator {
 		}
 
 		// just go to next node and stop if it's the end
-		currentNode = currentNode->next;
+		go_to_next();
 		return *this;
 	}
 
@@ -488,7 +524,7 @@ class NodeIterator {
 		}
 
 		if (currentNode->child->valid()) {  // has child, go down
-			currentNode = currentNode->child;
+			go_to_child();
 			return *this;
 		}
 
@@ -684,7 +720,7 @@ public:
 			return newNode;
         } else {
             cursor->initialize(tensor, std::move(args), std::move(name));
-            cursor.next();
+			cursor.go_to_next();
 			return cursor->prev;
         }
     }
@@ -778,6 +814,7 @@ public:
 	void OptimizeHost();
 	void OptimizeOperations();
 	void RemoveUnusedOperations();
+	void InsertAlgorithmicPrimitives();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);

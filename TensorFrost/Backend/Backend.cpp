@@ -134,7 +134,15 @@ vector<TensorMemory*> ExecuteProgram(
 	TensorProp* in = input_tensors.data();
 	TensorProp* out = new TensorProp[output_count];
 
+	if (current_backend == BackendType::OpenGL) {
+		StartDebugRegion(program->program_name);
+	}
+
 	program->execute_callback(in, out, Allocator, Deallocator, Readback, Writeback, Dispatch);
+
+	if (current_backend == BackendType::OpenGL) {
+		EndDebugRegion();
+	}
 
 	vector<TensorMemory*> outputs;
 	outputs.resize(output_count);

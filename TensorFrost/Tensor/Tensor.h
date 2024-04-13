@@ -122,6 +122,30 @@ class Tensor {
 	}
 
 	template <typename... Args>
+	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Operation name cannot be empty");
+		}
+
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		// get the operation and output type
+		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
+		DataType output_type = operation.second;
+
+		// create argument list
+		Arguments arguments = Arguments();
+
+		AddArguments(arguments, tensors, ArgType::Input);
+		AddArguments(arguments, shape, ArgType::Shape);
+
+		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
 	static Tensor& MemoryOp(string op, const Tensor* memory,
 	                        const Tensors indices, const Args*... args) {
 		op = RemoveSpaces(op);
@@ -389,6 +413,13 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
+	static Tensor& Constant(const Tensors shape, uint value, DataType type) {
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, ArgType::Shape);
+		Tensor& output = Static("const", arguments, type);
+		output.data = std::vector<uint>(1, value);
+		return output;
+	}
 	
 	static Tensors GetShapeTensors(const vector<int>& shape) {
 		Tensors result = Tensors();
@@ -537,10 +568,20 @@ class Tensor {
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
-	static Tensor& Sum(const Tensor& tensor, const int dim) {
-		Tensor& res = Op("sum", &tensor);
-		res.data = std::vector<uint>(1, dim);
-		return res;
+	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
+		//get the shape of the tensor (all dimensions except the last one)
+		Tensors shape = tensor.GetShape();
+		if (axis < 0) {
+			axis = (int)shape.size() + axis;
+		}
+		//remove the axis dimension
+		shape.erase(shape.begin() + axis);
+		if (shape.empty()) {
+			shape.push_back(&Constant(1));
+		}
+		Tensor& op = OpShape("sum", shape, &tensor);
+		op.data = vector<uint>(1, axis);
+		return op;
 	}
 
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,

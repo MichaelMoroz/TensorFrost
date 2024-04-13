@@ -37,4 +37,7 @@ void ImGuiSlider(std::string text, float* value, float min, float max);
 
 bool ImGuiButton(std::string text);
 
+void StartDebugRegion(const std::string& name);
+void EndDebugRegion();
+
 }  // namespace TensorFrost
