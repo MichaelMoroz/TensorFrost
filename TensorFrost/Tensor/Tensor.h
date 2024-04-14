@@ -263,6 +263,8 @@ class Tensor {
 		return copy;
 	}
 
+	static Tensor* GetCopy(const Tensor& other);
+
 	void SetMemoryType(MemoryType memory_type, int index = 0) const {
 		node_->SetMemoryType(memory_type, index);
 	}
@@ -568,20 +570,36 @@ class Tensor {
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
-	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
-		//get the shape of the tensor (all dimensions except the last one)
+	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1) {
+		// get the shape of the tensor (all dimensions except the last one)
 		Tensors shape = tensor.GetShape();
 		if (axis < 0) {
 			axis = (int)shape.size() + axis;
 		}
-		//remove the axis dimension
+		// remove the axis dimension
 		shape.erase(shape.begin() + axis);
 		if (shape.empty()) {
 			shape.push_back(&Constant(1));
 		}
-		Tensor& op = OpShape("sum", shape, &tensor);
+		Tensor& op = OpShape(name, shape, &tensor);
 		op.data = vector<uint>(1, axis);
 		return op;
+	}
+
+	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_sum", tensor, axis);
+	}
+
+	static Tensor& Norm(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_norm", tensor, axis);
+	}
+
+	static Tensor& Max(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_max", tensor, axis);
+	}
+
+	static Tensor& Min(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_min", tensor, axis);
 	}
 
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,

@@ -15,17 +15,17 @@ def QRDecomposition():
     j = tf.index(0, [m])
 
     def loop_body(i):
-        R[i, i] = tf.sqrt(tf.sum(A[j, i] ** 2))
+        R[i, i] = tf.norm(A[j, i])
         Q[j, i] = A[j, i] / R[i, i]
-        
+
+        p, k = tf.index_grid([0, i + 1], [m, n])
         t, = tf.index_grid([i+1], [n])
-        p, k = tf.index_grid([0, i+1], [m, n])
         R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
         A[p, k] -= Q[p, i] * R[i, k]
 
     tf.loop(loop_body, 0, n-1, 1)
 
-    R[n-1, n-1] = tf.sqrt(tf.sum(A[j, n-1] ** 2))
+    R[n-1, n-1] = tf.norm(A[j, n-1])
     Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
 
     return [Q, R]
@@ -50,3 +50,16 @@ print("Error using TensorFrost:", np.linalg.norm(A - np.dot(Qnp, Rnp)))
 #print Q and R
 print("Q:\n", Qnp)
 print("R:\n", Rnp)
+
+#def matmul():
+#    A = tf.input([-1, -1], tf.float32)
+#    N, M = A.shape
+#    B = tf.input([M, -1], tf.float32)
+#    K = B.shape[1]
+#
+#    i, j, k = tf.indices([N, K, M])
+#    C = tf.sum(A[i, k] * B[k, j])
+#    
+#    return [C]
+#
+#mmul = tf.compile(matmul)

@@ -417,6 +417,24 @@ class Node {
 		return last_modifier;
 	}
 
+	Node* GetFinalVersion() {
+		Node* final_version = this;
+		int last_index = -1;
+		for (auto& output : outputs_) {
+			if (output->type_ != ArgType::Memory) {
+				continue;
+			}
+			Node* output_node = output->to_->get();
+			if (output_node->op->HasAllTypes(OpType::Modifier) && !output_node->op->HasAllTypes(OpType::MemoryOp)) {
+				if (output_node->index_ > last_index) {
+					last_index = output_node->index_;
+					final_version = output_node;
+				}
+			}
+		}
+		return final_version;
+	}
+
 	~Node();
 };
 
@@ -800,19 +818,22 @@ public:
 		cursor = oldCursor;
 	}
 
-	map<Node*, Node*> CopyComputation(
-	    const unordered_set<Node*>& targets) const;
-
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
 	string PrintListing(map<Node*, string> node_debug) const;
+	map<Node*, Node*> CopyComputation(const unordered_set<Node*>& targets,
+	                                  const unordered_map<int, Node*>& indices);
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
 	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
+	map<Node*, Node*> CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
+	                          unordered_map<int, Node*> indices, Node* cursor);
 	void ReorderOperations();
+	void MoveShapeOutsideKernels();
 	void OptimizeKernels();
 	void OptimizeHost();
 	void OptimizeOperations();
+	void OptimizeKernelLoadOperations();
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
 	void SeparateOperationsIntoKernels();
@@ -852,6 +873,16 @@ public:
 		vector<Node*> result;
 		for (auto node = begin(); !node.end(); node.next()) {
 			if (node->name == name) {
+				result.push_back(*node);
+			}
+		}
+		return result;
+	}
+
+	vector<Node*> GetNodesOfType(OpType type) const {
+		vector<Node*> result;
+		for (auto node = begin(); !node.end(); node.next()) {
+			if (node->op->HasAllTypes(type)) {
 				result.push_back(*node);
 			}
 		}

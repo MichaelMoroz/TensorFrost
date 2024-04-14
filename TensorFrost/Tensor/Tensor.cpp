@@ -26,4 +26,13 @@ int Node::TryComputeShape() {
 	return size;
 }
 
+Tensor* Tensor::GetCopy(const Tensor& other) {
+	Arguments new_args;
+	for (auto& arg : other.node_->inputs_) {
+		new_args.push_back(arg);
+	}
+
+	return GetCopy(other, new_args);
+}
+
 }  // namespace TensorFrost

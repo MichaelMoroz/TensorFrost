@@ -36,12 +36,13 @@ const vector<Operation> operations = {
     //Operation("scan", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
     //Operation("reshape", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
     //Operation("transpose", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
-    Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
-    Operation("sum", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // sum of the last dimension
+    //Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
+    //Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
+    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // sum of the last dimension
+    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // length(norm) of the last dimension
+    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // max of the last dimension
+    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // min of the last dimension
     //Operation("mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static}), // mean of the last dimension
-    //Operation("max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static}), // max of the last dimension
-    //Operation("min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static}), // min of the last dimension
 
     Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),

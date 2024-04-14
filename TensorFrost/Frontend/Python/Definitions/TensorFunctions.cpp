@@ -151,6 +151,8 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
 	});
 
+	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
+
 	m.def("indices", [](py::list shape) {
 		Tensors shape_tensors = TensorsFromList(shape);
 		py::tuple indices = py::tuple(shape_tensors.size());
@@ -194,12 +196,7 @@ void TensorFunctionsDefinition(py::module& m) {
 		}
 		return indices;
 	});
-
-	m.def(
-	    "sum",
-	    [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
-	    py::arg("t"), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
-
+	
 	m.def(
 	    "loop",
 	    [](const py::function& body, const PyTensor& begin, const PyTensor& end,
@@ -251,6 +248,19 @@ void TensorFunctionsDefinition(py::module& m) {
 
 		Tensor::Kernel(shape_tensors, f2);
 	}, py::arg("shape"), py::arg("body"));
+
+	//algorithm functions
+	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
+
+	m.def("norm", [](const PyTensor& t, const int axis) { return PT(Tensor::Norm(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the norm of the tensor along the axis");
+
+	m.def("min", [](const PyTensor& t, const int axis) { return PT(Tensor::Min(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the min of the tensor along the axis");
+
+	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 }
 
 }  // namespace TensorFrost
