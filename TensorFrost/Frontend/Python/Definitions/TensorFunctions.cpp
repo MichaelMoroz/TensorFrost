@@ -249,12 +249,19 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::Kernel(shape_tensors, f2);
 	}, py::arg("shape"), py::arg("body"));
 
+	m.def("reshape", [](const PyTensor& t, py::list shape) {
+		return PT(Tensor::Reshape(T(t), TensorsFromList(shape)));
+	});
+
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
 	    py::arg("t"), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
 
 	m.def("norm", [](const PyTensor& t, const int axis) { return PT(Tensor::Norm(T(t), axis)); },
 	    py::arg("t"), py::arg("axis") = -1, "Compute the norm of the tensor along the axis");
+
+	m.def("mean", [](const PyTensor& t, const int axis) { return PT(Tensor::Mean(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the mean of the tensor along the axis");
 
 	m.def("min", [](const PyTensor& t, const int axis) { return PT(Tensor::Min(T(t), axis)); },
 	    py::arg("t"), py::arg("axis") = -1, "Compute the min of the tensor along the axis");

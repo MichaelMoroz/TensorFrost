@@ -35,4 +35,11 @@ Tensor* Tensor::GetCopy(const Tensor& other) {
 	return GetCopy(other, new_args);
 }
 
+void Tensor::SetShape(Tensors shape) const {
+	node_->RemoveArguments(ArgType::Shape);
+	for (int i = 0; i < shape.size(); i++) {
+		node_->AddArgument(shape[i]->node_, ArgType::Shape, i);
+	}
+}
+
 }  // namespace TensorFrost

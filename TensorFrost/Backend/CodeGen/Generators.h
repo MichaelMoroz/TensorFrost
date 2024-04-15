@@ -139,6 +139,12 @@ protected:
 				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
 				right = ";";
 			}
+			else if (op->name_ == "reshape")
+			{
+				left = "TensorProp " + node->var_name + " = ";
+				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+				right = ";";
+			}
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
 			string address;
 

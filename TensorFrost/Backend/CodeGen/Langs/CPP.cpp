@@ -320,6 +320,33 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 	return tensor;
 }
 
+TensorProp reshape(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
+{
+  TensorProp new_tensor = TensorProp();
+  new_tensor.offset = tensor.offset;
+  new_tensor.dim = shape.size();
+  new_tensor.shape = new uint[shape.size()];
+  new_tensor.type = type;
+
+  int old_size = 1;
+  for (int i = 0; i < tensor.dim; i++)
+  {
+	old_size *= tensor.shape[i];
+  }
+  int new_size = 1;
+  for (int i = 0; i < shape.size(); i++)
+  {
+	new_tensor.shape[i] = shape.begin()[i];
+	new_size *= new_tensor.shape[i];
+  }
+  if(old_size != new_size)
+  {
+	throw std::runtime_error("Cannot reshape " + name + ", expected " + std::to_string(new_size) + " elements, while input has " + std::to_string(old_size));
+  }
+
+  return new_tensor;
+}
+
 uint ReadFromMemory(TensorProp tensor, uint index)
 {
   return readback(tensor, index);

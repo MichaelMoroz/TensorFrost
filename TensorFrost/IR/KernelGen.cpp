@@ -500,6 +500,7 @@ map<Node*, Node*> IR::CopyComputation(
 				//add shape arguments
 				new_args.insert(new_args.end(), shape_args.begin(), shape_args.end());
 			}
+
 			// create new node
 			Tensor* tensor = Tensor::GetCopy(*node->GetTensor(), new_args);
 			new_node = tensor->node_;
@@ -675,8 +676,10 @@ void IR::OptimizeKernelLoadOperations() {
 			//get memory input
 			Node* memory_input = node->GetArguments(ArgType::Memory)[0].from_->get();
 
+			bool inside_kernel = memory_input->HasParent("kernel");
+
 			//if the memory input is used only once and is not a memory node
-			if (memory_input->outputs_.size() == 1 && memory_input->name != "memory") {
+			if (inside_kernel && memory_input->outputs_.size() == 1) {
 				loads_to_copy[memory_input] = *node;
 			}
 		}
@@ -1434,8 +1437,7 @@ void IR::RemoveUnusedKernels()
 	}
 }
 
-Tensor* ComputeReduction(const Tensor* array, int axis,
-                         function<Tensor*(Tensor*, Tensor*)> op) {
+Tensor* ComputeReduction(const Tensor* array, int axis, std::function<Tensor*(Tensor*, Tensor*)> reduction_op, std::function<Tensor*(Tensor*)> element_op = nullptr) {
 	// Get shape of the array
 	Tensors shape = array->GetShape();
 
@@ -1465,26 +1467,35 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 		sum_shape.push_back(&Tensor::Constant(1));
 	}
 
-	// create zero constant
-	Tensor* reduced = &Tensor::Constant(sum_shape, 0, array->type);
-
-	// create a loop over the last dimension
-	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
-	[&](const Tensor& i) {
-		// get the index for the last dimension
-		Tensors load_index = Tensors();
-		for (int id = 0, d = 0; d < dims; d++) {
-			if (d == axis) {
-				load_index.push_back(&i);
-			} else {
-				load_index.push_back(indices[id++]);
-			}
+	Tensors load_index = Tensors();
+	for (int id = 0, d = 0; d < dims; d++) {
+		if (d == axis) {
+			load_index.push_back(&Tensor::Constant(sum_shape, 0));
+		} else {
+			load_index.push_back(indices[id++]);
 		}
+	}
+
+	// start with the first value
+	Tensor* reduced = &Tensor::Load(*array, load_index);
+	if (element_op != nullptr) {
+		reduced = element_op(reduced);
+	}
+
+	// create a loop over the last dimension starting from the second value
+	Tensor::Loop(Tensor::Constant(1), *shape[axis], Tensor::Constant(1),
+	[&](const Tensor& i) {
+		load_index[axis] = &i;
+		
 		// load the value
 		Tensor* value = &Tensor::Load(*array, load_index);
 
+		if (element_op != nullptr) {
+			value = element_op(value);
+		}
+
 		// add the value to the sum
-		reduced->Set(*op(reduced, value));
+		reduced->Set(*reduction_op(reduced, value));
 	});
 
 	return reduced;
@@ -1495,7 +1506,18 @@ Tensor* ComputeSum(const Tensor* array, int axis) {
 }
 
 Tensor* ComputeNorm(const Tensor* array, int axis) { 
-	return &Tensor::sqrt(*ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a + *b * *b); })); 
+	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis, 
+		[](Tensor* a, Tensor* b) { return &(*a + *b); },  
+		[](Tensor* a) { return &(*a * *a); })));
+}
+
+Tensor* ComputeMean(const Tensor* array, int axis) {
+	Tensor* sum = ComputeSum(array, axis);
+	Tensors shape = array->GetShape();
+	if (axis < 0) {
+		axis = (int)shape.size() + axis;
+	}
+	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
 }
 
 Tensor* ComputeMax(const Tensor* array, int axis) {
@@ -1537,6 +1559,9 @@ void IR::InsertAlgorithmicPrimitives() {
 			}
 			else if (node->name == "dim_min") {
 				result = ComputeMin(input, axis);
+			} 
+			else if (node->name == "dim_mean") {
+				result = ComputeMean(input, axis);
 			}
 			else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);

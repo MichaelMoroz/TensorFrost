@@ -146,6 +146,31 @@ class Tensor {
 	}
 
 	template <typename... Args>
+	static Tensor& MemoryOpShape(std::string op, Tensors shape, const Tensor* memory, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Memory operation name cannot be empty");
+		}
+
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		// get the operation and output type
+		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
+		DataType output_type = operation.second;
+
+		// create argument list
+		Arguments arguments = Arguments();
+
+		AddArgument(arguments, memory, ArgType::Memory);
+		AddArguments(arguments, tensors, ArgType::Input);
+		AddArguments(arguments, shape, ArgType::Shape);
+
+		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
 	static Tensor& MemoryOp(string op, const Tensor* memory,
 	                        const Tensors indices, const Args*... args) {
 		op = RemoveSpaces(op);
@@ -345,6 +370,10 @@ class Tensor {
 		return result;
 	}
 
+	void SetShape(Tensors shape) const;
+
+
+
 	// tensor factory methods
 	static Tensors GetConstantShape(const vector<int>& shape) {
 		Tensors result = Tensors();
@@ -405,6 +434,7 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, int value) {
 		return Constant(GetConstantShape(shape), value);
 	}
+
 	static Tensor& Constant(const Tensors& shape, uint value) {
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape, ArgType::Shape);
@@ -412,6 +442,7 @@ class Tensor {
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
+
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
@@ -594,12 +625,20 @@ class Tensor {
 		return ReductionOP("dim_norm", tensor, axis);
 	}
 
+	static Tensor& Mean(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_mean", tensor, axis);
+	}
+
 	static Tensor& Max(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_max", tensor, axis);
 	}
 
 	static Tensor& Min(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_min", tensor, axis);
+	}
+
+	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape) {
+		return MemoryOpShape("reshape", shape, &tensor);
 	}
 
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
@@ -785,6 +824,10 @@ class Tensor {
 	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }
 	static Tensor& tobool(const Tensor& x) { return Op("bool", &x); }
+
+	static Tensor& asfloat(const Tensor& x) { return Op("asfloat", &x); }
+	static Tensor& asint(const Tensor& x) { return Op("asint", &x); }
+	static Tensor& asuint(const Tensor& x) { return Op("asuint", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
 		return Op("clamp", &x, &min, &max);

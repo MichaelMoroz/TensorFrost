@@ -25,16 +25,13 @@ const vector<Operation> operations = {
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
+    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
     Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
-
-    //Algorithms (TODO: implement in graph)
+    //Algorithms
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("reduce", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("scan", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("reshape", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
     //Operation("transpose", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
     //Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
     //Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
@@ -42,7 +39,7 @@ const vector<Operation> operations = {
     Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // length(norm) of the last dimension
     Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // max of the last dimension
     Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // min of the last dimension
-    //Operation("mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static}), // mean of the last dimension
+    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // mean of the last dimension
 
     Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
