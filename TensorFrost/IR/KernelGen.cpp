@@ -409,6 +409,20 @@ bool CannotCopyArgument(Arg& arg) {
 
 map<Node*, Node*> IR::CopyComputation(
     const unordered_set<Node*>& targets, const unordered_map<int, Node*>& indices) {
+	//if we have indices, we are basically rerunning the computation with a different set of indices (of possible different size)
+	bool can_change_shape = !indices.empty();
+	Arguments shape_args = Arguments();
+	if (can_change_shape) {
+		//get first index
+		int first_index = indices.begin()->first;
+		Node* first_index_node = indices.at(first_index);
+		for (auto& arg : first_index_node->inputs_) {
+			if (arg.type_ == ArgType::Shape) {
+				shape_args.push_back(arg);
+			}
+		}
+	}
+
 	// do a depth first search to copy all the nodes required for the targets
 	// (only if in the same kernel)
 	unordered_set<Node*> nodes_to_copy;
@@ -461,6 +475,10 @@ map<Node*, Node*> IR::CopyComputation(
 			// create new arguments
 			Arguments new_args;
 			for (Arg& arg : node->inputs_) {
+				if (can_change_shape && arg.type_ == ArgType::Shape) {
+					continue;
+				}
+
 				// if shape or memory argument, then no need to use copied node
 				if (CannotCopyArgument(arg) && !targets.contains(arg.from_->get())) {
 					new_args.push_back(arg);
@@ -478,6 +496,10 @@ map<Node*, Node*> IR::CopyComputation(
 				                      arg.index_);
 			}
 
+			if (can_change_shape) {
+				//add shape arguments
+				new_args.insert(new_args.end(), shape_args.begin(), shape_args.end());
+			}
 			// create new node
 			Tensor* tensor = Tensor::GetCopy(*node->GetTensor(), new_args);
 			new_node = tensor->node_;
@@ -753,14 +775,24 @@ void IR::MoveShapeOutsideKernels() {
 	for (auto [ node, kernel ] : nodes_to_copy) {
 		//get all output arguments that are shapes
 		unordered_set<Arg*> args_to_copy;
+		int earliest_output_index = INT_MAX;
+		Node* earliest_output = nullptr;
 		for (auto& output : node->outputs_) {
 			if (output->type_ == ArgType::Shape) {
 				args_to_copy.insert(output);
+
+				//get the earliest output
+				if (output->index_ < earliest_output_index) {
+					earliest_output_index = output->index_;
+					earliest_output = output->to_->get();
+				}
 			}
 		}
 
-		// copy shape computation and put it after the kernel
-		CopyArguments(args_to_copy, kernel->next);
+		Node* common_parent = earliest_output->GetCommonParent(kernel);
+
+		// copy shape computation and put it before the earliest output (outside of the kernel if its inside)
+		CopyArguments(args_to_copy, common_parent);
 	}
 }
 
