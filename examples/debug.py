@@ -51,18 +51,24 @@ tf.initialize(tf.opengl)
 #print("Q:\n", Qnp)
 #print("R:\n", Rnp)
 
-def MaxBlock():
-	A = tf.input([-1, -1, -1, -1], tf.float32)
-	N, Bx, By, Bz = A.shape
-	Ar = tf.reshape(A, [N, Bx*By*Bz])
-	#only reduces one dimension, by default it is the last dimension
-	max_val = tf.max(Ar)
-	min_val = tf.min(Ar)
-	sum = tf.sum(Ar)
-	mean = tf.mean(Ar)
-	norm = tf.norm(Ar)
-	total_max = tf.max(max_val)
-	total_min = tf.min(min_val)
-	return [max_val, min_val, sum, mean, norm, total_max, total_min]
+def BlockMax():
+	blocks = tf.input([-1, -1, -1, -1, -1], tf.float32)
+	N, Bx, By, Bz, CH = blocks.shape
 
-max_block = tf.compile(MaxBlock)
+	block_max = tf.max(tf.abs(tf.reshape(blocks, [N, Bx*By*Bz, CH])), axis=1)
+
+	return [block_max]
+
+bmax = tf.compile(BlockMax)
+
+#generate random blocks
+blocks = np.random.rand(32, 8, 8, 8, 3)
+
+#compute block max using TensorFrost
+blockstf = tf.tensor(blocks)
+block_max_tf, = bmax(blockstf)
+block_max_np = block_max_tf.numpy
+
+#check if block max is correct
+print("Block max using TensorFrost is correct:", np.allclose(np.max(np.abs(blocks), axis=(1, 2, 3)), block_max_np))
+

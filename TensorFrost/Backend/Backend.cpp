@@ -149,7 +149,12 @@ vector<TensorMemory*> ExecuteProgram(
 	for (int i = 0; i < output_count; i++)
 	{
 		outputs[i] = global_memory_manager->allocated_by_offset[out[i].offset];
-		outputs[i]->type = output_memory_map[i]->tensor_->type;
+		//TODO this can potentially overwite some of the tensor properties used elsewhere
+		outputs[i]->shape.clear();
+		for (uint j = 0; j < out[i].dim; j++) {
+			outputs[i]->shape.push_back(out[i].shape[j]);
+		}
+		outputs[i]->type = out[i].type;
 	}
 
 	return outputs;

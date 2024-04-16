@@ -839,7 +839,8 @@ public:
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
-	void AddKernelGlobalMemoryOperations();
+	void AddKernelGlobalLoadOperations();
+	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,

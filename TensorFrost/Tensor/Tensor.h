@@ -158,7 +158,7 @@ class Tensor {
 
 		// get the operation and output type
 		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = operation.second;
+		DataType output_type = memory->type;
 
 		// create argument list
 		Arguments arguments = Arguments();

@@ -25,10 +25,10 @@ const vector<Operation> operations = {
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
-    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
+    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly, OpType::MemoryReuse}),
     Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
     Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
-    Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+    //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
     //Algorithms
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
@@ -45,8 +45,8 @@ const vector<Operation> operations = {
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
     // Memory operations
-    Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
-    Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
+    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
+    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
     Operation("load", {"_f", "_u", "_i"}, 128, "",
               {OpType::Load, OpType::MemoryOp}),
     Operation("store", {"f_", "u_", "i_"}, 128, "",

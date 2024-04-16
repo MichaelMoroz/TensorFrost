@@ -49,6 +49,7 @@ enum class OpType {
 	KernelOnly,
 	Algorithm,
 	Modifier,
+	MemoryReuse,
 };
 
 using DataTypeList = vector<DataType>;

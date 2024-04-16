@@ -360,9 +360,9 @@ bool CannotMoveArgument(Arg& arg) {
 	Node* to = arg.to_->get();
 	return (arg.type_ == ArgType::Memory &&
 	        !to->op->HasAllTypes(OpType::Set)) ||
-	       (arg.type_ == ArgType::Shape && to->name != "memory") ||
-	       from->name == "memory" ||
-	       (from->name == "const" && to->name == "memory"); //FIX THIS
+	       (arg.type_ == ArgType::Shape && !to->op->HasAllTypes(OpType::Memory)) ||
+	       from->op->HasAllTypes(OpType::Memory) ||
+	       (from->name == "const" && to->op->HasAllTypes(OpType::Memory)); //FIX THIS
 }
 
 void IR::ReorderOperations() {
@@ -401,10 +401,10 @@ bool CannotCopyArgument(Arg& arg) {
 	Node* from = arg.from_->get();
 	Node* to = arg.to_->get();
 	bool shape = arg.type_ == ArgType::Shape;
-	bool to_memory = to->name == "memory";
+	bool to_memory = to->op->HasAllTypes(OpType::Memory);
 	bool shape_not_memory = shape && !to_memory;
 	return arg.type_ == ArgType::Memory || shape_not_memory || from->op->HasAllTypes(OpType::Static) ||
-	       from->name == "memory" || from->HasBeenModified();
+	       from->op->HasAllTypes(OpType::Memory) || from->HasBeenModified();
 }
 
 map<Node*, Node*> IR::CopyComputation(
@@ -536,7 +536,7 @@ void IR::GetInputList() {
 void IR::GetOutputList() {
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (node->memory_type_ == MemoryType::Output) {
-			if (node->name != "memory") {
+			if (!node->op->HasAllTypes(OpType::Memory)) {
 				throw std::runtime_error("Compilation error: output is not a memory node"); //all outputs should be memory nodes at this point
 			}
 			output_memory_map[node->special_index_] = *node;
@@ -1003,7 +1003,7 @@ void IR::RemoveUnusedOperations() {
 void IR::ComputeNodeCost()
 {
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->name == "memory";
+		bool is_memory = node->op->HasAllTypes(OpType::Memory);
 		unordered_map<Node*, float> input_costs;
 		for (auto& input : node->inputs_) {
 			if (input.type_ != ArgType::Memory &&
@@ -1045,7 +1045,45 @@ map<Node*, vector<Arg*>> IR::GetKernelOutputs(Node* kernel)
 	return node_output;
 }
 
-void IR::AddKernelGlobalMemoryOperations() {
+void IR::AddKernelGlobalLoadOperations() {
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+	for (auto kernel : kernels) {
+		//get kernel shape arguments
+		Arguments shape_args = kernel->GetArguments(ArgType::Shape);
+
+		Tensors indices = Tensors();
+		//add dimension index nodes
+		ExecuteExpressionChild(kernel, [&]() {
+			for (int i = 0; i < shape_args.size(); i++) {
+				indices.push_back(&Tensor::Index(shape_args, i));
+			}
+		});
+
+		// replace all inputs pointing to memory nodes with the memory node
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			for (auto& input : node->inputs_) {
+				if (input.type_ == ArgType::Memory || input.type_ == ArgType::Shape)
+					continue;
+
+				bool is_in_a_kernel = input.from_->get()->HasParent("kernel");
+				bool is_outside = !input.from_->get()->HasParent(kernel);
+				bool is_memory = input.from_->get()->op->HasAllTypes(OpType::Memory);
+
+				if (is_memory || (is_in_a_kernel && is_outside)) {
+					// load the memory node before this node
+					ExecuteExpressionBefore(node.get(), [&]() {
+						Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor(), indices);
+						input.from_ = loaded.node_->GetLable();
+					});
+				}
+			}
+		}
+	}
+}
+
+void IR::AddKernelGlobalStoreOperations() {
 	// get kernels
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -1058,7 +1096,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 		for (auto out : node_output) {
 			Node* output = out.first;
 			// if the output is already a memory node, then skip
-			if (output->name == "memory") {
+			if (output->op->HasAllTypes(OpType::Memory)) {
 				continue;
 			}
 
@@ -1107,14 +1145,14 @@ void IR::AddKernelGlobalMemoryOperations() {
 
 	// replace all inputs pointing to memory nodes with the memory node
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->name == "memory";
+		bool is_memory = node->op->HasAllTypes(OpType::Memory);
 
 		for (auto& input : node->inputs_) {
 			if (input.type_ == ArgType::Memory ||
 			    (input.type_ == ArgType::Shape && !is_memory))
 				continue;
 
-			if (input.from_->get()->name == "memory") {
+			if (input.from_->get()->op->HasAllTypes(OpType::Memory)) {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
 					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor());
@@ -1148,37 +1186,50 @@ void IR::CheckKernelShapes()
 
 void IR::AddMemoryDeallocation()
 {
+	UpdateGraph();
 	vector<Node*> memory_nodes = GetNodesOfType("memory");
 
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
 	for (auto memory : memory_nodes) {
-		if (memory->memory_type_ == MemoryType::Input || memory->memory_type_ == MemoryType::Output) {
+		// skip input and output memories, they are deallocated manually
+		if (memory->memory_type_ == MemoryType::Input) {
 			continue;
 		}
 
-		// get all outputs of this memory
-		vector<Arg*> outputs;
-		for (auto& output : memory->outputs_) {
-			if (output->to_ == nullptr) continue;
-			outputs.push_back(output);
-		}
+		Node* last_output = nullptr;
+		int last_output_index = -1;
 
-		// if the memory is not used, then skip
-		if (outputs.empty()) {
-			continue;
-		}
+		bool is_an_output = false;
 
-		// get the last time the memory is used
-		Node* last_output = outputs[0]->to_->get();
-		for (auto& output : outputs) {
-			if (output->to_->get()->index_ > last_output->index_) {
-				last_output = output->to_->get();
+		//do a dfs to find the last output
+		std::function<void(Node*)> dfs = [&](Node* node) {
+			if (node->memory_type_ == MemoryType::Output) {
+				is_an_output = true;
+				return;
 			}
+
+			for (auto& output : node->outputs_)
+			{
+				Node* output_node = output->to_->get();
+				if (output_node->op->HasAllTypes(OpType::MemoryReuse)) {
+					dfs(output_node);
+				} else {
+					if (last_output_index < output_node->index_) {
+						last_output_index = output_node->index_;
+						last_output = output_node;
+					}
+				}
+			}
+		};
+
+		dfs(memory);
+
+		if (is_an_output) {
+			continue;
 		}
 
 		// need to add deallication in the same scope as the allocation
 		Node* deallocation_point = last_output->GetCommonParent(memory);
-
 
 		// add deallocation node after the last time the memory is used
 		ExecuteExpressionAfter(deallocation_point, [&]() {
@@ -1437,7 +1488,10 @@ void IR::RemoveUnusedKernels()
 	}
 }
 
-Tensor* ComputeReduction(const Tensor* array, int axis, std::function<Tensor*(Tensor*, Tensor*)> reduction_op, std::function<Tensor*(Tensor*)> element_op = nullptr) {
+Tensor* ComputeReduction(const Tensor* array, int axis,
+                         std::function<Tensor*(Tensor*, Tensor*)> reduction_op,
+                         uint initial = 0,
+                         std::function<Tensor*(Tensor*)> element_op = nullptr) {
 	// Get shape of the array
 	Tensors shape = array->GetShape();
 
@@ -1477,13 +1531,10 @@ Tensor* ComputeReduction(const Tensor* array, int axis, std::function<Tensor*(Te
 	}
 
 	// start with the first value
-	Tensor* reduced = &Tensor::Load(*array, load_index);
-	if (element_op != nullptr) {
-		reduced = element_op(reduced);
-	}
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->type);
 
 	// create a loop over the last dimension starting from the second value
-	Tensor::Loop(Tensor::Constant(1), *shape[axis], Tensor::Constant(1),
+	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
 	[&](const Tensor& i) {
 		load_index[axis] = &i;
 		
@@ -1494,7 +1545,6 @@ Tensor* ComputeReduction(const Tensor* array, int axis, std::function<Tensor*(Te
 			value = element_op(value);
 		}
 
-		// add the value to the sum
 		reduced->Set(*reduction_op(reduced, value));
 	});
 
@@ -1507,7 +1557,7 @@ Tensor* ComputeSum(const Tensor* array, int axis) {
 
 Tensor* ComputeNorm(const Tensor* array, int axis) { 
 	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis, 
-		[](Tensor* a, Tensor* b) { return &(*a + *b); },  
+		[](Tensor* a, Tensor* b) { return &(*a + *b); }, 0, 
 		[](Tensor* a) { return &(*a * *a); })));
 }
 
@@ -1521,11 +1571,29 @@ Tensor* ComputeMean(const Tensor* array, int axis) {
 }
 
 Tensor* ComputeMax(const Tensor* array, int axis) {
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::max(*a, *b); });
+	uint initial = 0;
+	if (array->type == DataType::Float) {
+		float init = -FLT_MAX;
+		initial = *(uint*)&init;
+	}
+	else if (array->type == DataType::Int) {
+		int init = INT_MIN;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::max(*a, *b); }, initial);
 }
 
 Tensor* ComputeMin(const Tensor* array, int axis) {
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); });
+	uint initial = UINT_MAX;
+	if (array->type == DataType::Float) {
+		float init = FLT_MAX;
+		initial = *(uint*)&init;
+	}
+	else if (array->type == DataType::Int) {
+		int init = INT_MAX;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); }, initial);
 }
 
 void IR::InsertAlgorithmicPrimitives() {
@@ -1611,11 +1679,12 @@ void IR::CompileIR()
 	OptimizeKernels();
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	OptimizeKernelLoadOperations();
-	CheckIR("Optimize load operations", true, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", true, false);
-	AddKernelGlobalMemoryOperations();
+	AddKernelGlobalLoadOperations();
+	OptimizeKernelLoadOperations();
+	CheckIR("Optimize load operations", true, false);
+	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
 	CheckIR("Add Kernel Global Memory Operations", true, true);
 	ReorderOperations();
