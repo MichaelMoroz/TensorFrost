@@ -268,6 +268,18 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
 	    py::arg("t"), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
+
+	m.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
+		return PT(Tensor::Transpose(T(t), dim1, dim2));
+	}, py::arg("t"), py::arg("dim1"), py::arg("dim2"), "Transpose the tensor");
+
+	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
+		return PT(Tensor::Dot(T(t), T(t2), axis));
+	}, py::arg("t"), py::arg("t2"), py::arg("axis") = -1, "Dot product of two tensors");
+
+	m.def("matmul", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::Matmul(T(t), T(t2)));
+	}, py::arg("t"), py::arg("t2"), "Matrix multiplication of two tensors");
 }
 
 }  // namespace TensorFrost

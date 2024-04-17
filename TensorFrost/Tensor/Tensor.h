@@ -56,7 +56,7 @@ class Tensor {
 	}
 
 	static pair<const Operation*, DataType> GetOperation(const string& name,
-	                                              const Tensors& tensors) {
+	                                              const Tensors& tensors, bool check_shape = true) {
 		vector<DataType> input_types = vector<DataType>();
 		for (const auto& tensor : tensors) {
 			input_types.push_back(tensor->type);
@@ -74,11 +74,14 @@ class Tensor {
 			throw std::runtime_error(error);
 		}
 
-		//check if shapes are compatible
-		for (int i = 1; i < tensors.size(); i++) {
-			if (!CompareTensorShape(tensors[0], tensors[i])) {
-				throw std::runtime_error("Cannot perform operation \"" + name +
-				                         "\" on tensors with potentially incompatible shapes");
+		if (check_shape)
+		{
+			//check if shapes are compatible
+			for (int i = 1; i < tensors.size(); i++) {
+				if (!CompareTensorShape(tensors[0], tensors[i])) {
+					throw std::runtime_error("Cannot perform operation \"" + name +
+											 "\" on tensors with potentially incompatible shapes");
+				}
 			}
 		}
 
@@ -133,7 +136,7 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
+		pair<const Operation*, DataType> operation = GetOperation(op, tensors, false);
 		DataType output_type = operation.second;
 
 		// create argument list
@@ -601,12 +604,17 @@ class Tensor {
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
+	static int GetAxis(int dims, int axis) {
+		if (axis < 0) {
+			axis = dims + axis;
+		}
+		return axis;
+	}
+
 	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1) {
 		// get the shape of the tensor (all dimensions except the last one)
 		Tensors shape = tensor.GetShape();
-		if (axis < 0) {
-			axis = (int)shape.size() + axis;
-		}
+		axis = GetAxis((int)shape.size(), axis);
 		// remove the axis dimension
 		shape.erase(shape.begin() + axis);
 		if (shape.empty()) {
@@ -636,13 +644,71 @@ class Tensor {
 	static Tensor& Min(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_min", tensor, axis);
 	}
+	
+	static Tensor& Transpose(const Tensor& tensor, const int axis1, const int axis2) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		int a1 = GetAxis(dims, axis1);
+		int a2 = GetAxis(dims, axis2);
+		//swap the axes
+		std::swap(shape[a1], shape[a2]);
+		Tensor& output = OpShape("transpose", shape, &tensor);
+		//add data
+		output.data = vector<uint>(2, a1);
+		output.data[1] = a2;
+		return output;
+	}
+
+	//dot product of 
+	static Tensor& Dot(const Tensor& tensor1, const Tensor& tensor2, int axis = -1) {
+		Tensors shape = tensor1.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		shape.erase(shape.begin() + axis);
+		Tensor& output = OpShape("dot", shape, &tensor1, &tensor2);
+		return output;
+	}
+
+	//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
+	static Tensor& Matmul(const Tensor& a, const Tensor& b) {
+		Tensors shape_a = a.GetShape();
+		Tensors shape_b = b.GetShape();
+
+		if (shape_a.size() < 2 || shape_b.size() < 2) {
+			throw std::runtime_error("MatMul requires tensors with at least 2 dimensions");
+		}
+
+		// get shape of the result
+		Tensors shape_c = Tensors();
+		int dim_a = (int)shape_a.size();
+		int dim_b = (int)shape_b.size();
+		int max_dim = 0;
+		Tensors max_shape = Tensors();
+		// get the shape with most dimensions
+		if (dim_a < dim_b) {
+			max_dim = dim_b;
+			max_shape = shape_b;
+		} else {
+			max_dim = dim_a;
+			max_shape = shape_a;
+		}
+
+		for (int i = 0; i < max_dim - 2; i++) {
+			shape_c.push_back(max_shape[i]);
+		}
+		shape_c.push_back(shape_a[dim_a - 2]);
+		shape_c.push_back(shape_b[dim_b - 1]);
+
+		Tensor& output = OpShape("matmul", shape_c, &a, &b);
+		return output;
+	}
 
 	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape) {
 		return MemoryOpShape("reshape", shape, &tensor);
 	}
 
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
-	                 const std::function<void(const Tensor&)>& body) {
+	                 const function<void(const Tensor&)>& body) {
 		// create the loop
 		Tensor& loop = Op("loop", &start, &end, &step);
 

@@ -20,8 +20,7 @@ const vector<Operation> operations = {
               {OpType::Keyword, OpType::Static}),
     Operation("continue", {""}, 0, "continue",
               {OpType::Keyword, OpType::Static}),
-    Operation("group_barrier", {""}, 256, "",
-              {OpType::Static}),  // TODO implement in graph
+    //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
@@ -31,17 +30,23 @@ const vector<Operation> operations = {
     //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
     //Algorithms
-    //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("transpose", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
-    //Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
+    //Reduction
     Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // sum of the last dimension
     Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // length(norm) of the last dimension
     Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // max of the last dimension
     Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // min of the last dimension
     Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // mean of the last dimension
-
-    Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
+    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // product of the last dimension
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // any of the last dimension
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // all of the last dimension
+    //Matrix
+    Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
+    Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
+    //Advanced
+    //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+    //stack and vector operations
+    //Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
     // Memory operations

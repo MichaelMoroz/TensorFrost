@@ -62,6 +62,9 @@ void DefineOperators(py::class_<PyTensor>& py_tensor) {
 	py_tensor.def("__rpow__", [](const PyTensor& t, float f) {
 		return PT(Tensor::pow(Tensor::Constant(f), T(t)));
 	});
+	py_tensor.def("__matmul__", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::Matmul(T(t), T(t2)));
+	});
 }
 
 void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {

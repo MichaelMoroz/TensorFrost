@@ -1488,6 +1488,15 @@ void IR::RemoveUnusedKernels()
 	}
 }
 
+int GetAxis(int dims, int axis)
+{
+	if (axis < 0)
+	{
+		axis = dims + axis;
+	}
+	return axis;
+}
+
 Tensor* ComputeReduction(const Tensor* array, int axis,
                          std::function<Tensor*(Tensor*, Tensor*)> reduction_op,
                          uint initial = 0,
@@ -1495,9 +1504,7 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 	// Get shape of the array
 	Tensors shape = array->GetShape();
 
-	if (axis < 0) {
-		axis = (int)shape.size() + axis;
-	}
+	axis = GetAxis((int)shape.size(), axis);
 
 	// Get the number of dimensions
 	int dims = (int)shape.size();
@@ -1564,9 +1571,7 @@ Tensor* ComputeNorm(const Tensor* array, int axis) {
 Tensor* ComputeMean(const Tensor* array, int axis) {
 	Tensor* sum = ComputeSum(array, axis);
 	Tensors shape = array->GetShape();
-	if (axis < 0) {
-		axis = (int)shape.size() + axis;
-	}
+	axis = GetAxis((int)shape.size(), axis);
 	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
 }
 
@@ -1596,6 +1601,120 @@ Tensor* ComputeMin(const Tensor* array, int axis) {
 	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); }, initial);
 }
 
+Tensor* ComputeProduct(const Tensor* array, int axis) {
+	uint initial = 1;
+	if (array->type == DataType::Float) {
+		float init = 1.0f;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a * *b); }, initial);
+}
+
+Tensor* ComputeAny(const Tensor* array, int axis) {
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a || *b); }, 0);
+}
+
+Tensor* ComputeAll(const Tensor* array, int axis) {
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, ~0);
+}
+
+Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
+	Tensors shape = array->GetShape();
+	Tensors perm_shape = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		perm_shape.push_back(shape[permutation[i]]);
+	}
+	//create indices
+	Tensors indices = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		indices.push_back(&Tensor::Index(perm_shape, i));
+	}
+	//permute indices to load the values
+	Tensors perm_indices = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		perm_indices.push_back(indices[permutation[i]]);
+	}
+	return &Tensor::Load(*array, perm_indices);
+}
+
+Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
+	Tensors shape_a = a->GetShape();
+	Tensors shape_b = b->GetShape();
+	axis = GetAxis((int)shape_a.size(), axis);
+	return ComputeSum(&(*a * *b), axis);
+}
+
+//compute the matrix multiplication of two last dimensions
+//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
+Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
+	Tensors shape_a = a->GetShape();
+	Tensors shape_b = b->GetShape();
+
+	if (shape_a.size() < 2 || shape_b.size() < 2) {
+		throw std::runtime_error("Matrix multiplication requires at least 2 dimensions");
+	}
+
+	//get shape of the result
+	Tensors shape_c = Tensors();
+	int dim_a = (int)shape_a.size();
+	int dim_b = (int)shape_b.size();
+	int max_dim = 0;
+	Tensors max_shape = Tensors();
+	//get the shape with most dimensions
+	if (dim_a < dim_b) {
+		max_dim = dim_b;
+		max_shape = shape_b;
+	} else {
+		max_dim = dim_a;
+		max_shape = shape_a;
+	}
+
+	for (int i = 0; i < max_dim - 2; i++) {
+		shape_c.push_back(max_shape[i]);
+	}
+	shape_c.push_back(shape_a[dim_a - 2]);
+	shape_c.push_back(shape_b[dim_b - 1]);
+
+	const Tensor* sum_shape = shape_a[dim_a - 1];
+
+	// get indices for c elements
+	Tensors indices_c = Tensors();
+	for (int i = 0; i < max_dim; i++) {
+		indices_c.push_back(&Tensor::Index(shape_c, i));
+	}
+
+	// start with 0
+	Tensor* c = &Tensor::Constant(shape_c, 0, a->type);
+
+	// loop over k and compute += A t1t2..tN ik * B t1t2..tN kj
+	Tensor::Loop(Tensor::Constant(0), *sum_shape, Tensor::Constant(1),
+		[&](const Tensor& k) {
+
+		// get indices for a elements
+		Tensors indices_a = Tensors();
+		for (int i = 0; i < dim_a - 2; i++) {
+			indices_a.push_back(indices_c[max_dim - dim_a + i]);
+		}
+		indices_a.push_back(indices_c[max_dim - 2]);
+		indices_a.push_back(&k);
+
+		// get indices for b elements
+		Tensors indices_b = Tensors();
+		for (int i = 0; i < dim_b - 2; i++) {
+			indices_b.push_back(indices_c[max_dim - dim_b + i]);
+		}
+		indices_b.push_back(&k);
+		indices_b.push_back(indices_c[max_dim - 1]);
+
+		// load the value
+		Tensor* value = &(Tensor::Load(*a, indices_a) * Tensor::Load(*b, indices_b));
+
+		c->Set(*c + *value);
+	});
+	
+	return c;
+}
+
 void IR::InsertAlgorithmicPrimitives() {
 	UpdateGraph();
 	// get all nodes for each type
@@ -1608,28 +1727,57 @@ void IR::InsertAlgorithmicPrimitives() {
 		//compute the sum after the node
 		ExecuteExpressionAfter(node, [&]() {
 			//get the input tensor
-			const Tensor* input = node->GetArgumentTensors(ArgType::Input)[0];
+			map<int, const Tensor*> inputs = node->GetArgumentTensors(ArgType::Input);
 
 			//get sum axis
-			int axis = (int)node->tensor_->data[0];
+			vector<int> axes;
+			for (int i = 0; i < node->tensor_->data.size(); i++) {
+				axes.push_back((int)node->tensor_->data[i]);
+			}
 
 			//compute the sum
 			Tensor* result;
 			//= ComputeSum(input, axis);
 			if (node->name == "dim_sum") {
-				result = ComputeSum(input, axis);
+				result = ComputeSum(inputs[0], axes[0]);
 			}
 			else if (node->name == "dim_norm") {
-				result = ComputeNorm(input, axis);
+				result = ComputeNorm(inputs[0], axes[0]);
 			}
 			else if (node->name == "dim_max") {
-				result = ComputeMax(input, axis);
+				result = ComputeMax(inputs[0], axes[0]);
 			}
 			else if (node->name == "dim_min") {
-				result = ComputeMin(input, axis);
+				result = ComputeMin(inputs[0], axes[0]);
 			} 
 			else if (node->name == "dim_mean") {
-				result = ComputeMean(input, axis);
+				result = ComputeMean(inputs[0], axes[0]);
+			}
+			else if (node->name == "dim_product") {
+				result = ComputeProduct(inputs[0], axes[0]);
+			}
+			else if (node->name == "dim_any") {
+				result = ComputeAny(inputs[0], axes[0]);
+			}
+			else if (node->name == "dim_all") {
+				result = ComputeAll(inputs[0], axes[0]);
+			}
+			else if (node->name == "transpose") {
+				//get the permutation
+				int dim = (int)inputs[0]->GetDimension();
+				map<int, int> permutation;
+				for (int i = 0; i < dim; i++) {
+					permutation[i] = i;
+				}
+				permutation[axes[0]] = axes[1];
+				permutation[axes[1]] = axes[0];
+				result = Transpose(inputs[0], permutation);
+			}
+			else if (node->name == "dot") {
+				result = ComputeDot(inputs[0], inputs[1], axes[0]);
+			}
+			else if (node->name == "matmul") {
+				result = ComputeMatMul(inputs[0], inputs[1]);
 			}
 			else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
