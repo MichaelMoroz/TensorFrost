@@ -101,21 +101,14 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetGLSLHeader();
 
 	vector<int> group_size = kernel->root->group_size;
+	//reverse vector
+	reverse(group_size.begin(), group_size.end());
+	//pad with 1s
+	while (group_size.size() < 3) {
+		group_size.push_back(1);
+	}
 
-	final_source += "layout (local_size_x = " + to_string(group_size[0]);
-	if (group_size.size() > 1) {
-		final_source += ", local_size_y = " + to_string(group_size[1]);
-	}
-	else {
-		final_source += ", local_size_y = 1";
-	}
-	if (group_size.size() > 2) {
-		final_source += ", local_size_z = " + to_string(group_size[2]);
-	}
-	else {
-		final_source += ", local_size_z = 1";
-	}
-	final_source += ") in;";
+	final_source += "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
 
 
 	final_source += R"(

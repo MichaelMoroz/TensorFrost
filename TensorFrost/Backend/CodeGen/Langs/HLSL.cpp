@@ -74,22 +74,16 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
 
 	vector<int> group_size = kernel->root->group_size;
+	// reverse vector
+	reverse(group_size.begin(), group_size.end());
+	// pad with 1s
+	while (group_size.size() < 3) {
+		group_size.push_back(1);
+	}
 
-	final_source += "[numthreads(" + to_string(group_size[0]);
-	if (group_size.size() > 1) {
-		final_source += ", " + to_string(group_size[1]);
-	} else {
-		final_source += ", 1";
-	}
-	if (group_size.size() > 2) {
-		final_source += ", " + to_string(group_size[2]);
-	} else {
-		final_source += ", 1";
-	}
-	final_source += ")]";
+	final_source += "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
 
 	final_source += R"(
-
 void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
   int block_id = gid.x;

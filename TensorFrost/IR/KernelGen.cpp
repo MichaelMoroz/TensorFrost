@@ -1390,7 +1390,7 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	}
 	vector<Tensor*> in_block_indices;
 	for (int i = 0; i < block_dim; i++) {
-		in_block_indices.push_back(&block_index->BlockThreadIndex(i));
+		in_block_indices.push_back(&block_index->BlockThreadIndex(block_dim - 1 - i));
 		in_block_indices[i]->SetDebugName("in_block_index_" + to_string(i));
 	}
 
