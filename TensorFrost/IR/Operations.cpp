@@ -74,11 +74,8 @@ const vector<Operation> operations = {
 
     // Index operations
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
-    Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
-    Operation("block_thread_id", {"_i"}, 0, "", {OpType::DimensionIndex}),  // TODO implement in graph
-    Operation("block_id", {"_i"}, 0, "", {OpType::Variable}),         // TODO implement in graph
-    Operation("block_count", {"_i"}, 1),      // TODO implement in graph
-    Operation("thread_count", {"_i"}, 1),     // TODO implement in graph
+    Operation("block_thread_id", {"_i"}, 0, "", {OpType::DimensionIndex}), 
+    Operation("block_id", {"_i"}, 0, "", {OpType::Variable}), 
     
     //Compute operations
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),

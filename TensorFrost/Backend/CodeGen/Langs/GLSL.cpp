@@ -120,7 +120,6 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 
 	final_source += R"(
 void main() {
-  int thread_id = int(gl_GlobalInvocationID.x);
   int block_id = int(gl_WorkGroupID.x);
   int block_thread_id0 = int(gl_LocalInvocationID.x);
   int block_thread_id1 = int(gl_LocalInvocationID.y);

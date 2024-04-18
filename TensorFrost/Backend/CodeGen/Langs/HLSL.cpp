@@ -73,14 +73,29 @@ cbuffer ubo : register(b1) { UBO ubo; }
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
 
+	vector<int> group_size = kernel->root->group_size;
+
+	final_source += "[numthreads(" + to_string(group_size[0]);
+	if (group_size.size() > 1) {
+		final_source += ", " + to_string(group_size[1]);
+	} else {
+		final_source += ", 1";
+	}
+	if (group_size.size() > 2) {
+		final_source += ", " + to_string(group_size[2]);
+	} else {
+		final_source += ", 1";
+	}
+	final_source += ")]";
+
 	final_source += R"(
 
-[numthreads(256, 1, 1)]
-void main(uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
+void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
-  int thread_id = dtid.x;
   int block_id = gid.x;
-  int block_thread_id = gtid.x;
+  int block_thread_id0 = gtid.x;
+  int block_thread_id1 = gtid.y;
+  int block_thread_id2 = gtid.z;
 
 )";
 
