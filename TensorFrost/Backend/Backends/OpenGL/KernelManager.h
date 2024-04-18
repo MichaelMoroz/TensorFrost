@@ -57,10 +57,6 @@ class OpenGLKernelManager : public KernelManager {
 
 	void CompileKernel(Kernel* kernel) 
 	{
-		if (kernel->indexing_mode_ != KernelIndexingMode::Linear) {
-			throw std::runtime_error("OpenGL backend only supports linear indexing mode");
-			return;
-		}
 		cout << "Compiling kernel \n" << kernel->generated_code_ << endl;
 		//print out source if debug is enabled
 		GLuint program = createShaderProgram(kernel->generated_code_);
@@ -102,15 +98,6 @@ class OpenGLKernelManager : public KernelManager {
 		}
 		#endif
 
-		//compute number of threads
-		int thread_count = 1;
-		for (int i = 0; i < (int)info.dispatch_dim; i++) {
-			thread_count *= info.dispatch_shape[i];
-		}
-
-		//compute number of work groups
-		int work_group_count = (thread_count + WORK_GROUP_SIZE - 1) / WORK_GROUP_SIZE;
-
 		// Get memory
 		OpenGLMemoryManager* memory_manager =
 		    (OpenGLMemoryManager*)global_memory_manager;
@@ -120,9 +107,6 @@ class OpenGLKernelManager : public KernelManager {
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, memory_ssbo);
 
 		// Set uniforms
-		// Set the number of threads
-		glUniform1i(getUniformLocation(program, "dispatch_size"), thread_count);
-
 		if (info.tensor_count == 0) throw std::runtime_error("No tensors provided to kernel");
 
 		// Set offsets uniform array
@@ -146,7 +130,7 @@ class OpenGLKernelManager : public KernelManager {
 		}
 
 		// Dispatch the kernel
-		glDispatchCompute(work_group_count, 1, 1);
+		glDispatchCompute(info.work_group_count, 1, 1);
 
 		// Wait for the kernel to finish
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);

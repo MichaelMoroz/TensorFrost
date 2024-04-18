@@ -19,6 +19,8 @@ void StopOpenGL();
 void ShowWindow(int width, int height, const char* title);
 void HideWindow();
 
+void Finish();
+
 void RenderFrame(const TensorMemory& tensor);
 
 bool WindowShouldClose();

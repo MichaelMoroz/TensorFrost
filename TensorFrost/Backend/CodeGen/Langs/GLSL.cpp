@@ -90,7 +90,6 @@ int asint(uint x) {
 
 uniform int off[32];
 uniform int var[32];
-uniform int dispatch_size;
 
 layout(std430, binding = 0) buffer memory {
   uint mem[];
@@ -101,15 +100,31 @@ layout(std430, binding = 0) buffer memory {
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetGLSLHeader();
 
+	vector<int> group_size = kernel->root->group_size;
+
+	final_source += "layout (local_size_x = " + to_string(group_size[0]);
+	if (group_size.size() > 1) {
+		final_source += ", local_size_y = " + to_string(group_size[1]);
+	}
+	else {
+		final_source += ", local_size_y = 1";
+	}
+	if (group_size.size() > 2) {
+		final_source += ", local_size_z = " + to_string(group_size[2]);
+	}
+	else {
+		final_source += ", local_size_z = 1";
+	}
+	final_source += ") in;";
+
+
 	final_source += R"(
-layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 void main() {
   int thread_id = int(gl_GlobalInvocationID.x);
   int block_id = int(gl_WorkGroupID.x);
-  
-  if (thread_id >= dispatch_size) {
-    return;
-  }
+  int block_thread_id0 = int(gl_LocalInvocationID.x);
+  int block_thread_id1 = int(gl_LocalInvocationID.y);
+  int block_thread_id2 = int(gl_LocalInvocationID.z);
 
 )";
 

@@ -76,13 +76,11 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	final_source += R"(
 
 [numthreads(256, 1, 1)]
-void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
+void main(uint3 dtid : SV_DispatchThreadID, uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
   int thread_id = dtid.x;
-  
-  if (thread_id >= ubo.dispatch_size) {
-    return;
-  }
+  int block_id = gid.x;
+  int block_thread_id = gtid.x;
 
 )";
 

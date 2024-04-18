@@ -16,10 +16,9 @@ const vector<Operation> operations = {
     //Control operations
     Operation("loop", {"iii_i"}, 100, "", {OpType::Static, OpType::Special}),
     Operation("if", {"b_"}, 100, "", {OpType::Static, OpType::Special}),
-    Operation("break", {""}, 0, "break",
-              {OpType::Keyword, OpType::Static}),
-    Operation("continue", {""}, 0, "continue",
-              {OpType::Keyword, OpType::Static}),
+    Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
+    Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
+    Operation("discard", {""}, 0, "discard", {OpType::Keyword, OpType::Static}), //discard current thread
     //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
@@ -76,9 +75,9 @@ const vector<Operation> operations = {
     // Index operations
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
     Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
-    Operation("group_thread_id", {"_i"}, 0),  // TODO implement in graph
-    Operation("group_id", {"_i"}, 0),         // TODO implement in graph
-    Operation("group_count", {"_i"}, 1),      // TODO implement in graph
+    Operation("block_thread_id", {"_i"}, 0, "", {OpType::DimensionIndex}),  // TODO implement in graph
+    Operation("block_id", {"_i"}, 0, "", {OpType::Variable}),         // TODO implement in graph
+    Operation("block_count", {"_i"}, 1),      // TODO implement in graph
     Operation("thread_count", {"_i"}, 1),     // TODO implement in graph
     
     //Compute operations

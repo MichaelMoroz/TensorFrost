@@ -4,7 +4,7 @@ import time
 
 tf.initialize(tf.opengl)
 
-S = 1200
+S = 1024
 MAX_ITER = 1000
 SAMPLES = 4
 

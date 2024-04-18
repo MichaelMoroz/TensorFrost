@@ -193,6 +193,9 @@ void HideWindow() {
 	glfwHideWindow(global_window);
 }
 
+void Finish() {
+	glFinish();
+}
 
 void RenderFrame(const TensorMemory& tensor) {
 	//check if tensor is 2d + 3 channels

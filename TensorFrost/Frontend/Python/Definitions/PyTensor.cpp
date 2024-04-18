@@ -167,6 +167,16 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	//
 	//	Tensor::Store(t.Get(), T(t2), indices);
 	//});
+
+	// transpose
+	py_tensor.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
+		return PT(Tensor::Transpose(T(t), dim1, dim2));
+	}, py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");
+
+	//transpose property 
+	py_tensor.def_property_readonly("T", [](const PyTensor& t) {
+		return PT(Tensor::Transpose(T(t)));
+	});
 }
 
 }  // namespace TensorFrost

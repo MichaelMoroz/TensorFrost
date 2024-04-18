@@ -1074,7 +1074,8 @@ void IR::AddKernelGlobalLoadOperations() {
 				if (is_memory || (is_in_a_kernel && is_outside)) {
 					// load the memory node before this node
 					ExecuteExpressionBefore(node.get(), [&]() {
-						Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor(), indices);
+						Tensor& loaded =
+						    Tensor::Load(*input.from_->get()->GetTensor(), indices, true);
 						input.from_ = loaded.node_->GetLable();
 					});
 				}
@@ -1120,7 +1121,7 @@ void IR::AddKernelGlobalStoreOperations() {
 					// if not a memory or shape argument, then the memory needs to be
 					// loaded before the node
 					ExecuteExpressionBefore(arg_out->to_->get(), [&]() {
-						Tensor& loaded = Tensor::Load(*mem->GetTensor());
+						Tensor& loaded = Tensor::Load(*mem->GetTensor(), {}, true);
 						// the node must now use the loaded value
 						arg_out->from_ = loaded.node_->GetLable();
 					});
@@ -1138,7 +1139,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			// add store node after the last modification on the same level as the memory
 			ExecuteExpressionAfter(last_mod_parent, [&]() {
 				// add store node after this node
-				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor());
+				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, true);
 			});
 		}
 	}
@@ -1155,7 +1156,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			if (input.from_->get()->op->HasAllTypes(OpType::Memory)) {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
-					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor());
+					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor(), {}, true);
 					input.from_ = loaded.node_->GetLable();
 				});
 			}
@@ -1313,13 +1314,8 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 	return flat_index;
 }
 
-void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* kernel, int dims, Tensors kernel_shape)
+void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 {
-	ExecuteExpressionChild(kernel, [&]() {
-		thread_index = &kernel->GetTensor()->ThreadIndex();
-		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
-	});
-
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
@@ -1327,7 +1323,7 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 			int dim = node->GetTensor()->data[0];
 			if (dim >= dims) {
 				throw runtime_error("Invalid dimension index " + to_string(dim) +
-									" for kernel of size " + to_string(dims));
+													" for kernel of size " + to_string(dims));
 			}
 
 			// remove the dim node
@@ -1341,7 +1337,7 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 					int dim = input.from_->get()->GetTensor()->data[0];
 					if (dim >= dims) {
 						throw runtime_error("Invalid dimension index " + to_string(dim) +
-																	" for kernel of size " + to_string(dims));
+																							" for kernel of size " + to_string(dims));
 					}
 
 					// replace the dim node with the index node
@@ -1357,7 +1353,22 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 	}
 }
 
-void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
+void IR::LinearModeIndices(vector<Tensor*>& indices, Node* kernel, int dims, Tensors kernel_shape)
+{
+	Tensor* thread_index = nullptr;
+	ExecuteExpressionChild(kernel, [&]() {
+		thread_index = &kernel->GetTensor()->ThreadIndex();
+		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
+	});
+
+	for (int i = 0; i < dims; i++) {
+		indices[i]->SetDebugName("dim_index_" + to_string(i));
+	}
+	
+	ReplaceDimNodes(kernel, indices, dims);
+}
+
+void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
 {
 	//add dim_id nodes at the beginning of the kernel
 	ExecuteExpressionChild(kernel_, [&]() {
@@ -1367,7 +1378,107 @@ void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& ind
 	});
 }
 
-void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, KernelIndexingMode indexing_mode, TensorIndexingMode tensor_indexing_mode)
+vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
+                                             Tensors kernel_shape, int dims) {
+	//compute in-block index
+	vector<int> block_size = kernel->group_size;
+	int block_dim = block_size.size();
+	Tensors block_size_tensors = {};
+	for (int i = 0; i < block_dim; i++) {
+		block_size_tensors.push_back(&Tensor::Constant(block_size[i]));
+		block_size_tensors[i]->SetDebugName("block_size_" + to_string(i));
+	}
+	vector<Tensor*> in_block_indices;
+	for (int i = 0; i < block_dim; i++) {
+		in_block_indices.push_back(&block_index->BlockThreadIndex(i));
+		in_block_indices[i]->SetDebugName("in_block_index_" + to_string(i));
+	}
+
+	//compute out-of-block index
+	Tensors blocks_shape = {};
+	for (int i = 0; i < dims - block_dim; i++) {
+		blocks_shape.push_back(kernel_shape[i]);
+		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
+	}
+	//the rest are divided into blocks of the given size
+	for (int i = 0; i < block_dim; i++) {
+		const Tensor block_size = *block_size_tensors[i];
+		const Tensor shape = *kernel_shape[dims - block_dim + i];
+		Tensor& ceil = (shape + block_size - Tensor::Constant(1)) / block_size;
+		blocks_shape.push_back(&ceil);
+		blocks_shape[dims - block_dim + i]->SetDebugName("blocks_shape_" + to_string(dims - block_dim + i));
+	}
+	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);
+	for (int i = 0; i < dims; i++) {
+		out_block_indices[i]->SetDebugName("out_block_index_" + to_string(i));
+	}
+
+	//combine the indices
+	vector<Tensor*> indices = {};
+	for (int i = 0; i < dims - block_dim; i++) {
+		indices.push_back(out_block_indices[i]);
+		indices[i]->SetDebugName("dim_index_" + to_string(i));
+	}
+	//the rest are sum of block index and in-block index
+	for (int i = 0; i < block_dim; i++) {
+		indices.push_back(&(*out_block_indices[dims - block_dim + i] * *block_size_tensors[i] + *in_block_indices[i]));
+		indices[dims - block_dim + i]->SetDebugName("dim_index_" + to_string(dims - block_dim + i));
+	}
+
+	return indices;
+}
+
+Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
+{
+	Tensor* block_index = nullptr;
+	Tensor* if_tensor = nullptr;
+	ExecuteExpressionChild(kernel_, [&]() {
+		block_index = &kernel_->GetTensor()->BlockIndex();
+
+		switch (dims)
+		{ 
+			case 1:
+				kernel_->group_size = {256};
+				break;
+			case 2:
+				kernel_->group_size = {16, 16};
+				break;
+			case 3:
+				kernel_->group_size = {8, 8, 8};
+				break;
+			default:
+				kernel_->group_size = {8, 8, 8};
+		}
+
+		//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
+		int group_dim = kernel_->group_size.size();
+		for (int i = 0; i < group_dim; i++) {
+			int shape = kernel_shape[dims - group_dim + i]->TryGetConstant();
+			if (shape > 0) {
+				kernel_->group_size[i] = min(kernel_->group_size[i], shape);
+			}
+		}
+
+		indices = ComputeIndicesFromBlockIndex(block_index, kernel_, kernel_shape, dims);
+
+		//add a check for if inside the dispatch
+		Tensor* inside_dispatch = &(*indices[0] < *kernel_shape[0]);
+		for (int i = 1; i < dims; i++) {
+			inside_dispatch = &(*inside_dispatch && *indices[i] < *kernel_shape[i]);
+		}
+		inside_dispatch->SetDebugName("is_inside_dispatch");
+
+		//put an if condition
+		if_tensor = &Tensor::If(*inside_dispatch);
+		if_tensor->SetDebugName("if_inside_dispatch");
+	});
+
+	ReplaceDimNodes(kernel_, indices, dims);
+
+	return if_tensor;
+}
+
+void ComputeAddress(Node* node, vector<Tensor*> indices)
 {
 	// get the input memory node
 	const Tensor* memory = node->GetArgumentTensors(ArgType::Memory)[0];
@@ -1379,18 +1490,13 @@ void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, K
 	// get the index nodes
 	map<int, const Tensor*> idx = node->GetArgumentTensors(ArgType::Index);
 
-	// just use the thread index if no index is provided
-	if (idx.empty() && indexing_mode == KernelIndexingMode::Linear) {
-		if (thread_index == nullptr) {
-			throw runtime_error("Default thread index is not supported outside of a kernel");
-		}
-		// add the thread index node edge
-		node->AddArgument(thread_index->node_, ArgType::Index, 0);
-		return;
+	if (idx.empty())
+	{
+		node->indexing_mode_ = TensorIndexingMode::Unsafe; //we can guarantee that the index is in bounds
 	}
 
-	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim,
-	                                      tensor_indexing_mode);
+	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
+	flat_index->SetDebugName("data_id");
 
 	// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
 	// mirror, zero)
@@ -1405,6 +1511,8 @@ void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, K
 void IR::FinalizeMemoryIndexing() {
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	vector<Tensor*> dispatch_checks;
 
 	for (auto kernel : kernels) {
 		Node* shape_node = kernel;
@@ -1424,26 +1532,14 @@ void IR::FinalizeMemoryIndexing() {
 
 		// compute the index for each dimension
 		int dims = (int)kernel_shape.size();
-		Tensor* thread_index;
 		vector<Tensor*> indices = vector<Tensor*>(dims);
-
-		switch (indexing_mode_)
-		{ 
-		case KernelIndexingMode::Linear:
-			LinearModeIndices(thread_index, indices, kernel, dims, kernel_shape);
-			break;
-		case KernelIndexingMode::MultiDimensional:
-		case KernelIndexingMode::MultiDimensionalBlocks: //TODO (Moroz): add proper support for blocks
-			MultiDimensionalModeIndices(thread_index, indices, kernel, dims, kernel_shape);
-			break;
-		default:
-			throw runtime_error("Invalid kernel indexing mode");
-		}
+		dispatch_checks.push_back(
+		    LinearBlockModeIndices(indices, kernel, dims, kernel_shape));
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpType::MemoryOp)) {
-				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), thread_index, indices, indexing_mode_, tensor_indexing_mode_); });
+				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), indices); });
 			}
 		}
 	}
@@ -1453,10 +1549,22 @@ void IR::FinalizeMemoryIndexing() {
 		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpType::MemoryOp)) {
 			ExecuteExpressionBefore(node.get(), [&]() { 
 				vector<Tensor*> indices = {};
-				ComputeAddress(node.get(), nullptr, indices, indexing_mode_, tensor_indexing_mode_);
+				ComputeAddress(node.get(), indices);
 			});
 		}
 	}
+
+	for (auto check : dispatch_checks) {
+		// put the rest of the kernel starting from if_node->next_ as a child
+		// MoveNodeTo(if_node->node_->child, if_node->node_->next);
+		Node* if_node = check->node_;
+		if_node->child = if_node->next;
+		if_node->next->prev = nullptr;
+		if_node->next->parent = if_node;
+		if_node->next = nullptr;
+	}
+
+	UpdateGraph();
 }
 
 void IR::RemoveUnusedKernels()
@@ -1546,7 +1654,7 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 		load_index[axis] = &i;
 		
 		// load the value
-		Tensor* value = &Tensor::Load(*array, load_index);
+		Tensor* value = &Tensor::Load(*array, load_index, true);
 
 		if (element_op != nullptr) {
 			value = element_op(value);
@@ -1634,7 +1742,7 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	for (int i = 0; i < (int)shape.size(); i++) {
 		perm_indices.push_back(indices[permutation[i]]);
 	}
-	return &Tensor::Load(*array, perm_indices);
+	return &Tensor::Load(*array, perm_indices, true);
 }
 
 Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
@@ -1707,7 +1815,8 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 		indices_b.push_back(indices_c[max_dim - 1]);
 
 		// load the value
-		Tensor* value = &(Tensor::Load(*a, indices_a) * Tensor::Load(*b, indices_b));
+		Tensor* value = &(Tensor::Load(*a, indices_a, true) *
+		                  Tensor::Load(*b, indices_b, true));
 
 		c->Set(*c + *value);
 	});
@@ -1807,9 +1916,6 @@ void IR::CompileIR()
 	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
 
-	SetKernelIndexingMode(KernelIndexingMode::Linear);
-	SetTensorIndexingMode(TensorIndexingMode::Clamp);
-
 	CheckIR("Input", false, false);
 	GetInputList();
 	OptimizeOperations();
@@ -1827,10 +1933,11 @@ void IR::CompileIR()
 	OptimizeKernels();
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	RemoveUnusedOperations();
-	CheckIR("Remove Unused Operations 1", true, false);
-	AddKernelGlobalLoadOperations();
-	OptimizeKernelLoadOperations();
+	for (int i = 0; i < 3; i++) {
+		RemoveUnusedOperations();
+		AddKernelGlobalLoadOperations();
+		OptimizeKernelLoadOperations();
+	}
 	CheckIR("Optimize load operations", true, false);
 	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
@@ -1897,7 +2004,7 @@ Program* GenerateProgram(IR* ir)
 		int dim = MaxIndexCount(shape);
 
 		// add the kernel to the program
-		program->AddKernel(ir->indexing_mode_, kernel, variables, memory_nodes, shape, dim);
+		program->AddKernel(kernel, variables, memory_nodes, shape, dim);
 	}
 
 	return program;

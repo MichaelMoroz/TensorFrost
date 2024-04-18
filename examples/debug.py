@@ -1,93 +1,83 @@
 import TensorFrost as tf
 import numpy as np
-import matplotlib.pyplot as plt
-import time
 
 tf.initialize(tf.opengl)
 
-#dynamic size QR decomposition
-def QRDecomposition():
-    A = tf.input([-1, -1], tf.float32)
+def MaxBlock():
+	A = tf.input([-1, -1, -1, -1], tf.float32)
+	N, Bx, By, Bz = A.shape
+	Ar = tf.reshape(A, [N, Bx*By*Bz])
+	#only reduces one dimension, by default it is the last dimension
+	max_val = tf.max(Ar)
+	min_val = tf.min(Ar)
+	sum = tf.sum(Ar)
+	mean = tf.mean(Ar)
+	norm = tf.norm(Ar)
+	total_max = tf.max(max_val)
+	total_min = tf.min(min_val)
+	#get mean block
+	mean_block = tf.mean(A, axis=0)
+	return [max_val, min_val, sum, mean, norm, total_max, total_min, mean_block]
 
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
-    j = tf.index(0, [m])
-
-    def loop_body(i):
-        R[i, i] = tf.norm(A[j, i])
-        Q[j, i] = A[j, i] / R[i, i]
-
-        p, k = tf.index_grid([0, i + 1], [m, n])
-        t, = tf.index_grid([i+1], [n])
-        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
-        A[p, k] -= Q[p, i] * R[i, k]
-
-    tf.loop(loop_body, 0, n-1, 1)
-
-    R[n-1, n-1] = tf.norm(A[j, n-1])
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-
-    return [Q, R]
+max_block = tf.compile(MaxBlock)
 
 
-#def QRDecomposition():
-#    A = tf.input([-1, -1], tf.float32)
-#    m, n = A.shape
-#
-#    Q = tf.zeros([m, n])
-#    R = tf.zeros([n, n])
-#    def loop_body(i):
-#        R[i, i] = tf.norm(A[:, i])
-#        Q[:, i] = A[:, i] / R[i, i]
-#        R[i, i+1:n] = tf.sum(Q[:, i] * A[:, i+1:n], axis=0)
-#        A[:, i+1:n] -= Q[:, i] * R[i, i+1:n]
-#
-#    tf.loop(loop_body, 0, n-1, 1)
-#    R[n-1, n-1] = tf.norm(A[:, n-1])
-#    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
-#
-#    return [Q, R]
+#generate random tensor
+A = np.random.rand(10, 5, 6, 7)
 
-qr = tf.compile(QRDecomposition)
-
-#generate random matrix
-A = np.random.rand(5, 5)
-
-#compute QR decomposition using TensorFrost
+#compute maximum block using TensorFrost
 Atf = tf.tensor(A)
-Qtf, Rtf = qr(Atf)
-Qnp = Qtf.numpy
-Rnp = Rtf.numpy
+max_val_tf, min_val_tf, sum_tf, mean_tf, norm_tf, total_max_tf, total_min_tf, mean_block_tf = max_block(Atf)
+max_val_np = np.max(A, axis=(1, 2, 3))
+min_val_np = np.min(A, axis=(1, 2, 3))
+sum_np = np.sum(A, axis=(1, 2, 3))
+mean_np = np.mean(A, axis=(1, 2, 3))
+norm_np = np.linalg.norm(A.reshape(10, -1), axis=1)
+total_max_np = np.max(max_val_np)
+total_min_np = np.min(min_val_np)
+mean_block_np = np.mean(A, axis=0)
 
-#check if QR decomposition is correct
-print("QR decomposition using TensorFrost is correct:", np.allclose(A, np.dot(Qnp, Rnp)))
+#check if maximum block is correct
+print("Maximum block using TensorFrost is correct:", np.allclose(max_val_tf.numpy, max_val_np))
+print("Minimum block using TensorFrost is correct:", np.allclose(min_val_tf.numpy, min_val_np))
+print("Sum block using TensorFrost is correct:", np.allclose(sum_tf.numpy, sum_np))
+print("Mean block using TensorFrost is correct:", np.allclose(mean_tf.numpy, mean_np))
+print("Norm block using TensorFrost is correct:", np.allclose(norm_tf.numpy, norm_np))
+print("Total maximum using TensorFrost is correct:", np.allclose(total_max_tf.numpy, total_max_np))
+print("Total minimum using TensorFrost is correct:", np.allclose(total_min_tf.numpy, total_min_np))
+print("Mean block using TensorFrost is correct:", np.allclose(mean_block_tf.numpy, mean_block_np))
 
 #check error
-print("Error using TensorFrost:", np.linalg.norm(A - np.dot(Qnp, Rnp)))
+print("Error using TensorFrost:", np.linalg.norm(max_val_np - max_val_tf.numpy))
 
-#print Q and R
-print("Q:\n", Qnp)
-print("R:\n", Rnp)
+#print maximum block
+print("Maximum block:", max_val_tf.numpy)
+print("Maximum block:", max_val_np)
 
-#def BlockMax():
-#	blocks = tf.input([-1, -1, -1, -1, -1], tf.float32)
-#	N, Bx, By, Bz, CH = blocks.shape
-#
-#	block_max = tf.max(tf.abs(tf.reshape(blocks, [N, Bx*By*Bz, CH])), axis=1)
-#
-#	return [block_max]
-#
-#bmax = tf.compile(BlockMax)
-#
-##generate random blocks
-#blocks = np.random.rand(32, 8, 8, 8, 3)
-#
-##compute block max using TensorFrost
-#blockstf = tf.tensor(blocks)
-#block_max_tf, = bmax(blockstf)
-#block_max_np = block_max_tf.numpy
-#
-##check if block max is correct
-#print("Block max using TensorFrost is correct:", np.allclose(np.max(np.abs(blocks), axis=(1, 2, 3)), block_max_np))
+#print minimum block
+print("Minimum block:", min_val_tf.numpy)
+print("Minimum block:", min_val_np)
 
+#print sum block
+print("Sum block:", sum_tf.numpy)
+print("Sum block:", sum_np)
+
+#print mean block
+print("Mean block:", mean_tf.numpy)
+print("Mean block:", mean_np)
+
+#print norm block
+print("Norm block:", norm_tf.numpy)
+print("Norm block:", norm_np)
+
+#print total maximum
+print("Total maximum:", total_max_tf.numpy)
+print("Total maximum:", total_max_np)
+
+#print total minimum
+print("Total minimum:", total_min_tf.numpy)
+print("Total minimum:", total_min_np)
+
+#print mean block
+print("Mean block:", mean_block_tf.numpy)
+print("Mean block:", mean_block_np)

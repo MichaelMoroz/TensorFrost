@@ -271,7 +271,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
 		return PT(Tensor::Transpose(T(t), dim1, dim2));
-	}, py::arg("t"), py::arg("dim1"), py::arg("dim2"), "Transpose the tensor");
+	}, py::arg("t"), py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");
 
 	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
 		return PT(Tensor::Dot(T(t), T(t2), axis));

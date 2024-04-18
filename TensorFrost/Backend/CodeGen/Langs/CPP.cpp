@@ -243,8 +243,7 @@ extern "C" {
 		TensorProp* tensors;
 		uint variable_count;
 		uint* variables;
-		uint dispatch_dim;
-		uint* dispatch_shape;
+		uint work_group_count;
 	};
 
 	typedef TensorProp alloc_func(uint*, uint, DataType);
@@ -357,7 +356,7 @@ void WriteToMemory(TensorProp tensor, uint index, uint value)
   writeback(tensor, index, value);
 }
 
-void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape)
+void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape, std::initializer_list<int> group)
 {
   DispatchInfo info;
   info.kernel_id = kernel_id;
@@ -365,29 +364,38 @@ void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::ini
   info.tensors = new TensorProp[tensors.size()];
   info.variable_count = var.size();
   info.variables = new uint[var.size()];
-  info.dispatch_dim = shape.size();
-  info.dispatch_shape = new uint[shape.size()];
+
+  int dispatch_dim = shape.size();
+  int group_dim = group.size();
+
+  int work_group_count = 1;
+  for (int i = 0; i < dispatch_dim - group_dim; i++) {
+  	int dim = shape.begin()[i];
+  	work_group_count *= dim;
+  }
+  //only the last dimensions are divided by the group size
+  for (int i = 0; i < group_dim; i++) {
+  	int dim = shape.begin()[dispatch_dim - group_dim + i];
+  	dim = (dim + group.begin()[i] - 1) / group.begin()[i];
+  	work_group_count *= dim;
+  }
+
+  info.work_group_count = work_group_count;
 
   for (int i = 0; i < tensors.size(); i++)
   {
-	info.tensors[i] = tensors.begin()[i];
+  	info.tensors[i] = tensors.begin()[i];
   }
 
   for (int i = 0; i < var.size(); i++)
   {
-	info.variables[i] = var.begin()[i];
-  }
-
-  for (int i = 0; i < shape.size(); i++)
-  {
-	info.dispatch_shape[i] = shape.begin()[i];
+  	info.variables[i] = var.begin()[i];
   }
 
   dispatch_ref(info);
 
   delete[] info.tensors;
   delete[] info.variables;
-  delete[] info.dispatch_shape;
 } 
 
 )";
@@ -450,13 +458,22 @@ void GenerateCode(Program* program) {
 		}
 		shape_args += "}";
 
+		string group_args = "{";
+		for (int d = 0; d < kernel.root->group_size.size(); d++) {
+			if (d != 0) {
+				group_args += ", ";
+			}
+			group_args += to_string(kernel.root->group_size[d]);
+		}
+		group_args += "}";
+
 		GenerateKernel(program, &kernel);
 
 		if (current_backend == BackendType::CPU) {
 			final_source += kernel.generated_code_;
 		}
 
-		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ")";
+		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
 	}
 
 	GenerateMain(program, dispatch_code, input_count, output_count);
@@ -544,48 +561,18 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	string kernel_code = generator.AssembleString();
 
 	string loop = "";
-	const int block_size = 4;  // TODO chose automatically
-	switch (kernel->indexing_mode_) {
-		case KernelIndexingMode::Linear:
-			loop = "  int elements = ";
-			for (int d = 0; d < kernel->dim; d++) {
-				loop += "shape[" + to_string(d) + "]";
-				if (d != kernel->dim - 1) {
-					loop += " * ";
-				}
-			}
-			loop += ";\n";
-			loop += "  #pragma omp parallel for\n";
-			loop += "  for (int thread_id = 0; thread_id < elements; thread_id++)\n";
-			loop += "  {\n";
-			break;
-		case KernelIndexingMode::MultiDimensional:
-			loop = "  #pragma omp parallel for\n";
-			for (int d = 0; d < kernel->dim; d++) {
-				loop += "  for (int dim" + to_string(d) + " = 0; dim" + to_string(d) +
-				        " < shape[" + to_string(d) + "]; dim" + to_string(d) + "++)\n";
-			}
-			loop += "  {\n";
-			break;
-		case KernelIndexingMode::MultiDimensionalBlocks:
-			loop = "  #pragma omp parallel for\n";
-			for (int d = 0; d < kernel->dim; d++) {
-				loop += "  for (int wg" + to_string(d) + " = 0; wg" + to_string(d) +
-				        " < shape[" + to_string(d) + "]; wg" + to_string(d) +
-				        "+= " + to_string(block_size) + ")\n";
-			}
-			for (int d = 0; d < kernel->dim; d++) {
-				loop += "  for (int dim" + to_string(d) + " = wg" + to_string(d) +
-				        "; dim" + to_string(d) + " < min(wg" + to_string(d) + "+" +
-				        to_string(block_size) + ", shape[" + to_string(d) + "]); dim" +
-				        to_string(d) + "++)\n";
-			}
-			loop += "  {\n";
-			break;
-		default:
-			throw std::runtime_error("Invalid indexing mode");
-			break;
+	const int block_size = 4;
+	loop += "  #pragma omp parallel for\n";
+	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
+	loop += "  {\n";
+	for (int d = 0; d < kernel->root->group_size.size(); d++) {
+		loop += "    for (int block_thread_id" + to_string(d) + " = 0; block_thread_id" + to_string(d) + " < " + to_string(kernel->root->group_size[d]) + "; block_thread_id" + to_string(d) + "++)\n";
 	}
+	loop += "    {\n";
+	string loop_end = "    }\n";
+	loop_end += "  }\n";
+	loop += AddIndent(kernel_code, "      ");
+	loop += loop_end;
 
 	string kernel_source =
 	    "\n"
@@ -595,10 +582,8 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		#endif
 	    "void " +
 	    kernel->kernel_name_ +
-	    "(uint* var, uint* off, uint* mem, uint* shape)\n"
-	    "{\n" +
-	    loop + AddIndent(kernel_code, "    ") +
-	    "  }\n"
+	    "(uint* var, uint* off, uint* mem, uint work_group_count)\n"
+	    "{\n" + loop +
 	    "}\n";
 
 	kernel->generated_code_ = kernel_source;

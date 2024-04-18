@@ -37,8 +37,7 @@ class CpuKernelManager : public KernelManager {
 			offsets[i] = info.tensors[i].offset;
 		}
 		uint* variables = info.variables;
-		uint* shape = info.dispatch_shape;
-		func(variables, offsets, memory, shape);
+		func(variables, offsets, memory, info.work_group_count);
 		delete[] offsets;
 	}
 };

@@ -78,6 +78,13 @@ enum class MemoryType {
 	Constant,
 };
 
+enum class TensorIndexingMode {
+	Unsafe,
+	Clamp,
+	Repeat,
+	Zero,
+};
+
 
 using ArgID = pair<ArgType, int>;
 
@@ -154,6 +161,7 @@ class Node {
  public:
 	int index_ = 0;
 	string var_name = "none";
+	string debug_name;
 	string name;
 	float cost_ = -1.0f;
 	
@@ -184,6 +192,12 @@ class Node {
         return !placeholder;
     }
 
+	//clamp unless otherwise specified
+	TensorIndexingMode indexing_mode_;
+
+	//kernel properties
+	vector<int> group_size;
+
 	void UpdateEdges() {
 		if (!child) child = new Node(nullptr, this);
 		if (!next) next = new Node(this, parent);
@@ -212,7 +226,19 @@ class Node {
 		UpdateArgumentOutputs();
 		op = FindOperation(name);
 		CheckNode();
+		indexing_mode_ = TensorIndexingMode::Clamp;
     }
+
+	void CopyProperties(Node* other) {
+		debug_name = other->debug_name;
+		name = other->name;
+		scope_type_ = other->scope_type_;
+		special_index_ = other->special_index_;
+		has_been_modified_ = other->has_been_modified_;
+		is_static = other->is_static;
+		indexing_mode_ = other->indexing_mode_;
+		group_size = other->group_size;
+	}
 
 	const Tensor* GetTensor() const;
 
@@ -683,22 +709,6 @@ class Scope
 	}
 };
 
-enum class KernelIndexingMode
-{
-	Linear,
-	MultiDimensional,
-	LinearBlocks,
-	MultiDimensionalBlocks,
-};
-
-enum class TensorIndexingMode {
-	Unsafe,
-	Clamp,
-	Repeat,
-	Zero,
-};
-
-
 class IR {
 public:
 	Node* root;
@@ -843,11 +853,13 @@ public:
 	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
-	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Node* cluster, int dims, Tensors kernel_shape);
-	void MultiDimensionalModeIndices(Tensor*& thread_index,
-	                                 vector<Tensor*>& indices, Node* kernel_,
+	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
+	void LinearModeIndices(vector<Tensor*>& indices, Node* kernel, int dims,
+	                       Tensors kernel_shape);
+	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
+	Tensor* LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims,
+	                            Tensors kernel_shape);
 	void FinalizeMemoryIndexing();
 	void RemoveUnusedKernels();
 	void CompileIR();
@@ -890,18 +902,6 @@ public:
 		return result;
 	}
 
-	//TODO (Moroz): Make this per kernel
-	void SetKernelIndexingMode(KernelIndexingMode indexing_mode)
-	{
-		indexing_mode_ = indexing_mode; 
-	}
-
-	//TODO (Moroz): Make this per tensor
-	void SetTensorIndexingMode(TensorIndexingMode indexing_mode)
-	{
-		tensor_indexing_mode_ = indexing_mode;
-	}
-
 	int input_memory_count = 0;
 	int output_memory_count = 0;
 	int temp_memory_count = 0;
@@ -912,8 +912,6 @@ public:
 	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> output_memory_map;
-	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
-	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
 };
 struct ShapeCompareResult {
 	bool compatible;

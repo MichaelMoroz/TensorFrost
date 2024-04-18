@@ -142,6 +142,7 @@ vector<TensorMemory*> ExecuteProgram(
 
 	if (current_backend == BackendType::OpenGL) {
 		EndDebugRegion();
+		Finish();
 	}
 
 	vector<TensorMemory*> outputs;

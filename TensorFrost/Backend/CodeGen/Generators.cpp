@@ -26,19 +26,37 @@ void GenerateNodeNames(const IR& ir) {
 	int mem_index = 0;
 	int cluster_index = 0;
 	Node* curent_cluster = nullptr;
+	map<string, int> name_count;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (node->parent != curent_cluster) {
 			cluster_index++;
 			var_index = 0;
 		}
-		if (node->name == "memory") {
-			node->var_name = "m" + to_string(mem_index);
-			mem_index++;
-		} else {
-			node->var_name =
-			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
-			var_index++;
+		string debug = node->debug_name;
+
+		if (!debug.empty()) {
+			// check if the name is already used
+			if (name_count.contains(debug)) {
+				name_count[debug]++;
+				debug = debug + "_" + to_string(name_count[debug]);
+			}
+			else {
+				name_count[debug] = 1;
+			}
+			node->var_name = debug;
+		} 
+		else
+		{
+			if (node->name == "memory") {
+				node->var_name = debug + "m" + to_string(mem_index);
+				mem_index++;
+			} else {
+				node->var_name =
+				    debug + "v" + to_string(cluster_index) + "_" + to_string(var_index);
+				var_index++;
+			}
 		}
+
 		curent_cluster = node->parent;
 	}
 }

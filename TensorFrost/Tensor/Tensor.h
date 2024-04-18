@@ -285,11 +285,7 @@ class Tensor {
 	// Main constructor
 	explicit Tensor(DataType type) { this->type = type; }
 
-	static Tensor* GetCopy(const Tensor& other, Arguments args) {
-		Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
-		copy->data = other.data;
-		return copy;
-	}
+	static Tensor* GetCopy(const Tensor& other, Arguments args);
 
 	static Tensor* GetCopy(const Tensor& other);
 
@@ -375,7 +371,12 @@ class Tensor {
 
 	void SetShape(Tensors shape) const;
 
-
+	int TryGetConstant() const {
+		if (node_->name != "const") {
+			return -1;
+		}
+		return AsInt(data[0]);
+	}
 
 	// tensor factory methods
 	static Tensors GetConstantShape(const vector<int>& shape) {
@@ -543,10 +544,23 @@ class Tensor {
 		return output;
 	}
 
-	static Tensor& Load(const Tensor& tensor,
-	                    const Tensors& indices = Tensors()) {
-		return MemoryOp("load", &tensor, indices);
+	Tensor& BlockIndex() const {
+		Tensor& output = Static(
+		    "block_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		output.type = DataType::Int;
+		return output;
 	}
+
+	Tensor& BlockThreadIndex(int i) const {
+		Tensor& output = Static(
+		    "block_thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		output.type = DataType::Int;
+		output.data = std::vector<uint>(1, i);
+		return output;
+	}
+
+	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors(),
+	                    bool unsafe = false);
 
 	static Tensor& Deallocate(const Tensor& tensor) {
 		return MemoryOp("deallocate", &tensor, {});
@@ -561,9 +575,7 @@ class Tensor {
 	}
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
-	                     const Tensors& indices = Tensors()) {
-		return MemoryOp("store", &tensor, indices, &value);
-	}
+	                     const Tensors& indices = Tensors(), bool unsafe = false);
 
 	void Set(const Tensor& value) const  {
 		MemoryOp("set", this, {}, &value);
@@ -645,7 +657,7 @@ class Tensor {
 		return ReductionOP("dim_min", tensor, axis);
 	}
 	
-	static Tensor& Transpose(const Tensor& tensor, const int axis1, const int axis2) {
+	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		int a1 = GetAxis(dims, axis1);
@@ -718,10 +730,16 @@ class Tensor {
 		});
 	}
 
+	static Tensor& If(const Tensor& condition) {
+		// create the if
+		Tensor& if_tensor = Op("if", &condition);
+		return if_tensor;
+	}
+
 	static void If(const Tensor& condition,
 		const std::function<void()>& body) {
 		// create the if
-		Tensor& if_tensor = Op("if", &condition);
+		Tensor& if_tensor = If(condition);
 
 		evaluation_context_ir_->ExecuteExpressionChild(if_tensor.node_, [&]() {
 			// create the body
@@ -966,6 +984,8 @@ class Tensor {
 		}
 		return index_grid;
 	}
+
+	void SetDebugName(const string& name) const;
 };
 
 }  // namespace TensorFrost
