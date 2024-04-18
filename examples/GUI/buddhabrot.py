@@ -6,7 +6,7 @@ tf.initialize(tf.opengl)
 
 S = 1024
 MAX_ITER = 1000
-SAMPLES = 4
+SAMPLES = 16
 
 T1 = MAX_ITER // 50
 T2 = MAX_ITER // 10
@@ -110,5 +110,7 @@ while not tf.window_should_close():
     time_tf = tf.tensor(np.array([cur_time], np.float32))
     frame_tf, frame_id = mand(frame_tf, frame_id, time_tf)
     tf.render_frame(frame_tf)
+    render_time = time.time() - init_time - cur_time
+    tf.imgui_text("Render time: %.3f ms" % (render_time * 1000))
 
 tf.hide_window()

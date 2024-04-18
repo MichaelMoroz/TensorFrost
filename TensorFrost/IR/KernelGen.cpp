@@ -1933,7 +1933,7 @@ void IR::CompileIR()
 	OptimizeKernels();
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 0; i++) {
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		OptimizeKernelLoadOperations();

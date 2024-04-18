@@ -1,83 +1,61 @@
 import TensorFrost as tf
 import numpy as np
+import matplotlib.pyplot as plt
+import time
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
-def MaxBlock():
-	A = tf.input([-1, -1, -1, -1], tf.float32)
-	N, Bx, By, Bz = A.shape
-	Ar = tf.reshape(A, [N, Bx*By*Bz])
-	#only reduces one dimension, by default it is the last dimension
-	max_val = tf.max(Ar)
-	min_val = tf.min(Ar)
-	sum = tf.sum(Ar)
-	mean = tf.mean(Ar)
-	norm = tf.norm(Ar)
-	total_max = tf.max(max_val)
-	total_min = tf.min(min_val)
-	#get mean block
-	mean_block = tf.mean(A, axis=0)
-	return [max_val, min_val, sum, mean, norm, total_max, total_min, mean_block]
+def leaky_relu(X):
+	return tf.select(X > 0.0, X, 0.01 * X)
 
-max_block = tf.compile(MaxBlock)
+def forward(W, X, b):
+    L1 = tf.matmul(W, X)
+    L1 = L1 + b[L1.indices[1]]
+    L2 = leaky_relu(L1)
+    return L2
 
+def loss(Y, Yhat):
+    return tf.sum(tf.sum((Y - Yhat) ** 2.0))
 
-#generate random tensor
-A = np.random.rand(10, 5, 6, 7)
+def backward(W, X, b, Y, Yhat):
+    dL2 = 2.0 * (Yhat - Y)
+    dL1 = tf.select(Yhat > 0.0, dL2, 0.01 * dL2)
+    dW = tf.matmul(dL1, X.T)
+    db = tf.sum(dL1, axis = 1)
+    return dW, db
 
-#compute maximum block using TensorFrost
-Atf = tf.tensor(A)
-max_val_tf, min_val_tf, sum_tf, mean_tf, norm_tf, total_max_tf, total_min_tf, mean_block_tf = max_block(Atf)
-max_val_np = np.max(A, axis=(1, 2, 3))
-min_val_np = np.min(A, axis=(1, 2, 3))
-sum_np = np.sum(A, axis=(1, 2, 3))
-mean_np = np.mean(A, axis=(1, 2, 3))
-norm_np = np.linalg.norm(A.reshape(10, -1), axis=1)
-total_max_np = np.max(max_val_np)
-total_min_np = np.min(min_val_np)
-mean_block_np = np.mean(A, axis=0)
+def update(W, X, b, dW, db, lr):
+    W -= lr * dW
+    b -= lr * db
+    return W, b
 
-#check if maximum block is correct
-print("Maximum block using TensorFrost is correct:", np.allclose(max_val_tf.numpy, max_val_np))
-print("Minimum block using TensorFrost is correct:", np.allclose(min_val_tf.numpy, min_val_np))
-print("Sum block using TensorFrost is correct:", np.allclose(sum_tf.numpy, sum_np))
-print("Mean block using TensorFrost is correct:", np.allclose(mean_tf.numpy, mean_np))
-print("Norm block using TensorFrost is correct:", np.allclose(norm_tf.numpy, norm_np))
-print("Total maximum using TensorFrost is correct:", np.allclose(total_max_tf.numpy, total_max_np))
-print("Total minimum using TensorFrost is correct:", np.allclose(total_min_tf.numpy, total_min_np))
-print("Mean block using TensorFrost is correct:", np.allclose(mean_block_tf.numpy, mean_block_np))
+def step():
+    W = tf.input([-1, -1], tf.float32)
+    Out, In = W.shape
+    X = tf.input([In, -1], tf.float32)
+    b = tf.input([Out], tf.float32)
+    Samples = X.shape[1]
+    Y = tf.input([Out, Samples], tf.float32)
+    Yhat = forward(W, X, b)
+    L = loss(Y, Yhat)
+    dW, db = backward(W, X, b, Y, Yhat)
+    W, b = update(W, X, b, dW, db, 0.01)
 
-#check error
-print("Error using TensorFrost:", np.linalg.norm(max_val_np - max_val_tf.numpy))
+    return [Yhat, L, W, b]
 
-#print maximum block
-print("Maximum block:", max_val_tf.numpy)
-print("Maximum block:", max_val_np)
+fwd = tf.compile(step)
 
-#print minimum block
-print("Minimum block:", min_val_tf.numpy)
-print("Minimum block:", min_val_np)
+W = np.random.randn(2, 2)
+b = np.random.randn(2)
+X = np.random.randn(2, 2)
+Y = np.random.randn(2, 2)
 
-#print sum block
-print("Sum block:", sum_tf.numpy)
-print("Sum block:", sum_np)
+Wtf = tf.tensor(W)
+btf = tf.tensor(b)
+Xtf = tf.tensor(X)
+Ytf = tf.tensor(Y)
 
-#print mean block
-print("Mean block:", mean_tf.numpy)
-print("Mean block:", mean_np)
+Yhat, L, Wtf, btf = fwd(Wtf, Xtf, btf, Ytf)
 
-#print norm block
-print("Norm block:", norm_tf.numpy)
-print("Norm block:", norm_np)
-
-#print total maximum
-print("Total maximum:", total_max_tf.numpy)
-print("Total maximum:", total_max_np)
-
-#print total minimum
-print("Total minimum:", total_min_tf.numpy)
-print("Total minimum:", total_min_np)
-
-#print mean block
-print("Mean block:", mean_block_tf.numpy)
-print("Mean block:", mean_block_np)
+print(Yhat.numpy)
+print(L.numpy)

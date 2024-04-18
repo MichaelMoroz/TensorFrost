@@ -44,3 +44,4 @@ temp/
 .vscode/settings.json
 vc140.pdb
 imgui.ini
+examples/Algorithms/mnist.npz
