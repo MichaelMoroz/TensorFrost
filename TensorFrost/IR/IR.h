@@ -608,6 +608,7 @@ class Scope
 	Node* shape_node;
 	ScopeType type = ScopeType::None;
 	int shape_dim = 0;
+	bool shape_exact = false;
 
 	Scope(Node* begin) 
 		: begin(begin), end(begin), shape_node(begin) { UpdateEnd(begin); }
@@ -645,6 +646,13 @@ class Scope
 
 	void UpdateShape(Node* node)
 	{
+		if (shape_exact) return; // already found the exact shape
+
+		//memory outputs define the exact shape
+		shape_exact =
+		    node->op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) ||
+		    node->memory_type_ == MemoryType::Output;
+
 		ArgMap shape = node->GetArgumentMap(ArgType::Shape);
 		int dim = MaxIndexCount(shape);
 		if (node->name == "memory") dim = 0;
@@ -849,7 +857,9 @@ public:
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
+	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);
 	void AddKernelGlobalLoadOperations();
+	void AddMemoryOpIndices();
 	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
@@ -921,6 +931,6 @@ struct ShapeCompareResult {
 	int min_dim;
 };
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b);
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match = false);
 
 }  // namespace TensorFrost

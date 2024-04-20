@@ -1,61 +1,58 @@
-import TensorFrost as tf
 import numpy as np
-import matplotlib.pyplot as plt
-import time
+import TensorFrost as tf
 
 tf.initialize(tf.cpu)
-
 def leaky_relu(X):
 	return tf.select(X > 0.0, X, 0.01 * X)
 
+def softmax(X):
+    exp = tf.exp(X)
+    norm = tf.sum(exp, axis = 1)
+    return exp / tf.reshape(norm, [norm.shape[0], 1])
+
 def forward(W, X, b):
-    L1 = tf.matmul(W, X)
-    L1 = L1 + b[L1.indices[1]]
-    L2 = leaky_relu(L1)
-    return L2
+    L1 = leaky_relu(tf.matmul(X, W) + b)
+    return L1
 
 def loss(Y, Yhat):
-    return tf.sum(tf.sum((Y - Yhat) ** 2.0))
+    Y *= 1.0 #tensor view bug
+    return tf.sum(tf.sum((Y - Yhat) ** 2.0)) / tf.float(Y.shape[1] * Y.shape[0])
 
 def backward(W, X, b, Y, Yhat):
     dL2 = 2.0 * (Yhat - Y)
-    dL1 = tf.select(Yhat > 0.0, dL2, 0.01 * dL2)
-    dW = tf.matmul(dL1, X.T)
-    db = tf.sum(dL1, axis = 1)
-    return dW, db
+    dL1 = dL2 * tf.select(Yhat > 0.0, 1.0, 0.01)
+    dW = tf.matmul(tf.transpose(X), dL1)
+    db = tf.sum(dL1, axis = 0)
+    return dL2, dL1, dW, db
 
-def update(W, X, b, dW, db, lr):
+def update(W, b,  dW, db, lr):
     W -= lr * dW
     b -= lr * db
     return W, b
 
 def step():
     W = tf.input([-1, -1], tf.float32)
-    Out, In = W.shape
-    X = tf.input([In, -1], tf.float32)
+    In, Out = W.shape
     b = tf.input([Out], tf.float32)
-    Samples = X.shape[1]
-    Y = tf.input([Out, Samples], tf.float32)
-    Yhat = forward(W, X, b)
-    L = loss(Y, Yhat)
-    dW, db = backward(W, X, b, Y, Yhat)
-    W, b = update(W, X, b, dW, db, 0.01)
 
-    return [Yhat, L, W, b]
+    X = tf.input([-1, In], tf.float32)
+    Y = tf.input([-1, Out], tf.float32)
+    
+    info = tf.input([2], tf.int32)
+    offset = info[0]
+    batch_size = info[1]
 
-fwd = tf.compile(step)
+    #TODO: implement slicing instead of this crap
+    i, j = tf.indices([batch_size, In])
+    Xbatch = X[i + offset, j]
+    i, j = tf.indices([batch_size, Out])
+    Ybatch = Y[i + offset, j]
 
-W = np.random.randn(2, 2)
-b = np.random.randn(2)
-X = np.random.randn(2, 2)
-Y = np.random.randn(2, 2)
+    Yhat = forward(W, Xbatch, b)
+    L = loss(Ybatch, Yhat)
+    dL2, dL1, dW, db = backward(W, Xbatch, b, Ybatch, Yhat)
+    W, b, = update(W, b, dW, db, 0.0001)
 
-Wtf = tf.tensor(W)
-btf = tf.tensor(b)
-Xtf = tf.tensor(X)
-Ytf = tf.tensor(Y)
+    return [L, W, b, dW, db, dL2, dL1]
 
-Yhat, L, Wtf, btf = fwd(Wtf, Xtf, btf, Ytf)
-
-print(Yhat.numpy)
-print(L.numpy)
+train_step = tf.compile(step)
