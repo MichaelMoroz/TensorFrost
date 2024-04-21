@@ -7,8 +7,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 tf.initialize(tf.opengl)
 
-W = 1920
-H = 1080
+W = 1280
+H = 640
 eps = 0.0001
 m_pow = 8.0
 max_depth = 1200.0
@@ -517,6 +517,8 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     tf.imgui_begin("Path tracer controls")
+    W, H = tf.get_window_size()
+    tf.imgui_text("Window size: {} x {}".format(W, H))
     tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
     tf.imgui_text("FPS: {:.2f}".format(1.0 / np.maximum(smooth_delta_time, 1e-5)))
     tf.imgui_text("Camera position: ({:.2f}, {:.2f}, {:.2f})".format(*camera.position))

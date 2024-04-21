@@ -29,6 +29,10 @@ void WindowDefinitions(py::module& m) {
 	    "Get the current mouse position");
 
 	m.def(
+	    "get_window_size", []() { return GetWindowSize(); },
+	    "Get the current window size");
+
+	m.def(
 	    "is_mouse_button_pressed",
 	    [](int button) { return IsMouseButtonPressed(button); },
 	    "Check if a mouse button is pressed");

@@ -26,6 +26,7 @@ void RenderFrame(const TensorMemory& tensor);
 bool WindowShouldClose();
 
 pair<double, double> GetMousePosition();
+pair<int, int> GetWindowSize();
 
 bool IsMouseButtonPressed(int button);
 bool IsKeyPressed(int key);
