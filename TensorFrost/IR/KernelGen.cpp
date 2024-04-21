@@ -11,51 +11,6 @@ namespace TensorFrost {
 	return tensor_;
 }
 
-//ShapeCompareResult CompareShape(const Node* a, const Node* b) {
-//	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
-//	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
-//	int a_dim = MaxIndexCount(a_shape);
-//	int b_dim = MaxIndexCount(b_shape);
-//
-//	ShapeCompareResult result;
-//	result.compatible = true;
-//	result.is_broadcast = false;
-//	result.a_dim = a_dim;
-//	result.b_dim = b_dim;
-//
-//	int min_dim = min(a_dim, b_dim);
-//
-//	if (min_dim == 0) {
-//		result.is_broadcast = true;
-//		return result;
-//	}
-//
-//	if (a_dim != b_dim) {
-//		result.compatible = false;
-//		return result;
-//	}
-//
-//	for (int i = 0; i < a_dim; i++) {
-//		Node* a_node = a_shape[i]->from_->get();
-//		Node* b_node = b_shape[i]->from_->get();
-//		// if a and b are constants, then compare their values
-//		if (a_node->name == "const" && b_node->name == "const") {
-//			if (a_node->GetTensor()->data[0] != b_node->GetTensor()->data[0]) {
-//				result.compatible = false;
-//				return result;
-//			}
-//		}
-//		// otherwise, if a and b are not the same node
-//		// then they are not the same shape (possibly)
-//		else if (a_node != b_node) {
-//			result.compatible = false;
-//			return result;
-//		}
-//	}
-//
-//	return result;
-//}
-
 ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
 	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
 	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
@@ -90,20 +45,33 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, 
 		if (b_node->name == "const") val_b = b_node->GetTensor()->data[0];
 
 		//if one of the nodes is a constant = 1, then it is a broadcast
-		if (val_a == 1 || val_b == 1) {
-			result.is_broadcast = true;
+		if ((val_a == 1 || val_b == 1) && !exact_match) {
+			result.is_broadcast = true; 
+			continue;
 		} 
+
 		// if a and b are constants, then compare their values
-		else if(val_a != val_b && val_a != -1 && val_b != -1)
+		if(val_a != -1 && val_b != -1)
 		{
-			result.compatible = false;
-			if (throw_error) {
-				throw std::runtime_error("Constant dimensions are not compatible for nodes: " + a->var_name + " and " + b->var_name + " at index " + to_string(i) + " with values " + to_string(val_a) + " and " + to_string(val_b));
+			if (val_a != val_b) {
+				result.compatible = false;
+				if (throw_error) {
+					throw std::runtime_error(
+					    "Constant dimensions are not compatible for nodes: " +
+					    a->var_name + " and " + b->var_name + " at index " +
+					    to_string(i) + " with values " + to_string(val_a) + " and " +
+					    to_string(val_b));
+				}
+				return result;
 			}
-			return result;
+			else
+			{
+				continue;
+			}
 		}
+
 		// otherwise, if a and b are not the same node then they are not the same shape (possibly)
-		else if (a_node != b_node) {
+		if (a_node != b_node) {
 			if (throw_error) {
 				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a->var_name + " and " + b->var_name + " at index " + to_string(i));
 			}
