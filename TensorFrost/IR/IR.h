@@ -931,6 +931,6 @@ struct ShapeCompareResult {
 	int min_dim;
 };
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match = false);
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match = false, bool throw_error = false);
 
 }  // namespace TensorFrost

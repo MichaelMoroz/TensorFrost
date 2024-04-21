@@ -56,7 +56,7 @@ namespace TensorFrost {
 //	return result;
 //}
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match) {
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
 	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
 	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
 	int a_dim = MaxIndexCount(a_shape);
@@ -74,6 +74,9 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match) 
 	if (exact_match && min_dim > 0) {
 		if (a_dim != b_dim) {
 			result.compatible = false;
+			if (throw_error) {
+				throw std::runtime_error("Shapes must have the same dimension for " + a->var_name + " and " + b->var_name);
+			}
 			return result;
 		}
 	}
@@ -81,19 +84,29 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match) 
 	for (int i = 0; i < min_dim; i++) {
 		Node* a_node = a_shape[a_dim - i - 1]->from_->get();
 		Node* b_node = b_shape[b_dim - i - 1]->from_->get();
+		int val_a = -1;
+		int val_b = -1;
+		if (a_node->name == "const") val_a = a_node->GetTensor()->data[0];
+		if (b_node->name == "const") val_b = b_node->GetTensor()->data[0];
+
+		//if one of the nodes is a constant = 1, then it is a broadcast
+		if (val_a == 1 || val_b == 1) {
+			result.is_broadcast = true;
+		} 
 		// if a and b are constants, then compare their values
-		if (a_node->name == "const" && b_node->name == "const") {
-			int val_a = a_node->GetTensor()->data[0];
-			int val_b = b_node->GetTensor()->data[0];
-			// can be broadcasted if one of the values is 1
-			if ((val_a != val_b) && val_a > 1 && val_b > 1) {
-				result.compatible = false;
-				return result;
+		else if(val_a != val_b && val_a != -1 && val_b != -1)
+		{
+			result.compatible = false;
+			if (throw_error) {
+				throw std::runtime_error("Constant dimensions are not compatible for nodes: " + a->var_name + " and " + b->var_name + " at index " + to_string(i) + " with values " + to_string(val_a) + " and " + to_string(val_b));
 			}
+			return result;
 		}
-		// otherwise, if a and b are not the same node
-		// then they are not the same shape (possibly)
+		// otherwise, if a and b are not the same node then they are not the same shape (possibly)
 		else if (a_node != b_node) {
+			if (throw_error) {
+				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a->var_name + " and " + b->var_name + " at index " + to_string(i));
+			}
 			result.compatible = false;
 			return result;
 		}
@@ -197,7 +210,7 @@ void IR::SeparateOperationsIntoKernels() {
 			}
 		}
 
-		ShapeCompareResult result = CompareShape(current_scope->shape_node, node, current_scope->shape_exact);
+		ShapeCompareResult result = CompareShape(current_scope->shape_node, node, true);
 		if (!result.compatible) {
 			boundary_nodes[current_scope->shape_node->index_] =
 			    current_scope->shape_node;
@@ -331,6 +344,29 @@ bool BoundaryValid(const Node* input, const Node* output,
 	//return !is_boundary;
 	return true;
 }
+
+
+// check if all child nodes in a kernel have compatible shape to the kernel
+void IR::CheckKernelShapes() {
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	// go over all outputs of each kernel and create memory nodes to store the
+	// output
+	for (auto kernel : kernels) {
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			// check if the node has a shape argument
+			ShapeCompareResult result = CompareShape(kernel, node.get());
+			if (!result.compatible) {
+				throw std::runtime_error("Kernel " + kernel->var_name +
+				                         " has incompatible shape with node " +
+				                         node.get()->var_name);
+			}
+		}
+	}
+}
+
 
 void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 #ifdef NDEBUG
@@ -1152,7 +1188,7 @@ void IR::AddMemoryOpIndices() {
 				indices.push_back(&Tensor::Index(shape_args, i));
 			}
 		});
-		int kernel_dim = shape_args.size();
+		int kernel_dim = (int)shape_args.size();
 
 		// replace all inputs pointing to memory nodes with the memory node
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
@@ -1165,7 +1201,7 @@ void IR::AddMemoryOpIndices() {
 			const Tensor* input_tensor = input_node->GetTensor();
 			ArgMap index_args = node->GetArgumentMap(ArgType::Index);
 
-			int memory_dim = shape.size();
+			int memory_dim = (int)shape.size();
 			ExecuteExpressionBefore(node.get(), [&]() {
 				for (int i = 0; i < memory_dim; i++) {
 					if (index_args.contains(i)) {
@@ -1270,27 +1306,6 @@ void IR::AddKernelGlobalStoreOperations() {
 	}
 }
 
-//check if all child nodes in a kernel have compatible shape to the kernel
-void IR::CheckKernelShapes()
-{
-	// get kernels
-	UpdateGraph();
-	vector<Node*> kernels = GetNodesOfType("kernel");
-
-	// go over all outputs of each kernel and create memory nodes to store the
-	// output
-	for (auto kernel : kernels) {
-		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			//check if the node has a shape argument
-			ShapeCompareResult result = CompareShape(kernel, node.get());
-			if (!result.compatible) {
-				throw std::runtime_error("Kernel " + kernel->var_name + " has incompatible shape with node " + node.get()->var_name);
-			}
-		}
-	}
-
-}
-
 void IR::AddMemoryDeallocation()
 {
 	UpdateGraph();
@@ -1383,7 +1398,7 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 		return &Tensor::Constant(0);
 	}
 
-	int kernel_dim = indices.size();
+	int kernel_dim = (int)indices.size();
 
 	std::function<const Tensor*(int)> get_shape = [&](int dim) {
 		return memory_shape[dim]->from_->get()->GetTensor();
@@ -1490,7 +1505,7 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
                                              Tensors kernel_shape, int dims) {
 	//compute in-block index
 	vector<int> block_size = kernel->group_size;
-	int block_dim = block_size.size();
+	int block_dim = (int)block_size.size();
 	Tensors block_size_tensors = {};
 	for (int i = 0; i < block_dim; i++) {
 		block_size_tensors.push_back(&Tensor::Constant(block_size[i]));
@@ -1559,7 +1574,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 		}
 
 		//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
-		int group_dim = kernel_->group_size.size();
+		int group_dim = (int)kernel_->group_size.size();
 		for (int i = 0; i < group_dim; i++) {
 			int shape = kernel_shape[dims - group_dim + i]->TryGetConstant();
 			if (shape > 0) {
@@ -2034,6 +2049,7 @@ void IR::CompileIR()
 	CheckIR("Insert Algorithmic Primitives", false, false);
 	SeparateOperationsIntoKernels();
 	CheckKernelShapes();
+
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);

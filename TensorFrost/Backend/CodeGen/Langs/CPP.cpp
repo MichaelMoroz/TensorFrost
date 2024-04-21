@@ -566,7 +566,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
 	loop += "  {\n";
 	for (int d = 0; d < kernel->root->group_size.size(); d++) {
-		int dim = kernel->root->group_size.size() - d - 1;
+		int dim = (int)kernel->root->group_size.size() - d - 1;
 		loop += "    for (int block_thread_id" + to_string(dim) +
 		        " = 0; block_thread_id" + to_string(dim) + " < " +
 		        to_string(kernel->root->group_size[d]) + "; block_thread_id" +

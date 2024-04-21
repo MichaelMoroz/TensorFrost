@@ -51,8 +51,8 @@ class Tensor {
 		}
 	}
 
-	static bool CompareTensorShape(const Tensor* a, const Tensor* b) {
-		return CompareShape(a->node_, b->node_).compatible;
+	static bool AssertTensorShape(const Tensor* a, const Tensor* b, bool throw_error = true) {
+		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
 	}
 
 	static pair<const Operation*, DataType> GetOperation(const string& name,
@@ -78,10 +78,7 @@ class Tensor {
 		{
 			//check if shapes are compatible
 			for (int i = 1; i < tensors.size(); i++) {
-				if (!CompareTensorShape(tensors[0], tensors[i])) {
-					throw std::runtime_error("Cannot perform operation \"" + name +
-											 "\" on tensors with potentially incompatible shapes");
-				}
+				AssertTensorShape(tensors[0], tensors[i]);
 			}
 		}
 

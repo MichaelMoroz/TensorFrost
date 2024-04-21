@@ -175,6 +175,11 @@ void StopOpenGL() {
 
 	glDeleteProgram(quad_program);
 	global_window = nullptr;
+
+	// Cleanup ImGui
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
 void ShowWindow(int width, int height, const char* title) {
@@ -278,7 +283,7 @@ void ImGuiSlider(std::string text, float* value, float min, float max) {
 bool ImGuiButton(std::string text) { return ImGui::Button(text.c_str()); }
 
 void StartDebugRegion(const std::string& name) {
-	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, name.size(), name.c_str());
+	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, (GLsizei)name.size(), name.c_str());
 }
 
 void EndDebugRegion() { glPopDebugGroup(); }
