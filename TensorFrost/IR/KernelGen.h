@@ -2,6 +2,7 @@
 
 #include <utility>
 #include <limits.h>
+#include <float.h>
 
 #include "Backend/TensorMemory.h"
 #include "Tensor/Tensor.h"
