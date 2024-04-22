@@ -85,12 +85,64 @@ string GetNodeName(const Node* node,  bool compact) {
 	return node->var_name;
 }
 
-std::string format_float(float x) {
-	std::string s = std::format("{}", x);
-	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
-		s += '.';
+//std::string format_float(float x) {
+//	std::string s = std::format("{}", x);
+//	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
+//		s += '.';
+//	}
+//	return s + 'f';
+//}
+
+string format_float(double value) {
+	std::ostringstream out;
+
+	// Determine when to use scientific notation vs fixed
+	bool use_scientific = std::abs(value) < 1e-4 || std::abs(value) > 1e6;
+	//and if not a zero value
+	use_scientific = use_scientific && value != 0.0;
+	if (use_scientific) {
+		out << std::scientific;  // Use scientific notation for very small or large
+		                         // numbers
+	} else {
+		out << std::fixed;  // Use fixed notation for moderate values
 	}
-	return s + 'f';
+
+	out << std::setprecision(7) << value;
+
+	// Convert to string
+	std::string str = out.str();
+
+	// Remove trailing zeros and potentially unnecessary decimal point
+	size_t endpos = str.find_last_not_of('0');
+	if (endpos != std::string::npos) {
+		str = str.substr(0, endpos + 1);
+	}
+	if (str.back() == '.') {
+		str.pop_back();
+	}
+
+	// remove all zeros before "e"
+	size_t epos = str.find('e');
+	if (epos != std::string::npos) {
+		size_t startpos = str.find_last_not_of('0', epos - 1);
+		if (startpos != std::string::npos) {
+			str = str.substr(0, startpos + 1) + str.substr(epos);
+		}
+	}
+
+	if (str.find('.') == string::npos && str.find('e') == string::npos) {
+		str += '.';
+	}
+
+	// add a zero digit after the decimal point if the next character is not a
+	// digit
+	size_t dotpos = str.find('.');
+	if (dotpos != std::string::npos && !isdigit(str[dotpos + 1])) {
+		//add a zero digit after the decimal point
+		str.insert(dotpos + 1, "0");
+	}
+	
+	return str + 'f';
 }
 
 inline string Tensor::GetConstantString() const {

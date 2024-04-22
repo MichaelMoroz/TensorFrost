@@ -18,8 +18,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorF
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
 set(CMAKE_PDB_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
 
-set(PYBIND11_PYTHON_VERSION "3.12" CACHE STRING "Default Python version")
-find_package (Python3 ${PYBIND11_PYTHON_VERSION} EXACT COMPONENTS Interpreter Development)
+# If PYBIND11_PYTHON_VERSION is not set just use the default python version
+if(NOT DEFINED PYBIND11_PYTHON_VERSION)
+  find_package(Python3 COMPONENTS Interpreter Development)
+else()
+  find_package(Python3 ${PYBIND11_PYTHON_VERSION} EXACT COMPONENTS Interpreter Development)
+endif()
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
