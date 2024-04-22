@@ -6,7 +6,7 @@ tf.initialize(tf.opengl)
 
 S = 1024
 MAX_ITER = 1000
-SAMPLES = 16
+SAMPLES = 2
 
 T1 = MAX_ITER // 50
 T2 = MAX_ITER // 10
