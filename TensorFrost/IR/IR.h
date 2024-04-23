@@ -815,25 +815,35 @@ public:
         cursor = NodeIterator(node, root);
     }
 
+	stack<Node*> scope_stack;
+
+	void BeginScope(Node* node) {
+		scope_stack.push(*cursor);
+		SetCursor(node);
+	}
+
+	void EndScope() {
+		if (scope_stack.empty()) throw std::runtime_error("No scope to end");
+		SetCursor(scope_stack.top());
+		scope_stack.pop();
+	}
+
     void ExecuteExpressionAfter(Node* node, const function<void()>&& expression) {
-        NodeIterator oldCursor = cursor;
-        SetCursor(node->next);
-        expression();
-        cursor = oldCursor;
+		BeginScope(node->next);
+		expression();
+		EndScope();
     }
 
     void ExecuteExpressionBefore(Node* node, const function<void()>&& expression) {
-        NodeIterator oldCursor = cursor;
-        SetCursor(node);
-        expression();
-        cursor = oldCursor;
+		BeginScope(node);
+		expression();
+		EndScope();
     }
 
 	void ExecuteExpressionChild(Node* node, const function<void()>&& expression) {
-		NodeIterator oldCursor = cursor;
-		SetCursor(node->child);
+		BeginScope(node->child);
 		expression();
-		cursor = oldCursor;
+		EndScope();
 	}
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
