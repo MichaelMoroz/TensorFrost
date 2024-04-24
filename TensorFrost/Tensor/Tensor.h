@@ -716,10 +716,47 @@ class Tensor {
 		return MemoryOpShape("reshape", shape, &tensor);
 	}
 
+	//template <typename... Args>
+	//static Tensor& BeginScope(const string name, const Args*... args) {
+	//	Tensor& op = Op(name, args...);
+	//	evaluation_context_ir_->BeginScope(op.node_);
+	//	return op;
+	//}
+
+	//template <typename... Args>
+	//static Tensor& BeginScope(const string name, Tensors shape, DataType type, const Args*... args) {
+	//	Tensor& op = Static(name, shape, type);
+	//
+	//	//add arguments
+	//	op->node_->AddArguments(args...);
+	//
+	//
+	//
+	//	evaluation_context_ir_->BeginScope(op.node_);
+	//	return op;
+	//}
+
+	//static void EndScope() { evaluation_context_ir_->EndScope(); }
+
+	void Enter() const
+	{ 
+		evaluation_context_ir_->BeginScope(node_->child);
+	}
+
+	void Exit() const
+	{
+		evaluation_context_ir_->EndScope();
+	}
+
+	static Tensor& Loop(const Tensor& start, const Tensor& end, const Tensor& step)
+	{
+		return Op("loop", &start, &end, &step);
+	}
+
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
 	                 const function<void(const Tensor&)>& body) {
 		// create the loop
-		Tensor& loop = Op("loop", &start, &end, &step);
+		Tensor& loop = Loop(start, end, step);
 
 		evaluation_context_ir_->ExecuteExpressionChild(loop.node_, [&]() {
 			// create the body
@@ -750,9 +787,15 @@ class Tensor {
 		If(!condition, false_body);
 	}
 
-	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
+	static Tensor& Kernel(const Tensors shape) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, DataType::None);
+		return kernel;
+	}
+
+	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
+		// create the kernel
+		Tensor& kernel = Kernel(shape);
 
 		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
 			//create indices

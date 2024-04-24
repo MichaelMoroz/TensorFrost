@@ -12,6 +12,7 @@ void TensorProgramDefinition(py::module&, py::class_<TensorProgram>&);
 void TensorMemoryDefinition(py::module& m,
                             py::class_<TensorMemory>& py_tensor_mem);
 void WindowDefinitions(py::module& m);
+void ScopeDefinitions(py::module& m);
 
 PYBIND11_MODULE(TensorFrost, m) {
 	auto data_type = py::enum_<DataType>(m, "DataType");
@@ -61,6 +62,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	TensorProgramDefinition(m, tensor_program);
 	TensorMemoryDefinition(m, py_tensor_mem);
 	WindowDefinitions(m);
+	ScopeDefinitions(m);
 
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options, CodeGenLang kernel_lang) {
