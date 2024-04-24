@@ -21,6 +21,10 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 	}
 }
 
+unordered_set<string> forbidden_names = {"if", "else", "while", "for", "switch", "case", "default", "break",
+    "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
+	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
+
 void GenerateNodeNames(const IR& ir) {
 	int var_index = 0;
 	int mem_index = 0;
@@ -33,7 +37,9 @@ void GenerateNodeNames(const IR& ir) {
 			var_index = 0;
 		}
 		string debug = node->debug_name;
-
+		if (forbidden_names.contains(debug)) {
+			debug = debug + "_";
+		}
 		if (!debug.empty()) {
 			// check if the name is already used
 			if (name_count.contains(debug)) {

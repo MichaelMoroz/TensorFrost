@@ -63,9 +63,18 @@ Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
 	return out;
 }
 
+Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
+	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
+	out.SetDebugName(tensor.node_->debug_name);
+	return out;
+}
+
 void Tensor::SetDebugName(const string& name) const
 {
-	node_->debug_name = name;
+	if (name != "")
+	{
+		node_->debug_name = name;
+	}
 }
 
 }  // namespace TensorFrost

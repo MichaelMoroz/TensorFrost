@@ -712,31 +712,7 @@ class Tensor {
 		return output;
 	}
 
-	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape) {
-		return MemoryOpShape("reshape", shape, &tensor);
-	}
-
-	//template <typename... Args>
-	//static Tensor& BeginScope(const string name, const Args*... args) {
-	//	Tensor& op = Op(name, args...);
-	//	evaluation_context_ir_->BeginScope(op.node_);
-	//	return op;
-	//}
-
-	//template <typename... Args>
-	//static Tensor& BeginScope(const string name, Tensors shape, DataType type, const Args*... args) {
-	//	Tensor& op = Static(name, shape, type);
-	//
-	//	//add arguments
-	//	op->node_->AddArguments(args...);
-	//
-	//
-	//
-	//	evaluation_context_ir_->BeginScope(op.node_);
-	//	return op;
-	//}
-
-	//static void EndScope() { evaluation_context_ir_->EndScope(); }
+	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
 
 	void Enter() const
 	{ 
