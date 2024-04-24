@@ -242,6 +242,9 @@ protected:
 					}
 					line += ")";
 					break;
+				case OpType::Copy:
+					line += args.Name(ArgType::Input, 0);
+					break;
 				case OpType::Keyword:
 					line += op->code_;
 					break;

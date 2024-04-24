@@ -63,11 +63,39 @@ void TensorViewDefinition(py::module& /*m*/,
 	tensor_view.def("__pow__", [](const TensorView& t, const float f) {
 		return PT(Tensor::pow(PyTensor(t).Get(), Tensor::Constant(f)));
 	});
-	tensor_view.def("__iadd__", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterAdd(*t.value, t2.Get(), t.indices);
-	});
+
+	//It was nice to have, but unfortunately can result in slowdowns due to using atomics in inappropriate scenarios
+	//tensor_view.def("__iadd__", [](const TensorView& t, const PyTensor& t2) {
+	//	Tensor::ScatterAdd(*t.value, t2.Get(), t.indices);
+	//});
+	//tensor_view.def("__isub__", [](const TensorView& t, const PyTensor& t2) {
+	//	Tensor::ScatterAdd(*t.value, -t2.Get(), t.indices);
+	//});
+	//tensor_view.def("__imul__", [](const TensorView& t, const PyTensor& t2) {
+	//	throw std::runtime_error("No multiplicative atomics exist. Try representing the value in log space and adding instead.");
+	//});
+	//tensor_view.def("__idiv__", [](const TensorView& t, const PyTensor& t2) {
+	//	throw std::runtime_error("No division atomics exist. Try representing the value in log space and subtracting instead.");
+	//});
+	//tensor_view.def("__imod__", [](const TensorView& t, const PyTensor& t2) {
+	//	throw std::runtime_error("No modulo atomics exist.");
+	//});
+	//tensor_view.def("__iand__", [](const TensorView& t, const PyTensor& t2) {
+	//	Tensor::ScatterAnd(*t.value, t2.Get(), t.indices);
+	//});
+	//tensor_view.def("__ior__", [](const TensorView& t, const PyTensor& t2) {
+	//	Tensor::ScatterOr(*t.value, t2.Get(), t.indices);
+	//});
+	//tensor_view.def("__ixor__", [](const TensorView& t, const PyTensor& t2) {
+	//	Tensor::ScatterXor(*t.value, t2.Get(), t.indices);
+	//});
+
 	tensor_view.def("__setitem__", [](const TensorView& t, const PyTensor& t2) {
 		Tensor::Store(*t.value, t2.Get(), t.indices);
+	});
+
+	tensor_view.def("get", [](const TensorView& t) {
+		return PyTensor(t);
 	});
 }
 

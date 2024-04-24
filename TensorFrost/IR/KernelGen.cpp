@@ -1215,6 +1215,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			// add memory node before this kernel
 			ExecuteExpressionBefore(kernel, [&]() {
 				mem = Tensor::Memory(output->GetArguments(ArgType::Shape), output->tensor_->type).node_;
+				mem->debug_name = output->debug_name;
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;

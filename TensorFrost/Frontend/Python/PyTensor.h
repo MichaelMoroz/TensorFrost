@@ -12,6 +12,8 @@ namespace TensorFrost {
 
 namespace py = pybind11;
 
+void UpdateTensorNames();
+
 // Tensor wrapper for python
 class PyTensor {
 	const Tensor* tensor_;
@@ -19,7 +21,7 @@ class PyTensor {
  public:
 	explicit PyTensor(Tensor* tensor) : tensor_(tensor) {}
 	explicit PyTensor(const Tensor* tensor) : tensor_(tensor) {}
-	~PyTensor() = default;
+	~PyTensor() { UpdateTensorNames(); }
 
 	const Tensor& Get() const { return *tensor_; }
 
@@ -31,6 +33,18 @@ class PyTensor {
 	explicit PyTensor(float value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(int value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(value); }
+
+	PyTensor& __enter__() { 
+		//py::print("Entering node scope");
+		tensor_->Enter(); 
+		return *this;
+	}
+
+	void __exit__(py::object exc_type, py::object exc_value,
+	              py::object traceback) {
+		//py::print("Exiting node scope");
+		tensor_->Exit();
+	}
 };
 
 using PyTensors = std::vector<PyTensor*>;

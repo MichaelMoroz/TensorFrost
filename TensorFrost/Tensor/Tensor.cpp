@@ -52,6 +52,7 @@ Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices,
                      bool unsafe) {
 	Tensor& out = MemoryOp("load", &tensor, indices);
 	if (unsafe) out.node_->indexing_mode_ = TensorIndexingMode::Unsafe;
+	out.SetDebugName(tensor.node_->debug_name);
 	return out;
 }
 

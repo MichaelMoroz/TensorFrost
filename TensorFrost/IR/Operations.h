@@ -50,6 +50,7 @@ enum class OpType {
 	Algorithm,
 	Modifier,
 	MemoryReuse,
+	Copy,
 };
 
 using DataTypeList = vector<DataType>;

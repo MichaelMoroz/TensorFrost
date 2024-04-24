@@ -913,6 +913,10 @@ class Tensor {
 		return Op("cond", &condition, &ifTrue, &ifFalse);
 	}
 
+	static Tensor& copy(const Tensor& tensor) {
+		return Op("copy", &tensor);
+	}
+
 	static Tensor& sin(const Tensor& x) { return Op("sin", &x); }
 	static Tensor& cos(const Tensor& x) { return Op("cos", &x); }
 	static Tensor& tan(const Tensor& x) { return Op("tan", &x); }

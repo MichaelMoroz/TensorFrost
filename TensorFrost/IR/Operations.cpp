@@ -78,6 +78,7 @@ const vector<Operation> operations = {
     Operation("block_id", {"_i"}, 0, "", {OpType::Variable}), 
     
     //Compute operations
+    Operation("copy", {"f_f", "u_u", "i_i", "b_b"}, 1, "", {OpType::Copy}), //TODO: make sure no one copies memory objects
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),
     Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", {OpType::Operator}),

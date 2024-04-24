@@ -5,25 +5,7 @@
 
 namespace TensorFrost {
 
-class PyScope {
-	PyTensor& tensor_;
-public:
-	PyScope(PyTensor& tensor) : tensor_(tensor) {}
-
-	void __enter__() {
-		tensor_.Get().Enter();
-	}
-
-	void __exit__(py::object exc_type, py::object exc_value,
-	              py::object traceback) {
-		tensor_.Get().Exit();
-	}
-
- private:
-	std::string name_;
-};
-
-void ScopeDefinitions(py::module& m) {
+void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor) {
 	m.def(
 	    "loop",
 	    [](const py::function& body, const PyTensor& begin, const PyTensor& end,
@@ -86,35 +68,41 @@ void ScopeDefinitions(py::module& m) {
 	    },
 	    py::arg("shape"), py::arg("body"));
 
-	
-	auto py_scope = py::class_<PyTensor>(m, "Tensor");
-
-	py_scope.def("__enter__", &PyScope::__enter__);
-	py_scope.def("__exit__", &PyScope::__exit__);
+	py_tensor.def("__enter__", &PyTensor::__enter__);
+	py_tensor.def("__exit__", &PyTensor::__exit__);
 
 	//loop scope
-	m.def("loop", 
-	[](const PyTensor& begin, const PyTensor& end, const PyTensor& step) { 
-			Tensor& for_loop = Tensor::Loop(T(begin), T(end), T(step));
-			PyTensor tensor = PT(for_loop);
-			return PyScope(tensor);
+	m.def("loop",
+	[](const PyTensor& begin, const PyTensor& end, const PyTensor& step) {
+		Tensor& for_loop = Tensor::Loop(T(begin), T(end), T(step));
+		return PT(for_loop);
+	});
+
+	m.def("loop",
+	[](const PyTensor& begin, const PyTensor& end) {
+		Tensor& for_loop = Tensor::Loop(T(begin), T(end), T(PyTensor(1)));
+		return PT(for_loop);
+	});
+
+	m.def("loop",
+	[](const PyTensor& end) {
+		Tensor& for_loop = Tensor::Loop(T(PyTensor(0)), T(end), T(PyTensor(1)));
+		return PT(for_loop);
 	});
 	
 	//if scope
 	m.def("if_cond", 
-		[](const PyTensor& condition) {
-			Tensor& if_cond = Tensor::If(T(condition));
-			PyTensor tensor = PT(if_cond);
-			return PyScope(tensor);
+	[](const PyTensor& condition) {
+		Tensor& if_cond = Tensor::If(T(condition));
+		return PT(if_cond);
 	});
 
 	//kernel scope
 	m.def("kernel", 
-		[](py::list shape) {
-			Tensors shape_tensors = TensorsFromList(shape);
-			Tensor& kernel = Tensor::Kernel(shape_tensors);
-			PyTensor tensor = PT(kernel);
-			return PyScope(tensor);
+	[](py::list shape) {
+		Tensors shape_tensors = TensorsFromList(shape);
+		Tensor& kernel = Tensor::Kernel(shape_tensors);
+		return PT(kernel);
 	});
 }
 

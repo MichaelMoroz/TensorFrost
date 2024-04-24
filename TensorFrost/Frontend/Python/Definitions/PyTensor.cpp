@@ -142,6 +142,13 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		Tensor::Store(t.Get(), T(t2), indices);
 	});
 
+	py_tensor.def("__setitem__", [](const PyTensor& t, const PyTensor& t1, pybind11::none none) {
+		//do nothing
+	});
+	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple, pybind11::none none) {
+		//do nothing
+	});
+
 	//py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
 	//                                const PyTensor& t2) {
 	//	// Handle multi-dimensional indices/slices

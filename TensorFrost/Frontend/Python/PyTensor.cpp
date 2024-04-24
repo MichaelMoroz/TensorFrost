@@ -132,6 +132,21 @@ PyTensors PyTensorsFromTensors(const Tensors& tensors) {
 	return py_tensors;
 }
 
+void UpdateTensorNames() {
+	PyObject* p = PyEval_GetLocals();
+	py::dict all_names = py::reinterpret_borrow<py::dict>(p ? p : py::module_::import("__main__").attr("__dict__").ptr());
+	
+	for (auto item : all_names) {
+		std::string var_name = py::str(item.first);
+		py::object var_value = py::reinterpret_borrow<py::object>(item.second);
+		if (py::isinstance<PyTensor>(var_value)) {
+			PyTensor& py_tensor = var_value.cast<PyTensor&>();
+			const Tensor* tensor = &py_tensor.Get();
+			tensor->SetDebugName(var_name);
+		}
+	}
+}
+
 std::string r_op(const std::string& name) { return "__r" + name + "__"; }
 
 std::string l_op(const std::string& name) { return "__" + name + "__"; }

@@ -19,6 +19,7 @@ namespace TensorFrost {
 	})
 
 void TensorFunctionsDefinition(py::module& m) {
+	UNARY_FUNCTION(copy);
 	UNARY_FUNCTION(abs);
 	UNARY_FUNCTION(ceil);
 	UNARY_FUNCTION(floor);
