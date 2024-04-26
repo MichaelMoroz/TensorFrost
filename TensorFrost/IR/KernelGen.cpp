@@ -708,6 +708,7 @@ void IR::OptimizeKernels() {
 	}
 }
 
+#define MAX_LOAD_COPY 1024.0f
 
 void IR::OptimizeKernelLoadOperations() {
 	UpdateGraph();
@@ -728,8 +729,10 @@ void IR::OptimizeKernelLoadOperations() {
 
 			bool inside_kernel = memory_input->HasParent("kernel");
 
+			bool cheap_enough = memory_input->cost_ >= 0.0f && memory_input->cost_ < MAX_LOAD_COPY;
+
 			//if the memory input is used only once and is not a memory node
-			if (inside_kernel && memory_input->outputs_.size() == 1) {
+			if (cheap_enough && inside_kernel && memory_input->outputs_.size() == 1) {
 				loads_to_copy[memory_input] = *node;
 			}
 		}
@@ -1454,7 +1457,7 @@ void IR::LinearModeIndices(vector<Tensor*>& indices, Node* kernel, int dims, Ten
 	});
 
 	for (int i = 0; i < dims; i++) {
-		indices[i]->SetDebugName("dim_index_" + to_string(i));
+		indices[i]->SetDebugName("index_" + to_string(i));
 	}
 	
 	ReplaceDimNodes(kernel, indices, dims);
@@ -1478,12 +1481,11 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	Tensors block_size_tensors = {};
 	for (int i = 0; i < block_dim; i++) {
 		block_size_tensors.push_back(&Tensor::Constant(block_size[i]));
-		block_size_tensors[i]->SetDebugName("block_size_" + to_string(i));
+		//block_size_tensors[i]->SetDebugName("block_size_" + to_string(i));
 	}
 	vector<Tensor*> in_block_indices;
 	for (int i = 0; i < block_dim; i++) {
 		in_block_indices.push_back(&block_index->BlockThreadIndex(block_dim - 1 - i));
-		in_block_indices[i]->SetDebugName("in_block_index_" + to_string(i));
 	}
 
 	//compute out-of-block index
@@ -1502,19 +1504,19 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	}
 	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);
 	for (int i = 0; i < dims; i++) {
-		out_block_indices[i]->SetDebugName("out_block_index_" + to_string(i));
+		//out_block_indices[i]->SetDebugName("out_block_index_" + to_string(i));
 	}
 
 	//combine the indices
 	vector<Tensor*> indices = {};
 	for (int i = 0; i < dims - block_dim; i++) {
 		indices.push_back(out_block_indices[i]);
-		indices[i]->SetDebugName("dim_index_" + to_string(i));
+		indices[i]->SetDebugName("index_" + to_string(i));
 	}
 	//the rest are sum of block index and in-block index
 	for (int i = 0; i < block_dim; i++) {
 		indices.push_back(&(*out_block_indices[dims - block_dim + i] * *block_size_tensors[i] + *in_block_indices[i]));
-		indices[dims - block_dim + i]->SetDebugName("dim_index_" + to_string(dims - block_dim + i));
+		indices[dims - block_dim + i]->SetDebugName("index_" + to_string(dims - block_dim + i));
 	}
 
 	return indices;
@@ -1588,7 +1590,6 @@ void ComputeAddress(Node* node, vector<Tensor*> indices)
 	}
 
 	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
-	flat_index->SetDebugName("data_id");
 
 	// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
 	// mirror, zero)
@@ -1698,7 +1699,7 @@ int GetAxis(int dims, int axis)
 }
 
 Tensor* ComputeReduction(const Tensor* array, int axis,
-                         std::function<Tensor*(Tensor*, Tensor*)> reduction_op,
+                         std::function<Tensor*(Tensor*, Tensor*)> reduction_op, string debug_name = "",
                          uint initial = 0,
                          std::function<Tensor*(Tensor*)> element_op = nullptr) {
 	// Get shape of the array
@@ -1739,6 +1740,7 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 
 	// start with the first value
 	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->type);
+	reduced->SetDebugName(debug_name);
 
 	// create a loop over the last dimension starting from the second value
 	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
@@ -1759,12 +1761,13 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 }
 
 Tensor* ComputeSum(const Tensor* array, int axis) {
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a + *b); });
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) {
+	return &(*a + *b); }, "sum");
 }
 
 Tensor* ComputeNorm(const Tensor* array, int axis) { 
 	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis, 
-		[](Tensor* a, Tensor* b) { return &(*a + *b); }, 0, 
+		[](Tensor* a, Tensor* b) { return &(*a + *b); }, "norm", 0, 
 		[](Tensor* a) { return &(*a * *a); })));
 }
 
@@ -1785,7 +1788,9 @@ Tensor* ComputeMax(const Tensor* array, int axis) {
 		int init = INT_MIN;
 		initial = *(uint*)&init;
 	}
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::max(*a, *b); }, initial);
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &Tensor::max(*a, *b); },
+	    "max", initial);
 }
 
 Tensor* ComputeMin(const Tensor* array, int axis) {
@@ -1798,7 +1803,9 @@ Tensor* ComputeMin(const Tensor* array, int axis) {
 		int init = INT_MAX;
 		initial = *(uint*)&init;
 	}
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); }, initial);
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); },
+	    "min", initial);
 }
 
 Tensor* ComputeProduct(const Tensor* array, int axis) {
@@ -1807,15 +1814,17 @@ Tensor* ComputeProduct(const Tensor* array, int axis) {
 		float init = 1.0f;
 		initial = *(uint*)&init;
 	}
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a * *b); }, initial);
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &(*a * *b); }, "prod", initial);
 }
 
 Tensor* ComputeAny(const Tensor* array, int axis) {
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a || *b); }, 0);
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a || *b); }, "any", 0);
 }
 
 Tensor* ComputeAll(const Tensor* array, int axis) {
-	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, ~0);
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, "all", ~0);
 }
 
 Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
@@ -1834,7 +1843,9 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	for (int i = 0; i < (int)shape.size(); i++) {
 		perm_indices.push_back(indices[permutation[i]]);
 	}
-	return &Tensor::Load(*array, perm_indices, true);
+	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
+	loaded.SetDebugName("transposed");
+	return &loaded;
 }
 
 Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
@@ -1885,6 +1896,7 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 
 	// start with 0
 	Tensor* c = &Tensor::Constant(shape_c, 0, a->type);
+	c->SetDebugName("matmul");
 
 	// loop over k and compute += A t1t2..tN ik * B t1t2..tN kj
 	Tensor::Loop(Tensor::Constant(0), *sum_shape, Tensor::Constant(1),

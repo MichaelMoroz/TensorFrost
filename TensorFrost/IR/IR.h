@@ -95,18 +95,27 @@ struct HashArgID {
 };
 
 class ArgumentManager {
-public:
-	unordered_map<ArgID, Node*, HashArgID> arguments_;
+private:
+	bool add_parenthesis = false;
 	unordered_map<ArgID, DataType, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
+	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
+
+public:
+	unordered_map<ArgID, Node*, HashArgID> arguments_;
 
 	ArgumentManager() {}
 
+	void AddParenthesis(bool add) {
+		add_parenthesis = add;
+	}
+
 	void AddArgument(Arg* arg);
 
-	void SetName(ArgID id, string name) {
-		argument_names_[id] = name;
+	void SetName(ArgID id, string name, bool requires_parenthesis = false) {																																																		
+		argument_names_[id] = name; 
+	    argument_requires_parenthesis_[id] = requires_parenthesis;
 	}
 
 	bool Has(ArgType type, int index = 0) {
@@ -149,7 +158,11 @@ public:
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_names_.find(id);
 		if (Arg != argument_names_.end()) {
-			return Arg->second;
+			string name = Arg->second;
+			if (add_parenthesis && argument_requires_parenthesis_[id]) {
+				name = "(" + name + ")";
+			}
+			return name;
 		}
 		else {
 			throw std::runtime_error("Argument name not found");
@@ -315,6 +328,15 @@ class Node {
 				return cur_parent;
 			}
 		}
+		for (Node* cur_parent1 = this; cur_parent1 != nullptr;
+		     cur_parent1 = cur_parent1->parent) {
+			for (Node* cur_parent2 = other; cur_parent2 != nullptr;
+			     cur_parent2 = cur_parent2->parent) {
+				if (cur_parent1->parent == cur_parent2->parent) {
+					return cur_parent1;
+				}
+			}
+		}
 		throw std::runtime_error("No common parent found");
 	}
 
@@ -424,7 +446,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (output_node->op->HasAllTypes(OpType::Modifier)) {
 				if (output_node->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.

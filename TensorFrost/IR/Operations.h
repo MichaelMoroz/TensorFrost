@@ -42,6 +42,7 @@ enum class OpType {
 	TypeCast,
 	TypeReinterpret,
 	DimensionIndex,
+	CantSubstitute,
 	Constant,
 	MemoryOp,
 	Static, //can not be removed or copied

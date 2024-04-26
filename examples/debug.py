@@ -1,7 +1,8 @@
-import numpy as np
 import TensorFrost as tf
+import numpy as np
+import time
 
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
 
 #dynamic size QR decomposition
 def QRDecomposition():
@@ -12,7 +13,7 @@ def QRDecomposition():
     R = tf.zeros([n, n])
     j = tf.index(0, [m])
 
-    def loop_body(i):
+    with tf.loop(n-1) as i:
         R[i, i] = tf.norm(A[j, i])
         Q[j, i] = A[j, i] / R[i, i]
 
@@ -20,8 +21,6 @@ def QRDecomposition():
         t, = tf.index_grid([i+1], [n])
         R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
         A[p, k] -= Q[p, i] * R[i, k]
-
-    tf.loop(loop_body, 0, n-1, 1)
 
     R[n-1, n-1] = tf.norm(A[j, n-1])
     Q[j, n-1] = A[j, n-1] / R[n-1, n-1]

@@ -21,7 +21,7 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 	}
 }
 
-unordered_set<string> forbidden_names = {"if", "else", "while", "for", "switch", "case", "default", "break",
+unordered_set<string> forbidden_names = {"max", "min", "if", "else", "while", "for", "switch", "case", "default", "break",
     "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
 	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
 
@@ -37,9 +37,6 @@ void GenerateNodeNames(const IR& ir) {
 			var_index = 0;
 		}
 		string debug = node->debug_name;
-		if (forbidden_names.contains(debug)) {
-			debug = debug + "_";
-		}
 		if (!debug.empty()) {
 			// check if the name is already used
 			if (name_count.contains(debug)) {
@@ -48,6 +45,9 @@ void GenerateNodeNames(const IR& ir) {
 			}
 			else {
 				name_count[debug] = 1;
+			}
+			if (forbidden_names.contains(debug)) {
+				debug = debug + "_";
 			}
 			node->var_name = debug;
 		} 
@@ -180,10 +180,6 @@ void CodeGenerator::GenerateCode(const Node* root) {
 	int prev_depth = 0;
 	// Translate each operation into HLSL
 	for (auto node = NodeIterator(root); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
-		if (node->name == "const" && !node->has_been_modified_) {
-			continue;
-		}
-
 		string name = node->var_name;
 
 		int depth = node.depth() - 1;
@@ -202,7 +198,7 @@ void CodeGenerator::GenerateCode(const Node* root) {
 
 		Line* line = nullptr;
 		if (custom_generated_code_.contains(*node)) {
-			line = new Line("", custom_generated_code_[*node], ";", "", false, 0);
+			line = new Line(*node, "", custom_generated_code_[*node], ";", "", false, 0);
 		} else {
 			// get node arguments
 			line = GenerateLine(*node);
@@ -214,12 +210,30 @@ void CodeGenerator::GenerateCode(const Node* root) {
 		
 		line->indent = depth;
 		lines.push_back(line);
+
+		for (auto additional: additional_lines) {
+			lines.push_back(new Line(depth, additional));
+		}
+		additional_lines.clear();
+
 		prev_depth = depth;
 	}
 
 	// add closing brackets
 	for (int i = prev_depth - 1; i >= 0; i--) {
 		lines.push_back(new Line(i, "}"));
+	}
+
+	//remove lines
+	unordered_set<Line*> remove_lines;
+	for (auto& line : lines) {
+		if (lines_to_remove.contains(line->node)) {
+			remove_lines.insert(line);
+		}
+	}
+
+	for (auto& line : remove_lines) {
+		lines.erase(std::remove(lines.begin(), lines.end(), line), lines.end());
 	}
 }
 

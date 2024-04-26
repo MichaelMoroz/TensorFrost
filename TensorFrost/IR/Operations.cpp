@@ -70,7 +70,7 @@ const vector<Operation> operations = {
     Operation("InterlockedXor", {"u_", "i_"}, 256, "",
               {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
     Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier, OpType::CantSubstitute}),
 
     // Index operations
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),

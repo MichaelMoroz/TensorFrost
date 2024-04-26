@@ -30,8 +30,6 @@ def buddhabrot():
         u0 = (x + 2.0*tf.pcgf(seed + tf.uint(25))) / tf.float(S)
         v0 = (y + 2.0*tf.pcgf(seed + tf.uint(388))) / tf.float(S)
 
-        print("stuff")
-
         cx = (u * 2.0 - 1.0) * aspect * 1.5
         cy = (v * 2.0 - 1.0) * aspect * 1.5
         z0x = (u0 * 2.0 - 1.0) * aspect * 1.5
@@ -42,8 +40,6 @@ def buddhabrot():
         l = tf.zeros([], tf.int32)
         c_re = cx
         c_im = cy
-
-        print("stuff")
 
         def mandelbrot_iter(z_re, z_im):
             z_re_new = z_re*z_re - z_im*z_im + c_re

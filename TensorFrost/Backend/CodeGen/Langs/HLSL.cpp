@@ -23,7 +23,9 @@ class HLSLGenerator : public CodeGenerator {
 	                        const string& input, const string& output) override
 	{
 		if (op == "InterlockedAdd_Prev") {
-			return "0; InterlockedAdd(mem[" + address + "], " + input + ", " + output + ")";
+			additional_lines.push_back("InterlockedAdd(mem[" + address + "], " +
+			                           input + ", " + output + ");");
+			return "0";
 		}
 		else
 		{
