@@ -25,6 +25,10 @@ unordered_set<string> forbidden_names = {"max", "min", "if", "else", "while", "f
     "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
 	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
 
+bool IsForbiddenName(const string& name) {
+	return forbidden_names.contains(name);
+}
+
 void GenerateNodeNames(const IR& ir) {
 	int var_index = 0;
 	int mem_index = 0;
@@ -46,7 +50,7 @@ void GenerateNodeNames(const IR& ir) {
 			else {
 				name_count[debug] = 1;
 			}
-			if (forbidden_names.contains(debug)) {
+			if (IsForbiddenName(debug) ) {
 				debug = debug + "_";
 			}
 			node->var_name = debug;

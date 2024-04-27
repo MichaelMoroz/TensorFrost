@@ -25,6 +25,8 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
+bool IsForbiddenName(const string& name);
+
 using ArgumentNames = map<ArgID, string>;
 
 class Line {
@@ -70,6 +72,7 @@ protected:
 	map<Node*, bool> requires_paranthesis;
 	unordered_set<Node*> lines_to_remove;
 	vector<string> additional_lines;
+	unordered_map<string, int> name_count;
 
 	virtual void GenerateArgumentNames(ArgumentManager& args)  {
 		for (auto& arg : args.arguments_) {
@@ -110,11 +113,30 @@ protected:
 		}
 	}
 
+	void RegenerateNodeName(Node* node) {
+		string debug = node->debug_name;
+		if (debug.empty()) {
+			return;
+		}
+		// check if the name is already used
+		if (name_count.contains(debug)) {
+			name_count[debug]++;
+			debug = debug + "_" + to_string(name_count[debug]);
+		} else {
+			name_count[debug] = 1;
+		}
+		if (IsForbiddenName(debug)) {
+			debug = debug + "_";
+		}
+		node->var_name = debug;
+	}
+
 	virtual Line* GenerateLine(Node* node)  {
-		// TODO: Create argument manager class
 		ArgumentManager args = node->GetArgumentManager();
 		GenerateArgumentNames(args);
+		RegenerateNodeName(node);
 		const Operation* op = node->op;
+
 		string name = node->var_name;
 
 		// get output type
