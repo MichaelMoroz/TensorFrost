@@ -6,6 +6,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
 # Set the output directory for the .pyd file
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
