@@ -29,6 +29,7 @@ namespace TensorFrost {
 		return PT(Tensor::Constant(f) op T(PyTensor(t)));                          \
 	});
 
+//TODO: remove tensor view entirely and just use PyTensor with special flag and indices field
 void TensorViewDefinition(py::module& /*m*/,
                           py::class_<TensorView>& tensor_view) {
 	DEFINE_OPERATOR(add, +);
@@ -65,6 +66,7 @@ void TensorViewDefinition(py::module& /*m*/,
 	});
 
 	//It was nice to have, but unfortunately can result in slowdowns due to using atomics in inappropriate scenarios
+	//So better to have the user explicitly call the scatter functions
 	//tensor_view.def("__iadd__", [](const TensorView& t, const PyTensor& t2) {
 	//	Tensor::ScatterAdd(*t.value, t2.Get(), t.indices);
 	//});

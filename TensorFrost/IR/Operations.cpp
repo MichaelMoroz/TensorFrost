@@ -24,7 +24,7 @@ const vector<Operation> operations = {
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly, OpType::MemoryReuse}),
-    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
+    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static, OpType::HostOnly}),
     Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
     //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 

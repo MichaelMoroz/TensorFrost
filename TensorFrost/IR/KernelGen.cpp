@@ -11,76 +11,121 @@ namespace TensorFrost {
 	return tensor_;
 }
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
-	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
-	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
-	int a_dim = MaxIndexCount(a_shape);
-	int b_dim = MaxIndexCount(b_shape);
-
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
 	ShapeCompareResult result;
 	result.compatible = true;
 	result.is_broadcast = false;
-	result.a_dim = a_dim;
-	result.b_dim = b_dim;
+	result.a_dim = a.dim;
+	result.b_dim = b.dim;
+	result.broadcast_dim = max(a.dim, b.dim);
 
-
-	int min_dim = min(a_dim, b_dim);
+	int min_dim = min(a.dim, b.dim);
 
 	if (exact_match && min_dim > 0) {
-		if (a_dim != b_dim) {
+		if (a.dim != b.dim) {
 			result.compatible = false;
 			if (throw_error) {
-				throw std::runtime_error("Shapes must have the same dimension for " + a->var_name + " and " + b->var_name);
+				throw std::runtime_error("Shapes must have the same dimension for " +
+				                         a.name + " and " + b.name);
 			}
 			return result;
 		}
 	}
 
 	for (int i = 0; i < min_dim; i++) {
-		Node* a_node = a_shape[a_dim - i - 1]->from_->get();
-		Node* b_node = b_shape[b_dim - i - 1]->from_->get();
+		Node* a_node = a.shape[a.dim - i - 1];
+		Node* b_node = b.shape[b.dim - i - 1];
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
 		int val_a = -1;
 		int val_b = -1;
 		if (a_node->name == "const") val_a = a_node->GetTensor()->data[0];
 		if (b_node->name == "const") val_b = b_node->GetTensor()->data[0];
 
-		//if one of the nodes is a constant = 1, then it is a broadcast
+		// if one of the nodes is a constant = 1, then it is a broadcast
 		if ((val_a == 1 || val_b == 1) && !exact_match) {
-			result.is_broadcast = true; 
+			result.is_broadcast = true;
+			if (val_a == 1) {
+				result.broadcast_shape.AddShape(broadcast_index, b_node);
+			} else {
+				result.broadcast_shape.AddShape(broadcast_index, b_node);
+			}
 			continue;
-		} 
+		}
 
 		// if a and b are constants, then compare their values
-		if(val_a != -1 && val_b != -1)
-		{
+		if (val_a != -1 && val_b != -1) {
 			if (val_a != val_b) {
 				result.compatible = false;
 				if (throw_error) {
 					throw std::runtime_error(
 					    "Constant dimensions are not compatible for nodes: " +
-					    a->var_name + " and " + b->var_name + " at index " +
+					    a.name + " and " + b.name + " at index " +
 					    to_string(i) + " with values " + to_string(val_a) + " and " +
 					    to_string(val_b));
 				}
 				return result;
-			}
-			else
-			{
+			} else {
+				result.broadcast_shape.AddShape(broadcast_index, a_node);
 				continue;
 			}
 		}
 
-		// otherwise, if a and b are not the same node then they are not the same shape (possibly)
+		// otherwise, if a and b are not the same node then they are not the same
+		// shape (possibly)
 		if (a_node != b_node) {
 			if (throw_error) {
-				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a->var_name + " and " + b->var_name + " at index " + to_string(i));
+				throw std::runtime_error(
+				    "Shapes are potentially not compatible for nodes: " + a.name +
+				    " and " + b.name + " at index " + to_string(i));
 			}
 			result.compatible = false;
 			return result;
 		}
+
+		result.broadcast_shape.AddShape(broadcast_index, a_node);
 	}
 
 	return result;
+}
+
+
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
+	ShapeInfo a_info = ShapeInfo(a);
+	ShapeInfo b_info = ShapeInfo(b);
+	return CompareShape(a_info, b_info, exact_match, throw_error);
+}
+
+bool IsBoundary(const Arg* arg, bool is_identity = true) {
+	Node* input = arg->from_->get();
+	Node* output = arg->to_->get();
+	ArgType arg_type = arg->type_;
+
+	const Operation* input_op = input->op;
+	const Operation* output_op = output->op;
+
+	bool output_loads_memory = output_op->HasAllTypes(OpType::Load, OpType::MemoryOp);
+	bool output_modifies_memory = output_op->HasAllTypes(OpType::Modifier, OpType::MemoryOp);
+
+
+	if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+		return arg_type == ArgType::Memory && !is_identity;
+	}
+
+	if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
+		!input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
+		return arg_type == ArgType::Memory;
+	}
+
+	// if input has changed the memory and the output is a load then it is a
+	// boundary
+	if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
+		output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+		return true;
+	}
+
+	if (arg_type == ArgType::Shape) {
+		return true;  // shape should not be inside kernels
+	}
 }
 
 // returns true if the edge between given nodes is a boundary between kernels

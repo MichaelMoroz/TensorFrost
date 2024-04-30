@@ -172,7 +172,7 @@ public:
 
 class Node {
  public:
-	int index_ = 0;
+	int index_ = -1;
 	string var_name = "none";
 	string debug_name;
 	string name;
@@ -622,6 +622,233 @@ class NodeIterator {
 
 ScopeType GetScopeType(const Node* node);
 
+class ShapeInfo {
+ public:
+	map<int, Node*> shape;
+	int dim = 0;
+	string name;
+
+	ShapeInfo() {}
+
+	ShapeInfo(ShapeInfo* shape_info) {
+		shape = shape_info->shape;
+		dim = shape_info->dim;
+		name = shape_info->name;
+	}
+
+	ShapeInfo(ArgMap shape, string name) {
+		for (auto& [index, arg] : shape) {
+			AddShape(index, arg->from_->node_);
+		}
+		this->name = name;
+	}
+
+	ShapeInfo(const Node* node)
+	    : ShapeInfo(node->GetArgumentMap(ArgType::Shape), node->name) {}
+
+	void AddShape(int index, Node* node) {
+		shape[index] = node;
+		dim = max(dim, index + 1);
+	}
+};
+
+struct ShapeCompareResult {
+	bool compatible;
+	bool is_broadcast;
+	ShapeInfo broadcast_shape;
+	int broadcast_dim;
+	int a_dim;
+	int b_dim;
+	int min_dim;
+};
+
+ShapeCompareResult CompareShape(const Node* a, const Node* b,
+                                bool exact_match = false,
+                                bool throw_error = false);
+
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
+                                bool exact_match = false,
+                                bool throw_error = false);
+
+
+class KernelScope {
+ public:
+	Node* begin;
+	Node* end;
+	ShapeInfo scope_shape;
+	unordered_set<Node*> boundary_nodes;	
+
+	static bool IsBoundary(const Node* input, const Node* output, ArgType arg_type,
+	                bool is_identity) {
+		const Operation* input_op = input->op;
+		const Operation* output_op = output->op;
+
+		// if this node loads something from another node, that node must not be in
+		// this kernel
+		if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+			return arg_type == ArgType::Memory &&
+			       !is_identity;  // if its an identity load its fine
+		}
+
+		// if we are modifying memory, then the modified memory must not be in the
+		// kernel
+		if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
+		    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
+			return arg_type == ArgType::Memory;
+		}
+
+		//// if input has changed the memory and the output is a load then it is a
+		//// boundary
+		// if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
+		//     output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+		//	return true;
+		// }
+
+		// shape should not be inside kernels
+		if (arg_type == ArgType::Shape) {
+			return true;
+		}
+	}
+
+	KernelScope() : begin(nullptr), end(nullptr) {}
+	KernelScope(Node* node, unordered_set<KernelScope*> &output_scopes) : begin(node), end(node) {
+		scope_shape = ShapeInfo(node);
+
+		//if host only, then this can not be a valid scope
+		if (node->op->HasAllTypes(OpType::HostOnly)) {
+			begin = nullptr;
+			end = nullptr;
+			return;
+		}
+
+		//find boundary nodes
+		Arguments indices = node->GetArguments(ArgType::Index);
+		bool identity = indices.empty();
+
+		for (auto& input : node->inputs_) {
+			// get latest input version
+			Node* latest = input.from_->get()->GetLastVersion(node);
+			// check if input is the boundary of this kernel
+			bool is_loop_boundary = latest->index_ > node->index_;
+			if (IsBoundary(latest, node, input.type_, identity)) {
+				if (is_loop_boundary) {
+					latest = latest->GetParent("loop");
+				}
+				boundary_nodes.insert(latest);
+			}
+		}
+
+		unordered_set<KernelScope*> child_scopes = ComputeScopes(node);
+
+	}
+	KernelScope(Node* begin, Node* end, ShapeInfo shape, unordered_set<Node*> boundary_nodes)
+	    : begin(begin), end(end), scope_shape(shape), boundary_nodes(boundary_nodes) {}
+	
+	void CopyProperties(KernelScope* other) {
+		begin = other->begin;
+		end = other->end;
+		scope_shape = other->scope_shape;
+		boundary_nodes = other->boundary_nodes;
+	}
+
+	KernelScope(KernelScope* other) {
+		CopyProperties(other);
+	}
+
+	bool IsValid() const {
+		//check if the scope is valid
+		if(begin == nullptr || end == nullptr) return false;
+
+		//begin and end must have the same parent
+		if (begin->parent != end->parent) return false;
+
+		if (begin->index_ < 0 || end->index_ < 0) throw std::runtime_error("Indices are not computed");
+
+		//begin must be before or at the same index as end
+		if (begin->index_ <= end->index_) return false;
+
+		//check if the boundary nodes are not in the scope
+		for (Node* boundary_node : boundary_nodes) {
+			if (boundary_node->index_ >= begin->index_ && boundary_node->index_ <= end->index_) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	static std::unordered_set<KernelScope*> ComputeScopes(Node* root) {
+		std::unordered_set<KernelScope*> scopes;
+		KernelScope* current_scope = new KernelScope();
+		for (auto node = NodeIterator(root); !node.end(); node.go_to_next()) {
+			std::unordered_set<KernelScope*> child_scopes;
+			KernelScope* node_scope = new KernelScope(node.get(), child_scopes);
+			if (!child_scopes.empty()) //can be merged
+			{
+				KernelScope* merged = KernelScope::Merge(current_scope, node_scope);
+				if (merged->IsValid()) {
+					current_scope = merged;
+				} else {
+					if (current_scope->IsValid()) {
+						scopes.insert(current_scope);
+					}
+					current_scope = new KernelScope();
+				}
+			
+			} 
+			else //has child kernels
+			{
+				// add all child scopes
+				scopes.insert(child_scopes.begin(), child_scopes.end());
+				// add current scope
+				if (current_scope->IsValid()) {
+					scopes.insert(current_scope);
+				}
+				// create a new scope
+				current_scope = new KernelScope();
+			}
+		}
+		return scopes;
+	}
+
+	static KernelScope* Merge(KernelScope* a, KernelScope* b)
+	{
+		bool a_valid = a->IsValid();
+		bool b_valid = b->IsValid();
+		if (!a_valid && !b_valid) throw std::runtime_error("Invalid scopes");
+		if (!a_valid) return b;
+		if (!b_valid) return a;
+
+		// check if the scopes are adjacent
+		if (a->end->index_ + 1 != b->begin->index_)
+			throw std::runtime_error("Trying to merge non-adjacent scopes");
+
+		// compare shapes
+		ShapeCompareResult result =
+		    CompareShape(a->scope_shape, b->scope_shape, true);
+
+		if (!result.compatible) return new KernelScope();
+
+		Node* new_begin = a->begin;
+		Node* new_end = b->end;
+
+		unordered_set<Node*> new_boundary_nodes = a->boundary_nodes;
+		new_boundary_nodes.insert(b->boundary_nodes.begin(),
+		                          b->boundary_nodes.end());
+
+		KernelScope* new_scope = new KernelScope(new_begin, new_end, result.broadcast_shape, new_boundary_nodes);
+
+		if (!new_scope->IsValid()) return new KernelScope();
+
+		return new_scope;
+	}
+
+	void AddBoundaryNodes(unordered_set<Node*> new_boundary_nodes) {
+		boundary_nodes.insert(new_boundary_nodes.begin(), new_boundary_nodes.end());
+	}
+};
+
+
 class Scope
 {
  public:
@@ -955,14 +1182,4 @@ public:
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> output_memory_map;
 };
-struct ShapeCompareResult {
-	bool compatible;
-	bool is_broadcast;
-	int a_dim;
-	int b_dim;
-	int min_dim;
-};
-
-ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match = false, bool throw_error = false);
-
 }  // namespace TensorFrost

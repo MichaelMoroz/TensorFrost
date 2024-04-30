@@ -134,7 +134,7 @@ protected:
 	virtual Line* GenerateLine(Node* node)  {
 		ArgumentManager args = node->GetArgumentManager();
 		GenerateArgumentNames(args);
-		RegenerateNodeName(node);
+		if (is_kernel) RegenerateNodeName(node);
 		const Operation* op = node->op;
 
 		string name = node->var_name;

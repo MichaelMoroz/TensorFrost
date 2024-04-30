@@ -1,30 +1,58 @@
-import TensorFrost as tf
+# %%
 import numpy as np
-import time
+import TensorFrost as tf
+import matplotlib.pyplot as plt
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
-#dynamic size QR decomposition
-def QRDecomposition():
-    A = tf.input([-1, -1], tf.float32)
+blur_d = 16
+blur_r = blur_d * 0.5
 
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
-    j = tf.index(0, [m])
+def kernel(r):
+    #return 1.0
+    return tf.exp(-0.5 * (tf.float(r) / blur_r) ** 2.0) / (blur_r * np.sqrt(2.0 * np.pi))
 
-    with tf.loop(n-1) as i:
-        R[i, i] = tf.norm(A[j, i])
-        Q[j, i] = A[j, i] / R[i, i]
+def blur():
+    img = tf.input([-1, -1, -1], tf.float32)
+    
+    blur_h = tf.zeros(img.shape, tf.float32)
+    blur_v = tf.zeros(img.shape, tf.float32)
+    i, j, ch = img.indices
 
-        p, k = tf.index_grid([0, i + 1], [m, n])
-        t, = tf.index_grid([i+1], [n])
-        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
-        A[p, k] -= Q[p, i] * R[i, k]
+    #horizontal blur
+    with tf.loop(-blur_d, blur_d+1) as k:
+        blur_h += img[i+k, j, ch] * kernel(k)
 
-    R[n-1, n-1] = tf.norm(A[j, n-1])
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+    #vertical blur
+    with tf.loop(-blur_d, blur_d+1) as k:
+        blur_v += blur_h[i, j+k, ch] * kernel(k)
 
-    return [Q, R]
+    return [blur_v]
 
-qr = tf.compile(QRDecomposition)
+tf_blur = tf.compile(blur)
+
+# %%
+input_img = np.array(plt.imread("test.png"), dtype=np.float32)
+#input_img = input_img[:,:,0:3].reshape(input_img.shape[0], input_img.shape[1], 3)
+plt.imshow(input_img)
+plt.show()
+print(input_img.shape)
+
+# %%
+tf_img = tf.tensor(input_img)
+orig_img = tf_img.numpy
+
+plt.imshow(orig_img)
+plt.show()
+print(orig_img.shape)
+
+# %%
+output_img, = tf_blur(tf_img)
+
+output_numpy = output_img.numpy
+plt.imshow(output_numpy)
+plt.show()
+
+print(output_numpy.shape)
+
+
