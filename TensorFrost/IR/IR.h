@@ -16,14 +16,6 @@
 namespace TensorFrost {
 class Tensor;
 class Node;
-class Scope;
-
-enum class ScopeType {
-	None,
-	Host,
-	Kernel,
-};
-
 
 class Lable {
  public:
@@ -187,8 +179,6 @@ class Node {
 	const Operation* op;
 	const Tensor* tensor_;
 
-	ScopeType scope_type_ = ScopeType::None;
-
 	Lable* lable_ = nullptr;
 
 	Arguments inputs_;
@@ -245,7 +235,6 @@ class Node {
 	void CopyProperties(Node* other) {
 		debug_name = other->debug_name;
 		name = other->name;
-		scope_type_ = other->scope_type_;
 		special_index_ = other->special_index_;
 		has_been_modified_ = other->has_been_modified_;
 		is_static = other->is_static;
@@ -454,7 +443,8 @@ class Node {
 					// if the loop is scalar, then it doesn't matter
 					bool before_latest = output_node->index_ < latest_node->index_;
 					bool inside_loop = has_loop && output_node->HasParent(loop_node);
-					if (before_latest || inside_loop)
+					bool not_same = output_node != latest_node;
+					if ((before_latest || inside_loop) && not_same)
 					{
 						last_index = output_node->index_;
 						last_modifier = output_node;
@@ -620,8 +610,6 @@ class NodeIterator {
 	bool operator!=(const Node* node) { return currentNode != node; }
 };
 
-ScopeType GetScopeType(const Node* node);
-
 class ShapeInfo {
  public:
 	map<int, Node*> shape;
@@ -638,17 +626,27 @@ class ShapeInfo {
 
 	ShapeInfo(ArgMap shape, string name) {
 		for (auto& [index, arg] : shape) {
-			AddShape(index, arg->from_->node_);
+			AddShape(arg->index_, arg->from_->node_);
 		}
 		this->name = name;
 	}
 
 	ShapeInfo(const Node* node)
-	    : ShapeInfo(node->GetArgumentMap(ArgType::Shape), node->name) {}
+	    : ShapeInfo(node->GetArgumentMap(ArgType::Shape),
+	                node->var_name != "" ? node->var_name : node->name) {}
 
 	void AddShape(int index, Node* node) {
 		shape[index] = node;
 		dim = max(dim, index + 1);
+	}
+
+	Tensors GetTensors() const {
+		Tensors tensors = Tensors();
+		tensors.resize(dim);
+		for (auto& [index, node] : shape) {
+			tensors[index] = node->GetTensor();
+		}
+		return tensors;
 	}
 };
 
@@ -673,74 +671,16 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
 
 class KernelScope {
  public:
-	Node* begin;
-	Node* end;
+	Node* begin = nullptr;
+	Node* end = nullptr;
 	ShapeInfo scope_shape;
-	unordered_set<Node*> boundary_nodes;	
+	unordered_set<Node*> boundary_nodes;
 
-	static bool IsBoundary(const Node* input, const Node* output, ArgType arg_type,
-	                bool is_identity) {
-		const Operation* input_op = input->op;
-		const Operation* output_op = output->op;
-
-		// if this node loads something from another node, that node must not be in
-		// this kernel
-		if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-			return arg_type == ArgType::Memory &&
-			       !is_identity;  // if its an identity load its fine
-		}
-
-		// if we are modifying memory, then the modified memory must not be in the
-		// kernel
-		if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-		    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-			return arg_type == ArgType::Memory;
-		}
-
-		//// if input has changed the memory and the output is a load then it is a
-		//// boundary
-		// if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
-		//     output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-		//	return true;
-		// }
-
-		// shape should not be inside kernels
-		if (arg_type == ArgType::Shape) {
-			return true;
-		}
-	}
+	static bool IsBoundary(const Node* input, const Node* output, ArgType arg_type, bool is_identity);
 
 	KernelScope() : begin(nullptr), end(nullptr) {}
-	KernelScope(Node* node, unordered_set<KernelScope*> &output_scopes) : begin(node), end(node) {
-		scope_shape = ShapeInfo(node);
+	KernelScope(Node* node, unordered_set<KernelScope*>& output_scopes);
 
-		//if host only, then this can not be a valid scope
-		if (node->op->HasAllTypes(OpType::HostOnly)) {
-			begin = nullptr;
-			end = nullptr;
-			return;
-		}
-
-		//find boundary nodes
-		Arguments indices = node->GetArguments(ArgType::Index);
-		bool identity = indices.empty();
-
-		for (auto& input : node->inputs_) {
-			// get latest input version
-			Node* latest = input.from_->get()->GetLastVersion(node);
-			// check if input is the boundary of this kernel
-			bool is_loop_boundary = latest->index_ > node->index_;
-			if (IsBoundary(latest, node, input.type_, identity)) {
-				if (is_loop_boundary) {
-					latest = latest->GetParent("loop");
-				}
-				boundary_nodes.insert(latest);
-			}
-		}
-
-		unordered_set<KernelScope*> child_scopes = ComputeScopes(node);
-
-	}
 	KernelScope(Node* begin, Node* end, ShapeInfo shape, unordered_set<Node*> boundary_nodes)
 	    : begin(begin), end(end), scope_shape(shape), boundary_nodes(boundary_nodes) {}
 	
@@ -751,218 +691,14 @@ class KernelScope {
 		boundary_nodes = other->boundary_nodes;
 	}
 
-	KernelScope(KernelScope* other) {
-		CopyProperties(other);
-	}
+	bool IsValid() const;
 
-	bool IsValid() const {
-		//check if the scope is valid
-		if(begin == nullptr || end == nullptr) return false;
+	static std::unordered_set<KernelScope*> ComputeScopes(Node* root);
 
-		//begin and end must have the same parent
-		if (begin->parent != end->parent) return false;
-
-		if (begin->index_ < 0 || end->index_ < 0) throw std::runtime_error("Indices are not computed");
-
-		//begin must be before or at the same index as end
-		if (begin->index_ <= end->index_) return false;
-
-		//check if the boundary nodes are not in the scope
-		for (Node* boundary_node : boundary_nodes) {
-			if (boundary_node->index_ >= begin->index_ && boundary_node->index_ <= end->index_) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	static std::unordered_set<KernelScope*> ComputeScopes(Node* root) {
-		std::unordered_set<KernelScope*> scopes;
-		KernelScope* current_scope = new KernelScope();
-		for (auto node = NodeIterator(root); !node.end(); node.go_to_next()) {
-			std::unordered_set<KernelScope*> child_scopes;
-			KernelScope* node_scope = new KernelScope(node.get(), child_scopes);
-			if (!child_scopes.empty()) //can be merged
-			{
-				KernelScope* merged = KernelScope::Merge(current_scope, node_scope);
-				if (merged->IsValid()) {
-					current_scope = merged;
-				} else {
-					if (current_scope->IsValid()) {
-						scopes.insert(current_scope);
-					}
-					current_scope = new KernelScope();
-				}
-			
-			} 
-			else //has child kernels
-			{
-				// add all child scopes
-				scopes.insert(child_scopes.begin(), child_scopes.end());
-				// add current scope
-				if (current_scope->IsValid()) {
-					scopes.insert(current_scope);
-				}
-				// create a new scope
-				current_scope = new KernelScope();
-			}
-		}
-		return scopes;
-	}
-
-	static KernelScope* Merge(KernelScope* a, KernelScope* b)
-	{
-		bool a_valid = a->IsValid();
-		bool b_valid = b->IsValid();
-		if (!a_valid && !b_valid) throw std::runtime_error("Invalid scopes");
-		if (!a_valid) return b;
-		if (!b_valid) return a;
-
-		// check if the scopes are adjacent
-		if (a->end->index_ + 1 != b->begin->index_)
-			throw std::runtime_error("Trying to merge non-adjacent scopes");
-
-		// compare shapes
-		ShapeCompareResult result =
-		    CompareShape(a->scope_shape, b->scope_shape, true);
-
-		if (!result.compatible) return new KernelScope();
-
-		Node* new_begin = a->begin;
-		Node* new_end = b->end;
-
-		unordered_set<Node*> new_boundary_nodes = a->boundary_nodes;
-		new_boundary_nodes.insert(b->boundary_nodes.begin(),
-		                          b->boundary_nodes.end());
-
-		KernelScope* new_scope = new KernelScope(new_begin, new_end, result.broadcast_shape, new_boundary_nodes);
-
-		if (!new_scope->IsValid()) return new KernelScope();
-
-		return new_scope;
-	}
+	static KernelScope* Merge(KernelScope* a, KernelScope* b);
 
 	void AddBoundaryNodes(unordered_set<Node*> new_boundary_nodes) {
 		boundary_nodes.insert(new_boundary_nodes.begin(), new_boundary_nodes.end());
-	}
-};
-
-
-class Scope
-{
- public:
-	Node* begin;
-	Node* end;
-	Node* shape_node;
-	ScopeType type = ScopeType::None;
-	int shape_dim = 0;
-	bool shape_exact = false;
-
-	Scope(Node* begin) 
-		: begin(begin), end(begin), shape_node(begin) { UpdateEnd(begin); }
-
-	Scope(Node* begin, Node* end)
-	    : begin(begin), end(end) { RecomputeScope(); }
-
-	bool InScope(const Node* node) {
-		int begin_id = begin->index_;
-		int end_id = end->index_;
-		int node_id = node->index_;
-		return node_id >= begin_id && node_id <= end_id;
-	}
-
-	void UpdateType(Node* node) {
-		// if the end node is a memory node, it must be on the cpu
-		if (node->op->HasAllTypes(OpType::HostOnly)) {
-			if (type == ScopeType::Kernel) {
-				throw std::runtime_error("Host node in kernel scope");
-			}
-			type = ScopeType::Host;
-		} else if (shape_dim > 0 || node->scope_type_ == ScopeType::Kernel) { // non-scalars must be in a kernel
-			if (type == ScopeType::Host) {
-				throw std::runtime_error("Kernel node in host scope");
-			}
-			type = ScopeType::Kernel;
-		}
-	}
-
-	void UpdateEnd(Node* new_end) {
-		end = new_end;
-		UpdateShape(end);
-		UpdateType(end);
-	}
-
-	void UpdateShape(Node* node)
-	{
-		if (shape_exact) return; // already found the exact shape
-
-		//memory outputs define the exact shape
-		shape_exact =
-		    node->op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) ||
-		    node->memory_type_ == MemoryType::Output;
-
-		ArgMap shape = node->GetArgumentMap(ArgType::Shape);
-		int dim = MaxIndexCount(shape);
-		if (node->name == "memory") dim = 0;
-		if (dim >= shape_dim) {
-			shape_dim = dim;
-			shape_node = node;
-		}
-	}
-
-	void RecomputeScope()
-	{
-		shape_dim = 0;
-		type = ScopeType::None;
-		for (auto node = NodeIterator(begin, begin);
-		     node.get() != nullptr && node->index_ <= end->index_; node.true_next()) {
-			UpdateShape(*node);
-			UpdateType(*node);
-		}
-	}
-
-	static vector<Scope*> GetScopes(Node* begin, Node* end) {
-		int begin_depth = begin->ComputeDepth();
-		int end_depth = end->ComputeDepth();
-		vector<Scope*> scopes;
-		if (begin_depth <= end_depth) {
-			Node* prev_parent = nullptr;
-			for (Node* cur_parent = end; cur_parent != begin->parent;
-			     cur_parent = cur_parent->parent) {
-				if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-					scopes.push_back(new Scope(cur_parent->child, prev_parent->prev));
-				}
-				prev_parent = cur_parent;
-			}
-
-			if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-				scopes.push_back(new Scope(begin, prev_parent->prev));
-			}
-		}
-		else
-		{
-			throw std::runtime_error("Invalid scope");
-			//if (begin->parent->next) {
-			//	scopes.push_back(new Scope(begin, begin->parent->next->true_prev));
-			//	if (begin->parent->next != end)
-			//	{
-			//		scopes.push_back(new Scope(begin->parent->next, end->prev));
-			//	}
-			//}
-			
-			//Node* prev_parent = nullptr;
-			//for (Node* cur_parent = begin->parent; cur_parent != end->parent;
-			//     cur_parent = cur_parent->parent) {
-			//	if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-			//		scopes.push_back(new Scope(prev_parent->prev->next, cur_parent->child));
-			//	}
-			//	prev_parent = cur_parent;
-			//}
-		}
-		
-
-		return scopes;
 	}
 };
 

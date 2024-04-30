@@ -85,6 +85,21 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 		result.broadcast_shape.AddShape(broadcast_index, a_node);
 	}
 
+	//add the rest of the broadcast shape
+	for (int i = min_dim; i < result.broadcast_dim; i++) {
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		if (a.dim > b.dim) {
+			result.broadcast_shape.AddShape(broadcast_index, a.shape[a.dim - i - 1]);
+		}
+		else {
+			result.broadcast_shape.AddShape(broadcast_index, b.shape[b.dim - i - 1]);
+		}
+	}
+
+	if (result.broadcast_shape.dim != result.broadcast_dim) {
+		throw std::runtime_error("Internal Error: Broadcast shape does not match the broadcast dim");
+	}
+
 	return result;
 }
 
@@ -95,237 +110,18 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, 
 	return CompareShape(a_info, b_info, exact_match, throw_error);
 }
 
-bool IsBoundary(const Arg* arg, bool is_identity = true) {
-	Node* input = arg->from_->get();
-	Node* output = arg->to_->get();
-	ArgType arg_type = arg->type_;
-
-	const Operation* input_op = input->op;
-	const Operation* output_op = output->op;
-
-	bool output_loads_memory = output_op->HasAllTypes(OpType::Load, OpType::MemoryOp);
-	bool output_modifies_memory = output_op->HasAllTypes(OpType::Modifier, OpType::MemoryOp);
-
-
-	if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-		return arg_type == ArgType::Memory && !is_identity;
-	}
-
-	if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-		!input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-		return arg_type == ArgType::Memory;
-	}
-
-	// if input has changed the memory and the output is a load then it is a
-	// boundary
-	if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
-		output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-		return true;
-	}
-
-	if (arg_type == ArgType::Shape) {
-		return true;  // shape should not be inside kernels
-	}
-}
-
-// returns true if the edge between given nodes is a boundary between kernels
-bool IsBoundary(Node* input, Node* output,
-                ScopeType input_scope = ScopeType::None, bool is_identity = true,
-                int arg_index = -1, ArgType arg_type = ArgType::None) {
-	ShapeCompareResult result = CompareShape(input, output);
-
-	if (!result.compatible) {
-		return true;
-	}
-
-	if (input_scope != output->scope_type_ && output->scope_type_ == ScopeType::Kernel) {
-		return true;
-	}
-
-	// memory should not be inside work kernels
-	bool is_output_host_only = output->op->HasAllTypes(OpType::HostOnly);
-	bool is_input_host_only = input->op->HasAllTypes(OpType::HostOnly);
-	bool is_output_scalar = result.b_dim == 0;
-
-	bool scalar_kernel = output->TryComputeShape() == 1;
-
-	switch (input_scope) { 
-		case ScopeType::None:
-			return false;
-		case ScopeType::Host:
-			if (!is_output_scalar && !is_output_host_only) {
-				return true; // host should not have non-scalar operations
-			}
-			break;
-		case ScopeType::Kernel:
-			if (is_output_host_only || is_input_host_only) {
-				return true; // kernel should not have host operations
-			}
-
-			const Operation* input_op = input->op;
-			const Operation* output_op = output->op;
-
-			if (!scalar_kernel) {
-				if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-					return arg_type == ArgType::Memory && !is_identity;
-				}
-
-				if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-				    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-					return arg_type == ArgType::Memory;
-				}
-
-				// if input has changed the memory and the output is a load then it is a
-				// boundary
-				if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
-				    output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-					return true;
-				}
-			}
-
-			if (arg_type == ArgType::Shape) {
-				return true;  // shape should not be inside kernels
-			}
-
-			break;
-	}
-
-	return false;
-}
-
 //TODO: rewrite this function
 void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
-	vector<Scope*> kernels;
-	Scope* current_scope = new Scope(root->child);
 
-	map<Node*, string> boundary_nodes_debug;
-
-	for (auto it = begin(); !it.end(); it.next()) {
-		if (it->HasParent("kernel")) {
-			continue;
-		}
-
-		Node* node = it.get();
-		int current_depth = node->ComputeDepth();
-		int begin_depth = current_scope->begin->ComputeDepth();
-		Arguments indices = node->GetArguments(ArgType::Index);
-		bool ident = indices.empty();
-		bool loop_prev_iteration = false;
-
-		map<int, Node*> boundary_nodes;
-
-		Node* prev = node->prev;
-		if (prev != nullptr) {
-			if (current_scope->InScope(prev) &&
-			    IsBoundary(prev, node, current_scope->type, ident)) {
-				boundary_nodes[prev->index_] = prev;
-			}
-		}
-
-		ShapeCompareResult result = CompareShape(current_scope->shape_node, node, true);
-		if (!result.compatible) {
-			boundary_nodes[current_scope->shape_node->index_] =
-			    current_scope->shape_node;
-		}
-
-		// go over all inputs
-		for (auto& input : node->inputs_) {
-			// get latest input version
-			Node* latest = input.from_->get()->GetLastVersion(node);
-			// check if input is the boundary of this kernel
-			bool is_loop_boundary =
-			    latest->index_ > node->index_ && begin_depth < current_depth;
-			if ((current_scope->InScope(latest) || is_loop_boundary) &&
-			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
-				if (is_loop_boundary) {
-					latest = latest->GetParent("loop");
-					if (!current_scope->InScope(latest)) 
-					{
-						continue;
-					}
-					loop_prev_iteration = true;
-				}
-				boundary_nodes[latest->index_] = latest;
-			}
-		}
-		
-		if (current_scope->type == ScopeType::Host) {
-			current_scope = new Scope(node);
-			continue;
-		}
-
-		// if boundary, create new scope, else make this new end
-		if (boundary_nodes.size() > 0) {
-			string boundary_nodes_str = "Boundaries of this node: ";
-			int i = 0;
-			for (auto& [index, node] : boundary_nodes) {
-				if (i > 0) boundary_nodes_str += ", ";
-				boundary_nodes_str += node->var_name;
-				i++;
-			}
-			boundary_nodes_debug[node] = boundary_nodes_str;
-			
-			if (begin_depth > current_depth) {
-				Node* last_child = current_scope->begin->parent->GetLastChild();
-				NodeIterator it(last_child, last_child);
-				kernels.push_back(new Scope(current_scope->begin, it.get()));
-				current_scope = new Scope(it.next().get(), node);
-			} else if (current_scope->type == ScopeType::Kernel) {
-				// split the current scope using the last boundary node (highest index)
-				Node* boundary_node = boundary_nodes.rbegin()->second;
-				//find the nearest parent node of the scope end with the same parent as the boundary node
-				Node* parent = node->GetCommonParent(boundary_node);
-				int boundary_depth = boundary_node->ComputeDepth();
-
-				if (boundary_depth > current_depth) {
-					parent = parent->next;
-				}
-
-				vector<Scope*> new_scopes =
-				    Scope::GetScopes(current_scope->begin, parent);
-				for (auto scope : new_scopes) {
-					if (scope->type == ScopeType::Kernel) {
-						kernels.push_back(scope);
-					}
-				}
-
-				if (loop_prev_iteration)
-				{
-					current_scope = new Scope(parent->true_next, node);
-				}
-				else
-				{
-					current_scope = new Scope(parent, node);
-				}
-				
-			} else { 
-				// the current scope was a host scope, can just ignore it, we wont be using it
-				current_scope = new Scope(node);
-			}
-		} else {
-			current_scope->UpdateEnd(node);
-		}
-	}
-
-
-	if (current_scope->type == ScopeType::Kernel) {
-		kernels.push_back(current_scope);
-	}
-
-#ifndef NDEBUG
-	string listing = PrintListing(boundary_nodes_debug);
-
-	cout << "Kernel genration boundaries: \n\n";
-	cout << listing << endl;
-#endif
+	auto new_scopes = KernelScope::ComputeScopes(root);
 
 	// create kernel nodes for all kernel scopes
-	for (auto scope : kernels) {
+	for (auto scope : new_scopes) {
 		// create kernel node before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
 			//create kernel node
-		 	Tensor& tensor = Tensor::Kernel(scope->shape_node->GetArguments(ArgType::Shape));
+			Tensor& tensor = Tensor::Kernel(scope->scope_shape.GetTensors());
 		 	Node* kernel_node = tensor.node_;
 		 	// make the scope nodes children of the kernel node
 		 	kernel_node->child = scope->begin;
@@ -347,18 +143,6 @@ string IR::PrintListing(map<Node*, string> node_debug) const {
 	return GetOperationListing(*this, false, node_debug) + "\n\n";
 }
 
-bool BoundaryValid(const Node* input, const Node* output,
-                   bool is_identity = true, int arg_index = -1,
-                   ArgType arg_type = ArgType::None) {
-	//bool same_kernel = input->kernel_ == output->kernel_;
-	//bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
-	//if (output->op->HasAllTypes(OpType::Set) && !same_kernel) return false; // set is always within the same kernel
-	//if (!same_kernel) return true;
-	//return !is_boundary;
-	return true;
-}
-
-
 // check if all child nodes in a kernel have compatible shape to the kernel
 void IR::CheckKernelShapes() {
 	// get kernels
@@ -370,7 +154,7 @@ void IR::CheckKernelShapes() {
 	for (auto kernel : kernels) {
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// check if the node has a shape argument
-			ShapeCompareResult result = CompareShape(kernel, node.get());
+			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
 			if (!result.compatible) {
 				throw std::runtime_error("Kernel " + kernel->var_name +
 				                         " has incompatible shape with node " +
@@ -397,40 +181,14 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 		if (prev == nullptr) continue;
 
-		if (check_clustering) {
-			if (!BoundaryValid(prev, *node, identity)) {
-				invalid_nodes[node.get()] = "Invalid node order";
-			}
-		}
 
 		// go over all inputs
 		for (auto& input : node->inputs_) {
 			Node* from = input.from_->get();
 			Node* to = node.get();
 
-			//if (check_clustering)
-			//{
-			//	// get latest input version
-			//	const Node* latest = input.from_->get()->GetLastVersion(*node);
-			//	// check if input is the boundary of this kernel
-			//	if (!BoundaryValid(latest, to, identity, input.index_, input.type_)) {
-			//		invalid_nodes[to] = "Invalid clusterization for argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_);
-			//	}
-			//}
-
-			//if (check_kernels)
-			//{
-			//	//check if no inputs are outside the kernel
-			//	if (from->kernel_ != to->kernel_ && 
-			//		input.type_ != ArgType::Memory && 
-			//		input.type_ != ArgType::Shape && from->name != "memory" &&
-			//	    from->name != "const") {
-			//		invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is outside the kernel";
-			//	}
-			//}
-
 			// check if inputs are before the node
-			if (from->index_ >= to->index_) {
+			if (from->index_ >= to->index_ && from->name != "const") {
 				if (input.type_ != ArgType::Shape) {
 					invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" +
 										to_string(input.index_) + " is after the node";
@@ -753,7 +511,7 @@ void IR::OptimizeKernels() {
 	}
 }
 
-#define MAX_LOAD_COPY 1024.0f
+#define MAX_LOAD_COPY 5000.0f
 
 void IR::OptimizeKernelLoadOperations() {
 	UpdateGraph();
@@ -2103,6 +1861,7 @@ void IR::CompileIR()
 	CheckIR("Finalize Memory Indexing", false, false);
 	OptimizeKernels();
 	OptimizeHost();
+	//OptimizeLoops();
 	RemoveUnusedOperations();
 	CheckIR("Finalize Memory Indexing 2", true, true);
 	RemoveUnusedKernels();
