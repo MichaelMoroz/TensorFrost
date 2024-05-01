@@ -147,6 +147,10 @@ void StartOpenGL() {
 	glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &bufferSize);
 	printf("Max available buffer size, MB: %d\n", bufferSize / 1024 / 1024);
 
+	// Print max SSBO bindings
+	GLint max_ssbo_bindings;
+	glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &max_ssbo_bindings);
+	printf("Maximum SSBO bindings supported: %d\n", max_ssbo_bindings);
 
 	// Enable debug output
 	#ifndef NDEBUG
@@ -217,6 +221,11 @@ void RenderFrame(const TensorMemory& tensor) {
 	//check if tensor is 2d + 3 channels
 	if (tensor.shape.size() != 3 || tensor.shape[2] != 3) {
 		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
+	}
+
+	//check if tensor is float32 (TODO: use int8 instead)
+	if (tensor.type != DataType::Float) {
+		throw std::runtime_error("Window: Render tensor must be of type float32");
 	}
 
 	// Clear the screen

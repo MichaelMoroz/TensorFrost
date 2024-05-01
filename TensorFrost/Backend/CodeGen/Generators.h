@@ -37,13 +37,12 @@ class Line {
 	string right;
 	string name;
 	int indent;
-	float cost = 0;
 
-	Line(Node* node, string left, string expression, string right, string name, float cost = 0, int indent = 0)
-	    : left(left), right(right), name(name), indent(indent), expression(expression), cost(cost), node(node) {}
+	Line(Node* node, string left, string expression, string right, string name, int indent = 0)
+	    : left(left), right(right), name(name), indent(indent), expression(expression), node(node) {}
 
 	Line(int indent, string expression)
-	    : indent(indent), expression(expression), cost(0), left(""), right(""), name(""), node(nullptr) {}
+	    : indent(indent), expression(expression), left(""), right(""), name(""), node(nullptr) {}
 };
 
 class CodeGenerator {
@@ -339,7 +338,7 @@ protected:
 		node_expression[node] = expression;
 		requires_paranthesis[node] = needs_paranthesis;
 
-		return new Line(node, left, expression, right, name, op->cost_);
+		return new Line(node, left, expression, right, name);
 	}
 
 	virtual string GenerateLoop(ArgumentManager* args, const string& name)

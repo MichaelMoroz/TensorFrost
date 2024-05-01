@@ -648,6 +648,14 @@ class ShapeInfo {
 		}
 		return tensors;
 	}
+
+	Arguments GetArguments() const {
+		Arguments arguments;
+		for (auto& [index, node] : shape) {
+			arguments.emplace_back(ArgType::Shape, node->GetLable(), index);
+		}
+		return arguments;
+	}
 };
 
 struct ShapeCompareResult {

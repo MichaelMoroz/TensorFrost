@@ -55,7 +55,7 @@ class Tensor {
 		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
 	}
 
-	static pair<const Operation*, DataType> GetOperation(const string& name,
+	static tuple<const Operation*, DataType, ShapeInfo> GetOperation(const string& name,
 	                                              const Tensors& tensors, bool check_shape = true) {
 		vector<DataType> input_types = vector<DataType>();
 		for (const auto& tensor : tensors) {
@@ -74,17 +74,21 @@ class Tensor {
 			throw std::runtime_error(error);
 		}
 
+		ShapeInfo shape_info = ShapeInfo();	
+
 		if (check_shape)
-		{
-			//check if shapes are compatible
-			for (int i = 1; i < tensors.size(); i++) {
-				AssertTensorShape(tensors[0], tensors[i]);
+		{	
+			//check if shapes are compatible and get the final broadcasted shape
+			for (int i = 0; i < tensors.size(); i++) {
+				ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
+				auto result = CompareShape(shape_info, shape_info2, false, true);
+				shape_info = result.broadcast_shape;
 			}
 		}
 
 		DataType output_type = operation->GetOutputType(input_types);
 
-		return pair<const Operation*, DataType>(operation, output_type);
+		return {operation, output_type, shape_info};
 	}
 
 	template <typename... Args>
@@ -99,24 +103,14 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = operation.second;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
 		// create argument list
 		Arguments arguments = Arguments();
 
 		AddArguments(arguments, tensors, ArgType::Input);
 
-		// get an input node that has shape arguments
-		Arguments shape_arguments;
-		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node_->GetArguments(ArgType::Shape);
-			if (!shape_arguments.empty()) {
-				break;
-			}
-		}
-
-		AddArguments(arguments, shape_arguments);
+		AddArguments(arguments, shape_info.GetArguments());
 
 		return CreateNode(output_type, arguments, op);
 	}
@@ -133,8 +127,7 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors, false);
-		DataType output_type = operation.second;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors, false);
 
 		// create argument list
 		Arguments arguments = Arguments();
@@ -157,8 +150,7 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = memory->type;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
 		// create argument list
 		Arguments arguments = Arguments();
@@ -190,10 +182,9 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = operation.second;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
-		if (operation.first->HasAllTypes(OpType::Modifier))
+		if (operation->HasAllTypes(OpType::Modifier))
 		{
 			memory->node_->SetAsModified();
 		}
@@ -206,13 +197,9 @@ class Tensor {
 		AddArguments(arguments, indices, ArgType::Index);
 
 		// get an input node that has shape arguments
-		Arguments shape_arguments;
-		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node_->GetArguments(ArgType::Shape);
-			if (!shape_arguments.empty()) {
-				break;
-			}
-		}
+		Arguments shape_arguments = shape_info.GetArguments();
+
+		//use index shape instead if no input shape is found
 		if (shape_arguments.empty())
 		{
 			for (const Tensor* index : indices)
@@ -223,10 +210,6 @@ class Tensor {
 				}
 			}
 		}
-		//if (shape_arguments.empty())
-		//{
-		//	shape_arguments = memory->node_->GetArguments(ArgType::Shape);
-		//}
 
 		AddArguments(arguments, shape_arguments);
 

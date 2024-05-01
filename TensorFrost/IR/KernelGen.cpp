@@ -47,7 +47,7 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 			if (val_a == 1) {
 				result.broadcast_shape.AddShape(broadcast_index, b_node);
 			} else {
-				result.broadcast_shape.AddShape(broadcast_index, b_node);
+				result.broadcast_shape.AddShape(broadcast_index, a_node);
 			}
 			continue;
 		}
@@ -527,10 +527,13 @@ void IR::OptimizeKernelLoadOperations() {
 
 			bool inside_kernel = memory_input->HasParent("kernel");
 
-			bool cheap_enough = memory_input->cost_ >= 0.0f && memory_input->cost_ < MAX_LOAD_COPY;
+			int output_count = (int)memory_input->outputs_.size();
+			bool cheap_enough = memory_input->cost_ >= 0.0f &&
+			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
+
 
 			//if the memory input is used only once and is not a memory node
-			if (cheap_enough && inside_kernel && memory_input->outputs_.size() == 1) {
+			if (cheap_enough && inside_kernel && output_count < 4) {
 				loads_to_copy[memory_input] = *node;
 			}
 		}
@@ -1246,21 +1249,6 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 	}
 }
 
-void IR::LinearModeIndices(vector<Tensor*>& indices, Node* kernel, int dims, Tensors kernel_shape)
-{
-	Tensor* thread_index = nullptr;
-	ExecuteExpressionChild(kernel, [&]() {
-		thread_index = &kernel->GetTensor()->ThreadIndex();
-		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
-	});
-
-	for (int i = 0; i < dims; i++) {
-		indices[i]->SetDebugName("index_" + to_string(i));
-	}
-	
-	ReplaceDimNodes(kernel, indices, dims);
-}
-
 void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
 {
 	//add dim_id nodes at the beginning of the kernel
@@ -1815,7 +1803,6 @@ void IR::InsertAlgorithmicPrimitives() {
 
 void IR::CompileIR() 
 {
-	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
 
 	CheckIR("Input", false, false);

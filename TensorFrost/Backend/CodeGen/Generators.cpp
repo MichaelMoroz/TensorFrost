@@ -202,7 +202,7 @@ void CodeGenerator::GenerateCode(const Node* root) {
 
 		Line* line = nullptr;
 		if (custom_generated_code_.contains(*node)) {
-			line = new Line(*node, "", custom_generated_code_[*node], ";", "", false, 0);
+			line = new Line(*node, "", custom_generated_code_[*node], ";", "");
 		} else {
 			// get node arguments
 			line = GenerateLine(*node);
