@@ -1812,10 +1812,12 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
 	InsertAlgorithmicPrimitives();
+	//UnrollLoops();
+	//TryReplaceModificationsWithVersions();
 	CheckIR("Insert Algorithmic Primitives", false, false);
 	SeparateOperationsIntoKernels();
 	CheckKernelShapes();
-
+	//UnrollDimensions();
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);
