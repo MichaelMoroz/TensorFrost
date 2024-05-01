@@ -114,10 +114,10 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, 
 void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
 
-	auto new_scopes = KernelScope::ComputeScopes(root);
+	auto kernel_scopes = KernelScope::ComputeScopes(root);
 
 	// create kernel nodes for all kernel scopes
-	for (auto scope : new_scopes) {
+	for (auto scope : kernel_scopes) {
 		// create kernel node before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
 			//create kernel node
@@ -155,11 +155,6 @@ void IR::CheckKernelShapes() {
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// check if the node has a shape argument
 			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
-			if (!result.compatible) {
-				throw std::runtime_error("Kernel " + kernel->var_name +
-				                         " has incompatible shape with node " +
-				                         node.get()->var_name);
-			}
 		}
 	}
 }

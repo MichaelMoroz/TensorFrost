@@ -859,8 +859,6 @@ public:
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
-	void LinearModeIndices(vector<Tensor*>& indices, Node* kernel, int dims,
-	                       Tensors kernel_shape);
 	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
 	Tensor* LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims,
