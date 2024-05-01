@@ -65,32 +65,32 @@ void TensorFunctionsDefinition(py::module& m) {
 	TERNARY_FUNCTION(select);
 	TERNARY_FUNCTION(smoothstep);
 
-	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
+	m.def("scatterAdd", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterAdd(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterAddPrev", [](const TensorView& t, const PyTensor& t2) {
-		return PT(Tensor::ScatterAddPrev(*t.value, T(t2), t.indices));
+	m.def("scatterAddPrev", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::ScatterAddPrev(*t.Value(), T(t2), t.Indices()));
 	});
 
-	m.def("scatterMin", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterMin(*t.value, T(t2), t.indices);
+	m.def("scatterMin", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterMin(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterMax", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterMax(*t.value, T(t2), t.indices);
+	m.def("scatterMax", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterMax(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterOr", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterOr(*t.value, T(t2), t.indices);
+	m.def("scatterOr", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterOr(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterAnd", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterAnd(*t.value, T(t2), t.indices);
+	m.def("scatterAnd", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterAnd(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterXor", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterXor(*t.value, T(t2), t.indices);
+	m.def("scatterXor", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterXor(*t.Value(), T(t2), t.Indices());
 	});
 
 	m.def("buffer", [](py::list shape, DataType type) {

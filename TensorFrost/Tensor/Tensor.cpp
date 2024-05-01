@@ -48,6 +48,7 @@ void Tensor::SetShape(Tensors shape) const {
 	}
 }
 
+//Get values from a tensor at the given indices
 Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices,
                      bool unsafe) {
 	Tensor& out = MemoryOp("load", &tensor, indices);
