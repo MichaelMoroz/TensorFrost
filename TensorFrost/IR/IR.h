@@ -233,13 +233,22 @@ class Node {
     }
 
 	void CopyProperties(Node* other) {
-		debug_name = other->debug_name;
 		name = other->name;
-		special_index_ = other->special_index_;
 		has_been_modified_ = other->has_been_modified_;
+		debug_name = other->debug_name;
+		special_index_ = other->special_index_;
 		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
+	}
+
+	void CopyMetadata(Node* other) {
+		debug_name = other->debug_name;
+		special_index_ = other->special_index_;
+		is_static = other->is_static;
+		indexing_mode_ = other->indexing_mode_;
+		group_size = other->group_size;
+		memory_type_ = other->memory_type_;
 	}
 
 	const Tensor* GetTensor() const;

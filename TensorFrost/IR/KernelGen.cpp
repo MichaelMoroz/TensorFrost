@@ -566,9 +566,13 @@ void IR::OptimizeKernelLoadOperations() {
 				AddNodeLoadOperations(new_node, kernel, indices_tensors);
 			}
 
+			Node* copied_load = copied_node_map[memory_input];
+			//copy over the information from the original load node
+			copied_load->CopyMetadata(load_node);
+
 			//go over all outputs of the load node and replace them with the copied nodes
 			for (auto& output : load_node->outputs_) {
-				output->from_ = copied_node_map[memory_input]->GetLable();
+				output->from_ = copied_load->GetLable();
 			}
 
 			//remove the load node since it is not needed anymore

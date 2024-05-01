@@ -67,6 +67,7 @@ Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
 Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
+	out.type = tensor.type;
 	return out;
 }
 
