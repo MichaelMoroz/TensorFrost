@@ -530,10 +530,10 @@ void IR::OptimizeKernelLoadOperations() {
 			int output_count = (int)memory_input->outputs_.size();
 			bool cheap_enough = memory_input->cost_ >= 0.0f &&
 			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
-
+			bool is_not_modified = !memory_input->HasBeenModified();
 
 			//if the memory input is used only once and is not a memory node
-			if (cheap_enough && inside_kernel && output_count < 4) {
+			if (cheap_enough && inside_kernel && output_count < 4 && is_not_modified) {
 				loads_to_copy[memory_input] = *node;
 			}
 		}
