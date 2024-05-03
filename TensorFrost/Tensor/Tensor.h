@@ -658,8 +658,22 @@ class Tensor {
 		axis = GetAxis(dims, axis);
 		shape.erase(shape.begin() + axis);
 		Tensor& output = OpShape("dot", shape, &tensor1, &tensor2);
+		output.data = vector<uint>(1, axis);
 		return output;
 	}
+
+	static Tensor& Unsqeeze(const Tensor& tensor, int axis = -1) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		shape.insert(shape.begin() + axis + 1, &Constant(1));
+		Tensor& output = OpShape("unsqueeze", shape, &tensor);
+		output.data = vector<uint>(1, axis);
+		return output;
+	}
+
+	//TODO: implement
+	//static Tensor& Sqeeze(const Tensor& tensor)
 
 	//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
 	static Tensor& Matmul(const Tensor& a, const Tensor& b) {

@@ -222,6 +222,10 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Transpose(T(t), dim1, dim2));
 	}, py::arg("t"), py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");
 
+	m.def("unsqueeze", [](const PyTensor& t, int dim) {
+		return PT(Tensor::Unsqeeze(T(t), dim));
+	}, py::arg("t"), py::arg("dim") = -1, "Unsqueeze the tensor");
+
 	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
 		return PT(Tensor::Dot(T(t), T(t2), axis));
 	}, py::arg("t"), py::arg("t2"), py::arg("axis") = -1, "Dot product of two tensors");

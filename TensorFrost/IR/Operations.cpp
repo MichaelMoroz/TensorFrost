@@ -42,7 +42,7 @@ const vector<Operation> operations = {
     Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
     Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
-    Operation("expand_dims", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
     Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
     //Advanced
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),

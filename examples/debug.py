@@ -3,57 +3,41 @@ import numpy as np
 import TensorFrost as tf
 import matplotlib.pyplot as plt
 
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
 
-blur_d = 16
-blur_r = blur_d * 0.5
+dt = 0.0001
 
-def kernel(r):
-    #return 1.0
-    return tf.exp(-0.5 * (tf.float(r) / blur_r) ** 2.0) / (blur_r * np.sqrt(2.0 * np.pi))
+def Force(dx, dv, rho):
+    i, j, k = dx.indices
+    dist = tf.unsqueeze(tf.norm(dx))
+    dvdotdx = tf.unsqueeze(tf.dot(dv, dx))
+    weight = tf.exp(-dist / 0.015)
+    pressure = 0.2 * (rho[i] + rho[j])**2.0 * weight
+    Fij = 0.2 * dx / (dist ** 3.0 + 5e-3) + 100.0 * dvdotdx * dx * weight / (dist*dist + 1e-5)  - 50.0 * pressure * dx / (dist*dist + 1e-5)
+    Fij = tf.select(i == j, 0.0, Fij)
+    return Fij
 
-def blur():
-    img = tf.input([-1, -1, -1], tf.float32)
-    not_used = tf.input([128, 64, 64], tf.float32)
-    
-    blur_h = tf.zeros(img.shape, tf.float32)
-    i, j, ch = img.indices
+def Density(dx):
+    dist = tf.norm(dx)
+    weight = tf.exp(-dist / 0.015)
+    rho = 1.0 * weight
+    return rho
 
-    #horizontal blur
-    with tf.loop(-blur_d, blur_d+1) as k:
-        blur_h.val += img[i+k, j, ch] * kernel(k)
+def n_body():
+    X = tf.input([-1, 3], tf.float32)
+    N = X.shape[0]
+    V = tf.input([N, 3], tf.float32)
 
-    blur_v = tf.zeros(img.shape, tf.float32)
-    #vertical blur
-    with tf.loop(-blur_d, blur_d+1) as k:
-        blur_v.val += blur_h[i, j+k, ch] * kernel(k)
+    i, j, k = tf.indices([N, N, 3])
+    dx = X[i,k] - X[j,k]
+    dv = V[i,k] - V[j,k]
 
-    return [blur_v]
+    rho = tf.sum(Density(dx), axis=1)
+    Fi = tf.sum(Force(dx, dv, rho), axis=1)
 
-tf_blur = tf.compile(blur)
+    Vnew = V + Fi * dt
+    Xnew = X + Vnew * dt
 
-# %%
-input_img = np.array(plt.imread("test.png"), dtype=np.float32)
-#input_img = input_img[:,:,0:3].reshape(input_img.shape[0], input_img.shape[1], 3)
-plt.imshow(input_img)
-plt.show()
-print(input_img.shape)
+    return [Xnew, Vnew]
 
-# %%
-tf_img = tf.tensor(input_img)
-orig_img = tf_img.numpy
-
-plt.imshow(orig_img)
-plt.show()
-print(orig_img.shape)
-
-# %%
-output_img, = tf_blur(tf_img)
-
-output_numpy = output_img.numpy
-plt.imshow(output_numpy)
-plt.show()
-
-print(output_numpy.shape)
-
-
+nbody = tf.compile(n_body)

@@ -200,4 +200,18 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 	return new_scope;
 }
 
+Arg::~Arg() {
+	// remove this arg from the output list of the from node
+	if (from_) {
+		if (from_->node_->outputs_.empty()) return;
+		for (auto it = from_->node_->outputs_.begin();
+		     it != from_->node_->outputs_.end(); ++it) {
+			if (*it == this) {
+				from_->node_->outputs_.erase(it);
+				break;
+			}
+		}
+	}
+}
+
 }  // namespace TensorFrost

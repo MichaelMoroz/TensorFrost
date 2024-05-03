@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <stack>
+#include <set>
 
 #include "Operations.h"
 #include "Utility/Utility.h"
@@ -54,6 +55,8 @@ class Arg {
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
+
+	~Arg();
 };
 
 using ArgMap = map<int, const Arg*>;
@@ -298,9 +301,16 @@ class Node {
 		return false;
 	}
 
-	void MakeOutputsUseGivenNode(Node* replacement) {
+	/// <summary>
+	/// Make all outputs of this node use the given node as input, assuming that the output is further than min_index
+	/// </summary>
+	/// <param name="replacement"></param>
+	/// <param name="min_index"></param>
+	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1) {
 		for (Arg* output : outputs_) {
-			output->from_ = replacement->GetLable();
+			if (output->to_->get()->index_ >= min_index) {
+				output->from_ = replacement->GetLable();
+			}
 		}
 	}
 
@@ -790,30 +800,7 @@ public:
 		}
 	}
 
-    void RemoveNode(Node* node) {
-        if (node->valid()) {
-			// if child node exists, iterate through it and remove all children
-			if (node->child) {
-				vector<Node*> to_delete;
-				for (auto child = NodeIterator(node); !child.end(); child.next()) {
-					to_delete.push_back(*child);
-				}
-				for (Node* child : to_delete) {
-					RemoveNode(child);
-				}
-			}
-
-            //if direct child of its parent
-            if (node->parent && node->parent->child == node) {
-                node->parent->child = node->next;
-            } else if (node->prev) {
-                node->prev->next = node->next;
-            }
-
-            node->next->prev = node->prev;
-            delete node;
-        }
-    }
+    void RemoveNode(Node* node);
 
     void SetCursor(Node* node) {
         cursor = NodeIterator(node, root);
@@ -852,6 +839,10 @@ public:
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
 	string PrintListing(map<Node*, string> node_debug) const;
+	map<Node*, Node*> CopyNodes(set<Node*> nodes_to_copy,
+	                            unordered_map<Node*, Node*> argument_replacements,
+	                            unordered_map<int, Node*> indices,
+	                            unordered_set<Node*> targets, bool must_copy_all);
 	map<Node*, Node*> CopyComputation(const unordered_set<Node*>& targets,
 	                                  const unordered_map<int, Node*>& indices);
 	void GetInputList();
@@ -868,6 +859,8 @@ public:
 	void OptimizeKernelLoadOperations();
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
+	void UnrollLoops();
+	void TryReplaceModificationsWithVersions();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
@@ -887,6 +880,7 @@ public:
 	void CompileIR();
 
 	void UpdateGraph() const {
+		// update edges
 		Node* prev = nullptr;
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateEdges();
@@ -897,10 +891,36 @@ public:
 			}
 			prev = *node;
 		}
+
+		// check if graph is valid
+		for (auto node = begin(); !node.end(); node.next()) {
+			// if there are null inputs throw an error
+			for (auto& input : (*node)->inputs_) {
+				if (!input.from_) {
+					throw std::runtime_error("Null input found in node " +
+					                         (*node)->var_name +
+					                         ". Likely an icorrectly deleted node.");
+				}
+			}
+		}
+
+		// update outputs
 		int index = 0;    
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateOutputs();
 			node->index_ = index++;
+		}
+
+		//update modified flags
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->has_been_modified_ = false;
+			//go over all outputs and check if they are modifiers
+			for (auto& output : node->outputs_) {
+				if (output->to_->get()->op->HasAllTypes(OpType::Modifier) && output->type_ == ArgType::Memory) {
+					node->has_been_modified_ = true;
+					break;
+				}
+			}
 		}
 	}
 
@@ -920,6 +940,14 @@ public:
 			if (node->op->HasAllTypes(type)) {
 				result.push_back(*node);
 			}
+		}
+		return result;
+	}
+
+	vector<Node*> GetChildren(Node* node) const {
+		vector<Node*> result;
+		for (auto child = NodeIterator(node); !child.end(); child.next()) {
+			result.push_back(*child);
 		}
 		return result;
 	}
