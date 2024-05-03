@@ -26,6 +26,7 @@ class Frame {
 class FrameAllocator {
  private:
 	std::map<uint32_t, Frame*> Frames_;
+	const uint32_t min_frame_size = 4;
 
  public:
 	FrameAllocator() = default;
@@ -36,6 +37,8 @@ class FrameAllocator {
 	iterator end() { return Frames_.end(); }
 
 	Frame* AllocateFrame(uint32_t size) {
+		size = std::max(size, min_frame_size);
+
 		uint32_t start = 0;
 		for (auto& pair : Frames_) {
 			Frame* frame = pair.second;

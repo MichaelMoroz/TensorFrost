@@ -29,8 +29,7 @@ extern "C" {
 		TensorProp* tensors;
 		uint variable_count;
 		uint* variables;
-		uint dispatch_dim;
-		uint* dispatch_shape;
+		uint work_group_count;
 	};
 
 	typedef TensorProp alloc_func(uint*, uint, DataType);
@@ -38,7 +37,7 @@ extern "C" {
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
 	typedef void dispatch_func(DispatchInfo);
-	typedef void cpu_dispatch_func(uint* var, uint* off, uint* mem, uint* shape);
+	typedef void cpu_dispatch_func(uint* var, uint* off, uint* mem, uint work_group_count);
 }
 
 using uint = unsigned int;

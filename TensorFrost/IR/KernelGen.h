@@ -1,6 +1,8 @@
 #pragma once
 
 #include <utility>
+#include <limits.h>
+#include <float.h>
 
 #include "Backend/TensorMemory.h"
 #include "Tensor/Tensor.h"
@@ -12,7 +14,6 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 
 class Kernel {
  public:
-	KernelIndexingMode indexing_mode_;
 	Node* root;
 	map<Node*, int> variables;
 	map<Node*, int> memory;
@@ -37,11 +38,11 @@ class Program {
 
 	explicit Program(IR* ir) : ir_(ir) {}
 
-	void AddKernel(KernelIndexingMode indexing_mode, Node* kernel_node, map<Node*, int> variables, map<Node*, int> memory,
+	void AddKernel(Node* kernel_node, map<Node*, int> variables, map<Node*, int> memory,
 	               ArgMap shape, int dim) 
 	{
 		kernels_.push_back(
-		    {indexing_mode, kernel_node, std::move(variables), std::move(memory), std::move(shape), dim});
+		    {kernel_node, std::move(variables), std::move(memory), std::move(shape), dim});
 	}
 };
 

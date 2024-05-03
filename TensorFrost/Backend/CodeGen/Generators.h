@@ -2,7 +2,9 @@
 #include <regex>
 #include <sstream>
 #include <string>
-#include <format>
+#include <iostream>
+#include <iomanip>
+#include <string>
 #include "IR/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Backend/Backend.h"
@@ -23,22 +25,24 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
+bool IsForbiddenName(const string& name);
+
 using ArgumentNames = map<ArgID, string>;
 
 class Line {
  public:
+	Node* node;
 	string left;
 	string expression;
 	string right;
 	string name;
 	int indent;
-	float cost = 0;
 
-	Line(string left, string expression, string right, string name, float cost = 0, int indent = 0)
-	    : left(left), right(right), name(name), indent(indent), expression(expression), cost(cost) {}
+	Line(Node* node, string left, string expression, string right, string name, int indent = 0)
+	    : left(left), right(right), name(name), indent(indent), expression(expression), node(node) {}
 
 	Line(int indent, string expression)
-	    : indent(indent), expression(expression), cost(0), left(""), right(""), name("") {}
+	    : indent(indent), expression(expression), left(""), right(""), name(""), node(nullptr) {}
 };
 
 class CodeGenerator {
@@ -63,25 +67,75 @@ class CodeGenerator {
 protected:
 	map<Node*, int> offsets;
 	map<Node*, int> variables;
+	map<Node*, string> node_expression;
+	map<Node*, bool> requires_paranthesis;
+	unordered_set<Node*> lines_to_remove;
+	vector<string> additional_lines;
+	unordered_map<string, int> name_count;
 
 	virtual void GenerateArgumentNames(ArgumentManager& args)  {
 		for (auto& arg : args.arguments_) {
-			string name = GetNodeName(arg.second, true);
-			if (variables.contains(arg.second)) {
-				name = GetName("var") + "[" +
-				       to_string(variables[arg.second]) + "]";
-				name =
-				    "as" + type_names[arg.second->GetTensor()->type] + "(" + name + ")";
+			Node* node = arg.second;
+			ArgID id = arg.first;
+			string name = node->var_name;
+			bool need_parenthesis = false;
+			if (variables.contains(node)) {
+				name = GetName("var") + "[" + to_string(variables[node]) + "]";
+				name = "as" + type_names[node->GetTensor()->type] + "(" + name + ")";
 			}
-			args.SetName(arg.first, name);
+			else
+			{
+				string expr = node_expression[node];
+				bool is_memory = node->op->HasAllTypes(OpType::Memory);
+				bool is_static = node->op->HasAllTypes(OpType::Static) || 
+								 node->op->HasAllTypes(OpType::CantSubstitute);
+				bool is_constant = node->op->HasAllTypes(OpType::Constant);
+				if (is_constant && expr == "") {
+					expr = node->GetTensor()->GetConstantString();
+				}
+				bool is_variable = node->op->HasAllTypes(OpType::Variable);
+				bool has_name = node->debug_name != "";
+				bool has_single_output = (node->outputs_.size() == 1) || is_constant || is_variable;
+				bool modified = node->has_been_modified_;
+				bool short_enough = expr.size() < 100;
+				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
+				if (can_substitude) {
+					if (expr == "") {
+						throw std::runtime_error("Substitute expression is empty");
+					}
+					name = expr;
+					need_parenthesis = requires_paranthesis[node];
+					lines_to_remove.insert(node);
+				}
+			}
+			args.SetName(id, name, need_parenthesis);
 		}
 	}
 
+	void RegenerateNodeName(Node* node) {
+		string debug = node->debug_name;
+		if (debug.empty()) {
+			return;
+		}
+		// check if the name is already used
+		if (name_count.contains(debug)) {
+			name_count[debug]++;
+			debug = debug + "_" + to_string(name_count[debug]);
+		} else {
+			name_count[debug] = 1;
+		}
+		if (IsForbiddenName(debug)) {
+			debug = debug + "_";
+		}
+		node->var_name = debug;
+	}
+
 	virtual Line* GenerateLine(Node* node)  {
-		// TODO: Create argument manager class
 		ArgumentManager args = node->GetArgumentManager();
 		GenerateArgumentNames(args);
+		if (is_kernel) RegenerateNodeName(node);
 		const Operation* op = node->op;
+
 		string name = node->var_name;
 
 		// get output type
@@ -91,6 +145,7 @@ protected:
 		string left = "";
 		string expression = "";
 		string right = "";
+		bool needs_paranthesis = false;
 
 		if (op->HasAllTypes(OpType::Special)) {
 			int dims = args.Count(ArgType::Shape);
@@ -105,7 +160,7 @@ protected:
 					}
 					Node* shape_node = args.Get(ArgType::Shape, j);
 
-					shape_arg += "(uint)" + ReadVariable(shape_node);
+					shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
 				}
 			}
 
@@ -137,6 +192,12 @@ protected:
 				Node* output_memory = node->outputs_[0]->to_->get();
 				left = "int " + node->var_name + " = ";
 				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
+				right = ";";
+			}
+			else if (op->name_ == "reshape")
+			{
+				left = "TensorProp " + node->var_name + " = ";
+				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpType::MemoryOp)) {
@@ -215,14 +276,18 @@ protected:
 			string code = op->code_;
 			switch (op->op_types_[0]) {
 				case OpType::Operator:
+					args.AddParenthesis(true);
 					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
 						code = code + code;
 					}
 					line += args.Name(ArgType::Input, 0) + " " + code + " " +
 					        args.Name(ArgType::Input, 1);
+					needs_paranthesis = true;
 					break;
 				case OpType::UnaryOperator:
+					args.AddParenthesis(true);
 					line += op->code_ + args.Name(ArgType::Input, 0);
+					needs_paranthesis = true;
 					break;
 				case OpType::Function:
 					line += GetName(op->code_) + "(";
@@ -233,6 +298,9 @@ protected:
 						line += args.Name(ArgType::Input, i);
 					}
 					line += ")";
+					break;
+				case OpType::Copy:
+					line += args.Name(ArgType::Input, 0);
 					break;
 				case OpType::Keyword:
 					line += op->code_;
@@ -253,9 +321,11 @@ protected:
 					line += node->GetTensor()->GetConstantString();
 					break;
 				case OpType::TernaryOperator:
+					args.AddParenthesis(true);
 					line += args.Name(ArgType::Input, 0) + " ? " +
 					        args.Name(ArgType::Input, 1) + " : " +
 					        args.Name(ArgType::Input, 2);
+					needs_paranthesis = true;
 					break;
 				default:
 					line += "";
@@ -265,7 +335,10 @@ protected:
 			right += ";";
 		}
 
-		return new Line(left, expression, right, name, op->cost_);
+		node_expression[node] = expression;
+		requires_paranthesis[node] = needs_paranthesis;
+
+		return new Line(node, left, expression, right, name);
 	}
 
 	virtual string GenerateLoop(ArgumentManager* args, const string& name)

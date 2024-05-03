@@ -4,15 +4,15 @@ import time
 
 tf.initialize(tf.opengl)
 
-S = 1200
+S = 1024
 MAX_ITER = 1000
-SAMPLES = 4
+SAMPLES = 2
 
 T1 = MAX_ITER // 50
 T2 = MAX_ITER // 10
 T3 = MAX_ITER
 
-def mandelbrot():
+def buddhabrot():
     prev_frame = tf.input([S, S, 3], tf.float32)
     frame_id = tf.input([1], tf.int32)
     time_var = tf.input([1], tf.float32)[0]
@@ -23,7 +23,7 @@ def mandelbrot():
     seed = tf.uint(i + j * S + frame_id[0] * S * S)
     aspect = tf.float(S) / tf.float(S)
 
-    def sample_iteration(sit):
+    with tf.loop(SAMPLES):
         seed.set(tf.pcg(seed))
         u = (x + 2.0*tf.pcgf(seed)) / tf.float(S)
         v = (y + 2.0*tf.pcgf(seed + tf.uint(5))) / tf.float(S)
@@ -35,47 +35,43 @@ def mandelbrot():
         z0x = (u0 * 2.0 - 1.0) * aspect * 1.5
         z0y = (v0 * 2.0 - 1.0) * aspect * 1.5
 
-        z_re = z0x + 1e-6 #making a botched copy of the variable to avoid a bug
-        z_im = z0y + 1e-6
+        z_re = tf.copy(z0x)
+        z_im = tf.copy(z0y)
         l = tf.zeros([], tf.int32)
         c_re = cx
         c_im = cy
 
-        def loop_body(k):
+        def mandelbrot_iter(z_re, z_im):
             z_re_new = z_re*z_re - z_im*z_im + c_re
             z_im_new = 2.0*z_re*z_im + c_im
-            z_re.set(z_re_new)
-            z_im.set(z_im_new)
-            tf.if_cond((z_re*z_re + z_im*z_im) > 4.0, lambda: tf.break_loop())
-            l.set(l + 1)
+            z_re.val = z_re_new
+            z_im.val = z_im_new
+            with tf.if_cond((z_re*z_re + z_im*z_im) > 4.0):
+                tf.break_loop()
 
-        tf.loop(loop_body, 0, MAX_ITER, 1)
+        with tf.loop(MAX_ITER):
+            mandelbrot_iter(z_re, z_im)
+            l.val += 1
 
-        tf.if_cond(l >= MAX_ITER, lambda: tf.continue_loop())
+        with tf.if_cond(l >= MAX_ITER):
+            tf.continue_loop()
 
-        z_re.set(z0x)
-        z_im.set(z0y)
+        z_re.val = z0x
+        z_im.val = z0y
 
-        def loop_body(k):
-            z_re_new = z_re*z_re - z_im*z_im + c_re
-            z_im_new = 2.0*z_re*z_im + c_im
-            z_re.set(z_re_new)
-            z_im.set(z_im_new)
-            tf.if_cond((z_re*z_re + z_im*z_im) > 4.0, lambda: tf.break_loop())
-            #let p = (cos(.3*t) * z + sin(.3*t) * c) / 1.5 / aspect * .5 + .5;
+        with tf.loop(MAX_ITER):
+            mandelbrot_iter(z_re, z_im)
+            
             px = (tf.cos(.3*time_var) * z_re + tf.sin(.3*time_var) * c_re) / 1.5 / aspect * 0.5 + 0.6
             py = (tf.cos(.3*time_var) * z_im + tf.sin(.3*time_var) * c_im) / 1.5 / aspect * 0.5 + 0.5
-            tf.if_cond((px < 0.0) | (px > 1.0) | (py < 0.0) | (py > 1.0), lambda: tf.continue_loop())
+            with tf.if_cond((px < 0.0) | (px > 1.0) | (py < 0.0) | (py > 1.0)):
+                tf.continue_loop()
             x_pix = tf.int(px * tf.float(S))
             y_pix = tf.int(py * tf.float(S))
-    
+            
             ch = tf.select(l < T1, 2, tf.select(l < T2, 1, 0))
             tf.scatterAdd(atomic_canvas[S - 1 - y_pix, x_pix, ch], 1)
             tf.scatterAdd(atomic_canvas[y_pix, x_pix, ch], 1)
-
-        tf.loop(loop_body, 0, MAX_ITER, 1)
-
-    tf.loop(sample_iteration, 0, SAMPLES, 1)
 
     canvas = tf.buffer([S, S, 3], tf.float32)
 
@@ -95,7 +91,7 @@ def mandelbrot():
 
     return [canvas, frame_id + 1]
 
-mand = tf.compile(mandelbrot)
+mand = tf.compile(buddhabrot)
 
 frame = np.zeros([S, S, 3], np.float32)
 frame_tf = tf.tensor(frame)
@@ -110,5 +106,7 @@ while not tf.window_should_close():
     time_tf = tf.tensor(np.array([cur_time], np.float32))
     frame_tf, frame_id = mand(frame_tf, frame_id, time_tf)
     tf.render_frame(frame_tf)
+    render_time = time.time() - init_time - cur_time
+    tf.imgui_text("Render time: %.3f ms" % (render_time * 1000))
 
 tf.hide_window()

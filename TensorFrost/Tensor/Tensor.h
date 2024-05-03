@@ -51,12 +51,12 @@ class Tensor {
 		}
 	}
 
-	static bool CompareTensorShape(const Tensor* a, const Tensor* b) {
-		return CompareShape(a->node_, b->node_).compatible;
+	static bool AssertTensorShape(const Tensor* a, const Tensor* b, bool throw_error = true) {
+		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
 	}
 
-	static pair<const Operation*, DataType> GetOperation(const string& name,
-	                                              const Tensors& tensors) {
+	static tuple<const Operation*, DataType, ShapeInfo> GetOperation(const string& name,
+	                                              const Tensors& tensors, bool check_shape = true) {
 		vector<DataType> input_types = vector<DataType>();
 		for (const auto& tensor : tensors) {
 			input_types.push_back(tensor->type);
@@ -74,17 +74,21 @@ class Tensor {
 			throw std::runtime_error(error);
 		}
 
-		//check if shapes are compatible
-		for (int i = 1; i < tensors.size(); i++) {
-			if (!CompareTensorShape(tensors[0], tensors[i])) {
-				throw std::runtime_error("Cannot perform operation \"" + name +
-				                         "\" on tensors with potentially incompatible shapes");
+		ShapeInfo shape_info = ShapeInfo();	
+
+		if (check_shape)
+		{	
+			//check if shapes are compatible and get the final broadcasted shape
+			for (int i = 0; i < tensors.size(); i++) {
+				ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
+				auto result = CompareShape(shape_info, shape_info2, false, true);
+				shape_info = result.broadcast_shape;
 			}
 		}
 
 		DataType output_type = operation->GetOutputType(input_types);
 
-		return pair<const Operation*, DataType>(operation, output_type);
+		return {operation, output_type, shape_info};
 	}
 
 	template <typename... Args>
@@ -99,24 +103,61 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = operation.second;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
 		// create argument list
 		Arguments arguments = Arguments();
 
 		AddArguments(arguments, tensors, ArgType::Input);
 
-		// get an input node that has shape arguments
-		Arguments shape_arguments;
-		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node_->GetArguments(ArgType::Shape);
-			if (!shape_arguments.empty()) {
-				break;
-			}
+		AddArguments(arguments, shape_info.GetArguments());
+
+		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
+	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Operation name cannot be empty");
 		}
 
-		AddArguments(arguments, shape_arguments);
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		// get the operation and output type
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors, false);
+
+		// create argument list
+		Arguments arguments = Arguments();
+
+		AddArguments(arguments, tensors, ArgType::Input);
+		AddArguments(arguments, shape, ArgType::Shape);
+
+		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
+	static Tensor& MemoryOpShape(std::string op, Tensors shape, const Tensor* memory, const Args*... args) {
+		op = RemoveSpaces(op);
+
+		if (op.empty()) {
+			throw std::runtime_error("Memory operation name cannot be empty");
+		}
+
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		// get the operation and output type
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
+
+		// create argument list
+		Arguments arguments = Arguments();
+
+		AddArgument(arguments, memory, ArgType::Memory);
+		AddArguments(arguments, tensors, ArgType::Input);
+		AddArguments(arguments, shape, ArgType::Shape);
 
 		return CreateNode(output_type, arguments, op);
 	}
@@ -141,10 +182,9 @@ class Tensor {
 		Tensors tensors = {args...};
 
 		// get the operation and output type
-		pair<const Operation*, DataType> operation = GetOperation(op, tensors);
-		DataType output_type = operation.second;
+		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
-		if (operation.first->HasAllTypes(OpType::Modifier))
+		if (operation->HasAllTypes(OpType::Modifier))
 		{
 			memory->node_->SetAsModified();
 		}
@@ -157,13 +197,9 @@ class Tensor {
 		AddArguments(arguments, indices, ArgType::Index);
 
 		// get an input node that has shape arguments
-		Arguments shape_arguments;
-		for (const Tensor* tensor : tensors) {
-			shape_arguments = tensor->node_->GetArguments(ArgType::Shape);
-			if (!shape_arguments.empty()) {
-				break;
-			}
-		}
+		Arguments shape_arguments = shape_info.GetArguments();
+
+		//use index shape instead if no input shape is found
 		if (shape_arguments.empty())
 		{
 			for (const Tensor* index : indices)
@@ -174,10 +210,6 @@ class Tensor {
 				}
 			}
 		}
-		//if (shape_arguments.empty())
-		//{
-		//	shape_arguments = memory->node_->GetArguments(ArgType::Shape);
-		//}
 
 		AddArguments(arguments, shape_arguments);
 
@@ -233,11 +265,9 @@ class Tensor {
 	// Main constructor
 	explicit Tensor(DataType type) { this->type = type; }
 
-	static Tensor* GetCopy(const Tensor& other, Arguments args) {
-		Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
-		copy->data = other.data;
-		return copy;
-	}
+	static Tensor* GetCopy(const Tensor& other, Arguments args);
+
+	static Tensor* GetCopy(const Tensor& other);
 
 	void SetMemoryType(MemoryType memory_type, int index = 0) const {
 		node_->SetMemoryType(memory_type, index);
@@ -319,6 +349,15 @@ class Tensor {
 		return result;
 	}
 
+	void SetShape(Tensors shape) const;
+
+	int TryGetConstant() const {
+		if (node_->name != "const") {
+			return -1;
+		}
+		return AsInt(data[0]);
+	}
+
 	// tensor factory methods
 	static Tensors GetConstantShape(const vector<int>& shape) {
 		Tensors result = Tensors();
@@ -379,6 +418,7 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, int value) {
 		return Constant(GetConstantShape(shape), value);
 	}
+
 	static Tensor& Constant(const Tensors& shape, uint value) {
 		Arguments arguments = Arguments();
 		AddArguments(arguments, shape, ArgType::Shape);
@@ -386,8 +426,16 @@ class Tensor {
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
+
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
+	}
+	static Tensor& Constant(const Tensors shape, uint value, DataType type) {
+		Arguments arguments = Arguments();
+		AddArguments(arguments, shape, ArgType::Shape);
+		Tensor& output = Static("const", arguments, type);
+		output.data = std::vector<uint>(1, value);
+		return output;
 	}
 	
 	static Tensors GetShapeTensors(const vector<int>& shape) {
@@ -476,10 +524,23 @@ class Tensor {
 		return output;
 	}
 
-	static Tensor& Load(const Tensor& tensor,
-	                    const Tensors& indices = Tensors()) {
-		return MemoryOp("load", &tensor, indices);
+	Tensor& BlockIndex() const {
+		Tensor& output = Static(
+		    "block_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		output.type = DataType::Int;
+		return output;
 	}
+
+	Tensor& BlockThreadIndex(int i) const {
+		Tensor& output = Static(
+		    "block_thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		output.type = DataType::Int;
+		output.data = std::vector<uint>(1, i);
+		return output;
+	}
+
+	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors(),
+	                    bool unsafe = false);
 
 	static Tensor& Deallocate(const Tensor& tensor) {
 		return MemoryOp("deallocate", &tensor, {});
@@ -494,9 +555,7 @@ class Tensor {
 	}
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
-	                     const Tensors& indices = Tensors()) {
-		return MemoryOp("store", &tensor, indices, &value);
-	}
+	                     const Tensors& indices = Tensors(), bool unsafe = false);
 
 	void Set(const Tensor& value) const  {
 		MemoryOp("set", this, {}, &value);
@@ -537,16 +596,140 @@ class Tensor {
 		MemoryOp("InterlockedXor", &tensor, indices, &value);
 	}
 
-	static Tensor& Sum(const Tensor& tensor, const int dim) {
-		Tensor& res = Op("sum", &tensor);
-		res.data = std::vector<uint>(1, dim);
-		return res;
+	static int GetAxis(int dims, int axis) {
+		if (axis < 0) {
+			axis = dims + axis;
+		}
+		return axis;
+	}
+
+	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1) {
+		// get the shape of the tensor (all dimensions except the last one)
+		Tensors shape = tensor.GetShape();
+		axis = GetAxis((int)shape.size(), axis);
+		// remove the axis dimension
+		shape.erase(shape.begin() + axis);
+		if (shape.empty()) {
+			shape.push_back(&Constant(1));
+		}
+		Tensor& op = OpShape(name, shape, &tensor);
+		op.data = vector<uint>(1, axis);
+		return op;
+	}
+
+	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_sum", tensor, axis);
+	}
+
+	static Tensor& Norm(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_norm", tensor, axis);
+	}
+
+	static Tensor& Mean(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_mean", tensor, axis);
+	}
+
+	static Tensor& Max(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_max", tensor, axis);
+	}
+
+	static Tensor& Min(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_min", tensor, axis);
+	}
+	
+	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		int a1 = GetAxis(dims, axis1);
+		int a2 = GetAxis(dims, axis2);
+		//swap the axes
+		std::swap(shape[a1], shape[a2]);
+		Tensor& output = OpShape("transpose", shape, &tensor);
+		//add data
+		output.data = vector<uint>(2, a1);
+		output.data[1] = a2;
+		return output;
+	}
+
+	//dot product of 
+	static Tensor& Dot(const Tensor& tensor1, const Tensor& tensor2, int axis = -1) {
+		Tensors shape = tensor1.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		shape.erase(shape.begin() + axis);
+		Tensor& output = OpShape("dot", shape, &tensor1, &tensor2);
+		output.data = vector<uint>(1, axis);
+		return output;
+	}
+
+	static Tensor& Unsqeeze(const Tensor& tensor, int axis = -1) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		shape.insert(shape.begin() + axis + 1, &Constant(1));
+		Tensor& output = OpShape("unsqueeze", shape, &tensor);
+		output.data = vector<uint>(1, axis);
+		return output;
+	}
+
+	//TODO: implement
+	//static Tensor& Sqeeze(const Tensor& tensor)
+
+	//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
+	static Tensor& Matmul(const Tensor& a, const Tensor& b) {
+		Tensors shape_a = a.GetShape();
+		Tensors shape_b = b.GetShape();
+
+		if (shape_a.size() < 2 || shape_b.size() < 2) {
+			throw std::runtime_error("MatMul requires tensors with at least 2 dimensions");
+		}
+
+		// get shape of the result
+		Tensors shape_c = Tensors();
+		int dim_a = (int)shape_a.size();
+		int dim_b = (int)shape_b.size();
+		int max_dim = 0;
+		Tensors max_shape = Tensors();
+		// get the shape with most dimensions
+		if (dim_a < dim_b) {
+			max_dim = dim_b;
+			max_shape = shape_b;
+		} else {
+			max_dim = dim_a;
+			max_shape = shape_a;
+		}
+
+		for (int i = 0; i < max_dim - 2; i++) {
+			shape_c.push_back(max_shape[i]);
+		}
+		shape_c.push_back(shape_a[dim_a - 2]);
+		shape_c.push_back(shape_b[dim_b - 1]);
+
+		Tensor& output = OpShape("matmul", shape_c, &a, &b);
+		return output;
+	}
+
+	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
+
+	void Enter() const
+	{ 
+		evaluation_context_ir_->BeginScope(node_->child);
+	}
+
+	void Exit() const
+	{
+		evaluation_context_ir_->EndScope();
+	}
+
+	static Tensor& Loop(const Tensor& start, const Tensor& end, const Tensor& step)
+	{
+		return Op("loop", &start, &end, &step);
 	}
 
 	static void Loop(const Tensor& start, const Tensor& end, const Tensor& step,
-	                 const std::function<void(const Tensor&)>& body) {
+	                 const function<void(const Tensor&)>& body) {
 		// create the loop
-		Tensor& loop = Op("loop", &start, &end, &step);
+		Tensor& loop = Loop(start, end, step);
 
 		evaluation_context_ir_->ExecuteExpressionChild(loop.node_, [&]() {
 			// create the body
@@ -554,10 +737,16 @@ class Tensor {
 		});
 	}
 
+	static Tensor& If(const Tensor& condition) {
+		// create the if
+		Tensor& if_tensor = Op("if", &condition);
+		return if_tensor;
+	}
+
 	static void If(const Tensor& condition,
 		const std::function<void()>& body) {
 		// create the if
-		Tensor& if_tensor = Op("if", &condition);
+		Tensor& if_tensor = If(condition);
 
 		evaluation_context_ir_->ExecuteExpressionChild(if_tensor.node_, [&]() {
 			// create the body
@@ -571,9 +760,15 @@ class Tensor {
 		If(!condition, false_body);
 	}
 
-	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
+	static Tensor& Kernel(const Tensors shape) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, DataType::None);
+		return kernel;
+	}
+
+	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
+		// create the kernel
+		Tensor& kernel = Kernel(shape);
 
 		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
 			//create indices
@@ -691,6 +886,10 @@ class Tensor {
 		return Op("cond", &condition, &ifTrue, &ifFalse);
 	}
 
+	static Tensor& copy(const Tensor& tensor) {
+		return Op("copy", &tensor);
+	}
+
 	static Tensor& sin(const Tensor& x) { return Op("sin", &x); }
 	static Tensor& cos(const Tensor& x) { return Op("cos", &x); }
 	static Tensor& tan(const Tensor& x) { return Op("tan", &x); }
@@ -726,6 +925,10 @@ class Tensor {
 	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }
 	static Tensor& tobool(const Tensor& x) { return Op("bool", &x); }
+
+	static Tensor& asfloat(const Tensor& x) { return Op("asfloat", &x); }
+	static Tensor& asint(const Tensor& x) { return Op("asint", &x); }
+	static Tensor& asuint(const Tensor& x) { return Op("asuint", &x); }
 
 	static Tensor& clamp(const Tensor& x, const Tensor& min, const Tensor& max) {
 		return Op("clamp", &x, &min, &max);
@@ -798,6 +1001,8 @@ class Tensor {
 		}
 		return index_grid;
 	}
+
+	void SetDebugName(const string& name) const;
 };
 
 }  // namespace TensorFrost

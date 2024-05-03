@@ -19,11 +19,14 @@ void StopOpenGL();
 void ShowWindow(int width, int height, const char* title);
 void HideWindow();
 
+void Finish();
+
 void RenderFrame(const TensorMemory& tensor);
 
 bool WindowShouldClose();
 
 pair<double, double> GetMousePosition();
+pair<int, int> GetWindowSize();
 
 bool IsMouseButtonPressed(int button);
 bool IsKeyPressed(int key);
@@ -36,5 +39,8 @@ void ImGuiSlider(std::string text, int* value, int min, int max);
 void ImGuiSlider(std::string text, float* value, float min, float max);
 
 bool ImGuiButton(std::string text);
+
+void StartDebugRegion(const std::string& name);
+void EndDebugRegion();
 
 }  // namespace TensorFrost

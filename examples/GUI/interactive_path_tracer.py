@@ -7,8 +7,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 tf.initialize(tf.opengl)
 
-W = 1920
-H = 1080
+W = 1280
+H = 640
 eps = 0.0001
 m_pow = 8.0
 max_depth = 1200.0
@@ -339,20 +339,19 @@ def ray_marcher():
                     
     def MarchRay(ro, rd, steps=1024):
         td = tf.const(0.0)
-        def loop_body(k):
+        with tf.loop(steps):
             sdf = map(ro + rd * td)[0]
             td.val += sdf
-            tf.if_cond((sdf < min_angle * td) | (td > max_depth), lambda: tf.break_loop())
-
-        tf.loop(loop_body, 0, steps, 1)
+            with tf.if_cond((sdf < min_angle * td) | (td > max_depth)):
+                tf.break_loop()
         return td
 
-    def path_tracing_iteration(bounce):
+    with tf.loop(tf.int(params[5])) as bounce:
         td = MarchRay(ro, rd)
         hit = ro + rd * td
         tf.if_cond(bounce == 0, lambda: first_depth.set(td))
 
-        def if_body():
+        with tf.if_cond(td < max_depth):
             dx = td*min_angle
             norm = calcNormal(hit, dx)
             sdf, col = map(hit)
@@ -372,16 +371,10 @@ def ray_marcher():
             #rd.set(random_reflection(norm, rd, 0.001))
             ro.set(new_hit)
 
-        def else_body():
+        with tf.if_cond(td >= max_depth):
             sky = sample_background(rd) * params[1]
             emis.set(emis + mul(atten, sky))
             tf.break_loop()
-        
-        tf.if_cond(td < max_depth, if_body)
-        tf.if_cond(td >= max_depth, else_body)
-
-    tf.loop(path_tracing_iteration, 0, tf.int(params[5]), 1)
-    
 
     final_color = emis ** (1.0 / 2.2)
 
@@ -517,6 +510,8 @@ while not tf.window_should_close():
         camera.rotate_axis(2, -angular_speed*2)
 
     tf.imgui_begin("Path tracer controls")
+    W, H = tf.get_window_size()
+    tf.imgui_text("Window size: {} x {}".format(W, H))
     tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
     tf.imgui_text("FPS: {:.2f}".format(1.0 / np.maximum(smooth_delta_time, 1e-5)))
     tf.imgui_text("Camera position: ({:.2f}, {:.2f}, {:.2f})".format(*camera.position))

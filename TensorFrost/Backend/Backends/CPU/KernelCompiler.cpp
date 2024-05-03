@@ -12,7 +12,7 @@ bool RunCompiler(char* tempPath, char* dllName) {
 #if defined(_WIN32)
 	if (kernel_compile_options.empty()) {
 #ifdef NDEBUG
-		kernel_compile_options = "/O2 /fp:fast /openmp";
+		kernel_compile_options = "/O2 /fp:fast /openmp:experimental";
 #else
 		kernel_compile_options = "/Zi";
 #endif

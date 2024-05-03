@@ -137,6 +137,21 @@ void StartOpenGL() {
 	printf("Loaded OpenGL %d.%d\n", GLAD_VERSION_MAJOR(version),
 	       GLAD_VERSION_MINOR(version));
 
+	// Print the renderer string, which usually contains the GPU's name
+	const GLubyte* renderer = glGetString(GL_RENDERER);
+	const GLubyte* vendor = glGetString(GL_VENDOR);
+	printf("Renderer: %s\nVendor: %s\n", renderer, vendor);
+
+	// Print the max buffer size
+	GLint bufferSize;
+	glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &bufferSize);
+	printf("Max available buffer size, MB: %d\n", bufferSize / 1024 / 1024);
+
+	// Print max SSBO bindings
+	GLint max_ssbo_bindings;
+	glGetIntegerv(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS, &max_ssbo_bindings);
+	printf("Maximum SSBO bindings supported: %d\n", max_ssbo_bindings);
+
 	// Enable debug output
 	#ifndef NDEBUG
 	if (GLAD_GL_KHR_debug) {
@@ -175,6 +190,11 @@ void StopOpenGL() {
 
 	glDeleteProgram(quad_program);
 	global_window = nullptr;
+
+	// Cleanup ImGui
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
 }
 
 void ShowWindow(int width, int height, const char* title) {
@@ -193,11 +213,19 @@ void HideWindow() {
 	glfwHideWindow(global_window);
 }
 
+void Finish() {
+	glFinish();
+}
 
 void RenderFrame(const TensorMemory& tensor) {
 	//check if tensor is 2d + 3 channels
 	if (tensor.shape.size() != 3 || tensor.shape[2] != 3) {
-		//throw std::runtime_error("Tensor must be 2D with 3 channels to render");
+		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
+	}
+
+	//check if tensor is float32 (TODO: use int8 instead)
+	if (tensor.type != DataType::Float) {
+		throw std::runtime_error("Window: Render tensor must be of type float32");
 	}
 
 	// Clear the screen
@@ -240,6 +268,12 @@ pair<double, double> GetMousePosition() {
 	return {x, y};
 }
 
+pair<int, int> GetWindowSize() {
+	int width, height;
+	glfwGetWindowSize(global_window, &width, &height);
+	return {width, height};
+}
+
 bool IsMouseButtonPressed(int button) {
 	//if pressed in imgui, return false
 	if (io->WantCaptureMouse) {
@@ -273,5 +307,11 @@ void ImGuiSlider(std::string text, float* value, float min, float max) {
 }
 
 bool ImGuiButton(std::string text) { return ImGui::Button(text.c_str()); }
+
+void StartDebugRegion(const std::string& name) {
+	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, (GLsizei)name.size(), name.c_str());
+}
+
+void EndDebugRegion() { glPopDebugGroup(); }
 
 }  // namespace TensorFrost

@@ -19,6 +19,7 @@ namespace TensorFrost {
 	})
 
 void TensorFunctionsDefinition(py::module& m) {
+	UNARY_FUNCTION(copy);
 	UNARY_FUNCTION(abs);
 	UNARY_FUNCTION(ceil);
 	UNARY_FUNCTION(floor);
@@ -64,32 +65,32 @@ void TensorFunctionsDefinition(py::module& m) {
 	TERNARY_FUNCTION(select);
 	TERNARY_FUNCTION(smoothstep);
 
-	m.def("scatterAdd", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterAdd(*t.value, T(t2), t.indices);
+	m.def("scatterAdd", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterAdd(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterAddPrev", [](const TensorView& t, const PyTensor& t2) {
-		return PT(Tensor::ScatterAddPrev(*t.value, T(t2), t.indices));
+	m.def("scatterAddPrev", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::ScatterAddPrev(*t.Value(), T(t2), t.Indices()));
 	});
 
-	m.def("scatterMin", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterMin(*t.value, T(t2), t.indices);
+	m.def("scatterMin", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterMin(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterMax", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterMax(*t.value, T(t2), t.indices);
+	m.def("scatterMax", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterMax(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterOr", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterOr(*t.value, T(t2), t.indices);
+	m.def("scatterOr", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterOr(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterAnd", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterAnd(*t.value, T(t2), t.indices);
+	m.def("scatterAnd", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterAnd(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("scatterXor", [](const TensorView& t, const PyTensor& t2) {
-		Tensor::ScatterXor(*t.value, T(t2), t.indices);
+	m.def("scatterXor", [](const PyTensor& t, const PyTensor& t2) {
+		Tensor::ScatterXor(*t.Value(), T(t2), t.Indices());
 	});
 
 	m.def("buffer", [](py::list shape, DataType type) {
@@ -151,6 +152,8 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Index(TensorsFromList(shape), dim));
 	});
 
+	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
+
 	m.def("indices", [](py::list shape) {
 		Tensors shape_tensors = TensorsFromList(shape);
 		py::tuple indices = py::tuple(shape_tensors.size());
@@ -195,62 +198,41 @@ void TensorFunctionsDefinition(py::module& m) {
 		return indices;
 	});
 
-	m.def(
-	    "sum",
-	    [](const PyTensor& t, int dim) { return PT(Tensor::Sum(T(t), dim)); },
-	    py::arg("t"), py::arg("dim") = -1);
+	m.def("reshape", [](const PyTensor& t, py::list shape) {
+		return PT(Tensor::Reshape(T(t), TensorsFromList(shape)));
+	});
 
-	m.def(
-	    "loop",
-	    [](const py::function& body, const PyTensor& begin, const PyTensor& end,
-	       const PyTensor& step) {
-		    // wrap the function to convert the PyTensor to Tensor
-		    std::function<void(const Tensor&)> f2 = [&body](const Tensor& t) {
-			    py::gil_scoped_acquire acquire;
-			    body(PT(t));
-		    };
+	//algorithm functions
+	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
 
-		    Tensor::Loop(T(begin), T(end), T(step), f2);
-	    },
-	    py::arg("begin") = 0, py::arg("end"), py::arg("step") = 1,
-	    py::arg("body"));
+	m.def("norm", [](const PyTensor& t, const int axis) { return PT(Tensor::Norm(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the norm of the tensor along the axis");
 
-	m.def("if_cond", [](const PyTensor& condition, const py::function& true_body) {
-		std::function<void()> f = [&true_body]() {
-			py::gil_scoped_acquire acquire;
-			true_body();
-		};
-		Tensor::If(T(condition), f);
-	}, py::arg("condition"), py::arg("true_body"));
+	m.def("mean", [](const PyTensor& t, const int axis) { return PT(Tensor::Mean(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the mean of the tensor along the axis");
 
-	m.def("if_cond", [](const PyTensor& condition, const py::function& true_body, const py::function& false_body) {
-		std::function<void()> f1 = [&true_body]() {
-			py::gil_scoped_acquire acquire;
-			true_body();
-		};
-		std::function<void()> f2 = [&false_body]() {
-			py::gil_scoped_acquire acquire;
-			false_body();
-		};
-		Tensor::If(T(condition), f1, f2);
-	}, py::arg("condition"), py::arg("true_body"), py::arg("false_body"));
+	m.def("min", [](const PyTensor& t, const int axis) { return PT(Tensor::Min(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the min of the tensor along the axis");
 
-	m.def("break_loop", []() { Tensor::Break(); });
-	m.def("continue_loop", []() { Tensor::Continue(); });
+	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 
+	m.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
+		return PT(Tensor::Transpose(T(t), dim1, dim2));
+	}, py::arg("t"), py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");
 
-	m.def("kernel", [](py::list shape, const py::function& body) {
-		// wrap the function to convert the PyTensor to Tensor
-		std::function<void(const vector<Tensor*>&)> f2 = [&body](const vector<Tensor*>& tensors) {
-			py::gil_scoped_acquire acquire;
-			PyTensors py_tensors = PyTensorsFromVector(tensors);
-			body(py_tensors);
-		};
+	m.def("unsqueeze", [](const PyTensor& t, int dim) {
+		return PT(Tensor::Unsqeeze(T(t), dim));
+	}, py::arg("t"), py::arg("dim") = -1, "Unsqueeze the tensor");
 
-		Tensors shape_tensors = TensorsFromList(shape);
+	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
+		return PT(Tensor::Dot(T(t), T(t2), axis));
+	}, py::arg("t"), py::arg("t2"), py::arg("axis") = -1, "Dot product of two tensors");
 
-		Tensor::Kernel(shape_tensors, f2);
-	}, py::arg("shape"), py::arg("body"));
+	m.def("matmul", [](const PyTensor& t, const PyTensor& t2) {
+		return PT(Tensor::Matmul(T(t), T(t2)));
+	}, py::arg("t"), py::arg("t2"), "Matrix multiplication of two tensors");
 }
 
 }  // namespace TensorFrost

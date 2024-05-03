@@ -23,7 +23,9 @@ class HLSLGenerator : public CodeGenerator {
 	                        const string& input, const string& output) override
 	{
 		if (op == "InterlockedAdd_Prev") {
-			return "0; InterlockedAdd(mem[" + address + "], " + input + ", " + output + ")";
+			additional_lines.push_back("InterlockedAdd(mem[" + address + "], " +
+			                           input + ", " + output + ");");
+			return "0";
 		}
 		else
 		{
@@ -73,16 +75,23 @@ cbuffer ubo : register(b1) { UBO ubo; }
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
 
-	final_source += R"(
+	vector<int> group_size = kernel->root->group_size;
+	// reverse vector
+	reverse(group_size.begin(), group_size.end());
+	// pad with 1s
+	while (group_size.size() < 3) {
+		group_size.push_back(1);
+	}
 
-[numthreads(256, 1, 1)]
-void main(uint3 dtid : SV_DispatchThreadID, uint3 lid : SV_GroupThreadID)
+	final_source += "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
+
+	final_source += R"(
+void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
-  int thread_id = dtid.x;
-  
-  if (thread_id >= ubo.dispatch_size) {
-    return;
-  }
+  int block_id = gid.x;
+  int block_thread_id0 = gtid.x;
+  int block_thread_id1 = gtid.y;
+  int block_thread_id2 = gtid.z;
 
 )";
 

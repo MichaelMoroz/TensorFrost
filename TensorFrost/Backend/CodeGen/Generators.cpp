@@ -21,24 +21,52 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 	}
 }
 
+unordered_set<string> forbidden_names = {"unsigned", "input", "output", "max", "min", "if", "else", "while", "for", "switch", "case", "default", "break",
+    "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
+	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
+
+bool IsForbiddenName(const string& name) {
+	return forbidden_names.contains(name);
+}
+
 void GenerateNodeNames(const IR& ir) {
 	int var_index = 0;
 	int mem_index = 0;
 	int cluster_index = 0;
 	Node* curent_cluster = nullptr;
+	map<string, int> name_count;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
 		if (node->parent != curent_cluster) {
 			cluster_index++;
 			var_index = 0;
 		}
-		if (node->name == "memory") {
-			node->var_name = "m" + to_string(mem_index);
-			mem_index++;
-		} else {
-			node->var_name =
-			    "v" + to_string(cluster_index) + "_" + to_string(var_index);
-			var_index++;
+		string debug = node->debug_name;
+		if (!debug.empty()) {
+			// check if the name is already used
+			if (name_count.contains(debug)) {
+				name_count[debug]++;
+				debug = debug + "_" + to_string(name_count[debug]);
+			}
+			else {
+				name_count[debug] = 1;
+			}
+			if (IsForbiddenName(debug) ) {
+				debug = debug + "_";
+			}
+			node->var_name = debug;
+		} 
+		else
+		{
+			if (node->name == "memory") {
+				node->var_name = debug + "m" + to_string(mem_index);
+				mem_index++;
+			} else {
+				node->var_name =
+				    debug + "v" + to_string(cluster_index) + "_" + to_string(var_index);
+				var_index++;
+			}
 		}
+
 		curent_cluster = node->parent;
 	}
 }
@@ -67,12 +95,64 @@ string GetNodeName(const Node* node,  bool compact) {
 	return node->var_name;
 }
 
-std::string format_float(float x) {
-	std::string s = std::format("{}", x);
-	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
-		s += '.';
+//std::string format_float(float x) {
+//	std::string s = std::format("{}", x);
+//	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
+//		s += '.';
+//	}
+//	return s + 'f';
+//}
+
+string format_float(double value) {
+	std::ostringstream out;
+
+	// Determine when to use scientific notation vs fixed
+	bool use_scientific = std::abs(value) < 1e-4 || std::abs(value) > 1e6;
+	//and if not a zero value
+	use_scientific = use_scientific && value != 0.0;
+	if (use_scientific) {
+		out << std::scientific;  // Use scientific notation for very small or large
+		                         // numbers
+	} else {
+		out << std::fixed;  // Use fixed notation for moderate values
 	}
-	return s + 'f';
+
+	out << std::setprecision(7) << value;
+
+	// Convert to string
+	std::string str = out.str();
+
+	// Remove trailing zeros and potentially unnecessary decimal point
+	size_t endpos = str.find_last_not_of('0');
+	if (endpos != std::string::npos) {
+		str = str.substr(0, endpos + 1);
+	}
+	if (str.back() == '.') {
+		str.pop_back();
+	}
+
+	// remove all zeros before "e"
+	size_t epos = str.find('e');
+	if (epos != std::string::npos) {
+		size_t startpos = str.find_last_not_of('0', epos - 1);
+		if (startpos != std::string::npos) {
+			str = str.substr(0, startpos + 1) + str.substr(epos);
+		}
+	}
+
+	if (str.find('.') == string::npos && str.find('e') == string::npos) {
+		str += '.';
+	}
+
+	// add a zero digit after the decimal point if the next character is not a
+	// digit
+	size_t dotpos = str.find('.');
+	if (dotpos != std::string::npos && !isdigit(str[dotpos + 1])) {
+		//add a zero digit after the decimal point
+		str.insert(dotpos + 1, "0");
+	}
+	
+	return str + 'f';
 }
 
 inline string Tensor::GetConstantString() const {
@@ -104,10 +184,6 @@ void CodeGenerator::GenerateCode(const Node* root) {
 	int prev_depth = 0;
 	// Translate each operation into HLSL
 	for (auto node = NodeIterator(root); !node.end(); node->name == "kernel" ? node.forward() : node.next()) {
-		if (node->name == "const" && !node->has_been_modified_) {
-			continue;
-		}
-
 		string name = node->var_name;
 
 		int depth = node.depth() - 1;
@@ -126,7 +202,7 @@ void CodeGenerator::GenerateCode(const Node* root) {
 
 		Line* line = nullptr;
 		if (custom_generated_code_.contains(*node)) {
-			line = new Line("", custom_generated_code_[*node], ";", "", false, 0);
+			line = new Line(*node, "", custom_generated_code_[*node], ";", "");
 		} else {
 			// get node arguments
 			line = GenerateLine(*node);
@@ -138,12 +214,30 @@ void CodeGenerator::GenerateCode(const Node* root) {
 		
 		line->indent = depth;
 		lines.push_back(line);
+
+		for (auto additional: additional_lines) {
+			lines.push_back(new Line(depth, additional));
+		}
+		additional_lines.clear();
+
 		prev_depth = depth;
 	}
 
 	// add closing brackets
 	for (int i = prev_depth - 1; i >= 0; i--) {
 		lines.push_back(new Line(i, "}"));
+	}
+
+	//remove lines
+	unordered_set<Line*> remove_lines;
+	for (auto& line : lines) {
+		if (lines_to_remove.contains(line->node)) {
+			remove_lines.insert(line);
+		}
+	}
+
+	for (auto& line : remove_lines) {
+		lines.erase(std::remove(lines.begin(), lines.end(), line), lines.end());
 	}
 }
 

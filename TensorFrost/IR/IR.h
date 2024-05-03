@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 #include <stack>
+#include <set>
 
 #include "Operations.h"
 #include "Utility/Utility.h"
@@ -16,14 +17,6 @@
 namespace TensorFrost {
 class Tensor;
 class Node;
-class Scope;
-
-enum class ScopeType {
-	None,
-	Host,
-	Kernel,
-};
-
 
 class Lable {
  public:
@@ -62,6 +55,8 @@ class Arg {
 	    : type_(type), from_(node), index_(index) {}
 
 	void SetOutput(Lable* output) { to_ = output; }
+
+	~Arg();
 };
 
 using ArgMap = map<int, const Arg*>;
@@ -78,6 +73,13 @@ enum class MemoryType {
 	Constant,
 };
 
+enum class TensorIndexingMode {
+	Unsafe,
+	Clamp,
+	Repeat,
+	Zero,
+};
+
 
 using ArgID = pair<ArgType, int>;
 
@@ -88,18 +90,27 @@ struct HashArgID {
 };
 
 class ArgumentManager {
-public:
-	unordered_map<ArgID, Node*, HashArgID> arguments_;
+private:
+	bool add_parenthesis = false;
 	unordered_map<ArgID, DataType, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
+	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
+
+public:
+	unordered_map<ArgID, Node*, HashArgID> arguments_;
 
 	ArgumentManager() {}
 
+	void AddParenthesis(bool add) {
+		add_parenthesis = add;
+	}
+
 	void AddArgument(Arg* arg);
 
-	void SetName(ArgID id, string name) {
-		argument_names_[id] = name;
+	void SetName(ArgID id, string name, bool requires_parenthesis = false) {																																																		
+		argument_names_[id] = name; 
+	    argument_requires_parenthesis_[id] = requires_parenthesis;
 	}
 
 	bool Has(ArgType type, int index = 0) {
@@ -142,7 +153,11 @@ public:
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_names_.find(id);
 		if (Arg != argument_names_.end()) {
-			return Arg->second;
+			string name = Arg->second;
+			if (add_parenthesis && argument_requires_parenthesis_[id]) {
+				name = "(" + name + ")";
+			}
+			return name;
 		}
 		else {
 			throw std::runtime_error("Argument name not found");
@@ -152,8 +167,9 @@ public:
 
 class Node {
  public:
-	int index_ = 0;
+	int index_ = -1;
 	string var_name = "none";
+	string debug_name;
 	string name;
 	float cost_ = -1.0f;
 	
@@ -165,8 +181,6 @@ class Node {
 	
 	const Operation* op;
 	const Tensor* tensor_;
-
-	ScopeType scope_type_ = ScopeType::None;
 
 	Lable* lable_ = nullptr;
 
@@ -183,6 +197,12 @@ class Node {
     bool valid() {
         return !placeholder;
     }
+
+	//clamp unless otherwise specified
+	TensorIndexingMode indexing_mode_;
+
+	//kernel properties
+	vector<int> group_size;
 
 	void UpdateEdges() {
 		if (!child) child = new Node(nullptr, this);
@@ -212,7 +232,27 @@ class Node {
 		UpdateArgumentOutputs();
 		op = FindOperation(name);
 		CheckNode();
+		indexing_mode_ = TensorIndexingMode::Clamp;
     }
+
+	void CopyProperties(Node* other) {
+		name = other->name;
+		has_been_modified_ = other->has_been_modified_;
+		debug_name = other->debug_name;
+		special_index_ = other->special_index_;
+		is_static = other->is_static;
+		indexing_mode_ = other->indexing_mode_;
+		group_size = other->group_size;
+	}
+
+	void CopyMetadata(Node* other) {
+		debug_name = other->debug_name;
+		special_index_ = other->special_index_;
+		is_static = other->is_static;
+		indexing_mode_ = other->indexing_mode_;
+		group_size = other->group_size;
+		memory_type_ = other->memory_type_;
+	}
 
 	const Tensor* GetTensor() const;
 
@@ -261,6 +301,18 @@ class Node {
 		return false;
 	}
 
+	/// <summary>
+	/// Make all outputs of this node use the given node as input, assuming that the output is further than min_index
+	/// </summary>
+	/// <param name="replacement"></param>
+	/// <param name="min_index"></param>
+	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1) {
+		for (Arg* output : outputs_) {
+			if (output->to_->get()->index_ >= min_index) {
+				output->from_ = replacement->GetLable();
+			}
+		}
+	}
 
 	Node* GetParent(string name)
 	{
@@ -282,6 +334,15 @@ class Node {
 		for (Node* cur_parent = other; cur_parent != nullptr; cur_parent = cur_parent->parent) {
 			if (cur_parent->parent == this->parent) {
 				return cur_parent;
+			}
+		}
+		for (Node* cur_parent1 = this; cur_parent1 != nullptr;
+		     cur_parent1 = cur_parent1->parent) {
+			for (Node* cur_parent2 = other; cur_parent2 != nullptr;
+			     cur_parent2 = cur_parent2->parent) {
+				if (cur_parent1->parent == cur_parent2->parent) {
+					return cur_parent1;
+				}
 			}
 		}
 		throw std::runtime_error("No common parent found");
@@ -393,7 +454,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (output_node->op->HasAllTypes(OpType::Modifier)) {
 				if (output_node->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
@@ -401,7 +462,8 @@ class Node {
 					// if the loop is scalar, then it doesn't matter
 					bool before_latest = output_node->index_ < latest_node->index_;
 					bool inside_loop = has_loop && output_node->HasParent(loop_node);
-					if (before_latest || inside_loop)
+					bool not_same = output_node != latest_node;
+					if ((before_latest || inside_loop) && not_same)
 					{
 						last_index = output_node->index_;
 						last_modifier = output_node;
@@ -410,6 +472,24 @@ class Node {
 			}
 		}
 		return last_modifier;
+	}
+
+	Node* GetFinalVersion() {
+		Node* final_version = this;
+		int last_index = -1;
+		for (auto& output : outputs_) {
+			if (output->type_ != ArgType::Memory) {
+				continue;
+			}
+			Node* output_node = output->to_->get();
+			if (output_node->op->HasAllTypes(OpType::Modifier) && !output_node->op->HasAllTypes(OpType::MemoryOp)) {
+				if (output_node->index_ > last_index) {
+					last_index = output_node->index_;
+					final_version = output_node;
+				}
+			}
+		}
+		return final_version;
 	}
 
 	~Node();
@@ -436,6 +516,37 @@ class NodeIterator {
 
 	Node* operator*() const { return currentNode; }
 
+	
+	NodeIterator& go_to_next() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->next;
+
+		return *this;
+	}
+
+	NodeIterator& go_to_parent() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->parent;
+
+		return *this;
+	}
+
+	NodeIterator& go_to_child() {
+		if (!currentNode) {
+			throw std::runtime_error("Invalid node");
+		}
+
+		currentNode = currentNode->child;
+
+		return *this;
+	}
+
 	NodeIterator& up() {
 		if (!currentNode) {
 			throw std::runtime_error("Invalid node");
@@ -446,9 +557,9 @@ class NodeIterator {
 		}
 
 		if (currentNode->parent != root) {
-			currentNode = currentNode->parent;
+		    go_to_parent();
 		} else {
-			currentNode = currentNode->next;
+			go_to_next();
 		}
 		return *this;
 	}
@@ -473,7 +584,7 @@ class NodeIterator {
 		}
 
 		// just go to next node and stop if it's the end
-		currentNode = currentNode->next;
+		go_to_next();
 		return *this;
 	}
 
@@ -488,7 +599,7 @@ class NodeIterator {
 		}
 
 		if (currentNode->child->valid()) {  // has child, go down
-			currentNode = currentNode->child;
+			go_to_child();
 			return *this;
 		}
 
@@ -518,132 +629,107 @@ class NodeIterator {
 	bool operator!=(const Node* node) { return currentNode != node; }
 };
 
-ScopeType GetScopeType(const Node* node);
-
-class Scope
-{
+class ShapeInfo {
  public:
-	Node* begin;
-	Node* end;
-	Node* shape_node;
-	ScopeType type = ScopeType::None;
-	int shape_dim = 0;
+	map<int, Node*> shape;
+	int dim = 0;
+	string name;
 
-	Scope(Node* begin) 
-		: begin(begin), end(begin), shape_node(begin) { UpdateEnd(begin); }
+	ShapeInfo() {}
 
-	Scope(Node* begin, Node* end)
-	    : begin(begin), end(end) { RecomputeScope(); }
-
-	bool InScope(const Node* node) {
-		int begin_id = begin->index_;
-		int end_id = end->index_;
-		int node_id = node->index_;
-		return node_id >= begin_id && node_id <= end_id;
+	ShapeInfo(ShapeInfo* shape_info) {
+		shape = shape_info->shape;
+		dim = shape_info->dim;
+		name = shape_info->name;
 	}
 
-	void UpdateType(Node* node) {
-		// if the end node is a memory node, it must be on the cpu
-		if (node->op->HasAllTypes(OpType::HostOnly)) {
-			if (type == ScopeType::Kernel) {
-				throw std::runtime_error("Host node in kernel scope");
-			}
-			type = ScopeType::Host;
-		} else if (shape_dim > 0 || node->scope_type_ == ScopeType::Kernel) { // non-scalars must be in a kernel
-			if (type == ScopeType::Host) {
-				throw std::runtime_error("Kernel node in host scope");
-			}
-			type = ScopeType::Kernel;
+	ShapeInfo(ArgMap shape, string name) {
+		for (auto& [index, arg] : shape) {
+			AddShape(arg->index_, arg->from_->node_);
 		}
+		this->name = name;
 	}
 
-	void UpdateEnd(Node* new_end) {
-		end = new_end;
-		UpdateShape(end);
-		UpdateType(end);
+	ShapeInfo(const Node* node)
+	    : ShapeInfo(node->GetArgumentMap(ArgType::Shape),
+	                node->var_name != "" ? node->var_name : node->name) {}
+
+	void AddShape(int index, Node* node) {
+		shape[index] = node;
+		dim = max(dim, index + 1);
 	}
 
-	void UpdateShape(Node* node)
-	{
-		ArgMap shape = node->GetArgumentMap(ArgType::Shape);
-		int dim = MaxIndexCount(shape);
-		if (node->name == "memory") dim = 0;
-		if (dim >= shape_dim) {
-			shape_dim = dim;
-			shape_node = node;
+	Tensors GetTensors() const {
+		Tensors tensors = Tensors();
+		tensors.resize(dim);
+		for (auto& [index, node] : shape) {
+			tensors[index] = node->GetTensor();
 		}
+		return tensors;
 	}
 
-	void RecomputeScope()
-	{
-		shape_dim = 0;
-		type = ScopeType::None;
-		for (auto node = NodeIterator(begin, begin);
-		     node.get() != nullptr && node->index_ <= end->index_; node.true_next()) {
-			UpdateShape(*node);
-			UpdateType(*node);
+	Arguments GetArguments() const {
+		Arguments arguments;
+		for (auto& [index, node] : shape) {
+			arguments.emplace_back(ArgType::Shape, node->GetLable(), index);
 		}
-	}
-
-	static vector<Scope*> GetScopes(Node* begin, Node* end) {
-		int begin_depth = begin->ComputeDepth();
-		int end_depth = end->ComputeDepth();
-		vector<Scope*> scopes;
-		if (begin_depth <= end_depth) {
-			Node* prev_parent = nullptr;
-			for (Node* cur_parent = end; cur_parent != begin->parent;
-			     cur_parent = cur_parent->parent) {
-				if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-					scopes.push_back(new Scope(cur_parent->child, prev_parent->prev));
-				}
-				prev_parent = cur_parent;
-			}
-
-			if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-				scopes.push_back(new Scope(begin, prev_parent->prev));
-			}
-		}
-		else
-		{
-			throw std::runtime_error("Invalid scope");
-			//if (begin->parent->next) {
-			//	scopes.push_back(new Scope(begin, begin->parent->next->true_prev));
-			//	if (begin->parent->next != end)
-			//	{
-			//		scopes.push_back(new Scope(begin->parent->next, end->prev));
-			//	}
-			//}
-			
-			//Node* prev_parent = nullptr;
-			//for (Node* cur_parent = begin->parent; cur_parent != end->parent;
-			//     cur_parent = cur_parent->parent) {
-			//	if (prev_parent && prev_parent->prev && prev_parent->prev->valid()) {
-			//		scopes.push_back(new Scope(prev_parent->prev->next, cur_parent->child));
-			//	}
-			//	prev_parent = cur_parent;
-			//}
-		}
-		
-
-		return scopes;
+		return arguments;
 	}
 };
 
-enum class KernelIndexingMode
-{
-	Linear,
-	MultiDimensional,
-	LinearBlocks,
-	MultiDimensionalBlocks,
+struct ShapeCompareResult {
+	bool compatible;
+	bool is_broadcast;
+	ShapeInfo broadcast_shape;
+	int broadcast_dim;
+	int a_dim;
+	int b_dim;
+	int min_dim;
 };
 
-enum class TensorIndexingMode {
-	Unsafe,
-	Clamp,
-	Repeat,
-	Zero,
-};
+ShapeCompareResult CompareShape(const Node* a, const Node* b,
+                                bool exact_match = false,
+                                bool throw_error = false);
 
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
+                                bool exact_match = false,
+                                bool throw_error = false);
+
+/// <summary>
+/// Class to select kernel scopes from the IR graph given the constraints and the root node
+/// </summary>
+class KernelScope {
+ public:
+	Node* begin = nullptr;
+	Node* end = nullptr;
+	ShapeInfo scope_shape;
+	unordered_set<Node*> boundary_nodes;
+
+	static bool IsBoundary(const Node* input, const Node* output, ArgType arg_type, bool is_identity);
+
+	KernelScope() : begin(nullptr), end(nullptr) {}
+	KernelScope(Node* node, unordered_set<KernelScope*>& output_scopes);
+
+	KernelScope(Node* begin, Node* end, ShapeInfo shape, unordered_set<Node*> boundary_nodes)
+	    : begin(begin), end(end), scope_shape(shape), boundary_nodes(boundary_nodes) {}
+	
+	void CopyProperties(KernelScope* other) {
+		begin = other->begin;
+		end = other->end;
+		scope_shape = other->scope_shape;
+		boundary_nodes = other->boundary_nodes;
+	}
+
+	bool IsValid() const;
+
+	static std::unordered_set<KernelScope*> ComputeScopes(Node* root);
+
+	static KernelScope* Merge(KernelScope* a, KernelScope* b);
+
+	void AddBoundaryNodes(unordered_set<Node*> new_boundary_nodes) {
+		boundary_nodes.insert(new_boundary_nodes.begin(), new_boundary_nodes.end());
+	}
+};
 
 class IR {
 public:
@@ -684,7 +770,7 @@ public:
 			return newNode;
         } else {
             cursor->initialize(tensor, std::move(args), std::move(name));
-            cursor.next();
+			cursor.go_to_next();
 			return cursor->prev;
         }
     }
@@ -714,86 +800,87 @@ public:
 		}
 	}
 
-    void RemoveNode(Node* node) {
-        if (node->valid()) {
-			// if child node exists, iterate through it and remove all children
-			if (node->child) {
-				vector<Node*> to_delete;
-				for (auto child = NodeIterator(node); !child.end(); child.next()) {
-					to_delete.push_back(*child);
-				}
-				for (Node* child : to_delete) {
-					RemoveNode(child);
-				}
-			}
-
-            //if direct child of its parent
-            if (node->parent && node->parent->child == node) {
-                node->parent->child = node->next;
-            } else if (node->prev) {
-                node->prev->next = node->next;
-            }
-
-            node->next->prev = node->prev;
-            delete node;
-        }
-    }
+    void RemoveNode(Node* node);
 
     void SetCursor(Node* node) {
         cursor = NodeIterator(node, root);
     }
 
+	stack<Node*> scope_stack;
+
+	void BeginScope(Node* node) {
+		scope_stack.push(*cursor);
+		SetCursor(node);
+	}
+
+	void EndScope() {
+		if (scope_stack.empty()) throw std::runtime_error("No scope to end");
+		SetCursor(scope_stack.top());
+		scope_stack.pop();
+	}
+
     void ExecuteExpressionAfter(Node* node, const function<void()>&& expression) {
-        NodeIterator oldCursor = cursor;
-        SetCursor(node->next);
-        expression();
-        cursor = oldCursor;
+		BeginScope(node->next);
+		expression();
+		EndScope();
     }
 
     void ExecuteExpressionBefore(Node* node, const function<void()>&& expression) {
-        NodeIterator oldCursor = cursor;
-        SetCursor(node);
-        expression();
-        cursor = oldCursor;
+		BeginScope(node);
+		expression();
+		EndScope();
     }
 
 	void ExecuteExpressionChild(Node* node, const function<void()>&& expression) {
-		NodeIterator oldCursor = cursor;
-		SetCursor(node->child);
+		BeginScope(node->child);
 		expression();
-		cursor = oldCursor;
+		EndScope();
 	}
-
-	map<Node*, Node*> CopyComputation(
-	    const unordered_set<Node*>& targets) const;
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
 	string PrintListing(map<Node*, string> node_debug) const;
+	map<Node*, Node*> CopyNodes(set<Node*> nodes_to_copy,
+	                            unordered_map<Node*, Node*> argument_replacements,
+	                            unordered_map<int, Node*> indices,
+	                            unordered_set<Node*> targets, bool must_copy_all);
+	map<Node*, Node*> CopyComputation(const unordered_set<Node*>& targets,
+	                                  const unordered_map<int, Node*>& indices);
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
 	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
+	map<Node*, Node*> CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
+	                          unordered_map<int, Node*> indices, Node* cursor);
 	void ReorderOperations();
+	void MoveShapeOutsideKernels();
 	void OptimizeKernels();
 	void OptimizeHost();
 	void OptimizeOperations();
+	void OptimizeKernelLoadOperations();
 	void RemoveUnusedOperations();
+	void InsertAlgorithmicPrimitives();
+	void UnrollLoops();
+	void TryReplaceModificationsWithVersions();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
-	void AddKernelGlobalMemoryOperations();
+	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);
+	void AddKernelGlobalLoadOperations();
+	void AddMemoryOpIndices();
+	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
-	void LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices,
-	                       Node* cluster, int dims, Tensors kernel_shape);
-	void MultiDimensionalModeIndices(Tensor*& thread_index,
-	                                 vector<Tensor*>& indices, Node* kernel_,
+	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
+	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
+	Tensor* LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims,
+	                            Tensors kernel_shape);
 	void FinalizeMemoryIndexing();
 	void RemoveUnusedKernels();
 	void CompileIR();
 
 	void UpdateGraph() const {
+		// update edges
 		Node* prev = nullptr;
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateEdges();
@@ -804,10 +891,36 @@ public:
 			}
 			prev = *node;
 		}
+
+		// check if graph is valid
+		for (auto node = begin(); !node.end(); node.next()) {
+			// if there are null inputs throw an error
+			for (auto& input : (*node)->inputs_) {
+				if (!input.from_) {
+					throw std::runtime_error("Null input found in node " +
+					                         (*node)->var_name +
+					                         ". Likely an icorrectly deleted node.");
+				}
+			}
+		}
+
+		// update outputs
 		int index = 0;    
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateOutputs();
 			node->index_ = index++;
+		}
+
+		//update modified flags
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->has_been_modified_ = false;
+			//go over all outputs and check if they are modifiers
+			for (auto& output : node->outputs_) {
+				if (output->to_->get()->op->HasAllTypes(OpType::Modifier) && output->type_ == ArgType::Memory) {
+					node->has_been_modified_ = true;
+					break;
+				}
+			}
 		}
 	}
 
@@ -821,16 +934,22 @@ public:
 		return result;
 	}
 
-	//TODO (Moroz): Make this per kernel
-	void SetKernelIndexingMode(KernelIndexingMode indexing_mode)
-	{
-		indexing_mode_ = indexing_mode; 
+	vector<Node*> GetNodesOfType(OpType type) const {
+		vector<Node*> result;
+		for (auto node = begin(); !node.end(); node.next()) {
+			if (node->op->HasAllTypes(type)) {
+				result.push_back(*node);
+			}
+		}
+		return result;
 	}
 
-	//TODO (Moroz): Make this per tensor
-	void SetTensorIndexingMode(TensorIndexingMode indexing_mode)
-	{
-		tensor_indexing_mode_ = indexing_mode;
+	vector<Node*> GetChildren(Node* node) const {
+		vector<Node*> result;
+		for (auto child = NodeIterator(node); !child.end(); child.next()) {
+			result.push_back(*child);
+		}
+		return result;
 	}
 
 	int input_memory_count = 0;
@@ -843,17 +962,5 @@ public:
 	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> output_memory_map;
-	KernelIndexingMode indexing_mode_ = KernelIndexingMode::Linear;
-	TensorIndexingMode tensor_indexing_mode_ = TensorIndexingMode::Unsafe;
 };
-struct ShapeCompareResult {
-	bool compatible;
-	bool is_broadcast;
-	int a_dim;
-	int b_dim;
-	int min_dim;
-};
-
-ShapeCompareResult CompareShape(const Node* a, const Node* b);
-
 }  // namespace TensorFrost

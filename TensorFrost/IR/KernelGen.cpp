@@ -11,249 +11,116 @@ namespace TensorFrost {
 	return tensor_;
 }
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b) {
-	ArgMap a_shape = a->GetArgumentMap(ArgType::Shape);
-	ArgMap b_shape = b->GetArgumentMap(ArgType::Shape);
-	int a_dim = MaxIndexCount(a_shape);
-	int b_dim = MaxIndexCount(b_shape);
-
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
 	ShapeCompareResult result;
 	result.compatible = true;
 	result.is_broadcast = false;
-	result.a_dim = a_dim;
-	result.b_dim = b_dim;
+	result.a_dim = a.dim;
+	result.b_dim = b.dim;
+	result.broadcast_dim = max(a.dim, b.dim);
 
-	int min_dim = min(a_dim, b_dim);
+	int min_dim = min(a.dim, b.dim);
 
-	if (min_dim == 0) {
-		result.is_broadcast = true;
-		return result;
+	if (exact_match && min_dim > 0) {
+		if (a.dim != b.dim) {
+			result.compatible = false;
+			if (throw_error) {
+				throw std::runtime_error("Shapes must have the same dimension for " +
+				                         a.name + " and " + b.name);
+			}
+			return result;
+		}
 	}
 
-	if (a_dim != b_dim) {
-		result.compatible = false;
-		return result;
-	}
+	for (int i = 0; i < min_dim; i++) {
+		Node* a_node = a.shape[a.dim - i - 1];
+		Node* b_node = b.shape[b.dim - i - 1];
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		int val_a = -1;
+		int val_b = -1;
+		if (a_node->name == "const") val_a = a_node->GetTensor()->data[0];
+		if (b_node->name == "const") val_b = b_node->GetTensor()->data[0];
 
-	for (int i = 0; i < a_dim; i++) {
-		Node* a_node = a_shape[i]->from_->get();
-		Node* b_node = b_shape[i]->from_->get();
+		// if one of the nodes is a constant = 1, then it is a broadcast
+		if ((val_a == 1 || val_b == 1) && !exact_match) {
+			result.is_broadcast = true;
+			if (val_a == 1) {
+				result.broadcast_shape.AddShape(broadcast_index, b_node);
+			} else {
+				result.broadcast_shape.AddShape(broadcast_index, a_node);
+			}
+			continue;
+		}
+
 		// if a and b are constants, then compare their values
-		if (a_node->name == "const" && b_node->name == "const") {
-			if (a_node->GetTensor()->data[0] != b_node->GetTensor()->data[0]) {
+		if (val_a != -1 && val_b != -1) {
+			if (val_a != val_b) {
 				result.compatible = false;
+				if (throw_error) {
+					throw std::runtime_error(
+					    "Constant dimensions are not compatible for nodes: " +
+					    a.name + " and " + b.name + " at index " +
+					    to_string(i) + " with values " + to_string(val_a) + " and " +
+					    to_string(val_b));
+				}
 				return result;
+			} else {
+				result.broadcast_shape.AddShape(broadcast_index, a_node);
+				continue;
 			}
 		}
-		// otherwise, if a and b are not the same node
-		// then they are not the same shape (possibly)
-		else if (a_node != b_node) {
+
+		// otherwise, if a and b are not the same node then they are not the same
+		// shape (possibly)
+		if (a_node != b_node) {
+			if (throw_error) {
+				throw std::runtime_error(
+				    "Shapes are potentially not compatible for nodes: " + a.name +
+				    " and " + b.name + " at index " + to_string(i));
+			}
 			result.compatible = false;
 			return result;
 		}
+
+		result.broadcast_shape.AddShape(broadcast_index, a_node);
+	}
+
+	//add the rest of the broadcast shape
+	for (int i = min_dim; i < result.broadcast_dim; i++) {
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		if (a.dim > b.dim) {
+			result.broadcast_shape.AddShape(broadcast_index, a.shape[a.dim - i - 1]);
+		} else {
+			result.broadcast_shape.AddShape(broadcast_index, b.shape[b.dim - i - 1]);
+		}
+	}
+
+	if (result.broadcast_shape.dim != result.broadcast_dim) {
+		throw std::runtime_error("Internal Error: Broadcast shape does not match the broadcast dim");
 	}
 
 	return result;
 }
 
-// returns true if the edge between given nodes is a boundary between kernels
-bool IsBoundary(Node* input, Node* output,
-                ScopeType input_scope = ScopeType::None, bool is_identity = true,
-                int arg_index = -1, ArgType arg_type = ArgType::None) {
-	ShapeCompareResult result = CompareShape(input, output);
 
-	if (!result.compatible) {
-		return true;
-	}
-
-	if (input_scope != output->scope_type_ && output->scope_type_ == ScopeType::Kernel) {
-		return true;
-	}
-
-	// memory should not be inside work kernels
-	bool is_output_host_only = output->op->HasAllTypes(OpType::HostOnly);
-	bool is_input_host_only = input->op->HasAllTypes(OpType::HostOnly);
-	bool is_output_scalar = result.b_dim == 0;
-
-	bool scalar_kernel = output->TryComputeShape() == 1;
-
-	switch (input_scope) { 
-		case ScopeType::None:
-			return false;
-		case ScopeType::Host:
-			if (!is_output_scalar && !is_output_host_only) {
-				return true; // host should not have non-scalar operations
-			}
-			break;
-		case ScopeType::Kernel:
-			if (is_output_host_only || is_input_host_only) {
-				return true; // kernel should not have host operations
-			}
-
-			const Operation* input_op = input->op;
-			const Operation* output_op = output->op;
-
-			if (!scalar_kernel) {
-				if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-					return arg_type == ArgType::Memory && !is_identity;
-				}
-
-				if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-				    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
-					return arg_type == ArgType::Memory;
-				}
-
-				// if input has changed the memory and the output is a load then it is a
-				// boundary
-				if (input_op->HasAllTypes(OpType::MemoryOp, OpType::Modifier) &&
-				    output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-					return true;
-				}
-			}
-
-			if (arg_type == ArgType::Shape) {
-				return true;  // shape should not be inside kernels
-			}
-
-			break;
-	}
-
-	return false;
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
+	ShapeInfo a_info = ShapeInfo(a);
+	ShapeInfo b_info = ShapeInfo(b);
+	return CompareShape(a_info, b_info, exact_match, throw_error);
 }
 
 //TODO: rewrite this function
 void IR::SeparateOperationsIntoKernels() {
 	UpdateGraph();
-	vector<Scope*> kernels;
-	Scope* current_scope = new Scope(root->child);
 
-	map<Node*, string> boundary_nodes_debug;
-
-	for (auto it = begin(); !it.end(); it.next()) {
-		if (it->HasParent("kernel")) {
-			continue;
-		}
-
-		Node* node = it.get();
-		int current_depth = node->ComputeDepth();
-		int begin_depth = current_scope->begin->ComputeDepth();
-		Arguments indices = node->GetArguments(ArgType::Index);
-		bool ident = indices.empty();
-		bool loop_prev_iteration = false;
-
-		map<int, Node*> boundary_nodes;
-
-		Node* prev = node->prev;
-		if (prev != nullptr) {
-			if (current_scope->InScope(prev) &&
-			    IsBoundary(prev, node, current_scope->type, ident)) {
-				boundary_nodes[prev->index_] = prev;
-			}
-		}
-
-		ShapeCompareResult result = CompareShape(current_scope->shape_node, node);
-		if (!result.compatible) {
-			boundary_nodes[current_scope->shape_node->index_] =
-			    current_scope->shape_node;
-		}
-
-		// go over all inputs
-		for (auto& input : node->inputs_) {
-			// get latest input version
-			Node* latest = input.from_->get()->GetLastVersion(node);
-			// check if input is the boundary of this kernel
-			bool is_loop_boundary =
-			    latest->index_ > node->index_ && begin_depth < current_depth;
-			if ((current_scope->InScope(latest) || is_loop_boundary) &&
-			    IsBoundary(latest, node, current_scope->type, ident, input.index_, input.type_)) {
-				if (is_loop_boundary) {
-					latest = latest->GetParent("loop");
-					if (!current_scope->InScope(latest)) 
-					{
-						continue;
-					}
-					loop_prev_iteration = true;
-				}
-				boundary_nodes[latest->index_] = latest;
-			}
-		}
-		
-		if (current_scope->type == ScopeType::Host) {
-			current_scope = new Scope(node);
-			continue;
-		}
-
-		// if boundary, create new scope, else make this new end
-		if (boundary_nodes.size() > 0) {
-			string boundary_nodes_str = "Boundaries of this node: ";
-			int i = 0;
-			for (auto& [index, node] : boundary_nodes) {
-				if (i > 0) boundary_nodes_str += ", ";
-				boundary_nodes_str += node->var_name;
-				i++;
-			}
-			boundary_nodes_debug[node] = boundary_nodes_str;
-			
-			if (begin_depth > current_depth) {
-				Node* last_child = current_scope->begin->parent->GetLastChild();
-				NodeIterator it(last_child, last_child);
-				kernels.push_back(new Scope(current_scope->begin, it.get()));
-				current_scope = new Scope(it.next().get(), node);
-			} else if (current_scope->type == ScopeType::Kernel) {
-				// split the current scope using the last boundary node (highest index)
-				Node* boundary_node = boundary_nodes.rbegin()->second;
-				//find the nearest parent node of the scope end with the same parent as the boundary node
-				Node* parent = node->GetCommonParent(boundary_node);
-				int boundary_depth = boundary_node->ComputeDepth();
-
-				if (boundary_depth > current_depth) {
-					parent = parent->next;
-				}
-
-				vector<Scope*> new_scopes =
-				    Scope::GetScopes(current_scope->begin, parent);
-				for (auto scope : new_scopes) {
-					if (scope->type == ScopeType::Kernel) {
-						kernels.push_back(scope);
-					}
-				}
-
-				if (loop_prev_iteration)
-				{
-					current_scope = new Scope(parent->true_next, node);
-				}
-				else
-				{
-					current_scope = new Scope(parent, node);
-				}
-				
-			} else { 
-				// the current scope was a host scope, can just ignore it, we wont be using it
-				current_scope = new Scope(node);
-			}
-		} else {
-			current_scope->UpdateEnd(node);
-		}
-	}
-
-
-	if (current_scope->type == ScopeType::Kernel) {
-		kernels.push_back(current_scope);
-	}
-
-#ifndef NDEBUG
-	string listing = PrintListing(boundary_nodes_debug);
-
-	cout << "Kernel genration boundaries: \n\n";
-	cout << listing << endl;
-#endif
+	auto kernel_scopes = KernelScope::ComputeScopes(root);
 
 	// create kernel nodes for all kernel scopes
-	for (auto scope : kernels) {
+	for (auto scope : kernel_scopes) {
 		// create kernel node before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
 			//create kernel node
-		 	Tensor& tensor = Tensor::Kernel(scope->shape_node->GetArguments(ArgType::Shape));
+			Tensor& tensor = Tensor::Kernel(scope->scope_shape.GetTensors());
 		 	Node* kernel_node = tensor.node_;
 		 	// make the scope nodes children of the kernel node
 		 	kernel_node->child = scope->begin;
@@ -275,15 +142,52 @@ string IR::PrintListing(map<Node*, string> node_debug) const {
 	return GetOperationListing(*this, false, node_debug) + "\n\n";
 }
 
-bool BoundaryValid(const Node* input, const Node* output,
-                   bool is_identity = true, int arg_index = -1,
-                   ArgType arg_type = ArgType::None) {
-	//bool same_kernel = input->kernel_ == output->kernel_;
-	//bool is_boundary = IsBoundary(input, output, is_identity, arg_index, arg_type);
-	//if (output->op->HasAllTypes(OpType::Set) && !same_kernel) return false; // set is always within the same kernel
-	//if (!same_kernel) return true;
-	//return !is_boundary;
-	return true;
+// check if all child nodes in a kernel have compatible shape to the kernel
+void IR::CheckKernelShapes() {
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	// go over all outputs of each kernel and create memory nodes to store the
+	// output
+	for (auto kernel : kernels) {
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			// check if the node has a shape argument
+			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
+		}
+	}
+}
+
+void IR::RemoveNode(Node* node) {
+	if (node->valid()) {
+		// if child node exists, iterate through it and remove all children
+		if (node->child) {
+			vector<Node*> to_delete;
+			for (auto child = NodeIterator(node); !child.end(); child.next()) {
+				to_delete.push_back(*child);
+			}
+			for (Node* child : to_delete) {
+				RemoveNode(child);
+			}
+		}
+
+		// set all outputs of the node to be nullptr
+		for (Arg* output : node->outputs_) {
+			if (output->from_ != nullptr && output->from_->get() == node) {
+				output->from_ = nullptr;
+			}
+		}
+
+		// if direct child of its parent
+		if (node->parent && node->parent->child == node) {
+			node->parent->child = node->next;
+		} else if (node->prev) {
+			node->prev->next = node->next;
+		}
+
+		node->next->prev = node->prev;
+		delete node;
+	}
 }
 
 void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
@@ -302,40 +206,14 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 		if (prev == nullptr) continue;
 
-		if (check_clustering) {
-			if (!BoundaryValid(prev, *node, identity)) {
-				invalid_nodes[node.get()] = "Invalid node order";
-			}
-		}
 
 		// go over all inputs
 		for (auto& input : node->inputs_) {
 			Node* from = input.from_->get();
 			Node* to = node.get();
 
-			//if (check_clustering)
-			//{
-			//	// get latest input version
-			//	const Node* latest = input.from_->get()->GetLastVersion(*node);
-			//	// check if input is the boundary of this kernel
-			//	if (!BoundaryValid(latest, to, identity, input.index_, input.type_)) {
-			//		invalid_nodes[to] = "Invalid clusterization for argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_);
-			//	}
-			//}
-
-			//if (check_kernels)
-			//{
-			//	//check if no inputs are outside the kernel
-			//	if (from->kernel_ != to->kernel_ && 
-			//		input.type_ != ArgType::Memory && 
-			//		input.type_ != ArgType::Shape && from->name != "memory" &&
-			//	    from->name != "const") {
-			//		invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" + to_string(input.index_) + " is outside the kernel";
-			//	}
-			//}
-
 			// check if inputs are before the node
-			if (from->index_ >= to->index_) {
+			if (from->index_ >= to->index_ && from->name != "const") {
 				if (input.type_ != ArgType::Shape) {
 					invalid_nodes[to] = "Argument " + Arg::TypeToString(input.type_) + ":" +
 										to_string(input.index_) + " is after the node";
@@ -360,9 +238,9 @@ bool CannotMoveArgument(Arg& arg) {
 	Node* to = arg.to_->get();
 	return (arg.type_ == ArgType::Memory &&
 	        !to->op->HasAllTypes(OpType::Set)) ||
-	       (arg.type_ == ArgType::Shape && to->name != "memory") ||
-	       from->name == "memory" ||
-	       (from->name == "const" && to->name == "memory"); //FIX THIS
+	       (arg.type_ == ArgType::Shape && !to->op->HasAllTypes(OpType::Memory)) ||
+	       from->op->HasAllTypes(OpType::Memory) ||
+	       (from->name == "const" && to->op->HasAllTypes(OpType::Memory)); //FIX THIS
 }
 
 void IR::ReorderOperations() {
@@ -401,17 +279,133 @@ bool CannotCopyArgument(Arg& arg) {
 	Node* from = arg.from_->get();
 	Node* to = arg.to_->get();
 	bool shape = arg.type_ == ArgType::Shape;
-	bool to_memory = to->name == "memory";
+	bool to_memory = to->op->HasAllTypes(OpType::Memory);
 	bool shape_not_memory = shape && !to_memory;
-	return arg.type_ == ArgType::Memory || shape_not_memory || from->op->HasAllTypes(OpType::Static) ||
-	       from->name == "memory" || from->HasBeenModified();
+	return arg.type_ == ArgType::Memory || shape_not_memory ||
+	       from->op->HasAllTypes(OpType::Static) ||
+	       from->op->HasAllTypes(OpType::Memory) || from->HasBeenModified();
 }
 
+
+/// <summary>
+/// Copy given nodes
+/// </summary>
+/// <param name="nodes_to_copy">target nodes to copy</param>
+/// <param name="argument_replacements">if given, the arguments to replace</param>
+/// <param name="indices">if given, the indices to use</param>
+/// <param name="targets">if given, the target nodes</param>
+/// <param name="must_copy_all">if true, all nodes and their arguments must be copied</param>
+/// <returns>mappings between the original nodes and the copied nodes</returns>
+map<Node*, Node*> IR::CopyNodes(
+	set<Node*> nodes_to_copy,
+    unordered_map<Node*, Node*> argument_replacements,
+	unordered_map<int, Node*> indices, 
+	unordered_set<Node*> targets, bool must_copy_all) {
+
+	// if we have indices, we are basically rerunning the computation with a
+	// different set of indices (of possible different shape)
+	bool can_change_shape = !indices.empty();
+	Arguments shape_args = Arguments();
+	if (can_change_shape) {
+		// get first index
+		int first_index = indices.begin()->first;
+		Node* first_index_node = indices.at(first_index);
+		for (auto& arg : first_index_node->inputs_) {
+			if (arg.type_ == ArgType::Shape) {
+				shape_args.push_back(arg);
+			}
+		}
+	}
+
+	if (nodes_to_copy.empty()) {
+		return {};
+	}
+
+	if (nodes_to_copy.size() > 1024) {
+		throw std::runtime_error(
+		    "Copy Nodes: Copying too many nodes, something is probably "
+		    "wrong. Number of nodes to copy: " +
+		    to_string(nodes_to_copy.size()));
+	}
+
+	// copy the nodes
+	map<Node*, Node*> copied_node_map;
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (!nodes_to_copy.contains(node.get())) {
+			continue;
+		}
+
+		Node* new_node;
+
+		// if we have the index, use it instead
+		bool is_dim = node->name == "dim_id";
+		bool no_index = true;
+		if (is_dim) {
+			int dim = node->GetTensor()->data[0];
+			if (indices.contains(dim)) {
+				new_node = indices.at(dim);
+				no_index = false;
+			}
+		}
+
+		if (no_index) {
+			// create new arguments
+			Arguments new_args;
+			for (Arg& arg : node->inputs_) {
+				if (can_change_shape && arg.type_ == ArgType::Shape) {
+					continue;
+				}
+
+				Node* from = arg.from_->get();
+
+				// if shape or memory argument, then no need to use copied node
+				if (CannotCopyArgument(arg) && !targets.contains(from) && !argument_replacements.contains(from)) {
+					new_args.push_back(arg);
+					continue;
+				}
+
+				Node* new_from = from;
+
+				if (argument_replacements.contains(from)) {
+					new_from = argument_replacements[from];
+				} else if (nodes_to_copy.contains(from)) {
+					new_from = copied_node_map[from];
+				} else if (must_copy_all) {
+					throw std::runtime_error("Copy Nodes: No replacement for node " + from->name + " but we must copy all nodes");
+				}
+
+				// create new argument
+				new_args.emplace_back(arg.type_, new_from->GetLable(), arg.index_);
+			}
+
+			if (can_change_shape) {
+				// add shape arguments
+				new_args.insert(new_args.end(), shape_args.begin(), shape_args.end());
+			}
+
+			// create new node
+			Tensor* tensor = Tensor::GetCopy(*node->GetTensor(), new_args);
+			new_node = tensor->node_;
+		}
+
+		copied_node_map[node.get()] = new_node;
+	}
+
+	return copied_node_map;
+}
+
+/// <summary>
+/// Copy nodes together with their arguments (as far as possible)
+/// </summary>
+/// <param name="targets">nodes to copy</param>
+/// <param name="indices">if given, the indices to use</param>
+/// <returns>map between the original nodes and the copied nodes</returns>
 map<Node*, Node*> IR::CopyComputation(
-    const unordered_set<Node*>& targets) const {
+    const unordered_set<Node*>& targets, const unordered_map<int, Node*>& indices) {
+
 	// do a depth first search to copy all the nodes required for the targets
 	// (only if in the same kernel)
-	unordered_set<Node*> nodes_to_copy;
+	set<Node*> nodes_to_copy;
 	std::function<void(Node*)> dfs = [&](Node* node) {
 		if (nodes_to_copy.contains(node)) return;
 		nodes_to_copy.insert(node);
@@ -425,106 +419,19 @@ map<Node*, Node*> IR::CopyComputation(
 		dfs(target);
 	}
 
-	if (nodes_to_copy.empty()) {
-		return {};
-	}
+	return CopyNodes(nodes_to_copy, {}, indices, targets, true);
+}
 
-	if (nodes_to_copy.size() > 1024) {
-		throw std::runtime_error(
-		    "Copy Computation: Copying too many nodes, something is probably wrong. Number of nodes to copy: " + to_string(nodes_to_copy.size()));
-	}
-
-	// copy the nodes
+map<Node*, Node*> IR::CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
+                                         unordered_map<int, Node*> indices,
+                                         Node* cursor) {
+	// copy all the nodes at the beginning of the kernel
 	map<Node*, Node*> copied_node_map;
-	for (auto node = begin(); !node.end(); node.next()) {
-		if (!nodes_to_copy.contains(node.get())) {
-			continue;
-		}
-
-		// create new arguments
-		Arguments new_args;
-		for (Arg& arg : node->inputs_) {
-			// if shape or memory argument, then no need to use copied node
-			if (CannotCopyArgument(arg) && !targets.contains(arg.from_->get())) {
-				new_args.push_back(arg);
-				continue;
-			}
-
-			Node* from = arg.from_->get();
-
-			if (!copied_node_map.contains(from)) {
-				throw std::runtime_error("Copy Computation: Node not found");
-			}
-
-			// create new argument
-			new_args.emplace_back(arg.type_, copied_node_map[from]->GetLable(),
-			                      arg.index_);
-		}
-
-		// create new node
-		Tensor* tensor = Tensor::GetCopy(*node->GetTensor(), new_args);
-		Node* new_node = tensor->node_;
-		copied_node_map[node.get()] = new_node;
-	}
+	ExecuteExpressionBefore(cursor, [&]() {
+		copied_node_map = CopyComputation(nodes_to_copy, indices);
+	});
 
 	return copied_node_map;
-}
-
-void IR::GetInputList() {
-	int input_memory_index = 0;
-	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->memory_type_ == MemoryType::Input) {
-			//add shapes to the memory inputs
-			memory_inputs.push_back(*node);
-
-			shape_memory_map[*node] = {};
-			//add shapes to the memory inputs
-			for (auto& arg : node->inputs_) {
-				if (arg.type_ == ArgType::Shape) {
-					shape_memory_map[*node][arg.index_] = arg.from_->get();
-				}
-			}
-
-			//set input memory index
-			node->special_index_ = input_memory_index++;
-		}
-	}
-}
-
-void IR::GetOutputList() {
-	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->memory_type_ == MemoryType::Output) {
-			if (node->name != "memory") {
-				throw std::runtime_error("Compilation error: output is not a memory node"); //all outputs should be memory nodes at this point
-			}
-			output_memory_map[node->special_index_] = *node;
-		}
-		if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
-			if (!node->HasParent("kernel")) {
-				writebacks++;
-			}
-		}
-		else if (node->op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
-			if (!node->HasParent("kernel")) {
-				readbacks++;
-			}
-		}
-	}
-}
-
-void IR::ComputeStatistics() {
-	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->name == "memory")
-		{
-			if (node->memory_type_ == MemoryType::Output) {
-				output_memory_count++;
-			} else if (node->memory_type_ == MemoryType::Input) {
-				input_memory_count++;
-			} else {
-				temp_memory_count++;
-			}
-		}
-	}
 }
 
 void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
@@ -536,8 +443,8 @@ void IR::CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor)
 
 	// copy all the nodes at the beginning of the kernel
 	map<Node*, Node*> copied_node_map;
-	ExecuteExpressionBefore(
-	    cursor, [&]() { copied_node_map = CopyComputation(nodes_to_copy); });
+	unordered_map<int, Node*> indices;
+	copied_node_map = CopyNodesWithIndex(nodes_to_copy, indices, cursor);
 
 	// replace all the arguments that use the copied nodes
 	for (auto* arg : args_to_copy) {
@@ -574,7 +481,8 @@ void IR::OptimizeKernels() {
 					// check if input is cheap enough to copy
 					float input_cost = input.from_->get()->cost_;
 					if (input_cost == -1.0) {
-						throw std::runtime_error("Cost has not been computed");
+						//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
 					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
@@ -604,6 +512,87 @@ void IR::OptimizeKernels() {
 	}
 }
 
+#define MAX_LOAD_COPY 5000.0f
+#define MAX_LOAD_COPY_COUNT 8
+void IR::OptimizeKernelLoadOperations() {
+	UpdateGraph();
+	ComputeNodeCost();
+
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	unordered_set<Node*> nodes_to_remove;
+
+	for (auto kernel : kernels) {
+		unordered_map<Node*, Node*> loads_to_copy;
+		// go over all nodes in the kernel and check if their inputs can be copied
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			if (node->name != "load") continue;
+
+			//get memory input
+			Node* memory_input = node->GetArguments(ArgType::Memory)[0].from_->get();
+
+			bool inside_kernel = memory_input->HasParent("kernel");
+
+			int output_count = (int)memory_input->outputs_.size();
+			bool cheap_enough = memory_input->cost_ >= 0.0f &&
+			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
+			bool is_not_modified = !memory_input->HasBeenModified();
+
+			//if the memory input is used only once and is not a memory node
+			if (cheap_enough && inside_kernel && output_count < MAX_LOAD_COPY_COUNT &&
+			    is_not_modified) {
+				loads_to_copy[memory_input] = *node;
+			}
+		}
+
+		for (auto load : loads_to_copy) {
+			//get the load
+			Node* memory_input = load.first;
+			Node* load_node = load.second;
+
+			//get the indices
+			unordered_map<int, Node*> indices;
+			for (auto& arg : load_node->inputs_) {
+				if (arg.type_ == ArgType::Index) {
+					indices[arg.index_] = arg.from_->get();
+				}
+			}
+
+			//copy the load node
+			map<Node*, Node*> copied_node_map = CopyNodesWithIndex({ memory_input }, indices, load_node);
+
+
+			Tensors indices_tensors = Tensors();
+			indices_tensors.resize(indices.size());	
+			for (auto& [index, node] : indices) {
+				indices_tensors[index] = node->GetTensor();
+			}
+
+			//go over all the copied nodes and add load nodes to their inputs that are outside the kernel
+			for (auto& [old_node, new_node] : copied_node_map) {
+				AddNodeLoadOperations(new_node, kernel, indices_tensors);
+			}
+
+			Node* copied_load = copied_node_map[memory_input];
+			//copy over the information from the original load node
+			copied_load->CopyMetadata(load_node);
+
+			//go over all outputs of the load node and replace them with the copied nodes
+			for (auto& output : load_node->outputs_) {
+				output->from_ = copied_load->GetLable();
+			}
+
+			//remove the load node since it is not needed anymore
+			nodes_to_remove.insert(load_node);
+		}
+	}
+
+	// remove the load nodes
+	for (auto node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
 #define MAX_HOST_COPY_COST 8192.0f
 
 void IR::OptimizeHost() {
@@ -624,7 +613,8 @@ void IR::OptimizeHost() {
 				// check if input is cheap enough to copy
 				float input_cost = input.from_->get()->cost_;
 				if (input_cost == -1.0) {
-					throw std::runtime_error("Cost has not been computed");
+					//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+					continue;
 				}
 				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
 				bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
@@ -641,6 +631,120 @@ void IR::OptimizeHost() {
 	}
 }
 
+
+
+void IR::MoveShapeOutsideKernels() {
+	UpdateGraph();
+
+	// find all nodes that are used as shapes and are inside kernels
+	map<Node*, Node*> nodes_to_copy;
+	for (auto node = begin(); !node.end(); node.next()) {
+		Node* kernel = node->GetParent("kernel");
+		if (kernel == *node) continue;
+
+		// go over all outputs arguments
+		for (auto& output : node->outputs_) {
+			if (output->type_ != ArgType::Shape) {
+				continue;
+			}
+
+			// add the node to the set
+			nodes_to_copy[node.get()] = kernel;
+		}
+	}
+
+	for (auto [ node, kernel ] : nodes_to_copy) {
+		//get all output arguments that are shapes
+		unordered_set<Arg*> args_to_copy;
+		int earliest_output_index = INT_MAX;
+		Node* earliest_output = nullptr;
+		for (auto& output : node->outputs_) {
+			if (output->type_ == ArgType::Shape) {
+				args_to_copy.insert(output);
+
+				//get the earliest output
+				if (output->index_ < earliest_output_index) {
+					earliest_output_index = output->index_;
+					earliest_output = output->to_->get();
+				}
+			}
+		}
+
+		Node* common_parent = earliest_output->GetCommonParent(kernel);
+
+		// copy shape computation and put it before the earliest output (outside of the kernel if its inside)
+		CopyArguments(args_to_copy, common_parent);
+	}
+}
+
+
+/// <summary>
+/// Get all inputs of this program in the IR
+/// </summary>
+void IR::GetInputList() {
+	int input_memory_index = 0;
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (node->memory_type_ == MemoryType::Input) {
+			// add shapes to the memory inputs
+			memory_inputs.push_back(*node);
+
+			shape_memory_map[*node] = {};
+			// add shapes to the memory inputs
+			for (auto& arg : node->inputs_) {
+				if (arg.type_ == ArgType::Shape) {
+					shape_memory_map[*node][arg.index_] = arg.from_->get();
+				}
+			}
+
+			// set input memory index
+			node->special_index_ = input_memory_index++;
+		}
+	}
+}
+
+/// <summary>
+/// Get all outputs of this program in the IR
+/// </summary>
+void IR::GetOutputList() {
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (node->memory_type_ == MemoryType::Output) {
+			if (!node->op->HasAllTypes(OpType::Memory)) {
+				throw std::runtime_error(
+				    "Compilation error: output is not a memory node");  // all outputs
+				                                                        // should be
+				                                                        // memory nodes
+				                                                        // at this point
+			}
+			output_memory_map[node->special_index_] = *node;
+		}
+		if (node->op->HasAllTypes(OpType::Modifier, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				writebacks++;
+			}
+		} else if (node->op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+			if (!node->HasParent("kernel")) {
+				readbacks++;
+			}
+		}
+	}
+}
+
+/// <summary>
+/// Compute statistics about the IR
+/// </summary>
+void IR::ComputeStatistics() {
+	for (auto node = begin(); !node.end(); node.next()) {
+		if (node->name == "memory") {
+			if (node->memory_type_ == MemoryType::Output) {
+				output_memory_count++;
+			} else if (node->memory_type_ == MemoryType::Input) {
+				input_memory_count++;
+			} else {
+				temp_memory_count++;
+			}
+		}
+	}
+}
 
 bool isConstantAndEqualTo(const Tensor* tensor, float value) {
 	if (tensor->node_->name != "const" || tensor->node_->has_been_modified_) {
@@ -815,7 +919,9 @@ void IR::RemoveUnusedOperations() {
 
 	//mark all output nodes as used
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->memory_type_ == MemoryType::Output || node->op->HasAllTypes(OpType::Static)) {
+		if (node->memory_type_ == MemoryType::Output ||
+		    node->memory_type_ == MemoryType::Input ||
+		    node->op->HasAllTypes(OpType::Static)) {
 			dfs(node.get());
 		}
 	}
@@ -827,10 +933,6 @@ void IR::RemoveUnusedOperations() {
 			if (node->memory_type_ != MemoryType::Input && node->memory_type_ != MemoryType::Output)
 			{
 				nodes_to_remove.insert(node.get());
-			}
-			else
-			{
-				throw std::runtime_error("Input " + node->var_name + " is not being used");
 			}
 		}
 	}
@@ -845,7 +947,7 @@ void IR::RemoveUnusedOperations() {
 void IR::ComputeNodeCost()
 {
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->name == "memory";
+		bool is_memory = node->op->HasAllTypes(OpType::Memory);
 		unordered_map<Node*, float> input_costs;
 		for (auto& input : node->inputs_) {
 			if (input.type_ != ArgType::Memory &&
@@ -887,7 +989,94 @@ map<Node*, vector<Arg*>> IR::GetKernelOutputs(Node* kernel)
 	return node_output;
 }
 
-void IR::AddKernelGlobalMemoryOperations() {
+void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
+	for (auto& input : node->inputs_) {
+		if (input.type_ == ArgType::Memory || input.type_ == ArgType::Shape)
+			continue;
+
+		Node* input_node = input.from_->get();
+		bool is_in_a_kernel = input_node->HasParent("kernel");
+		bool is_outside = !input_node->HasParent(kernel);
+		bool is_memory = input_node->op->HasAllTypes(OpType::Memory);
+
+		if (is_memory || (is_in_a_kernel && is_outside)) {
+			// load the memory node before this node
+			ExecuteExpressionBefore(node, [&]() {
+				Tensor& loaded = Tensor::Load(*input_node->GetTensor(), indices, true);
+				input.from_ = loaded.node_->GetLable();
+			});
+		}
+	}
+}
+
+void IR::AddKernelGlobalLoadOperations() {
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+	for (auto kernel : kernels) {
+
+		// replace all inputs pointing to memory nodes with the memory node
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			AddNodeLoadOperations(node.get(), kernel, {});
+		}
+	}
+}
+
+
+void IR::AddMemoryOpIndices() {
+	// get kernels
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+	for (auto kernel : kernels) {
+		// get kernel shape arguments
+		Arguments shape_args = kernel->GetArguments(ArgType::Shape);
+
+		Tensors indices = Tensors();
+		// add dimension index nodes
+		ExecuteExpressionChild(kernel, [&]() {
+			for (int i = 0; i < shape_args.size(); i++) {
+				indices.push_back(&Tensor::Index(shape_args, i));
+			}
+		});
+		int kernel_dim = (int)shape_args.size();
+
+		// replace all inputs pointing to memory nodes with the memory node
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			if (!node->op->HasAllTypes(OpType::MemoryOp)) {
+				continue;
+			}
+
+			Node* input_node = node->GetArguments(ArgType::Memory)[0].from_->get();
+			map<int, const Tensor*> shape = input_node->GetArgumentTensors(ArgType::Shape);
+			const Tensor* input_tensor = input_node->GetTensor();
+			ArgMap index_args = node->GetArgumentMap(ArgType::Index);
+
+			int memory_dim = (int)shape.size();
+			ExecuteExpressionBefore(node.get(), [&]() {
+				for (int i = 0; i < memory_dim; i++) {
+					if (index_args.contains(i)) {
+						continue;
+					}
+					if (memory_dim > kernel_dim) {
+						throw std::runtime_error(
+						    "Memory dimension is greater than kernel dimension, we can't "
+						    "implicitly broadcast");
+					}
+					const Tensor* index = nullptr;
+					// if the shape is 1, then we broadcast and set the index to 0
+					if (isConstantAndEqualTo(shape[i], 1.0)) {
+						index = &Tensor::Constant(0);
+					} else {
+						index = indices[kernel_dim - memory_dim + i];
+					}
+					node->AddArgument(index->node_, ArgType::Index, i);
+				}
+			});
+		}
+	}
+}
+
+void IR::AddKernelGlobalStoreOperations() {
 	// get kernels
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -900,7 +1089,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 		for (auto out : node_output) {
 			Node* output = out.first;
 			// if the output is already a memory node, then skip
-			if (output->name == "memory") {
+			if (output->op->HasAllTypes(OpType::Memory)) {
 				continue;
 			}
 
@@ -908,6 +1097,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 			// add memory node before this kernel
 			ExecuteExpressionBefore(kernel, [&]() {
 				mem = Tensor::Memory(output->GetArguments(ArgType::Shape), output->tensor_->type).node_;
+				mem->debug_name = output->debug_name;
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;
@@ -924,7 +1114,7 @@ void IR::AddKernelGlobalMemoryOperations() {
 					// if not a memory or shape argument, then the memory needs to be
 					// loaded before the node
 					ExecuteExpressionBefore(arg_out->to_->get(), [&]() {
-						Tensor& loaded = Tensor::Load(*mem->GetTensor());
+						Tensor& loaded = Tensor::Load(*mem->GetTensor(), {}, true);
 						// the node must now use the loaded value
 						arg_out->from_ = loaded.node_->GetLable();
 					});
@@ -934,27 +1124,32 @@ void IR::AddKernelGlobalMemoryOperations() {
 				}
 			}
 
-			// add store node after this node
-			ExecuteExpressionAfter(output, [&]() {
+			//get last modification of the memory
+			Node* last_mod = output->GetFinalVersion();
+			//get the parent of the last modification on the same level as the memory
+			Node* last_mod_parent = last_mod->GetCommonParent(output);
+
+			// add store node after the last modification on the same level as the memory
+			ExecuteExpressionAfter(last_mod_parent, [&]() {
 				// add store node after this node
-				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor());
+				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, true);
 			});
 		}
 	}
 
 	// replace all inputs pointing to memory nodes with the memory node
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->name == "memory";
+		bool is_memory = node->op->HasAllTypes(OpType::Memory);
 
 		for (auto& input : node->inputs_) {
 			if (input.type_ == ArgType::Memory ||
 			    (input.type_ == ArgType::Shape && !is_memory))
 				continue;
 
-			if (input.from_->get()->name == "memory") {
+			if (input.from_->get()->op->HasAllTypes(OpType::Memory)) {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
-					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor());
+					Tensor& loaded = Tensor::Load(*input.from_->get()->GetTensor(), {}, true);
 					input.from_ = loaded.node_->GetLable();
 				});
 			}
@@ -962,60 +1157,52 @@ void IR::AddKernelGlobalMemoryOperations() {
 	}
 }
 
-//check if all child nodes in a kernel have compatible shape to the kernel
-void IR::CheckKernelShapes()
-{
-	// get kernels
-	UpdateGraph();
-	vector<Node*> kernels = GetNodesOfType("kernel");
-
-	// go over all outputs of each kernel and create memory nodes to store the
-	// output
-	for (auto kernel : kernels) {
-		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			//check if the node has a shape argument
-			ShapeCompareResult result = CompareShape(kernel, node.get());
-			if (!result.compatible) {
-				throw std::runtime_error("Kernel " + kernel->var_name + " has incompatible shape with node " + node.get()->var_name);
-			}
-		}
-	}
-
-}
-
 void IR::AddMemoryDeallocation()
 {
+	UpdateGraph();
 	vector<Node*> memory_nodes = GetNodesOfType("memory");
 
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
 	for (auto memory : memory_nodes) {
-		if (memory->memory_type_ == MemoryType::Input || memory->memory_type_ == MemoryType::Output) {
+		// skip input and output memories, they are deallocated manually
+		if (memory->memory_type_ == MemoryType::Input) {
 			continue;
 		}
 
-		// get all outputs of this memory
-		vector<Arg*> outputs;
-		for (auto& output : memory->outputs_) {
-			if (output->to_ == nullptr) continue;
-			outputs.push_back(output);
-		}
+		Node* last_output = nullptr;
+		int last_output_index = -1;
 
-		// if the memory is not used, then skip
-		if (outputs.empty()) {
-			continue;
-		}
+		bool is_an_output = false;
 
-		// get the last time the memory is used
-		Node* last_output = outputs[0]->to_->get();
-		for (auto& output : outputs) {
-			if (output->to_->get()->index_ > last_output->index_) {
-				last_output = output->to_->get();
+		//do a dfs to find the last output
+		std::function<void(Node*)> dfs = [&](Node* node) {
+			if (node->memory_type_ == MemoryType::Output) {
+				is_an_output = true;
+				return;
 			}
+
+			for (auto& output : node->outputs_)
+			{
+				Node* output_node = output->to_->get();
+				if (output_node->op->HasAllTypes(OpType::MemoryReuse)) {
+					dfs(output_node);
+				} else {
+					if (last_output_index < output_node->index_) {
+						last_output_index = output_node->index_;
+						last_output = output_node;
+					}
+				}
+			}
+		};
+
+		dfs(memory);
+
+		if (is_an_output) {
+			continue;
 		}
 
 		// need to add deallication in the same scope as the allocation
 		Node* deallocation_point = last_output->GetCommonParent(memory);
-
 
 		// add deallocation node after the last time the memory is used
 		ExecuteExpressionAfter(deallocation_point, [&]() {
@@ -1062,6 +1249,8 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 		return &Tensor::Constant(0);
 	}
 
+	int kernel_dim = (int)indices.size();
+
 	std::function<const Tensor*(int)> get_shape = [&](int dim) {
 		return memory_shape[dim]->from_->get()->GetTensor();
 	};
@@ -1073,7 +1262,7 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 		if (idx.find(dim) != idx.end()) {
 			out = const_cast<Tensor*>(idx[dim]);
 		} else {
-			out = indices[dim];
+			throw std::runtime_error("Finalize memory indexing: node index not found");
 		}
 
 		switch (mode)
@@ -1085,7 +1274,7 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 			case TensorIndexingMode::Unsafe:
 				return out;
 			default: //TODO (Moroz): add other modes
-				throw std::runtime_error("Invalid tensor indexing mode");
+				throw std::runtime_error("Finalize memory indexing: invalid tensor indexing mode");
 		}
 	};
 
@@ -1099,13 +1288,8 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 	return flat_index;
 }
 
-void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* kernel, int dims, Tensors kernel_shape)
+void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 {
-	ExecuteExpressionChild(kernel, [&]() {
-		thread_index = &kernel->GetTensor()->ThreadIndex();
-		indices = ComputeIndicesFromLinearIndex(thread_index, kernel_shape, dims);
-	});
-
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
@@ -1113,7 +1297,7 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 			int dim = node->GetTensor()->data[0];
 			if (dim >= dims) {
 				throw runtime_error("Invalid dimension index " + to_string(dim) +
-									" for kernel of size " + to_string(dims));
+													" for kernel of size " + to_string(dims));
 			}
 
 			// remove the dim node
@@ -1127,7 +1311,7 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 					int dim = input.from_->get()->GetTensor()->data[0];
 					if (dim >= dims) {
 						throw runtime_error("Invalid dimension index " + to_string(dim) +
-																	" for kernel of size " + to_string(dims));
+																							" for kernel of size " + to_string(dims));
 					}
 
 					// replace the dim node with the index node
@@ -1143,7 +1327,7 @@ void IR::LinearModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node
 	}
 }
 
-void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
+void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
 {
 	//add dim_id nodes at the beginning of the kernel
 	ExecuteExpressionChild(kernel_, [&]() {
@@ -1153,7 +1337,106 @@ void IR::MultiDimensionalModeIndices(Tensor*& thread_index, vector<Tensor*>& ind
 	});
 }
 
-void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, KernelIndexingMode indexing_mode, TensorIndexingMode tensor_indexing_mode)
+vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
+                                             Tensors kernel_shape, int dims) {
+	//compute in-block index
+	vector<int> block_size = kernel->group_size;
+	int block_dim = (int)block_size.size();
+	Tensors block_size_tensors = {};
+	for (int i = 0; i < block_dim; i++) {
+		block_size_tensors.push_back(&Tensor::Constant(block_size[i]));
+		//block_size_tensors[i]->SetDebugName("block_size_" + to_string(i));
+	}
+	vector<Tensor*> in_block_indices;
+	for (int i = 0; i < block_dim; i++) {
+		in_block_indices.push_back(&block_index->BlockThreadIndex(block_dim - 1 - i));
+	}
+
+	//compute out-of-block index
+	Tensors blocks_shape = {};
+	for (int i = 0; i < dims - block_dim; i++) {
+		blocks_shape.push_back(kernel_shape[i]);
+		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
+	}
+	//the rest are divided into blocks of the given size
+	for (int i = 0; i < block_dim; i++) {
+		const Tensor block_size = *block_size_tensors[i];
+		const Tensor shape = *kernel_shape[dims - block_dim + i];
+		Tensor& ceil = (shape + block_size - Tensor::Constant(1)) / block_size;
+		blocks_shape.push_back(&ceil);
+		blocks_shape[dims - block_dim + i]->SetDebugName("blocks_shape_" + to_string(dims - block_dim + i));
+	}
+	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);
+	for (int i = 0; i < dims; i++) {
+		//out_block_indices[i]->SetDebugName("out_block_index_" + to_string(i));
+	}
+
+	//combine the indices
+	vector<Tensor*> indices = {};
+	for (int i = 0; i < dims - block_dim; i++) {
+		indices.push_back(out_block_indices[i]);
+		indices[i]->SetDebugName("index_" + to_string(i));
+	}
+	//the rest are sum of block index and in-block index
+	for (int i = 0; i < block_dim; i++) {
+		indices.push_back(&(*out_block_indices[dims - block_dim + i] * *block_size_tensors[i] + *in_block_indices[i]));
+		indices[dims - block_dim + i]->SetDebugName("index_" + to_string(dims - block_dim + i));
+	}
+
+	return indices;
+}
+
+Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
+{
+	Tensor* block_index = nullptr;
+	Tensor* if_tensor = nullptr;
+	ExecuteExpressionChild(kernel_, [&]() {
+		block_index = &kernel_->GetTensor()->BlockIndex();
+
+		switch (dims)
+		{ 
+			case 1:
+				kernel_->group_size = {256};
+				break;
+			case 2:
+				kernel_->group_size = {16, 16};
+				break;
+			case 3:
+				kernel_->group_size = {8, 8, 8};
+				break;
+			default:
+				kernel_->group_size = {8, 8, 8};
+		}
+
+		//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
+		int group_dim = (int)kernel_->group_size.size();
+		for (int i = 0; i < group_dim; i++) {
+			int shape = kernel_shape[dims - group_dim + i]->TryGetConstant();
+			if (shape > 0) {
+				kernel_->group_size[i] = min(kernel_->group_size[i], shape);
+			}
+		}
+
+		indices = ComputeIndicesFromBlockIndex(block_index, kernel_, kernel_shape, dims);
+
+		//add a check for if inside the dispatch
+		Tensor* inside_dispatch = &(*indices[0] < *kernel_shape[0]);
+		for (int i = 1; i < dims; i++) {
+			inside_dispatch = &(*inside_dispatch && *indices[i] < *kernel_shape[i]);
+		}
+		inside_dispatch->SetDebugName("is_inside_dispatch");
+
+		//put an if condition
+		if_tensor = &Tensor::If(*inside_dispatch);
+		if_tensor->SetDebugName("if_inside_dispatch");
+	});
+
+	ReplaceDimNodes(kernel_, indices, dims);
+
+	return if_tensor;
+}
+
+void ComputeAddress(Node* node, vector<Tensor*> indices)
 {
 	// get the input memory node
 	const Tensor* memory = node->GetArgumentTensors(ArgType::Memory)[0];
@@ -1165,18 +1448,12 @@ void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, K
 	// get the index nodes
 	map<int, const Tensor*> idx = node->GetArgumentTensors(ArgType::Index);
 
-	// just use the thread index if no index is provided
-	if (idx.empty() && indexing_mode == KernelIndexingMode::Linear) {
-		if (thread_index == nullptr) {
-			throw runtime_error("Default thread index is not supported outside of a kernel");
-		}
-		// add the thread index node edge
-		node->AddArgument(thread_index->node_, ArgType::Index, 0);
-		return;
+	if (idx.empty())
+	{
+		node->indexing_mode_ = TensorIndexingMode::Unsafe; //we can guarantee that the index is in bounds
 	}
 
-	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim,
-	                                      tensor_indexing_mode);
+	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
 
 	// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
 	// mirror, zero)
@@ -1191,6 +1468,8 @@ void ComputeAddress(Node* node, Tensor* thread_index, vector<Tensor*> indices, K
 void IR::FinalizeMemoryIndexing() {
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	vector<Tensor*> dispatch_checks;
 
 	for (auto kernel : kernels) {
 		Node* shape_node = kernel;
@@ -1210,26 +1489,14 @@ void IR::FinalizeMemoryIndexing() {
 
 		// compute the index for each dimension
 		int dims = (int)kernel_shape.size();
-		Tensor* thread_index;
 		vector<Tensor*> indices = vector<Tensor*>(dims);
-
-		switch (indexing_mode_)
-		{ 
-		case KernelIndexingMode::Linear:
-			LinearModeIndices(thread_index, indices, kernel, dims, kernel_shape);
-			break;
-		case KernelIndexingMode::MultiDimensional:
-		case KernelIndexingMode::MultiDimensionalBlocks: //TODO (Moroz): add proper support for blocks
-			MultiDimensionalModeIndices(thread_index, indices, kernel, dims, kernel_shape);
-			break;
-		default:
-			throw runtime_error("Invalid kernel indexing mode");
-		}
+		dispatch_checks.push_back(
+		    LinearBlockModeIndices(indices, kernel, dims, kernel_shape));
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpType::MemoryOp)) {
-				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), thread_index, indices, indexing_mode_, tensor_indexing_mode_); });
+				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), indices); });
 			}
 		}
 	}
@@ -1239,10 +1506,22 @@ void IR::FinalizeMemoryIndexing() {
 		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpType::MemoryOp)) {
 			ExecuteExpressionBefore(node.get(), [&]() { 
 				vector<Tensor*> indices = {};
-				ComputeAddress(node.get(), nullptr, indices, indexing_mode_, tensor_indexing_mode_);
+				ComputeAddress(node.get(), indices);
 			});
 		}
 	}
+
+	for (auto check : dispatch_checks) {
+		// put the rest of the kernel starting from if_node->next_ as a child
+		// MoveNodeTo(if_node->node_->child, if_node->node_->next);
+		Node* if_node = check->node_;
+		if_node->child = if_node->next;
+		if_node->next->prev = nullptr;
+		if_node->next->parent = if_node;
+		if_node->next = nullptr;
+	}
+
+	UpdateGraph();
 }
 
 void IR::RemoveUnusedKernels()
@@ -1274,13 +1553,455 @@ void IR::RemoveUnusedKernels()
 	}
 }
 
+int GetAxis(int dims, int axis)
+{
+	if (axis < 0)
+	{
+		axis = dims + axis;
+	}
+	return axis;
+}
+
+Tensor* ComputeReduction(const Tensor* array, int axis,
+                         std::function<Tensor*(Tensor*, Tensor*)> reduction_op, string debug_name = "",
+                         uint initial = 0,
+                         std::function<Tensor*(Tensor*)> element_op = nullptr) {
+	// Get shape of the array
+	Tensors shape = array->GetShape();
+
+	axis = GetAxis((int)shape.size(), axis);
+
+	// Get the number of dimensions
+	int dims = (int)shape.size();
+
+	Tensors sum_shape = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			continue;
+		}
+		sum_shape.push_back(shape[i]);
+	}
+
+	// get indices for all dimensions but the last
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims - 1; i++) {
+		indices.push_back(&Tensor::Index(sum_shape, i));
+	}
+
+	// if no dimensions, then add constant 1
+	if (sum_shape.empty()) {
+		sum_shape.push_back(&Tensor::Constant(1));
+	}
+
+	Tensors load_index = Tensors();
+	for (int id = 0, d = 0; d < dims; d++) {
+		if (d == axis) {
+			load_index.push_back(&Tensor::Constant(sum_shape, 0));
+		} else {
+			load_index.push_back(indices[id++]);
+		}
+	}
+
+	// start with the first value
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->type);
+	reduced->SetDebugName(debug_name);
+
+	// create a loop over the last dimension starting from the second value
+	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
+	[&](const Tensor& i) {
+		load_index[axis] = &i;
+		
+		// load the value
+		Tensor* value = &Tensor::Load(*array, load_index, true);
+
+		if (element_op != nullptr) {
+			value = element_op(value);
+		}
+
+		reduced->Set(*reduction_op(reduced, value));
+	});
+
+	return reduced;
+}
+
+Tensor* ComputeSum(const Tensor* array, int axis) {
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) {
+	return &(*a + *b); }, "sum");
+}
+
+Tensor* ComputeNorm(const Tensor* array, int axis) { 
+	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis, 
+		[](Tensor* a, Tensor* b) { return &(*a + *b); }, "norm", 0, 
+		[](Tensor* a) { return &(*a * *a); })));
+}
+
+Tensor* ComputeMean(const Tensor* array, int axis) {
+	Tensor* sum = ComputeSum(array, axis);
+	Tensors shape = array->GetShape();
+	axis = GetAxis((int)shape.size(), axis);
+	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
+}
+
+Tensor* ComputeMax(const Tensor* array, int axis) {
+	uint initial = 0;
+	if (array->type == DataType::Float) {
+		float init = -FLT_MAX;
+		initial = *(uint*)&init;
+	}
+	else if (array->type == DataType::Int) {
+		int init = INT_MIN;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &Tensor::max(*a, *b); },
+	    "max", initial);
+}
+
+Tensor* ComputeMin(const Tensor* array, int axis) {
+	uint initial = UINT_MAX;
+	if (array->type == DataType::Float) {
+		float init = FLT_MAX;
+		initial = *(uint*)&init;
+	}
+	else if (array->type == DataType::Int) {
+		int init = INT_MAX;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &Tensor::min(*a, *b); },
+	    "min", initial);
+}
+
+Tensor* ComputeProduct(const Tensor* array, int axis) {
+	uint initial = 1;
+	if (array->type == DataType::Float) {
+		float init = 1.0f;
+		initial = *(uint*)&init;
+	}
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &(*a * *b); }, "prod", initial);
+}
+
+Tensor* ComputeAny(const Tensor* array, int axis) {
+	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) { return &(*a || *b); }, "any", 0);
+}
+
+Tensor* ComputeAll(const Tensor* array, int axis) {
+	return ComputeReduction(
+	    array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, "all", ~0);
+}
+
+Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
+	Tensors shape = array->GetShape();
+	Tensors perm_shape = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		perm_shape.push_back(shape[permutation[i]]);
+	}
+	//create indices
+	Tensors indices = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		indices.push_back(&Tensor::Index(perm_shape, i));
+	}
+	//permute indices to load the values
+	Tensors perm_indices = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		perm_indices.push_back(indices[permutation[i]]);
+	}
+	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
+	loaded.SetDebugName("transposed");
+	return &loaded;
+}
+
+Tensor* Unsqueeze(const Tensor* array, int axis) {
+	Tensors shape = array->GetShape();
+	Tensors new_shape = Tensors();
+	for (int i = 0; i < (int)shape.size(); i++) {
+		new_shape.push_back(shape[i]);
+	}
+	int expanded_dim = GetAxis((int)shape.size(), axis) + 1;
+	new_shape.insert(new_shape.begin() + expanded_dim, &Tensor::Constant(1));
+	//create indices
+	Tensors indices = Tensors();
+	for (int i = 0; i < (int)new_shape.size(); i++) {
+		if (i == expanded_dim) continue;
+		indices.push_back(&Tensor::Index(new_shape, i));
+	}
+
+	//load the values
+	Tensor& loaded = Tensor::Load(*array, indices, true);
+	loaded.SetDebugName(array->node_->debug_name);
+
+	return &loaded;
+}
+
+Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
+	Tensors shape_a = a->GetShape();
+	Tensors shape_b = b->GetShape();
+	axis = GetAxis((int)shape_a.size(), axis);
+	return ComputeSum(&(*a * *b), axis);
+}
+
+//compute the matrix multiplication of two last dimensions
+//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
+Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
+	Tensors shape_a = a->GetShape();
+	Tensors shape_b = b->GetShape();
+
+	if (shape_a.size() < 2 || shape_b.size() < 2) {
+		throw std::runtime_error("Matrix multiplication requires at least 2 dimensions");
+	}
+
+	//get shape of the result
+	Tensors shape_c = Tensors();
+	int dim_a = (int)shape_a.size();
+	int dim_b = (int)shape_b.size();
+	int max_dim = 0;
+	Tensors max_shape = Tensors();
+	//get the shape with most dimensions
+	if (dim_a < dim_b) {
+		max_dim = dim_b;
+		max_shape = shape_b;
+	} else {
+		max_dim = dim_a;
+		max_shape = shape_a;
+	}
+
+	for (int i = 0; i < max_dim - 2; i++) {
+		shape_c.push_back(max_shape[i]);
+	}
+	shape_c.push_back(shape_a[dim_a - 2]);
+	shape_c.push_back(shape_b[dim_b - 1]);
+
+	const Tensor* sum_shape = shape_a[dim_a - 1];
+
+	// get indices for c elements
+	Tensors indices_c = Tensors();
+	for (int i = 0; i < max_dim; i++) {
+		indices_c.push_back(&Tensor::Index(shape_c, i));
+	}
+
+	// start with 0
+	Tensor* c = &Tensor::Constant(shape_c, 0, a->type);
+	c->SetDebugName("matmul");
+
+	// loop over k and compute += A t1t2..tN ik * B t1t2..tN kj
+	Tensor::Loop(Tensor::Constant(0), *sum_shape, Tensor::Constant(1),
+		[&](const Tensor& k) {
+
+		// get indices for a elements
+		Tensors indices_a = Tensors();
+		for (int i = 0; i < dim_a - 2; i++) {
+			indices_a.push_back(indices_c[max_dim - dim_a + i]);
+		}
+		indices_a.push_back(indices_c[max_dim - 2]);
+		indices_a.push_back(&k);
+
+		// get indices for b elements
+		Tensors indices_b = Tensors();
+		for (int i = 0; i < dim_b - 2; i++) {
+			indices_b.push_back(indices_c[max_dim - dim_b + i]);
+		}
+		indices_b.push_back(&k);
+		indices_b.push_back(indices_c[max_dim - 1]);
+
+		// load the value
+		Tensor* value = &(Tensor::Load(*a, indices_a, true) *
+		                  Tensor::Load(*b, indices_b, true));
+
+		c->Set(*c + *value);
+	});
+	
+	return c;
+}
+
+void IR::InsertAlgorithmicPrimitives() {
+	UpdateGraph();
+	// get all nodes for each type
+	vector<Node*> nodes = GetNodesOfType(OpType::Algorithm);
+
+	unordered_set<Node*> nodes_to_remove;
+
+	// replace all nodes with the algorithmic primitive
+	for (auto node : nodes) {
+		//compute the sum after the node
+		ExecuteExpressionAfter(node, [&]() {
+			//get the input tensor
+			map<int, const Tensor*> inputs = node->GetArgumentTensors(ArgType::Input);
+
+			//get sum axis
+			vector<int> axes;
+			for (int i = 0; i < node->tensor_->data.size(); i++) {
+				axes.push_back((int)node->tensor_->data[i]);
+			}
+
+			Tensor* result;
+			if (node->name == "dim_sum") {
+				result = ComputeSum(inputs[0], axes[0]);
+			} else if (node->name == "dim_norm") {
+				result = ComputeNorm(inputs[0], axes[0]);
+			} else if (node->name == "dim_max") {
+				result = ComputeMax(inputs[0], axes[0]);
+			} else if (node->name == "dim_min") {
+				result = ComputeMin(inputs[0], axes[0]);
+			} else if (node->name == "dim_mean") {
+				result = ComputeMean(inputs[0], axes[0]);
+			} else if (node->name == "dim_product") {
+				result = ComputeProduct(inputs[0], axes[0]);
+			} else if (node->name == "dim_any") {
+				result = ComputeAny(inputs[0], axes[0]);
+			} else if (node->name == "dim_all") {
+				result = ComputeAll(inputs[0], axes[0]);
+			} else if (node->name == "transpose") {
+				//get the permutation
+				int dim = (int)inputs[0]->GetDimension();
+				map<int, int> permutation;
+				for (int i = 0; i < dim; i++) {
+					permutation[i] = i;
+				}
+				permutation[axes[0]] = axes[1];
+				permutation[axes[1]] = axes[0];
+				result = Transpose(inputs[0], permutation);
+			} else if (node->name == "dot") {
+				result = ComputeDot(inputs[0], inputs[1], axes[0]);
+			} else if (node->name == "matmul") {
+				result = ComputeMatMul(inputs[0], inputs[1]);
+			} else if (node->name == "unsqueeze") {
+				result = Unsqueeze(inputs[0], axes[0]);
+			} else {
+				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
+			}
+
+			//replace the node with the sum
+			node->MakeOutputsUseGivenNode(result->node_);
+
+			//copy over all memory flags to the new node
+			//TODO make a function for this
+			result->node_->memory_type_ = node->memory_type_;
+			result->node_->special_index_ = node->special_index_;
+		});
+
+		//mark the node for removal
+		nodes_to_remove.insert(node);
+
+		UpdateGraph();
+	}
+
+	// remove all nodes that are not used
+	for (auto* node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
+#define MAX_UNROLL_SIZE 8
+#define MAX_UNROLL_NODES 128
+void IR::UnrollLoops()
+{
+	UpdateGraph();
+	vector<Node*> loops = GetNodesOfType("loop");
+
+	unordered_set<Node*> loops_to_remove;
+
+	for (auto loop : loops) {
+		//get inputs (begin, end, step)
+		map<int, const Tensor*> inputs = loop->GetArgumentTensors(ArgType::Input);
+
+		//try get the constant values
+		bool is_const = isConstant(inputs[0]) && isConstant(inputs[1]) && isConstant(inputs[2]);
+
+		if (!is_const) {
+			continue;
+		}
+
+		int begin = inputs[0]->TryGetConstant();
+		int end = inputs[1]->TryGetConstant();
+		int step = inputs[2]->TryGetConstant();
+
+		//how many iterations to unroll
+		int iters = (end - begin) / step;
+		if (iters > MAX_UNROLL_SIZE) {
+			continue;
+		}
+
+		//get all children of the loop
+		vector<Node*> children = GetChildren(loop);
+
+		if (children.size() > MAX_UNROLL_NODES) {
+			continue;
+		}
+
+		//check if they are not keywords or have no children
+		set<Node*> nodes_to_copy;
+		bool can_unroll = true;
+		for (auto child : children) {
+			if (child->op->HasAllTypes(OpType::Keyword) || child->child->valid()) {
+				can_unroll = false;
+				break;
+			}
+			nodes_to_copy.insert(child);
+		}
+
+		if (!can_unroll) {
+			continue;
+		}
+
+		//unroll the loop
+		ExecuteExpressionAfter(loop, [&]() {
+			for (int i = begin; i < end; i += step) {
+				unordered_map<Node*, Node*> arg_remap;
+				Tensor* index = &Tensor::Constant(i);
+				//index->SetDebugName(loop->debug_name + "_unroll_" + to_string(i));
+				arg_remap[loop] = index->node_;
+				CopyNodes(nodes_to_copy, arg_remap, {}, {}, false);
+			}
+		});
+
+		//mark the loop for removal
+		loops_to_remove.insert(loop);
+	}
+
+	// remove all loops that are not used
+	for (auto* loop : loops_to_remove) {
+		RemoveNode(loop);
+	}
+}
+
+void IR::TryReplaceModificationsWithVersions()
+{
+	UpdateGraph();
+	//get all "set" nodes
+	vector<Node*> nodes = GetNodesOfType("set");
+
+	unordered_set<Node*> nodes_to_remove;
+
+	for (auto set_node : nodes) {
+	
+		//look up the memory node
+		Node* memory_node = set_node->GetArguments(ArgType::Memory)[0].from_->get();
+		Node* input_value = set_node->GetArguments(ArgType::Input)[0].from_->get();
+
+		//if this node has the same parent as the memory node, then it can be replaced with a version
+		if (memory_node->parent == set_node->parent) {
+			//replace the set node with the memory node
+			memory_node->MakeOutputsUseGivenNode(input_value, set_node->index_);
+			input_value->memory_type_ = memory_node->memory_type_;
+			input_value->special_index_ = memory_node->special_index_;
+			input_value->debug_name = memory_node->debug_name;
+			memory_node->memory_type_ = MemoryType::None;
+			nodes_to_remove.insert(set_node);
+		}	
+
+		UpdateGraph();
+	}
+
+	// remove all nodes that are not used
+	for (auto* node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+}
+
 void IR::CompileIR() 
 {
-	// TODO (Moroz): Make sure that shape works with non-const tensors
 	// TODO (Moroz): Add auto tests into build system
-
-	SetKernelIndexingMode(KernelIndexingMode::Linear);
-	SetTensorIndexingMode(TensorIndexingMode::Clamp);
 
 	CheckIR("Input", false, false);
 	GetInputList();
@@ -1288,25 +2009,42 @@ void IR::CompileIR()
 	CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
+	InsertAlgorithmicPrimitives();
+	UnrollLoops();
+	TryReplaceModificationsWithVersions();
+	CheckIR("Insert Algorithmic Primitives", false, false);
 	SeparateOperationsIntoKernels();
 	CheckKernelShapes();
+	//UnrollDimensions();
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);
-	OptimizeKernels();
+	MoveShapeOutsideKernels();
+	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
-	CheckIR("Optimize program", true, false);
-	RemoveUnusedOperations();
-	CheckIR("Remove Unused Operations 1", true, false);
-	AddKernelGlobalMemoryOperations();
+	CheckIR("Optimize kernels and host", true, false);
+	for (int i = 0; i < 5; i++) { //fusing kernels by loads (tensor product)
+		RemoveUnusedOperations();
+		AddKernelGlobalLoadOperations();
+		AddMemoryOpIndices();
+		CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
+		OptimizeKernelLoadOperations();
+		CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
+	}
+	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
 	CheckIR("Add Kernel Global Memory Operations", true, true);
+	AddMemoryOpIndices();
 	ReorderOperations();
+	OptimizeOperations();
+	AddMemoryOpIndices();
+	CheckIR("Final optimization", true, true);
 	FinalizeMemoryIndexing();
 	RemoveUnusedOperations();
 	CheckIR("Finalize Memory Indexing", false, false);
 	OptimizeKernels();
 	OptimizeHost();
+	//OptimizeLoops();
 	RemoveUnusedOperations();
 	CheckIR("Finalize Memory Indexing 2", true, true);
 	RemoveUnusedKernels();
@@ -1363,7 +2101,7 @@ Program* GenerateProgram(IR* ir)
 		int dim = MaxIndexCount(shape);
 
 		// add the kernel to the program
-		program->AddKernel(ir->indexing_mode_, kernel, variables, memory_nodes, shape, dim);
+		program->AddKernel(kernel, variables, memory_nodes, shape, dim);
 	}
 
 	return program;

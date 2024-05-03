@@ -16,34 +16,53 @@ const vector<Operation> operations = {
     //Control operations
     Operation("loop", {"iii_i"}, 100, "", {OpType::Static, OpType::Special}),
     Operation("if", {"b_"}, 100, "", {OpType::Static, OpType::Special}),
-    Operation("break", {""}, 0, "break",
-              {OpType::Keyword, OpType::Static}),
-    Operation("continue", {""}, 0, "continue",
-              {OpType::Keyword, OpType::Static}),
-    Operation("group_barrier", {""}, 256, "",
-              {OpType::Static}),  // TODO implement in graph
+    Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
+    Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
+    Operation("discard", {""}, 0, "discard", {OpType::Keyword, OpType::Static}), //discard current thread
+    //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
-    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static}),
+    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly, OpType::MemoryReuse}),
+    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static, OpType::HostOnly}),
     Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
-    Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+    //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
+    //Algorithms
+    //Reduction
+    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // sum of the last dimension
+    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // length(norm) of the last dimension
+    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // max of the last dimension
+    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // min of the last dimension
+    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // mean of the last dimension
+    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // product of the last dimension
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // any of the last dimension
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // all of the last dimension
+    //Matrix
+    Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
+    Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
+    Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
 
-    //Algorithms (TODO: implement in graph)
+    //Native operations (built-in shader operations, only for size <= 4)
+    //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_norm", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_max", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_min", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
+
+    //Advanced
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("reduce", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("scan", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("reshape", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("transpose", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //Operation("dot", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-
-    Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
+    //stack and vector operations
+    //Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
     // Memory operations
-    Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
-    Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
+    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
+    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
     Operation("load", {"_f", "_u", "_i"}, 128, "",
               {OpType::Load, OpType::MemoryOp}),
     Operation("store", {"f_", "u_", "i_"}, 128, "",
@@ -63,17 +82,15 @@ const vector<Operation> operations = {
     Operation("InterlockedXor", {"u_", "i_"}, 256, "",
               {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
     Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier, OpType::CantSubstitute}),
 
     // Index operations
     Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
-    Operation("thread_id", {"_i"}, 0, "", {OpType::Variable}),
-    Operation("group_thread_id", {"_i"}, 0),  // TODO implement in graph
-    Operation("group_id", {"_i"}, 0),         // TODO implement in graph
-    Operation("group_count", {"_i"}, 1),      // TODO implement in graph
-    Operation("thread_count", {"_i"}, 1),     // TODO implement in graph
+    Operation("block_thread_id", {"_i"}, 0, "", {OpType::DimensionIndex}), 
+    Operation("block_id", {"_i"}, 0, "", {OpType::Variable}), 
     
     //Compute operations
+    Operation("copy", {"f_f", "u_u", "i_i", "b_b"}, 1, "", {OpType::Copy}), //TODO: make sure no one copies memory objects
     Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
     Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),
     Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", {OpType::Operator}),

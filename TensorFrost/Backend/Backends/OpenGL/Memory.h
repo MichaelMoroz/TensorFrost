@@ -16,6 +16,7 @@ namespace TensorFrost {
 class OpenGLMemoryManager : public TensorMemoryManager {
  public:
 	 const int DEFAULT_SIZE = 1024 * 1024 * 64;
+	 const int MAX_BUFFER_SIZE = 2147483647 / sizeof(uint);
 	 GLuint memory;
 	 int mem_size;
 
@@ -91,6 +92,18 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 }
 
 		 Frame* frame = allocator.AllocateFrame(size);
+
+		 if ((int)frame->end > MAX_BUFFER_SIZE) {
+			 string error = "Tried to allocate a tensor of shape ";
+			 for (int i = 0; i < shape.size(); i++) {
+				 error += to_string(shape[i]);
+				 if (i != shape.size() - 1) {
+					 error += "x";
+				 }
+			 }
+			 error += " which requires a buffer of size " + to_string(frame->end) + " but the maximum buffer size is " + to_string(MAX_BUFFER_SIZE);
+			 throw std::runtime_error(error);
+		 }
 		 // reserve space in memory if needed
 		 if ((int)frame->end > mem_size) {
 			 IncreaseMemorySize(frame->end * 3 / 2);

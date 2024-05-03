@@ -1,5 +1,3 @@
-#pragma once
-
 #include <TensorFrost.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
@@ -14,25 +12,56 @@ namespace TensorFrost {
 
 namespace py = pybind11;
 
+void UpdateTensorNames();
+
 // Tensor wrapper for python
 class PyTensor {
 	const Tensor* tensor_;
+	Tensors indices;
+	Tensor* value = nullptr;
 
  public:
 	explicit PyTensor(Tensor* tensor) : tensor_(tensor) {}
 	explicit PyTensor(const Tensor* tensor) : tensor_(tensor) {}
-	~PyTensor() = default;
+	~PyTensor() { UpdateTensorNames(); }
+
+	//tensor view constructor
+	explicit PyTensor(const Tensor* value, Tensors& indices)
+		: value(const_cast<Tensor*>(value)), indices(std::move(indices)) {
+		tensor_ = &Tensor::Load(*value, this->indices);
+	}
 
 	const Tensor& Get() const { return *tensor_; }
 
-	explicit PyTensor(const TensorView& indexed_tensor) {
-		// load the elements of the indexed tensor
-		tensor_ = indexed_tensor.load;
+	Tensor* Value() const {
+		if (value == nullptr) {
+			throw std::runtime_error("Not a tensor view");
+		}
+		return value;
+	}
+
+	Tensors Indices() const { 
+		if (value == nullptr) {
+			throw std::runtime_error("Not a tensor view");
+		}
+		return indices;
 	}
 
 	explicit PyTensor(float value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(int value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(value); }
+
+	PyTensor& __enter__() { 
+		//py::print("Entering node scope");
+		tensor_->Enter(); 
+		return *this;
+	}
+
+	void __exit__(py::object exc_type, py::object exc_value,
+	              py::object traceback) {
+		//py::print("Exiting node scope");
+		tensor_->Exit();
+	}
 };
 
 using PyTensors = std::vector<PyTensor*>;
