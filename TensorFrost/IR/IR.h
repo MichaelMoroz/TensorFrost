@@ -685,7 +685,9 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
                                 bool exact_match = false,
                                 bool throw_error = false);
 
-
+/// <summary>
+/// Class to select kernel scopes from the IR graph given the constraints and the root node
+/// </summary>
 class KernelScope {
  public:
 	Node* begin = nullptr;

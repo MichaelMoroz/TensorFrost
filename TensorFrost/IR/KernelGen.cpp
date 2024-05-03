@@ -90,8 +90,7 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 		int broadcast_index = max(a.dim, b.dim) - i - 1;
 		if (a.dim > b.dim) {
 			result.broadcast_shape.AddShape(broadcast_index, a.shape[a.dim - i - 1]);
-		}
-		else {
+		} else {
 			result.broadcast_shape.AddShape(broadcast_index, b.shape[b.dim - i - 1]);
 		}
 	}
@@ -476,7 +475,8 @@ void IR::OptimizeKernels() {
 					// check if input is cheap enough to copy
 					float input_cost = input.from_->get()->cost_;
 					if (input_cost == -1.0) {
-						throw std::runtime_error("Cost has not been computed");
+						//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
 					bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
@@ -606,7 +606,8 @@ void IR::OptimizeHost() {
 				// check if input is cheap enough to copy
 				float input_cost = input.from_->get()->cost_;
 				if (input_cost == -1.0) {
-					throw std::runtime_error("Cost has not been computed");
+					//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+					continue;
 				}
 				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
 				bool has_only_one_output = input.from_->get()->outputs_.size() == 1;
@@ -843,7 +844,9 @@ void IR::RemoveUnusedOperations() {
 
 	//mark all output nodes as used
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->memory_type_ == MemoryType::Output || node->op->HasAllTypes(OpType::Static)) {
+		if (node->memory_type_ == MemoryType::Output ||
+		    node->memory_type_ == MemoryType::Input ||
+		    node->op->HasAllTypes(OpType::Static)) {
 			dfs(node.get());
 		}
 	}
@@ -858,7 +861,7 @@ void IR::RemoveUnusedOperations() {
 			}
 			else
 			{
-				throw std::runtime_error("Input " + node->var_name + " is not being used");
+				//throw std::runtime_error("Input " + node->var_name + " is not being used");
 			}
 		}
 	}
@@ -1826,10 +1829,10 @@ void IR::CompileIR()
 	ReorderOperations();
 	CheckIR("Reorder Operations", true, false);
 	MoveShapeOutsideKernels();
-	OptimizeKernels();
+	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 3; i++) {
+	for (int i = 0; i < 3; i++) { //fusing kernels by loads (tensor product)
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();

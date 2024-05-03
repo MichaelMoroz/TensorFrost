@@ -14,18 +14,19 @@ def kernel(r):
 
 def blur():
     img = tf.input([-1, -1, -1], tf.float32)
+    not_used = tf.input([128, 64, 64], tf.float32)
     
     blur_h = tf.zeros(img.shape, tf.float32)
-    blur_v = tf.zeros(img.shape, tf.float32)
     i, j, ch = img.indices
 
     #horizontal blur
     with tf.loop(-blur_d, blur_d+1) as k:
-        blur_h += img[i+k, j, ch] * kernel(k)
+        blur_h.val += img[i+k, j, ch] * kernel(k)
 
+    blur_v = tf.zeros(img.shape, tf.float32)
     #vertical blur
     with tf.loop(-blur_d, blur_d+1) as k:
-        blur_v += blur_h[i, j+k, ch] * kernel(k)
+        blur_v.val += blur_h[i, j+k, ch] * kernel(k)
 
     return [blur_v]
 
