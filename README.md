@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.3.2)
+# 🔢🥶 TensorFrost (v0.4.0)
 Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
 
 Currently working platforms:
@@ -14,28 +14,29 @@ After minimizing links between protokernels, it creates actual tensors for input
 ```c++
 std::tuple<TensorProp, TensorProp> QRDecomposition(TensorProp in0)
 {
-  int v1_0 = in0.shape[0];
-  int v1_1 = in0.shape[1];
-  TensorProp m0 = check_tensor(in0, "m0", {(uint)v1_0, (uint)v1_1}, DataType::Float);
-  TensorProp m1 = allocate({(uint)v1_0, (uint)v1_1}, DataType::Float);
-  dispatch(0, {m1}, {}, {(uint)v1_0, (uint)v1_1});
-  TensorProp m2 = allocate({(uint)v1_1, (uint)v1_1}, DataType::Float);
-  dispatch(1, {m2}, {}, {(uint)v1_1, (uint)v1_1});
-  int v5_1 = v1_1 - 1;
-  for (int v5_4 = 0; v5_4 < v5_1; v5_4 += 1)
+  int m = in0.shape[0];
+  int n = in0.shape[1];
+  TensorProp A = check_tensor(in0, "A", {(uint)m, (uint)n}, DataType::Float);
+  TensorProp Q = allocate("Q", {(uint)m, (uint)n}, DataType::Float);
+  dispatch(0, {Q}, {asuint(n), asuint(m)}, {(uint)m, (uint)n}, {16, 16});
+  TensorProp R = allocate("R", {(uint)n, (uint)n}, DataType::Float);
+  dispatch(1, {R}, {asuint(n)}, {(uint)n, (uint)n}, {16, 16});
+  for (int i = 0; i < n - 1; i += 1)
   {
-    dispatch(2, {m0, m2}, {asuint(v1_0), asuint(v1_1), asuint(v5_4)}, {(uint)1});
-    dispatch(3, {m0, m2, m1}, {asuint(v1_0), asuint(v1_1), asuint(v5_4)}, {(uint)v1_0});
-    int v12_1 = v5_4 + 1;
-    int v12_2 = v1_1 - v12_1;
-    dispatch(4, {m1, m0, m2}, {asuint(v5_4), asuint(v1_0), asuint(v1_1)}, {(uint)v12_2});
-    int v16_1 = v5_4 + 1;
-    int v16_2 = v1_1 - v16_1;
-    dispatch(5, {m0, m1, m2}, {asuint(v5_4), asuint(v1_1), asuint(v1_0)}, {(uint)v1_0, (uint)v16_2});
+    int v8_0 = 1;
+    int v8_1 = 1;
+    dispatch(2, {A, R}, {asuint(m), asuint(n), asuint(i)}, {(uint)1}, {1});
+    dispatch(3, {A, R, Q}, {asuint(m), asuint(n), asuint(i)}, {(uint)m}, {256});
+    int v16_2 = n - (i + 1);
+    int v16_5 = n - (i + 1);
+    dispatch(4, {Q, A, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_5}, {256});
+    dispatch(5, {A, Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_5}, {16, 16});
   }
-  dispatch(6, {m0, m2}, {asuint(v1_0), asuint(v1_1)}, {(uint)1});
-  dispatch(7, {m0, m2, m1}, {asuint(v1_1), asuint(v1_0)}, {(uint)v1_0});
-  return {m1, m2};
+  int v24_0 = 1;
+  int v24_1 = 1;
+  dispatch(6, {A, R}, {asuint(m), asuint(n)}, {(uint)1}, {1});
+  dispatch(7, {A, R, Q}, {asuint(m), asuint(n)}, {(uint)m}, {256});
+  return {Q, R};
 }
 ```
 
@@ -96,7 +97,32 @@ Then you need to initialize the library with the device you want to use and the 
 tf.initialize(tf.cpu) # or tf.opengl
 ```
 
-TensorFrost will find any available MSVC installation and use it to compile the kernels. If you want to use a different compiler, you can specify the path to the compiler executable (TODO).
+TensorFrost will find any available MSVC(Windows) or GCC(Linux) compiler and use it to compile the main code and the kernels. In OpenGL mode the driver compiles the kernels. (TODO: compile the main code into python for faster compile times, MSVC is super slow, 1.5 seconds for a single function)
+
+You can have TensorFrost in code generation mode instead (you cant run tensor programs here), it is much faster, but you would need to use the code manually afterwards:
+
+```python
+tf.initialize(tf.codegen, kernel_lang = tf.hlsl_lang) # or tf.glsl_lang for OpenGL, or tf.cpp_lang for C++
+```
+
+After you compiled all the tensor programs you need, you can get all the generated code and save it to a file:
+```python
+# Save all the compiled functions
+cpp_header = tf.get_cpp_header()
+all_main_functions = tf.get_all_generated_main_functions() #always in C++
+with open('tensorfrost_main.cpp', 'w') as f:
+    f.write(cpp_header)
+    for func in all_main_functions:
+        f.write(func)
+
+# Save all the compiled kernels
+all_kernels = tf.get_all_generated_kernels() #depends on the kernel_lang
+for i, kernel in enumerate(all_kernels):
+    with open('generated_kernels/kernel_{}.hlsl'.format(i), 'w') as f:
+        f.write(kernel)
+```
+
+Right now you cant just compile the code and run it, since it also requires a Kernel compiler and executor as well as memory manager for tensors. In the future I plan to add all the required functions for that too, for better portability.
 
 ### Basic usage
 
@@ -118,6 +144,8 @@ def WaveEq():
 wave_eq = tf.compile(WaveEq)
 ```
 
+As you can see, inputs are not arguments to the function, but are created inside the function. This is because some inputs can be constrained by the shape of other inputs, and the shape of the input tensor is not known at compile time. You can give shape arguments to the input function, constants for exactly matching shapes, or -1 for any shape. If you want to constrain the shape of the input tensor, you need to get the shape of the other tensor and use it as an argument to the input function.
+
 The tensor programs take and output tensor memory buffers, which can be created from numpy arrays:
 ```python
 A = tf.tensor(np.zeros([100, 100], dtype=np.float32))
@@ -128,6 +156,7 @@ Then you can run the program:
 ```python
 A, B = wave_eq(A, B)
 ```
+As you can see the inputs are given to the compiled function in the same order as they are created in the function.
 
 To get the result back into a numpy array, you can use the `numpy` property:
 ```python
@@ -174,6 +203,18 @@ Here we can see that the shape of the "computation" is not the same as the shape
 
 When doing out-of-bounds indexing, the index is currently clamped to the tensor shape. This is not ideal, but it is the simplest way to handle this. In the future there will be a way to specify the boundary conditions.
 
+You can also use the index_grid operation which is similar to numpy's `np.meshgrid` function and provides a grid of indices for each dimension:
+
+```python
+p, k = tf.index_grid([0, i + 1], [m, n])
+```
+
+Which is equivalent to numpy's `np.meshgrid` function (only for ints with step 1 for now):
+
+```python
+p, k = np.meshgrid(np.arange(0, m), np.arange(i + 1, n))
+```
+
 ### Scatter operations
 
 These operations allow implementing non-trivial reduction operations, including, for example, matrix multiplication:
@@ -198,36 +239,188 @@ Here the 3D nature of the matrix multiplication is apparent. The scatter operati
 
 (This is not the most efficient way to implement matrix multiplication, but it is the simplest way to show how scatter operations work. In the future though, some dimensions will be converted into loop indices, and the scatter operation will be used to accumulate the results of the dot products into the resulting matrix.)
 
+### Reduction operations
+
+Reduction operations are used to reduce the tensor data along one (TODO more) dimension(s). For example, here is a simple example of a sum reduction:
+
+```python
+def MatrixMultiplication():
+    A = tf.input([-1, -1], tf.float32)
+    N, M = A.shape
+    B = tf.input([M, -1], tf.float32) #M must match
+    K = B.shape[1]
+
+    i, j, k = tf.indices([N, K, M])
+    C = tf.sum(A[i, k] * B[k, j], axis=1) #by default axis is -1 (last axis)
+
+    return [C]
+
+matmul = tf.compile(MatrixMultiplication)
+```
+
+Here the `sum` operation is used to sum the dot products of the rows and columns of the input matrices along the `k` axis.
+This is much more efficient than the scatter operation, and in fact this compiles to a single N*K kernel.
+
+### Broadcasting
+
+Broadcasting is used to make the shapes of the input tensors compatible. For example, here is a simple example of a broadcasting operation:
+
+```python
+def Broadcasting():
+    A = tf.input([1, 3], tf.float32)
+    B = tf.input([3, 1], tf.float32)
+
+    C = A + B
+
+    return [C]
+```
+
+Here the `+` operation is used to add the two input tensors. The shapes of the input tensors are `[1, 3]` and `[3, 1]`, and the shape of the output tensor is `[3, 3]`. The `+` operation is broadcasted over the input tensors, and the result is a tensor with the shape `[3, 3]`.
+The rules are the same as in numpy essentially.
+
+### Reshape
+
+Reshape operation is used to change the shape of the tensor. For example, here is a simple example of a reshape operation:
+
+```python
+def Reshape():
+    A = tf.input([2, 3], tf.float32)
+
+    B = tf.reshape(A, [3, 2])
+
+    return [B]
+```
+
+Here the `reshape` operation is used to change the shape of the input tensor from `[2, 3]` to `[3, 2]`.
+At the moment this is implemented in a very crude way, so doing this will always halt kernel fusion, so use it only when you are sure things are unfusable
+(usually at the beginning or end of the program).
+
+Alternatively you can also use `transpose` and `unsqueeze` operations to change the shape of the tensor, which are work fine with fusion.
+
+```python
+def Transpose():
+    A = tf.input([2, 3], tf.float32)
+
+    B = tf.transpose(A) #shape is [3, 2]
+    C = B.T #shape is [2, 3]
+
+    return [C]
+```
+
+```python
+def Unsqueeze():
+    A = tf.input([2, 3], tf.float32)
+
+    B = tf.unsqueeze(A, 1) #shape is [2, 1, 3]
+
+    return [B]
+```
+
+### Matrix operations
+
+Matrix operations are used to perform matrix operations on the tensor data. For example, here is a simple example of a matrix multiplication:
+
+```python
+def MatrixMultiplication():
+    A = tf.input([-1, -1], tf.float32)
+    N, M = A.shape
+    B = tf.input([M, -1], tf.float32) #M must match
+    K = B.shape[1]
+
+    C = tf.matmul(A, B) #or A @ B
+
+    return [C]
+
+matmul = tf.compile(MatrixMultiplication)
+
+A = tf.tensor(np.zeros([100, 100], dtype=np.float32))
+B = tf.tensor(np.zeros([100, 100], dtype=np.float32))
+
+C, = matmul(A, B)
+```
+
+Here the `matmul` operation is used to multiply the input matrices `A` and `B`. The shapes of the input tensors are `[N, M]` and `[M, K]`, and the shape of the output tensor is `[N, K]`.
+The inputs can have any shape of the form [A, B, ..., N, M], and as long as they are broadcastable, the operation will work.
+
 ### Loops and conditionals
 
 ```python
 #Mandelbrot set
-z_re = tf.zeros([S, S], tf.float32)
-z_im = tf.zeros([S, S], tf.float32)
-
-def loop_body(k):
+z_re = tf.const(0.0)
+z_im = tf.const(0.0)
+with tf.loop(128) as k: #or tf.loop(0, 128) for a range loop, or tf.loop(0, 128, 2) for a range loop with step
     z_re_new = z_re*z_re - z_im*z_im + c_re
     z_im_new = 2.0*z_re*z_im + c_im
-    z_re.set(z_re_new)
-    z_im.set(z_im_new)
-    tf.if_cond((z_re*z_re + z_im*z_im) > 256.0, lambda: tf.break_loop())
-        
-tf.loop(loop_body, 0, 128, 1)
+    z_re.val = z_re_new
+    z_im.val = z_im_new
+    with tf.if_cond(z_re*z_re + z_im*z_im > 256.0):
+        tf.break_loop()
 ```
 
-In this example, the loop body is a function that takes an index `k` and updates the `z_re` and `z_im` tensors. The loop is then run 128 times, and the loop body is executed for each iteration. The `if_cond` operation is used to break the loop if the condition is met.
-Since TensorFrost uses tracing to build the program graph, the loop body must be a function. If you do a normal loop, it will essentially just be unrolled (also wont work if the loop iteration count is not known at compile time).
-
-Also since the setting operation can not be overloaded, the `set` method must be used to update the tensor data outside of this scope. 
+Scopes in TensorFrost are implemented through python context managers. There are `tf.loop` and `tf.if_cond` context managers that can be used to create loops and conditionals. The loop context manager takes the number of iterations as an argument, and the if_cond context manager takes a condition as an argument. The condition can be any tensor operation that returns a boolean tensor.
+Also since the setting operation can not be overloaded in python, the `set` method must be used to update the tensor data outside of this scope, or alternatively the `val` property can be used to set the value of the tensor. 
 
 ```python
-z_re.set(z_re_new) #this is fine
-z_re = z_re_new #this is not fine
+z_re = tf.const(0.0)
+with tf.loop(128):
+    z_re.set(z_re_new) #this is fine
+    z_re.val = z_re_new #this is also fine
+    z_re = z_re_new #this is not fine
 ```
 
 Just setting the tensor to a new value will actually create a new tensor on top of the old one, and the old one will not be updated.
 
-Loops and conditionals can be stacked and nested, but they can be compiled into separate kernels inside the loop body if the data dependencies are not local (look at the QR decomposition example in the examples folder). Not all possible loop and conditional can be valid here, if the loop iteration count has a shape incompatible with the shapes of the tensors in the loop body, the program will not compile correctly.
+Loops and conditionals can be stacked and nested. Usually they are compiled into a single kernel with the scopes inside it, but they can be compiled into separate kernels if the data dependencies are not local (look at the QR decomposition example in the examples folder). Not all possible loop and conditional can be valid here, if the loop iteration count has a shape incompatible with the shapes of the tensors in the loop body, the program will not compile correctly.
+
+PS: You can also provide a function instead of using a context manager, but it is not recommended, as it is harder to read and understand.
+
+```python
+def loop_body(k):
+    z_re_new = z_re*z_re - z_im*z_im + c_re
+    z_im_new = 2.0*z_re*z_im + c_im
+    z_re.val = z_re_new
+    z_im.val = z_im_new
+    with tf.if_cond(z_re*z_re + z_im*z_im > 256.0):
+        tf.break_loop()
+
+tf.loop(0, 128, 1, loop_body)
+```
+
+### GUI and visualization
+
+TensorFrost has simple bindings for the GLFW window library, and some ImGui bindings for GUI. You can render tensors as images (only [-1, -1, 3] float32 tensors for now) and display them in a window. You can also use ImGui to create simple GUIs for your programs. Do note that this only works in the OpenGL backend.
+
+```python
+
+#at this moment you can only open one window
+tf.show_window(1280, 720, "a window")
+
+while not tf.window_should_close(): #window will close if you press the close button and this will return True
+    mx, my = tf.get_mouse_position()
+    wx, wy = tf.get_window_size()
+
+    #simple input example
+    if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+        tf.imgui_text("Mouse button 0 is pressed")
+
+    if tf.is_key_pressed(tf.KEY_W):
+        tf.imgui_text("W is pressed")
+
+    #ImGui example
+    tf.imgui_begin("an imgui window")
+    tf.imgui_text("some text")
+    value = tf.imgui_slider("slider", value, 0.0, 10.0)
+    if(tf.imgui_button("a button")):
+        print("button pressed")
+    tf.imgui_end()
+
+    #exectute a tensorfrost program that outputs a [-1, -1, 3] float32 tensor
+    img, = render_image(...)
+
+    #display the image (will be stretched to the window size with nearest neighbor interpolation)
+    tf.render_frame(img)
+
+```
 
 ### Autodifferentiation
 
@@ -252,9 +445,9 @@ Core features:
 - [ ] Kernel shape and cache optimization
   
 Algorithm library:
-- [ ] Scan, reduction, etc.
+- [x] Scan, reduction, etc.
 - [ ] Sorting algorithms
-- [ ] Matrix operations (matrix multiplication, etc.)
+- [x] Matrix operations (matrix multiplication, etc.)
 - [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.)
 - [ ] Fast Fourier Transform
 - [ ] High-level neural network layers (convolution, etc.)
