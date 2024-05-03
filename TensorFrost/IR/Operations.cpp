@@ -44,6 +44,16 @@ const vector<Operation> operations = {
     Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
     Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
     Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+
+    //Native operations (built-in shader operations, only for size <= 4)
+    //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_norm", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_max", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_min", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Operation("native_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
+
     //Advanced
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
     //stack and vector operations
