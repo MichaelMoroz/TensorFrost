@@ -251,7 +251,7 @@ def MatrixMultiplication():
     K = B.shape[1]
 
     i, j, k = tf.indices([N, K, M])
-    C = tf.sum(A[i, k] * B[k, j], axis=1) #by default axis is -1 (last axis)
+    C = tf.sum(A[i, k] * B[k, j], axis=2) #by default axis is -1 (last axis)
 
     return [C]
 
