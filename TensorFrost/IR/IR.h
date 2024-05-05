@@ -675,6 +675,8 @@ class ShapeInfo {
 		}
 		return arguments;
 	}
+
+	static float GetSizeRatio(ShapeInfo& a, ShapeInfo& b);
 };
 
 struct ShapeCompareResult {

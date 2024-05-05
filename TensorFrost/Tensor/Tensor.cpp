@@ -6,6 +6,38 @@ IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }
 
+float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
+	unordered_map<Node*, int> shape_map;
+	for (auto& [index, node] : a.shape) {
+		// if the node is a constant, use the constant value
+		if (node->op->HasAllTypes(OpType::Constant)) {
+			shape_map[node] = node->tensor_->TryGetConstant();
+		} else { //just assume it equal to 256
+			shape_map[node] = 256;
+		}
+	}
+	for (auto& [index, node] : b.shape) {
+		// if the node is a constant, use the constant value
+		if (node->op->HasAllTypes(OpType::Constant)) {
+			shape_map[node] = node->tensor_->TryGetConstant();
+		} else { //just assume it equal to 256
+			shape_map[node] = 256;
+		}
+	}
+	
+	float size_a = 1.0f;
+	float size_b = 1.0f;
+
+	for (auto& [index, node] : a.shape) {
+		size_a *= (float)shape_map[node];
+	}
+	for (auto& [index, node] : b.shape) {
+		size_b *= (float)shape_map[node];
+	}
+
+	return size_a / size_b;
+}
+
 void ArgumentManager::AddArgument(Arg* arg) {
 	ArgID id = ArgID(arg->type_, arg->index_);
 	arguments_[id] = arg->from_->node_;

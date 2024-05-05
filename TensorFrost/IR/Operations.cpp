@@ -60,6 +60,10 @@ const vector<Operation> operations = {
     //Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
+    //Autodiff
+    Operation("backwards_grad", {"ff_f"}, 0, "", {OpType::Static, OpType::Gradient}),
+    Operation("forward_grad", {"ff_f"}, 0, "", {OpType::Static, OpType::Gradient}),
+
     // Memory operations
     //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
     //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph

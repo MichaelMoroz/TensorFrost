@@ -513,7 +513,8 @@ void IR::OptimizeKernels() {
 }
 
 #define MAX_LOAD_COPY 5000.0f
-#define MAX_LOAD_COPY_COUNT 8
+#define MAX_LOAD_COPY_COUNT 1
+#define MAX_LOAD_SIZE_RATIO 5.0f
 void IR::OptimizeKernelLoadOperations() {
 	UpdateGraph();
 	ComputeNodeCost();
@@ -523,7 +524,10 @@ void IR::OptimizeKernelLoadOperations() {
 	unordered_set<Node*> nodes_to_remove;
 
 	for (auto kernel : kernels) {
+		ShapeInfo kernel_shape = ShapeInfo(kernel);
+
 		unordered_map<Node*, Node*> loads_to_copy;
+		unordered_set<Node*> memory_inputs;
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->name != "load") continue;
@@ -531,17 +535,27 @@ void IR::OptimizeKernelLoadOperations() {
 			//get memory input
 			Node* memory_input = node->GetArguments(ArgType::Memory)[0].from_->get();
 
+			ShapeInfo memory_shape = ShapeInfo(memory_input);
+
 			bool inside_kernel = memory_input->HasParent("kernel");
+			if (!inside_kernel) continue;
+
+			bool is_not_modified = !memory_input->HasBeenModified();
+			if (!is_not_modified) continue;
+
+			float size_ratio = ShapeInfo::GetSizeRatio(kernel_shape, memory_shape);
 
 			int output_count = (int)memory_input->outputs_.size();
+			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
+			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
+			                          (size_ratio < MAX_LOAD_SIZE_RATIO);
 			bool cheap_enough = memory_input->cost_ >= 0.0f &&
 			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
-			bool is_not_modified = !memory_input->HasBeenModified();
 
 			//if the memory input is used only once and is not a memory node
-			if (cheap_enough && inside_kernel && output_count < MAX_LOAD_COPY_COUNT &&
-			    is_not_modified) {
+			if (cheap_enough && fusion_makes_sense) {
 				loads_to_copy[memory_input] = *node;
+				memory_inputs.insert(memory_input);
 			}
 		}
 
@@ -1999,6 +2013,11 @@ void IR::TryReplaceModificationsWithVersions()
 	}
 }
 
+void IR::ComputeAutodiff()
+{
+
+}
+
 void IR::CompileIR() 
 {
 	// TODO (Moroz): Add auto tests into build system
@@ -2009,6 +2028,7 @@ void IR::CompileIR()
 	CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
+	ComputeAutodiff();
 	InsertAlgorithmicPrimitives();
 	UnrollLoops();
 	TryReplaceModificationsWithVersions();

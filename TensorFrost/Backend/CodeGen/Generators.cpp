@@ -21,7 +21,7 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 	}
 }
 
-unordered_set<string> forbidden_names = {"unsigned", "input", "output", "max", "min", "if", "else", "while", "for", "switch", "case", "default", "break",
+unordered_set<string> forbidden_names = {"unsigned", "input", "output", "max", "min", "exp", "sin", "cos", "if", "else", "while", "for", "switch", "case", "default", "break",
     "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
 	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
 
