@@ -51,6 +51,7 @@ enum class OpType {
 	Algorithm,
 	Modifier,
 	MemoryReuse,
+	Gradient,
 	Copy,
 };
 

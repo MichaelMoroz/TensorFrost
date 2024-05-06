@@ -863,6 +863,7 @@ public:
 	void InsertAlgorithmicPrimitives();
 	void UnrollLoops();
 	void TryReplaceModificationsWithVersions();
+	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);

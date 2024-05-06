@@ -1892,6 +1892,10 @@ void IR::InsertAlgorithmicPrimitives() {
 			//TODO make a function for this
 			result->node_->memory_type_ = node->memory_type_;
 			result->node_->special_index_ = node->special_index_;
+
+			if (node->debug_name != "") {
+				result->node_->debug_name = node->debug_name;
+			}
 		});
 
 		//mark the node for removal
@@ -2013,8 +2017,176 @@ void IR::TryReplaceModificationsWithVersions()
 	}
 }
 
+class TensorVec : public vector<Tensor*>
+{
+public:
+	//get element at index
+	Tensor& operator[](int i) { return *at(i); }
+
+	//construct tensor vector from multiple Tensor& arguments
+	template <typename... Args>
+	TensorVec(Tensor& arg, Args&... args) : vector<Tensor*>({ &arg, &args... }) {}
+
+	TensorVec(Tensor& arg) : vector<Tensor*>({ &arg }) {}
+
+	TensorVec(const Tensor& arg) : vector<Tensor*>({ const_cast<Tensor*>(&arg) }) {}
+};
+
+map<string, function<TensorVec(TensorVec, Tensor&, Tensor&)>> gradient_functions =
+{
+	//elementwise operations
+    {"copy", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad); }},
+	{"add", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad, grad); }},
+	{"sub", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad, -grad); }},
+	{"mul", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[1], grad * in[0]); }},
+	{"div", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / in[1], -grad * in[0] / (in[1] * in[1])); }},
+	{"neg", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(-grad); }},
+	{"exp", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * out); }},
+	{"log", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / in[0]); }},
+	{"sin", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * Tensor::cos(in[0])); }},
+	{"cos", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(-grad * Tensor::sin(in[0])); }},
+	{"tan", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * (Tensor::Constant(1.0f) + out * out)); }},
+	{"asin", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
+	{"acos", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(-grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
+	{"atan", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / (Tensor::Constant(1.0f) + out * out)); }},
+	{"abs", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * Tensor::sign(in[0])); }},
+	{"sign", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f)); }},
+	{"exp2", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * Tensor::log(Tensor::Constant(2.0f)) * out); }},
+	{"log2", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / (in[0] * Tensor::log(Tensor::Constant(2.0f)))); }},
+	{"sqrt", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad / (Tensor::Constant(2.0f) * out)); }},
+	{"rsqrt", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(-grad / (Tensor::Constant(2.0f) * in[0] * out)); }},
+	{"floor", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f)); }},
+	{"ceil", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f)); }},
+	{"round", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f)); }},
+	{"frac", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f)); }},
+	{"atan2", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[1] / (in[0] * in[0] + in[1] * in[1]), -grad * in[0] / (in[0] * in[0] + in[1] * in[1])); }},
+	{"lerp", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
+	{"max", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},
+	{"min", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f))); }},
+	{"pow", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[1] * Tensor::pow(in[0], in[1] - Tensor::Constant(1.0f)), grad * Tensor::log(in[0]) * out); }},
+
+	//matrix operations
+	{"matmul", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Matmul(grad, Tensor::Transpose(in[1])), Tensor::Matmul(Tensor::Transpose(in[0]), grad)); }},
+	{"transpose", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Transpose(grad)); }},
+	{"dot", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Dot(grad, in[1]), Tensor::Dot(Tensor::Transpose(in[0]), grad)); }},
+	{"unsqueeze", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Sum(grad, 0)); }},
+	{"sum", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Unsqueeze(grad, 0)); }},
+};
+
+TensorVec ComputeNodeGradients(Node* value, Tensor* grad)
+{
+	string op_name = value->name;
+	if (!gradient_functions.contains(op_name)) {
+		throw std::runtime_error("Cannot compute gradient for operation " + op_name);
+	}
+
+	map<int, const Tensor*> inputs = value->GetArgumentTensors(ArgType::Input);
+	TensorVec in = TensorVec(*inputs[0]);
+
+	//add rest of the inputs
+	for (int i = 1; i < inputs.size(); i++) {
+		in.push_back(const_cast<Tensor*>(inputs[i]));
+	}
+
+	Tensor out = *value->tensor_;
+	TensorVec grads = gradient_functions[op_name](in, out, *grad);
+
+	return grads;
+}
+
 void IR::ComputeAutodiff()
 {
+	UpdateGraph();
+	vector<Node*> nodes = GetNodesOfType(OpType::Gradient);
+
+	if(nodes.empty()) {
+		return;
+	}
+
+	set<Node*> loss_nodes;
+	map<pair<Node*, Node*>, Node*> loss_wrt_grad;
+
+	for (auto gradient : nodes) {
+		Node* loss = gradient->GetArguments(ArgType::Input)[0].from_->get();
+		Node* wrt = gradient->GetArguments(ArgType::Input)[1].from_->get();
+
+		loss_nodes.insert(loss);
+		loss_wrt_grad[{loss, wrt}] = gradient;
+	}
+
+	map<Node*, Node*> grad_to_computed_grad;
+	for (auto loss : loss_nodes) {
+		set<Node*> visited;
+		map<Node*, Tensor*> node_to_grad;
+		queue<Node*> queue;
+
+		queue.push(loss);
+		node_to_grad[loss] = &Tensor::Constant(1.0f);
+
+		while (!queue.empty()) {
+			Node* node = queue.front();
+			queue.pop();
+
+			if (visited.contains(node)) {
+				continue;
+			}
+
+			visited.insert(node);
+
+			Tensor* grad = node_to_grad[node];
+			TensorVec grads = ComputeNodeGradients(node, grad);
+
+			for (int i = 0; i < grads.size(); i++) {
+				Node* input = node->GetArguments(ArgType::Input)[i].from_->get();
+
+				if (!node_to_grad.contains(input)) {
+					node_to_grad[input] = &grads[i];
+				} else {
+					node_to_grad[input] = &(*node_to_grad[input] + *grads[i]);
+				}
+
+				if (visited.contains(input)) {
+					throw std::runtime_error("Not topologically sorted");
+				}
+
+				queue.push(input);
+			}
+		}
+
+		for (auto wrt_grad : loss_wrt_grad) {
+			if (wrt_grad.first.first != loss) {
+				continue;
+			}
+
+			Node* grad = wrt_grad.second;
+			Node* computed_grad = node_to_grad[wrt_grad.first.second]->node_;
+			grad_to_computed_grad[grad] = computed_grad;
+		}
+	}
+
+	unordered_set<Node*> nodes_to_remove;
+	//replace all gradients with computed gradients
+	for (auto gradient : nodes) {
+		Node* computed_grad = grad_to_computed_grad[gradient];
+
+		//replace the node with the sum
+		node->MakeOutputsUseGivenNode(result->node_);
+
+		//copy over all memory flags to the new node
+		//TODO make a function for this
+		result->node_->memory_type_ = node->memory_type_;
+		result->node_->special_index_ = node->special_index_;
+
+		if (node->debug_name != "") {
+			result->node_->debug_name = node->debug_name;
+		}
+
+		//mark the node for removal
+		nodes_to_remove.insert(node);
+
+		UpdateGraph();
+	}
+
 
 }
 

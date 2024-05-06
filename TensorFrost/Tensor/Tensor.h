@@ -662,7 +662,7 @@ class Tensor {
 		return output;
 	}
 
-	static Tensor& Unsqeeze(const Tensor& tensor, int axis = -1) {
+	static Tensor& Unsqueeze(const Tensor& tensor, int axis = -1) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);

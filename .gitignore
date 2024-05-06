@@ -47,3 +47,6 @@ imgui.ini
 examples/Algorithms/mnist.npz
 *.npz
 examples/ML/mnist.npz
+/cmake-build-debug-visual-studio
+/.idea
+/cmake-build-release-visual-studio

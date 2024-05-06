@@ -3,6 +3,7 @@
 #include <utility>
 #include <limits.h>
 #include <float.h>
+#include <queue>
 
 #include "Backend/TensorMemory.h"
 #include "Tensor/Tensor.h"
