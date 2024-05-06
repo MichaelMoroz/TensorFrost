@@ -184,7 +184,7 @@ class Tensor {
 		// get the operation and output type
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
-		if (operation->HasAllTypes(OpType::Modifier))
+		if (operation->HasAllTypes(OpClass::Modifier))
 		{
 			memory->node_->SetAsModified();
 		}
@@ -956,6 +956,10 @@ class Tensor {
 
 	static Tensor& atan2(const Tensor& x, const Tensor& y) {
 		return Op("atan2", &x, &y);
+	}
+
+	static Tensor& grad(const Tensor& x, const Tensor& wrt) {
+		return Op("backwards_grad", &x, &wrt);
 	}
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {

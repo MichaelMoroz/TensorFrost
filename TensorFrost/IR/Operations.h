@@ -26,7 +26,7 @@ extern "C" {
 
 extern std::unordered_map<DataType, string> DataTypeNames;
 
-enum class OpType {
+enum class OpClass {
 	Operator,
 	Function,
 	Keyword,
@@ -52,6 +52,7 @@ enum class OpType {
 	Modifier,
 	MemoryReuse,
 	Gradient,
+	Nondiff,
 	Copy,
 };
 
@@ -65,12 +66,12 @@ public:
 	float cost_ = 0.0F;
 	vector<pair<vector<DataType>, DataType>> overloads_;
 	string code_;
-	vector<OpType> op_types_;
+	vector<OpClass> op_classes;
 
 	Operation() = default;
 
-	Operation(string name, initializer_list<string> oloads, float cost,
-	          string code = "", initializer_list <OpType> op_type = {})
+	Operation(string name, initializer_list<string> overloads, float cost,
+	          string code = "", initializer_list <OpClass> op_type = {})
 	    : name_(std::move(name)){
 		if (code.empty()) {
 			code = name_;
@@ -81,17 +82,17 @@ public:
 
 		//add op types
 		for (const auto& type : op_type) {
-			op_types_.push_back(type);
+			op_classes.push_back(type);
 		}
 
-		if (op_types_.empty()) {
-			op_types_.push_back(OpType::Function);
+		if (op_classes.empty()) {
+			op_classes.push_back(OpClass::Function);
 		}
 
 		// parse the overloads
 		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool,
 		// uint, float in, float out
-		for (const auto& oload : oloads) {
+		for (const auto& oload : overloads) {
 			vector<DataType> inputs;
 			DataType output = DataType::None;
 			bool is_output = false;
@@ -130,21 +131,21 @@ public:
 		}
 	}
 
-	bool HasAllTypes(OpType type) const {
-		return std::find(op_types_.begin(), op_types_.end(), type) != op_types_.end();
+	bool HasAllTypes(OpClass type) const {
+		return std::find(op_classes.begin(), op_classes.end(), type) != op_classes.end();
 	}
 
 	template <typename... Args>
-	bool HasAllTypes(OpType type, Args... args) const {
+	bool HasAllTypes(OpClass type, Args... args) const {
 		return HasAllTypes(type) && HasAllTypes(args...);
 	}
 
-	bool HasAnyType(OpType type) const {
+	bool HasAnyType(OpClass type) const {
 		return HasAllTypes(type);
 	}
 
 	template <typename... Args>
-	bool HasAnyType(OpType type, Args... args) const {
+	bool HasAnyType(OpClass type, Args... args) const {
 		return HasAllTypes(type) || HasAnyType(args...);
 	}
 

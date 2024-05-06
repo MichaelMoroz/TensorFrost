@@ -86,14 +86,14 @@ protected:
 			else
 			{
 				string expr = node_expression[node];
-				bool is_memory = node->op->HasAllTypes(OpType::Memory);
-				bool is_static = node->op->HasAllTypes(OpType::Static) || 
-								 node->op->HasAllTypes(OpType::CantSubstitute);
-				bool is_constant = node->op->HasAllTypes(OpType::Constant);
+				bool is_memory = node->op->HasAllTypes(OpClass::Memory);
+				bool is_static = node->op->HasAllTypes(OpClass::Static) || 
+								 node->op->HasAllTypes(OpClass::CantSubstitute);
+				bool is_constant = node->op->HasAllTypes(OpClass::Constant);
 				if (is_constant && expr == "") {
 					expr = node->GetTensor()->GetConstantString();
 				}
-				bool is_variable = node->op->HasAllTypes(OpType::Variable);
+				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
 				bool has_single_output = (node->outputs_.size() == 1) || is_constant || is_variable;
 				bool modified = node->has_been_modified_;
@@ -147,7 +147,7 @@ protected:
 		string right = "";
 		bool needs_paranthesis = false;
 
-		if (op->HasAllTypes(OpType::Special)) {
+		if (op->HasAllTypes(OpClass::Special)) {
 			int dims = args.Count(ArgType::Shape);
 
 			string shape_arg = "{";
@@ -200,7 +200,7 @@ protected:
 				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
-		} else if (op->HasAllTypes(OpType::MemoryOp)) {
+		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
 			string address;
 
 			if (is_kernel) {
@@ -227,7 +227,7 @@ protected:
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
 					right += "; // " + args.Name(ArgType::Memory);
-				} else if (op->HasAllTypes(OpType::Scatter)) {
+				} else if (op->HasAllTypes(OpClass::Scatter)) {
 					if (output_type != DataType::None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
@@ -259,7 +259,7 @@ protected:
 					string memory_expression = GetName("WriteToMemory") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
-				} else if (op->HasAllTypes(OpType::Scatter)) {
+				} else if (op->HasAllTypes(OpClass::Scatter)) {
 					throw std::runtime_error("Scatter operation not supported in non-kernel mode");
 				}
 			}
@@ -274,8 +274,8 @@ protected:
 			}
 			string line;
 			string code = op->code_;
-			switch (op->op_types_[0]) {
-				case OpType::Operator:
+			switch (op->op_classes[0]) {
+				case OpClass::Operator:
 					args.AddParenthesis(true);
 					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
 						code = code + code;
@@ -284,12 +284,12 @@ protected:
 					        args.Name(ArgType::Input, 1);
 					needs_paranthesis = true;
 					break;
-				case OpType::UnaryOperator:
+				case OpClass::UnaryOperator:
 					args.AddParenthesis(true);
 					line += op->code_ + args.Name(ArgType::Input, 0);
 					needs_paranthesis = true;
 					break;
-				case OpType::Function:
+				case OpClass::Function:
 					line += GetName(op->code_) + "(";
 					for (int i = 0; i < args.Count(ArgType::Input); i++) {
 						if (i != 0) {
@@ -299,28 +299,28 @@ protected:
 					}
 					line += ")";
 					break;
-				case OpType::Copy:
+				case OpClass::Copy:
 					line += args.Name(ArgType::Input, 0);
 					break;
-				case OpType::Keyword:
+				case OpClass::Keyword:
 					line += op->code_;
 					break;
-				case OpType::DimensionIndex:
+				case OpClass::DimensionIndex:
 					line += op->code_ + to_string(node->GetTensor()->data[0]);
 					break;
-				case OpType::Variable:
+				case OpClass::Variable:
 					line += op->code_;
 					break;
-				case OpType::TypeCast:
+				case OpClass::TypeCast:
 					line += GenerateTypeCast(&args, op->code_);
 					break;
-				case OpType::TypeReinterpret:
+				case OpClass::TypeReinterpret:
 					line += GenerateTypeReinterpret(&args, op->code_);
 					break;
-				case OpType::Constant:
+				case OpClass::Constant:
 					line += node->GetTensor()->GetConstantString();
 					break;
-				case OpType::TernaryOperator:
+				case OpClass::TernaryOperator:
 					args.AddParenthesis(true);
 					line += args.Name(ArgType::Input, 0) + " ? " +
 					        args.Name(ArgType::Input, 1) + " : " +

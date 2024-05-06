@@ -59,6 +59,8 @@ void TensorFunctionsDefinition(py::module& m) {
 	BINARY_FUNCTION(atan2);
 	BINARY_FUNCTION(modf);
 
+	BINARY_FUNCTION(grad);
+
 	TERNARY_FUNCTION(clamp);
 	TERNARY_FUNCTION(fma);
 	TERNARY_FUNCTION(lerp);

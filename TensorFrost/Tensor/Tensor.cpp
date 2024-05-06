@@ -10,7 +10,7 @@ float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
 	unordered_map<Node*, int> shape_map;
 	for (auto& [index, node] : a.shape) {
 		// if the node is a constant, use the constant value
-		if (node->op->HasAllTypes(OpType::Constant)) {
+		if (node->op->HasAllTypes(OpClass::Constant)) {
 			shape_map[node] = node->tensor_->TryGetConstant();
 		} else { //just assume it equal to 256
 			shape_map[node] = 256;
@@ -18,7 +18,7 @@ float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
 	}
 	for (auto& [index, node] : b.shape) {
 		// if the node is a constant, use the constant value
-		if (node->op->HasAllTypes(OpType::Constant)) {
+		if (node->op->HasAllTypes(OpClass::Constant)) {
 			shape_map[node] = node->tensor_->TryGetConstant();
 		} else { //just assume it equal to 256
 			shape_map[node] = 256;

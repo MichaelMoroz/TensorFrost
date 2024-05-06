@@ -454,7 +454,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier)) {
+			if (output_node->op->HasAllTypes(OpClass::Modifier)) {
 				if (output_node->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
@@ -482,7 +482,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier) && !output_node->op->HasAllTypes(OpType::MemoryOp)) {
+			if (output_node->op->HasAllTypes(OpClass::Modifier) && !output_node->op->HasAllTypes(OpClass::MemoryOp)) {
 				if (output_node->index_ > last_index) {
 					last_index = output_node->index_;
 					final_version = output_node;
@@ -919,7 +919,7 @@ public:
 			node->has_been_modified_ = false;
 			//go over all outputs and check if they are modifiers
 			for (auto& output : node->outputs_) {
-				if (output->to_->get()->op->HasAllTypes(OpType::Modifier) && output->type_ == ArgType::Memory) {
+				if (output->to_->get()->op->HasAllTypes(OpClass::Modifier) && output->type_ == ArgType::Memory) {
 					node->has_been_modified_ = true;
 					break;
 				}
@@ -937,7 +937,7 @@ public:
 		return result;
 	}
 
-	vector<Node*> GetNodesOfType(OpType type) const {
+	vector<Node*> GetNodesOfType(OpClass type) const {
 		vector<Node*> result;
 		for (auto node = begin(); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(type)) {
