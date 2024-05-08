@@ -959,7 +959,7 @@ class Tensor {
 	}
 
 	static Tensor& grad(const Tensor& x, const Tensor& wrt) {
-		return Op("backwards_grad", &x, &wrt);
+		return OpShape("backwards_grad", wrt.GetShape(), &x, &wrt);
 	}
 
 	static Tensor& lerp(const Tensor& x, const Tensor& y, const Tensor& a) {

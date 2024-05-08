@@ -1030,8 +1030,33 @@ void IR::AddKernelGlobalLoadOperations() {
 	for (auto kernel : kernels) {
 
 		// replace all inputs pointing to memory nodes with the memory node
+		unordered_set<Node*> nodes_to_load;
+		unordered_map<Node*, vector<Arg*>> load_arguments;
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			AddNodeLoadOperations(node.get(), kernel, {});
+			for (auto& input : node->inputs_) {
+				if (input.type_ == ArgType::Memory || input.type_ == ArgType::Shape)
+					continue;
+
+				Node* input_node = input.from_->get();
+				bool is_in_a_kernel = input_node->HasParent("kernel");
+				bool is_outside = !input_node->HasParent(kernel);
+				bool is_memory = input_node->op->HasAllTypes(OpClass::Memory);
+
+				if (is_memory || (is_in_a_kernel && is_outside)) {
+					nodes_to_load.insert(input_node);
+					load_arguments[input_node].push_back(&input);
+				}
+			}
+		}
+
+		for (auto node : nodes_to_load) {
+			// load the memory node at the beginning of the kernel
+			ExecuteExpressionChild(kernel, [&]() {
+				Tensor& loaded = Tensor::Load(*node->GetTensor(), {}, true);
+				for (auto arg : load_arguments[node]) {
+					arg->from_ = loaded.node_->GetLable();
+				}
+			});
 		}
 	}
 }
@@ -2225,7 +2250,7 @@ void IR::CompileIR()
 	//UnrollDimensions();
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
-	//CheckIR("Reorder Operations", true, false);
+	CheckIR("Reorder Operations", true, false);
 	MoveShapeOutsideKernels();
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
@@ -2234,9 +2259,9 @@ void IR::CompileIR()
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
-		//CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
+		CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
 		OptimizeKernelLoadOperations();
-		//CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
+		CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
 	}
 	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
@@ -2245,15 +2270,15 @@ void IR::CompileIR()
 	ReorderOperations();
 	OptimizeOperations();
 	AddMemoryOpIndices();
-	//CheckIR("Final optimization", true, true);
+	CheckIR("Final optimization", true, true);
 	FinalizeMemoryIndexing();
 	RemoveUnusedOperations();
-	//CheckIR("Finalize Memory Indexing", false, false);
+	CheckIR("Finalize Memory Indexing", false, false);
 	OptimizeKernels();
 	OptimizeHost();
 	//OptimizeLoops();
 	RemoveUnusedOperations();
-	//CheckIR("Finalize Memory Indexing 2", true, true);
+	CheckIR("Finalize Memory Indexing 2", true, true);
 	RemoveUnusedKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();
