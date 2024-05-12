@@ -11,10 +11,53 @@ namespace TensorFrost {
 	return tensor_;
 }
 
+//if shape nodes are compatible, then return the broadcast shape, if not return nullptr
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match) {
+	ShapeDimCompareResult result;
+	result.a_dim = -1;
+	result.b_dim = -1;
+	if (a_node->name == "const") result.a_dim = a_node->GetTensor()->data[0];
+	if (b_node->name == "const") result.b_dim = b_node->GetTensor()->data[0];
+
+	// if one of the nodes is a constant = 1, then it is a broadcast
+	if ((result.a_dim == 1 || result.b_dim == 1) && !exact_match) {
+		result.compatible = true;
+		if (result.a_dim == 1) {
+			result.broadcast_dim = b_node;
+			return result;
+		} else {
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
+	// if a and b are constants, then compare their values
+	if (result.a_dim != -1 && result.b_dim != -1) {
+		if (result.a_dim != result.b_dim) {
+			result.compatible = false;
+			return result;
+		} else {
+			result.compatible = true;
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
+	// otherwise, if a and b are not the same node then they are not the same
+	// shape (possibly)
+	if (a_node != b_node) {
+		result.compatible = false;
+		return result;
+	}
+
+	result.compatible = true;
+	result.broadcast_dim = a_node;
+	return result;
+}
+
 ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
 	ShapeCompareResult result;
 	result.compatible = true;
-	result.is_broadcast = false;
 	result.a_dim = a.dim;
 	result.b_dim = b.dim;
 	result.broadcast_dim = max(a.dim, b.dim);
@@ -36,53 +79,21 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 		Node* a_node = a.shape[a.dim - i - 1];
 		Node* b_node = b.shape[b.dim - i - 1];
 		int broadcast_index = max(a.dim, b.dim) - i - 1;
-		int val_a = -1;
-		int val_b = -1;
-		if (a_node->name == "const") val_a = a_node->GetTensor()->data[0];
-		if (b_node->name == "const") val_b = b_node->GetTensor()->data[0];
 
-		// if one of the nodes is a constant = 1, then it is a broadcast
-		if ((val_a == 1 || val_b == 1) && !exact_match) {
-			result.is_broadcast = true;
-			if (val_a == 1) {
-				result.broadcast_shape.AddShape(broadcast_index, b_node);
-			} else {
-				result.broadcast_shape.AddShape(broadcast_index, a_node);
-			}
-			continue;
-		}
+		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
 
-		// if a and b are constants, then compare their values
-		if (val_a != -1 && val_b != -1) {
-			if (val_a != val_b) {
-				result.compatible = false;
-				if (throw_error) {
-					throw std::runtime_error(
-					    "Constant dimensions are not compatible for nodes: " +
-					    a.name + " and " + b.name + " at index " +
-					    to_string(i) + " with values " + to_string(val_a) + " and " +
-					    to_string(val_b));
-				}
-				return result;
-			} else {
-				result.broadcast_shape.AddShape(broadcast_index, a_node);
-				continue;
-			}
-		}
-
-		// otherwise, if a and b are not the same node then they are not the same
-		// shape (possibly)
-		if (a_node != b_node) {
-			if (throw_error) {
-				throw std::runtime_error(
-				    "Shapes are potentially not compatible for nodes: " + a.name +
-				    " and " + b.name + " at index " + to_string(i));
-			}
+		if(!res.compatible) {
 			result.compatible = false;
+			if (throw_error) {
+				if(res.a_dim != -1 || res.b_dim != -1) {
+					throw std::runtime_error("Shapes are not compatible for nodes: " + a.name + " and " + b.name + " with constant values " + to_string(res.a_dim) + " and " + to_string(res.b_dim) + " at index " + to_string(i));
+				}
+				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a.name + " and " + b.name + " at index " + to_string(i));
+			}
 			return result;
 		}
 
-		result.broadcast_shape.AddShape(broadcast_index, a_node);
+		result.broadcast_shape.AddShape(broadcast_index, res.broadcast_dim);
 	}
 
 	//add the rest of the broadcast shape
@@ -513,7 +524,7 @@ void IR::OptimizeKernels() {
 }
 
 #define MAX_LOAD_COPY 5000.0f
-#define MAX_LOAD_COPY_COUNT 1
+#define MAX_LOAD_COPY_COUNT 2
 #define MAX_LOAD_SIZE_RATIO 5.0f
 void IR::OptimizeKernelLoadOperations() {
 	UpdateGraph();
@@ -1290,13 +1301,13 @@ Tensor* ComputeFlatIndex(ArgMap memory_shape, vector<Tensor*> indices, map<int, 
 
 	int kernel_dim = (int)indices.size();
 
-	std::function<const Tensor*(int)> get_shape = [&](int dim) {
+	function<const Tensor*(int)> get_shape = [&](int dim) {
 		return memory_shape[dim]->from_->get()->GetTensor();
 	};
 
 	// function to get index for given dimension, if not found then return
 	// default dim index
-	std::function<Tensor*(int)> get_index = [&](int dim) {
+	function<Tensor*(int)> get_index = [&](int dim) {
 		Tensor* out;
 		if (idx.find(dim) != idx.end()) {
 			out = const_cast<Tensor*>(idx[dim]);
@@ -1731,45 +1742,32 @@ Tensor* ComputeAll(const Tensor* array, int axis) {
 }
 
 Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
-	Tensors shape = array->GetShape();
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int old_dim = shapeinfo.dim;
 	Tensors perm_shape = Tensors();
-	for (int i = 0; i < (int)shape.size(); i++) {
+	int permuted_dim = 0;
+	for(auto perm: permutation) {
+		permuted_dim = max(permuted_dim, perm.second+1);
+	}
+	shapeinfo.ExpandDimensions(permuted_dim);
+	Tensors shape = shapeinfo.GetTensors();
+
+	for (int i = 0; i < permuted_dim; i++) {
 		perm_shape.push_back(shape[permutation[i]]);
 	}
+
 	//create indices
 	Tensors indices = Tensors();
-	for (int i = 0; i < (int)shape.size(); i++) {
+	for (int i = 0; i < permuted_dim; i++) {
 		indices.push_back(&Tensor::Index(perm_shape, i));
 	}
 	//permute indices to load the values
 	Tensors perm_indices = Tensors();
-	for (int i = 0; i < (int)shape.size(); i++) {
-		perm_indices.push_back(indices[permutation[i]]);
+	for (int i = 0; i < old_dim; i++) {
+		perm_indices.push_back(indices[permutation[permuted_dim - old_dim + i]]);
 	}
 	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
 	loaded.SetDebugName("transposed");
-	return &loaded;
-}
-
-Tensor* Unsqueeze(const Tensor* array, int axis) {
-	Tensors shape = array->GetShape();
-	Tensors new_shape = Tensors();
-	for (int i = 0; i < (int)shape.size(); i++) {
-		new_shape.push_back(shape[i]);
-	}
-	int expanded_dim = GetAxis((int)shape.size(), axis) + 1;
-	new_shape.insert(new_shape.begin() + expanded_dim, &Tensor::Constant(1));
-	//create indices
-	Tensors indices = Tensors();
-	for (int i = 0; i < (int)new_shape.size(); i++) {
-		if (i == expanded_dim) continue;
-		indices.push_back(&Tensor::Index(new_shape, i));
-	}
-
-	//load the values
-	Tensor& loaded = Tensor::Load(*array, indices, true);
-	loaded.SetDebugName(array->node_->debug_name);
-
 	return &loaded;
 }
 
@@ -1783,35 +1781,50 @@ Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
 //compute the matrix multiplication of two last dimensions
 //takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
 Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
-	Tensors shape_a = a->GetShape();
-	Tensors shape_b = b->GetShape();
+	ShapeInfo shape_a = a->GetShapeInfo();
+	ShapeInfo shape_b = b->GetShapeInfo();
 
-	if (shape_a.size() < 2 || shape_b.size() < 2) {
-		throw std::runtime_error("Matrix multiplication requires at least 2 dimensions");
+	if (shape_a.dim < 2 && shape_b.dim < 2) {
+		throw std::runtime_error("Matrix multiplication requires at least one 2D tensor");
 	}
+
+	if(shape_a.dim < 2) {
+		shape_a.ExpandDimensions(2);
+	}
+	if(shape_b.dim < 2) {
+		shape_b.ExpandDimensions(2);
+	}
+
+	Tensors shape_a_tensors = shape_a.GetTensors();
+	Tensors shape_b_tensors = shape_b.GetTensors();
 
 	//get shape of the result
 	Tensors shape_c = Tensors();
-	int dim_a = (int)shape_a.size();
-	int dim_b = (int)shape_b.size();
+	int dim_a = shape_a.dim;
+	int dim_b = shape_b.dim;
 	int max_dim = 0;
 	Tensors max_shape = Tensors();
 	//get the shape with most dimensions
 	if (dim_a < dim_b) {
 		max_dim = dim_b;
-		max_shape = shape_b;
+		max_shape = shape_b_tensors;
 	} else {
 		max_dim = dim_a;
-		max_shape = shape_a;
+		max_shape = shape_a_tensors;
 	}
 
 	for (int i = 0; i < max_dim - 2; i++) {
 		shape_c.push_back(max_shape[i]);
 	}
-	shape_c.push_back(shape_a[dim_a - 2]);
-	shape_c.push_back(shape_b[dim_b - 1]);
+	shape_c.push_back(shape_a_tensors[dim_a - 2]);
+	shape_c.push_back(shape_b_tensors[dim_b - 1]);
 
-	const Tensor* sum_shape = shape_a[dim_a - 1];
+	ShapeDimCompareResult result = CompareShapeDim(shape_a_tensors[dim_a - 1]->node_, shape_b_tensors[dim_b - 2]->node_);
+	if (!result.compatible) {
+		throw std::runtime_error("Inner dimensions of the matrices must match");
+	}
+
+	const Tensor* sum_shape = result.broadcast_dim->GetTensor();
 
 	// get indices for c elements
 	Tensors indices_c = Tensors();
@@ -1895,23 +1908,56 @@ void IR::InsertAlgorithmicPrimitives() {
 				int dim = (int)inputs[0]->GetDimension();
 				map<int, int> permutation;
 				for (int i = 0; i < dim; i++) {
-					permutation[i] = i;
+					if(i == axes[0]) {
+						permutation[i] = axes[1];
+					} else if(i == axes[1]) {
+						permutation[i] = axes[0];
+					} else {
+						permutation[i] = i;
+					}
 				}
-				permutation[axes[0]] = axes[1];
-				permutation[axes[1]] = axes[0];
 				result = Transpose(inputs[0], permutation);
 			} else if (node->name == "dot") {
 				result = ComputeDot(inputs[0], inputs[1], axes[0]);
 			} else if (node->name == "matmul") {
 				result = ComputeMatMul(inputs[0], inputs[1]);
 			} else if (node->name == "unsqueeze") {
-				result = Unsqueeze(inputs[0], axes[0]);
+				map<int, int> permutation;
+				int dim = (int)inputs[0]->GetDimension() + 1;
+				for(int i = 0; i < dim; i++) {
+					if(i == axes[0]) {
+						permutation[i] = 0;
+					} else if (i < axes[0]) {
+						permutation[i] = i + 1;
+					} else {
+						permutation[i] = i;
+					}
+				}
+				result = Transpose(inputs[0], permutation);
+				result->SetDebugName("unsqueezed");
+			} else if (node->name == "squeeze") {
+				map<int, int> permutation;
+				int dim = (int)inputs[0]->GetDimension() - 1;
+				for(int i = 0; i < dim; i++) {
+					if(i < axes[0]) {
+						permutation[i] = i;
+					} else {
+						permutation[i] = i + 1;
+					}
+				}
+				result = Transpose(inputs[0], permutation);
+				result->SetDebugName("squeezed");
 			} else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
 			}
 
 			//replace the node with the sum
 			node->MakeOutputsUseGivenNode(result->node_);
+
+			ShapeCompareResult shape_result = CompareShape(node, result->node_, true);
+			if (!shape_result.compatible) {
+				throw std::runtime_error("Algorithmic primitive " + node->name + " at " + node->debug_name + " has incompatible shapes");
+			}
 
 			//copy over all memory flags to the new node
 			//TODO make a function for this
@@ -2089,13 +2135,29 @@ map<string, function<TensorVec(TensorVec, Tensor&, Tensor&)>> gradient_functions
 	{"max", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},
 	{"min", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f))); }},
 	{"pow", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[1] * Tensor::pow(in[0], in[1] - Tensor::Constant(1.0f)), grad * Tensor::log(in[0]) * out); }},
+	{"tanh", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * (Tensor::Constant(1.0f) - out * out)); }},
+	{"sigmoid", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * out * (Tensor::Constant(1.0f) - out)); }},
+	{"clamp", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::select(in[0] < in[1], Tensor::Constant(0.0f), Tensor::select(in[0] > in[2], Tensor::Constant(0.0f), grad))); }},
+	{"select", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
+	{"lerp", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
 
 	//matrix operations
-	{"matmul", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Matmul(grad, Tensor::Transpose(in[1])), Tensor::Matmul(Tensor::Transpose(in[0]), grad)); }},
-	{"transpose", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Transpose(grad)); }},
-	{"dot", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Dot(grad, in[1]), Tensor::Dot(Tensor::Transpose(in[0]), grad)); }},
-	{"unsqueeze", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Sum(grad, 0)); }},
-	{"sum", [](TensorVec in, Tensor& out, Tensor& grad) { return TensorVec(Tensor::Unsqueeze(grad, 0)); }},
+	{"matmul", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Matmul(grad, Tensor::Transpose(in[1])), Tensor::Matmul(Tensor::Transpose(in[0]), grad));
+	}},
+	{"transpose", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Transpose(grad, out.data[1], out.data[0]));
+	}},
+	{"dot", [](TensorVec in, Tensor& out, Tensor& grad) {
+		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.data[0]);
+		return TensorVec(unsq_grad * in[1], unsq_grad * in[0]);
+	}},
+	{"unsqueeze", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Sum(grad, out.data[0]));
+	}},
+	{"sum", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Unsqueeze(grad, out.data[0]));
+	}},
 };
 
 TensorVec ComputeNodeGradients(Node* value, Tensor* grad)
@@ -2193,6 +2255,9 @@ void IR::ComputeAutodiff()
 			}
 
 			Node* grad = wrt_grad.second;
+			if(!node_to_grad.contains(wrt_grad.first.second)) {
+				throw std::runtime_error("Gradient not computed for " + wrt_grad.first.second->debug_name);
+			}
 			Node* computed_grad = node_to_grad[wrt_grad.first.second]->node_;
 			grad_to_computed_grad[grad] = computed_grad;
 		}
@@ -2239,12 +2304,14 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
 	ComputeAutodiff();
+	RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
 	InsertAlgorithmicPrimitives();
+	CheckIR("Insert Algorithmic Primitives", false, false);
 	UnrollLoops();
 	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
-	CheckIR("Insert Algorithmic Primitives", false, false);
+	CheckIR("Remove Unused Operations 1", false, false);
 	SeparateOperationsIntoKernels();
 	CheckKernelShapes();
 	//UnrollDimensions();

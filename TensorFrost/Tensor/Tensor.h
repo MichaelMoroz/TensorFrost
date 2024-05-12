@@ -274,79 +274,17 @@ class Tensor {
 	}
 
 	int GetDimension() const {
-		// find max dimension
-		int max_dim = -1;
-
-		for (const auto& input : node_->inputs_) {
-			if (input.type_ == ArgType::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		return max_dim + 1;
+		ShapeInfo shape_info = ShapeInfo(node_);
+		return shape_info.dim;
 	}
 
 	Tensors GetShape() const {
-		Tensors result = Tensors();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : node_->inputs_) {
-			if (input.type_ == ArgType::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = nullptr;
-		}
-		// fill result
-		for (const auto& input : node_->inputs_) {
-			if (input.type_ == ArgType::Shape) {
-				result[input.index_] = input.from_->get()->GetTensor();
-			}
-		}
-		// if there are any missing dimensions, fill them with 1
-		Tensor& one = Constant(1);
-		for (int i = 0; i <= max_dim; i++) {
-			if (result[i] == nullptr) {
-				result[i] = &one;
-			}
-		}
-		return result;
+		ShapeInfo shape_info = ShapeInfo(node_);
+		return shape_info.GetTensors();
 	}
 
-	vector<int> TryGetShape() const {
-		vector<int> result = vector<int>();
-		// get max dimension
-		int max_dim = -1;
-		for (const auto& input : node_->inputs_) {
-			if (input.type_ == ArgType::Shape) {
-				max_dim = std::max(max_dim, input.index_);
-			}
-		}
-
-		if (max_dim == -1) {
-			return result;
-		}
-
-		// resize result
-		result.resize(max_dim + 1);
-		for (int i = 0; i <= max_dim; i++) {
-			result[i] = 1;
-		}
-		// fill result
-		for (const auto& input : node_->inputs_) {
-			if (input.type_ == ArgType::Shape) {
-				result[input.index_] = AsInt(input.from_->get()->GetTensor()->data[0]);
-			}
-		}
-		return result;
+	ShapeInfo GetShapeInfo() const {
+		return ShapeInfo(node_);
 	}
 
 	void SetShape(Tensors shape) const;
@@ -638,10 +576,13 @@ class Tensor {
 	}
 	
 	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
-		Tensors shape = tensor.GetShape();
-		int dims = (int)shape.size();
+		ShapeInfo shapeinfo = tensor.GetShapeInfo();
+
+		int dims = std::max(std::max(axis1, axis2), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
 		int a1 = GetAxis(dims, axis1);
 		int a2 = GetAxis(dims, axis2);
+		shapeinfo.ExpandDimensions(dims);
+		Tensors shape = shapeinfo.GetTensors();
 		//swap the axes
 		std::swap(shape[a1], shape[a2]);
 		Tensor& output = OpShape("transpose", shape, &tensor);
@@ -665,45 +606,82 @@ class Tensor {
 	static Tensor& Unsqueeze(const Tensor& tensor, int axis = -1) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
-		axis = GetAxis(dims, axis);
-		shape.insert(shape.begin() + axis + 1, &Constant(1));
+		if(axis < 0) {
+			axis = dims + axis + 1;
+		}
+		shape.insert(shape.begin() + axis, &Constant(1));
 		Tensor& output = OpShape("unsqueeze", shape, &tensor);
 		output.data = vector<uint>(1, axis);
 		return output;
 	}
 
-	//TODO: implement
-	//static Tensor& Sqeeze(const Tensor& tensor)
+	static bool AreTensorsEqual(const Tensor& a, const Tensor& b) {
+		if(a.node_->op->HasAllTypes(OpClass::Constant) && b.node_->op->HasAllTypes(OpClass::Constant)) {
+			return a.data[0] == b.data[0];
+		}
+		if(a.node_ == b.node_) {
+			return true;
+		}
+		return false;
+	}
+
+	static Tensor& Sqeeze(const Tensor& tensor, int axis = -1) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		if (shape[axis]->TryGetConstant() != 1) {
+			throw std::runtime_error("Cannot squeeze a dimension that is not 1");
+		}
+		shape.erase(shape.begin() + axis);
+		Tensor& output = OpShape("squeeze", shape, &tensor);
+		output.data = vector<uint>(1, axis);
+		return output;
+	}
 
 	//takes two tensors [T1, T2, ..., Tn, M, N] and [Tm, .., Tn, N, K] and returns [T1, T2, ..., Tm, M, K]
 	static Tensor& Matmul(const Tensor& a, const Tensor& b) {
-		Tensors shape_a = a.GetShape();
-		Tensors shape_b = b.GetShape();
+		ShapeInfo shape_a = a.GetShapeInfo();
+		ShapeInfo shape_b = b.GetShapeInfo();
 
-		if (shape_a.size() < 2 || shape_b.size() < 2) {
-			throw std::runtime_error("MatMul requires tensors with at least 2 dimensions");
+		if (shape_a.dim < 2 && shape_b.dim < 2) {
+			throw std::runtime_error("Matrix multiplication requires at least one 2D tensor");
 		}
 
-		// get shape of the result
+		if(shape_a.dim < 2) {
+			shape_a.ExpandDimensions(2);
+		}
+		if(shape_b.dim < 2) {
+			shape_b.ExpandDimensions(2);
+		}
+
+		Tensors shape_a_tensors = shape_a.GetTensors();
+		Tensors shape_b_tensors = shape_b.GetTensors();
+
+		//get shape of the result
 		Tensors shape_c = Tensors();
-		int dim_a = (int)shape_a.size();
-		int dim_b = (int)shape_b.size();
+		int dim_a = shape_a.dim;
+		int dim_b = shape_b.dim;
 		int max_dim = 0;
 		Tensors max_shape = Tensors();
-		// get the shape with most dimensions
+		//get the shape with most dimensions
 		if (dim_a < dim_b) {
 			max_dim = dim_b;
-			max_shape = shape_b;
+			max_shape = shape_b_tensors;
 		} else {
 			max_dim = dim_a;
-			max_shape = shape_a;
+			max_shape = shape_a_tensors;
 		}
 
 		for (int i = 0; i < max_dim - 2; i++) {
 			shape_c.push_back(max_shape[i]);
 		}
-		shape_c.push_back(shape_a[dim_a - 2]);
-		shape_c.push_back(shape_b[dim_b - 1]);
+		shape_c.push_back(shape_a_tensors[dim_a - 2]);
+		shape_c.push_back(shape_b_tensors[dim_b - 1]);
+
+		//make sure that the inner dimensions match
+		if (!CompareShapeDim(shape_a_tensors[dim_a - 1]->node_, shape_b_tensors[dim_b - 2]->node_).compatible) {
+			throw std::runtime_error("Inner dimensions of the matrices must match");
+		}
 
 		Tensor& output = OpShape("matmul", shape_c, &a, &b);
 		return output;
@@ -959,6 +937,9 @@ class Tensor {
 	}
 
 	static Tensor& grad(const Tensor& x, const Tensor& wrt) {
+		if(x.node_->op->HasAllTypes(OpClass::Nondiff)) {
+			throw std::runtime_error("Cannot compute gradient of a non-differentiable operation");
+		}
 		return OpShape("backwards_grad", wrt.GetShape(), &x, &wrt);
 	}
 

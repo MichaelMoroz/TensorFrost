@@ -631,7 +631,7 @@ class NodeIterator {
 
 class ShapeInfo {
  public:
-	map<int, Node*> shape;
+	vector<Node*> shape;
 	int dim = 0;
 	string name;
 
@@ -655,38 +655,72 @@ class ShapeInfo {
 	                node->var_name != "" ? node->var_name : node->name) {}
 
 	void AddShape(int index, Node* node) {
+		if(shape.size() <= index) {
+			shape.resize(index + 1);
+		}
 		shape[index] = node;
 		dim = max(dim, index + 1);
 	}
 
+	bool CheckValidity(bool throw_error = false) const {
+		for (auto node : shape) {
+			if(node == nullptr) {
+				if (throw_error) {
+					throw std::runtime_error("Shape not fully defined");
+				}
+				return false;
+			}
+		}
+		return true;
+	}
+
 	Tensors GetTensors() const {
+		CheckValidity(true);
 		Tensors tensors = Tensors();
-		tensors.resize(dim);
-		for (auto& [index, node] : shape) {
-			tensors[index] = node->GetTensor();
+		for (auto node : shape) {
+			tensors.push_back(node->GetTensor());
 		}
 		return tensors;
 	}
 
 	Arguments GetArguments() const {
+		CheckValidity(true);
 		Arguments arguments;
-		for (auto& [index, node] : shape) {
-			arguments.emplace_back(ArgType::Shape, node->GetLable(), index);
+		for (int i = 0; i < shape.size(); i++) {
+			arguments.emplace_back(ArgType::Shape, shape[i]->GetLable(), i);
 		}
 		return arguments;
 	}
 
+	vector<int> GetShape(int default_value = 256) const;
+
 	static float GetSizeRatio(ShapeInfo& a, ShapeInfo& b);
+
+	void InsertDim(int index, Node* node) {
+		if (index >= shape.size()+1) {
+			shape.resize(index + 1);
+		}
+		shape.insert(shape.begin() + index, node);
+		dim++;
+	}
+
+	void ExpandDimensions(int new_dim);
 };
 
 struct ShapeCompareResult {
 	bool compatible;
-	bool is_broadcast;
 	ShapeInfo broadcast_shape;
 	int broadcast_dim;
 	int a_dim;
 	int b_dim;
 	int min_dim;
+};
+
+struct ShapeDimCompareResult {
+	bool compatible;
+	Node* broadcast_dim;
+	int a_dim;
+	int b_dim;
 };
 
 ShapeCompareResult CompareShape(const Node* a, const Node* b,
@@ -696,6 +730,8 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b,
 ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
                                 bool exact_match = false,
                                 bool throw_error = false);
+
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match = false);
 
 /// <summary>
 /// Class to select kernel scopes from the IR graph given the constraints and the root node

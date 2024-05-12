@@ -6,35 +6,40 @@ IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }
 
+vector<int> ShapeInfo::GetShape(int default_value) const {
+	vector<int> shape;
+	for (auto node: this->shape) {
+		if(node->op->HasAllTypes(OpClass::Constant)) {
+			shape.push_back(node->tensor_->TryGetConstant());
+		} else {
+			shape.push_back(default_value);
+		}
+	}
+	return shape;
+}
+
+void ShapeInfo::ExpandDimensions(int new_dim)
+{
+	if(new_dim <= dim) {
+		return;
+	}
+	Tensor& one = Tensor::Constant(1);
+	for(int i = dim; i < new_dim; i++) {
+	   InsertDim(0, one.node_);
+	}
+}
+
 float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
-	unordered_map<Node*, int> shape_map;
-	for (auto& [index, node] : a.shape) {
-		// if the node is a constant, use the constant value
-		if (node->op->HasAllTypes(OpClass::Constant)) {
-			shape_map[node] = node->tensor_->TryGetConstant();
-		} else { //just assume it equal to 256
-			shape_map[node] = 256;
-		}
-	}
-	for (auto& [index, node] : b.shape) {
-		// if the node is a constant, use the constant value
-		if (node->op->HasAllTypes(OpClass::Constant)) {
-			shape_map[node] = node->tensor_->TryGetConstant();
-		} else { //just assume it equal to 256
-			shape_map[node] = 256;
-		}
-	}
-	
+	vector<int> shape_a = a.GetShape();
+	vector<int> shape_b = b.GetShape();
 	float size_a = 1.0f;
 	float size_b = 1.0f;
-
-	for (auto& [index, node] : a.shape) {
-		size_a *= (float)shape_map[node];
+	for (int i = 0; i < shape_a.size(); i++) {
+		size_a *= (float)shape_a[i];
 	}
-	for (auto& [index, node] : b.shape) {
-		size_b *= (float)shape_map[node];
+	for (int i = 0; i < shape_b.size(); i++) {
+		size_b *= (float)shape_b[i];
 	}
-
 	return size_a / size_b;
 }
 
