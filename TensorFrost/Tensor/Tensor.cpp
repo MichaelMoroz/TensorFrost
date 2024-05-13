@@ -101,6 +101,29 @@ Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
 	return out;
 }
 
+Tensor & Tensor::ReductionOP(string name, const Tensor &tensor, int axis, bool keepdims) {
+	// get the shape of the tensor (all dimensions except the last one)
+	Tensors shape = tensor.GetShape();
+	axis = GetAxis((int)shape.size(), axis);
+
+	//check if axis is valid
+	if (axis < 0 || axis >= shape.size()) {
+		throw std::runtime_error("Invalid axis for reduction operation " + name);
+	}
+
+	// remove the axis dimension
+	shape.erase(shape.begin() + axis);
+	if (shape.empty()) {
+		shape.push_back(&Constant(1));
+	}
+	Tensor& op = OpShape(name, shape, &tensor);
+	op.data = vector<uint>(1, axis);
+	if(keepdims) {
+		op.node_->AddFlag(NodeFlag::KeepDims);
+	}
+	return op;
+}
+
 Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);

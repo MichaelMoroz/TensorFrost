@@ -4,27 +4,39 @@ import TensorFrost as tf
 import matplotlib.pyplot as plt
 
 tf.initialize(tf.opengl)
+
+# def softmax(X):
+#     exp = tf.exp(X)
+#     return exp / tf.unsqueeze(tf.sum(exp))
 #
-# def forward(W1, b1, X):
-#     return tf.tanh(tf.matmul(X, W1) + b1)
+# def forward(W1, W2, b1, b2, X):
+#     L1 = tf.tanh(tf.matmul(X, W1) + b1)
+#     L3 = softmax(tf.matmul(L1, W2) + b2)
+#     return L3
 #
 # def forward_step():
 #     #input weights and biases
 #     W1 = tf.input([-1, -1], tf.float32)
-#     In, Out = W1.shape
-#     b1 = tf.input([Out], tf.float32)
+#     In, Hidden = W1.shape
+#     W2 = tf.input([Hidden, -1], tf.float32)
+#     Out = W2.shape[1]
+#     b1 = tf.input([Hidden], tf.float32)
+#     b2 = tf.input([Out], tf.float32)
 #
 #     #input data
 #     X = tf.input([-1, In], tf.float32)
 #
-#     Yhat = forward(W1, b1, X)
+#     Yhat = forward(W1, W2, b1, b2, X)
 #
 #     dW1 = tf.grad(Yhat, W1)
+#     db1 = tf.grad(Yhat, b1)
+#     dW2 = tf.grad(Yhat, W2)
+#     db2 = tf.grad(Yhat, b2)
 #
-#     return [Yhat, dW1]
+#     return [Yhat, dW1, db1, dW2, db2]
 #
 # fwd_step = tf.compile(forward_step)
-#
+
 
 import math
 
@@ -106,7 +118,13 @@ def step():
 
     L1, Yhat = forward(W1, W2, b1, b2, Xbatch)
     L = loss(Ybatch, Yhat)
-    dW1, dW2, db1, db2 = backward(W1, W2, b1, b2, L1, Yhat, Xbatch, Ybatch)
+
+    #dW1, dW2, db1, db2 = backward(W1, W2, b1, b2, L1, Yhat, Xbatch, Ybatch)
+    dW2 = tf.grad(L, W2)
+    db2 = tf.grad(L, b2)
+    dW1 = tf.grad(L, W1)
+    db1 = tf.grad(L, b1)
+
     W1, W2, b1, b2 = update(W1, W2, b1, b2, dW1, dW2, db1, db2, learning_rate)
 
     return [L, W1, W2, b1, b2]

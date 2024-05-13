@@ -541,19 +541,7 @@ class Tensor {
 		return axis;
 	}
 
-	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1) {
-		// get the shape of the tensor (all dimensions except the last one)
-		Tensors shape = tensor.GetShape();
-		axis = GetAxis((int)shape.size(), axis);
-		// remove the axis dimension
-		shape.erase(shape.begin() + axis);
-		if (shape.empty()) {
-			shape.push_back(&Constant(1));
-		}
-		Tensor& op = OpShape(name, shape, &tensor);
-		op.data = vector<uint>(1, axis);
-		return op;
-	}
+	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1, bool keepdims = false);
 
 	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_sum", tensor, axis);

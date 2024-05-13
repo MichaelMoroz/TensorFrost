@@ -14,22 +14,11 @@ namespace TensorFrost {
 //if shape nodes are compatible, then return the broadcast shape, if not return nullptr
 ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match) {
 	ShapeDimCompareResult result;
+	result.broadcast = false;
 	result.a_dim = -1;
 	result.b_dim = -1;
 	if (a_node->name == "const") result.a_dim = a_node->GetTensor()->data[0];
 	if (b_node->name == "const") result.b_dim = b_node->GetTensor()->data[0];
-
-	// if one of the nodes is a constant = 1, then it is a broadcast
-	if ((result.a_dim == 1 || result.b_dim == 1) && !exact_match) {
-		result.compatible = true;
-		if (result.a_dim == 1) {
-			result.broadcast_dim = b_node;
-			return result;
-		} else {
-			result.broadcast_dim = a_node;
-			return result;
-		}
-	}
 
 	// if a and b are constants, then compare their values
 	if (result.a_dim != -1 && result.b_dim != -1) {
@@ -38,6 +27,19 @@ ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_mat
 			return result;
 		} else {
 			result.compatible = true;
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
+	// if one of the nodes is a constant = 1, then it is a broadcast
+	if ((result.a_dim == 1 || result.b_dim == 1) && !exact_match) {
+		result.compatible = true;
+		result.broadcast = true;
+		if (result.a_dim == 1) {
+			result.broadcast_dim = b_node;
+			return result;
+		} else {
 			result.broadcast_dim = a_node;
 			return result;
 		}
@@ -58,6 +60,7 @@ ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_mat
 ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
 	ShapeCompareResult result;
 	result.compatible = true;
+	result.broadcast = false;
 	result.a_dim = a.dim;
 	result.b_dim = b.dim;
 	result.broadcast_dim = max(a.dim, b.dim);
@@ -93,11 +96,16 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 			return result;
 		}
 
+		if(res.broadcast) {
+			result.broadcast = true;
+		}
+
 		result.broadcast_shape.AddShape(broadcast_index, res.broadcast_dim);
 	}
 
 	//add the rest of the broadcast shape
 	for (int i = min_dim; i < result.broadcast_dim; i++) {
+		result.broadcast = true;
 		int broadcast_index = max(a.dim, b.dim) - i - 1;
 		if (a.dim > b.dim) {
 			result.broadcast_shape.AddShape(broadcast_index, a.shape[a.dim - i - 1]);
@@ -258,7 +266,7 @@ void IR::ReorderOperations() {
 	// get kernel data
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
-	
+
 	for (auto* kernel: kernels) {
 		unordered_set<Node*> nodes_to_move;
 		// go over all nodes in the kernel and check if their inputs can be copied
@@ -275,9 +283,9 @@ void IR::ReorderOperations() {
 				}
 			}
 		}
-	
+
 		//TODO (Moroz): do a check on order of the moved nodes - seems to be breaking sometimes
-	
+
 		// move all the nodes that are outside the kernel inside
 		Node* kernel_begin = kernel->child;
 		for (auto* node : nodes_to_move) {
@@ -310,7 +318,7 @@ bool CannotCopyArgument(Arg& arg) {
 map<Node*, Node*> IR::CopyNodes(
 	set<Node*> nodes_to_copy,
     unordered_map<Node*, Node*> argument_replacements,
-	unordered_map<int, Node*> indices, 
+	unordered_map<int, Node*> indices,
 	unordered_set<Node*> targets, bool must_copy_all) {
 
 	// if we have indices, we are basically rerunning the computation with a
@@ -588,7 +596,7 @@ void IR::OptimizeKernelLoadOperations() {
 
 
 			Tensors indices_tensors = Tensors();
-			indices_tensors.resize(indices.size());	
+			indices_tensors.resize(indices.size());
 			for (auto& [index, node] : indices) {
 				indices_tensors[index] = node->GetTensor();
 			}
@@ -808,7 +816,7 @@ Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float
 #define ApplyOP(v1, v2, op) ApplyMultiOP(v1, v2, [](float a, float b) { return a op b; }, [](int a, int b) { return a op b; }, [](uint a, uint b) { return a op b; })
 #define ApplyFUNC(v1, v2, func) ApplyMultiOP(v1, v2, [](float a, float b) { return func(a, b); }, [](int a, int b) { return func(a, b); }, [](uint a, uint b) { return func(a, b); })
 
-void IR::OptimizeOperations() 
+void IR::OptimizeOperations()
 {
 	for (auto node = begin(); !node.end(); node.next()) {
 		//get node operation
@@ -883,7 +891,7 @@ void IR::OptimizeOperations()
 					result = inputs[0];
 				}
 
-				// if all are constants, replace with result	
+				// if all are constants, replace with result
 				if (isConstant(inputs[0]) && isConstant(inputs[1])) {
 					// compute result
 					result = ApplyOP(inputs[0], inputs[1], /);
@@ -921,7 +929,7 @@ void IR::RemoveUnusedOperations() {
 	// use depth first search to find all nodes that are used for the output nodes
 	unordered_set<Node*> used_nodes;
 
-	std::function<void(Node*)> dfs = [&](Node* node) 
+	std::function<void(Node*)> dfs = [&](Node* node)
 	{
 		if (used_nodes.contains(node)) {
 			return;
@@ -1444,7 +1452,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 		block_index = &kernel_->GetTensor()->BlockIndex();
 
 		switch (dims)
-		{ 
+		{
 			case 1:
 				kernel_->group_size = {256};
 				break;
@@ -1554,7 +1562,7 @@ void IR::FinalizeMemoryIndexing() {
 	//now compute address for all nodes that are not in a kernel
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpClass::MemoryOp)) {
-			ExecuteExpressionBefore(node.get(), [&]() { 
+			ExecuteExpressionBefore(node.get(), [&]() {
 				vector<Tensor*> indices = {};
 				ComputeAddress(node.get(), indices);
 			});
@@ -2101,6 +2109,9 @@ public:
 	TensorVec(Tensor& arg) : vector<Tensor*>({ &arg }) {}
 
 	TensorVec(const Tensor& arg) : vector<Tensor*>({ const_cast<Tensor*>(&arg) }) {}
+
+	//default constructor
+	TensorVec() : vector<Tensor*>() {}
 };
 
 map<string, function<TensorVec(TensorVec, Tensor&, Tensor&)>> gradient_functions =
@@ -2153,10 +2164,59 @@ map<string, function<TensorVec(TensorVec, Tensor&, Tensor&)>> gradient_functions
 		return TensorVec(unsq_grad * in[1], unsq_grad * in[0]);
 	}},
 	{"unsqueeze", [](TensorVec in, Tensor& out, Tensor& grad) {
-		return TensorVec(Tensor::Sum(grad, out.data[0]));
+		return TensorVec(Tensor::Sqeeze(grad, out.data[0]));
 	}},
-	{"sum", [](TensorVec in, Tensor& out, Tensor& grad) {
+	{"dim_sum", [](TensorVec in, Tensor& out, Tensor& grad) {
 		return TensorVec(Tensor::Unsqueeze(grad, out.data[0]));
+	}},
+	{"dim_norm", [](TensorVec in, Tensor& out, Tensor& grad) {
+		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.data[0]);
+		return TensorVec((unsq_grad/out) * in[0]);
+	}},
+	{"dim_max", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.data[0]));
+	}},
+	{"dim_min", [](TensorVec in, Tensor& out, Tensor& grad) {
+		return TensorVec(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.data[0]));
+	}},
+
+
+	//memory operations
+	{"load", [](TensorVec in, Tensor& out, Tensor& grad) {
+		//derivative of load is scatter gradient to the load memory addresses
+		// Node* out_node = out.node_;
+		// const Tensor* memory_input = out_node->GetArguments(ArgType::Memory)[0].from_->get()->GetTensor();
+		// auto indices = out_node->GetArgumentTensors(ArgType::Index);
+		// Tensors tensor_indices = Tensors();
+		// for (auto index : indices) {
+		// 	tensor_indices.push_back(index.second);
+		// }
+		//
+		// Tensor& newGrad = Tensor::Constant(memory_input->GetShape(), 0.0f);
+		// Tensor::ScatterAdd(newGrad, grad, tensor_indices);
+		return TensorVec();
+	}},
+	{"store", [](TensorVec in, Tensor& out, Tensor& grad) {
+		//derivative of store is load gradient at the store memory addresses
+		// Node* out_node = out.node_;
+		// const Tensor* memory_input = out_node->GetArguments(ArgType::Memory)[0].from_->get()->GetTensor();
+		// auto indices = out_node->GetArgumentTensors(ArgType::Index);
+		// Tensors tensor_indices = Tensors();
+		// for (auto index : indices) {
+		// 	tensor_indices.push_back(index.second);
+		// }
+		return TensorVec();
+	}},
+	{"InterlockedAdd", [](TensorVec in, Tensor& out, Tensor& grad) {
+		//derivative of scatter_add is load gradient at the scatter memory addresses
+		// Node* out_node = out.node_;
+		// const Tensor* memory_input = out_node->GetArguments(ArgType::Memory)[0].from_->get()->GetTensor();
+		// auto indices = out_node->GetArgumentTensors(ArgType::Index);
+		// Tensors tensor_indices = Tensors();
+		// for (auto index : indices) {
+		// 	tensor_indices.push_back(index.second);
+		// }
+		return TensorVec();
 	}},
 };
 
@@ -2166,12 +2226,11 @@ TensorVec ComputeNodeGradients(Node* value, Tensor* grad)
 	if (!gradient_functions.contains(op_name)) {
 		throw std::runtime_error("Cannot compute gradient for operation " + op_name);
 	}
+	TensorVec in = TensorVec();
 
+	//add input arguments
 	map<int, const Tensor*> inputs = value->GetArgumentTensors(ArgType::Input);
-	TensorVec in = TensorVec(*inputs[0]);
-
-	//add rest of the inputs
-	for (int i = 1; i < inputs.size(); i++) {
+	for (int i = 0; i < inputs.size(); i++) {
 		in.push_back(const_cast<Tensor*>(inputs[i]));
 	}
 
@@ -2179,6 +2238,50 @@ TensorVec ComputeNodeGradients(Node* value, Tensor* grad)
 	TensorVec grads = gradient_functions[op_name](in, out, *grad);
 
 	return grads;
+}
+
+Tensor& ReduceGradientToShape(Tensor& gradient, const Tensor& target) {
+	ShapeCompareResult shape_result = CompareShape(gradient.node_, target.node_);
+	if (!shape_result.compatible) {
+		throw std::runtime_error("Autodiff: gradient shape not compatible with target tensor");
+	}
+
+	if(!shape_result.broadcast) {
+		return gradient;
+	}
+
+	int dim = shape_result.broadcast_dim;
+	ShapeInfo gradinfo = gradient.GetShapeInfo();
+	ShapeInfo targetinfo = target.GetShapeInfo();
+
+	gradinfo.ExpandDimensions(dim);
+	targetinfo.ExpandDimensions(dim);
+
+	Tensors grad_shape = gradinfo.GetTensors();
+	Tensors target_shape = targetinfo.GetTensors();
+
+	vector<int> axes_to_reduce;
+	vector<bool> unsqueeze;
+	for(int i = 0; i < dim; i++) {
+		int val_a = grad_shape[i]->TryGetConstant();
+		int val_b = target_shape[i]->TryGetConstant();
+		if(val_a != val_b && val_b == 1) { //if the target has a dimension of 1, and the gradient has a different dimension, then reduce
+			axes_to_reduce.push_back(i);
+			bool should_unsqueeze = i >= (dim - target.GetDimension());
+			unsqueeze.push_back(should_unsqueeze);
+		}
+	}
+
+	Tensor* reduced = &gradient;
+	//go in inverse order to keep the dimensions in the same order
+	for(int i = (int)axes_to_reduce.size() - 1; i >= 0; i--) {
+		reduced = &Tensor::Sum(*reduced, axes_to_reduce[i]);
+		if(unsqueeze[i]) {
+			reduced = &Tensor::Unsqueeze(*reduced, axes_to_reduce[i]);
+		}
+	}
+
+	return *reduced;
 }
 
 void IR::ComputeAutodiff()
@@ -2206,48 +2309,67 @@ void IR::ComputeAutodiff()
 	for (auto loss : loss_nodes) {
 		set<Node*> visited;
 		map<Node*, Tensor*> node_to_grad;
-		queue<Node*> queue;
 
-		queue.push(loss);
-		node_to_grad[loss] = &Tensor::Constant(1.0f);
+		//node comparator for priority queue
+		auto comparator = [&](Node* a, Node* b) {
+			return a->index_ < b->index_;
+		};
 
-		while (!queue.empty()) {
-			Node* node = queue.front();
-			queue.pop();
+		//priority queue for topological sorting
+		priority_queue<Node*, vector<Node*>, decltype(comparator)> queue(comparator);
 
-			if (visited.contains(node)) {
-				continue;
-			}
+		ExecuteExpressionAfter(loss, [&]() {
+			queue.push(loss);
+			node_to_grad[loss] = &Tensor::Constant(1.0f);
 
-			if (node->op->HasAllTypes(OpClass::Nondiff)) {
+			while (!queue.empty()) {
+				Node* node = queue.top();
+				queue.pop();
+
+				if (visited.contains(node)) {
+					continue;
+				}
+
+				if (node->op->HasAllTypes(OpClass::Nondiff)) {
+					visited.insert(node);
+					continue;
+				}
+
 				visited.insert(node);
-				continue;
-			}
 
-			visited.insert(node);
+				Tensor* grad = node_to_grad[node];
 
-			Tensor* grad = node_to_grad[node];
-			TensorVec grads = ComputeNodeGradients(node, grad);
+				TensorVec grads = ComputeNodeGradients(node, grad);
 
-			for (int i = 0; i < grads.size(); i++) {
-				Arg arg = node->GetArguments(ArgType::Input)[i];
-				Node* input = arg.from_->get();
-				int index = arg.index_;
-				Tensor* cur_grad = &grads[index];
+				for (int i = 0; i < grads.size(); i++) {
+					Arg arg = node->GetArguments(ArgType::Input)[i];
+					Node* input = arg.from_->get();
+					int index = arg.index_;
+					Tensor* cur_grad = &grads[index];
 
-				if (!node_to_grad.contains(input)) {
-					node_to_grad[input] = cur_grad;
-				} else {
-					node_to_grad[input] = &(*node_to_grad[input] + *cur_grad);
+					cur_grad = &ReduceGradientToShape(*cur_grad, *input->GetTensor());
+
+					if (!node_to_grad.contains(input)) {
+						node_to_grad[input] = cur_grad;
+					} else {
+						node_to_grad[input] = &(*node_to_grad[input] + *cur_grad);
+					}
+
+					if(input->debug_name != "") {
+						cur_grad->SetDebugName("d" + loss->debug_name + "_d" + input->debug_name);
+					} else {
+						cur_grad->SetDebugName("d" + loss->debug_name + "_d" + input->var_name);
+					}
+
+
+					if (visited.contains(input)) {
+						throw std::runtime_error("Not topologically sorted");
+					}
+
+					queue.push(input);
 				}
-
-				if (visited.contains(input)) {
-					throw std::runtime_error("Not topologically sorted");
-				}
-
-				queue.push(input);
 			}
-		}
+		});
 
 		for (auto wrt_grad : loss_wrt_grad) {
 			if (wrt_grad.first.first != loss) {

@@ -165,6 +165,14 @@ public:
 	}
 };
 
+enum class NodeFlag {
+	HasBeenModified,
+	IsStatic,
+	OutputMemory,
+	InputMemory,
+	KeepDims,
+};
+
 class Node {
  public:
 	int index_ = -1;
@@ -188,6 +196,22 @@ class Node {
 	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
 	int special_index_ = 0;
+
+	unordered_map<NodeFlag, int> flags_;
+
+	void AddFlag(NodeFlag flag, int value = 1) {
+		flags_[flag] = value;
+	}
+
+	template<typename ...Args>
+	bool HasAllFlags(Args... args) {
+		for (auto flag : {args...}) {
+			if (!flags_.contains(flag)) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	bool has_been_modified_ = false;
 	bool is_static = false;
@@ -710,6 +734,7 @@ class ShapeInfo {
 struct ShapeCompareResult {
 	bool compatible;
 	ShapeInfo broadcast_shape;
+	bool broadcast;
 	int broadcast_dim;
 	int a_dim;
 	int b_dim;
@@ -719,6 +744,7 @@ struct ShapeCompareResult {
 struct ShapeDimCompareResult {
 	bool compatible;
 	Node* broadcast_dim;
+	bool broadcast;
 	int a_dim;
 	int b_dim;
 };
