@@ -67,17 +67,18 @@ def settest():
     b = tf.input([1], tf.float32)
 
     c = tf.const(0.0)
+    t = tf.const(0.0)
     c.set(a)
     c.val += b
     c.val += 1.0
     with tf.loop(10):
         c.val += a
-
+    t.val = c
     c.val += 2.0
 
     with tf.loop(10):
         c.val += b
 
-    return [c]
+    return [c, t]
 
 test = tf.compile(settest)

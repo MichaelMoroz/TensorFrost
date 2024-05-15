@@ -301,6 +301,7 @@ protected:
 					break;
 				case OpClass::Copy:
 					line += args.Name(ArgType::Input, 0);
+				    needs_paranthesis = true;
 					break;
 				case OpClass::Keyword:
 					line += op->code_;

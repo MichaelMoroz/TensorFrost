@@ -1154,7 +1154,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			Node* mem;
 			// add memory node before this kernel
 			ExecuteExpressionBefore(kernel, [&]() {
-				mem = Tensor::Memory(output->GetArguments(ArgType::Shape), output->tensor_->type).node_;
+				mem = Tensor::Memory(kernel->GetArguments(ArgType::Shape), output->tensor_->type).node_;
 				mem->debug_name = output->debug_name;
 
 				if (output->memory_type_ == MemoryType::Output) {
@@ -2089,7 +2089,7 @@ void IR::TryReplaceModificationsWithVersions()
 		//if this node has the same parent as the memory node, then it can be replaced with a version
 		if (memory_node->parent == set_node->parent) {
 			//replace the set node with the memory node
-			ExecuteExpressionAfter(input_value, [&]() {
+			ExecuteExpressionAfter(set_node, [&]() {
 				Tensor& copied = Tensor::copy(*input_value->GetTensor());
 				Node* copynode = copied.node_;
 				memory_node->MakeOutputsUseGivenNode(copynode, set_node->index_, true);
@@ -2439,13 +2439,13 @@ void IR::CompileIR()
 	//CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
-	//ComputeAutodiff();
-	//RemoveUnusedOperations();
+	ComputeAutodiff();
+	RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
 	InsertAlgorithmicPrimitives();
 	CheckIR("Insert Algorithmic Primitives", false, false);
-	//UnrollLoops();
-	//TryReplaceModificationsWithVersions();
+	UnrollLoops();
+	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", false, false);
 	SeparateOperationsIntoKernels();
