@@ -128,6 +128,10 @@ public:
 		}
 	}
 
+	const Tensor *GetTensor(ArgType type, int index = 0);
+
+	const Tensor& operator[](int index);
+
 	DataType Type(ArgType type, int index = 0) {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_types_.find(id);

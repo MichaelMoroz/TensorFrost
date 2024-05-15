@@ -8,6 +8,14 @@ int MaxIndexCount(ArgMap& map) {
 	return map.rbegin()->first + 1;
 }
 
+const Tensor *ArgumentManager::GetTensor(ArgType type, int index) {
+	return Get(type, index)->GetTensor();
+}
+
+const Tensor & ArgumentManager::operator[](int index) {
+	return *GetTensor(ArgType::Input, index);
+}
+
 void SwapLables(Node* a, Node* b) {
 	// first swap the node addresses
 	a->lable_->node_ = b;
