@@ -330,9 +330,12 @@ class Node {
 	/// </summary>
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
-	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1) {
+	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1, bool make_modified = false) {
 		for (Arg* output : outputs_) {
 			if (output->to_->get()->index_ >= min_index) {
+				if(make_modified) {
+					replacement->has_been_modified_ = true;
+				}
 				output->from_ = replacement->GetLable();
 			}
 		}

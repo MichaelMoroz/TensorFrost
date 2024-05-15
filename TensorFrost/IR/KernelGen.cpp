@@ -20,6 +20,19 @@ ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_mat
 	if (a_node->name == "const") result.a_dim = a_node->GetTensor()->data[0];
 	if (b_node->name == "const") result.b_dim = b_node->GetTensor()->data[0];
 
+	// if one of the nodes is a constant = 1, then it is a broadcast
+	if ((result.a_dim == 1 || result.b_dim == 1) && !(result.a_dim == 1 && result.b_dim == 1) && !exact_match) {
+		result.compatible = true;
+		result.broadcast = true;
+		if (result.a_dim == 1) {
+			result.broadcast_dim = b_node;
+			return result;
+		} else {
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
 	// if a and b are constants, then compare their values
 	if (result.a_dim != -1 && result.b_dim != -1) {
 		if (result.a_dim != result.b_dim) {
@@ -27,19 +40,6 @@ ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_mat
 			return result;
 		} else {
 			result.compatible = true;
-			result.broadcast_dim = a_node;
-			return result;
-		}
-	}
-
-	// if one of the nodes is a constant = 1, then it is a broadcast
-	if ((result.a_dim == 1 || result.b_dim == 1) && !exact_match) {
-		result.compatible = true;
-		result.broadcast = true;
-		if (result.a_dim == 1) {
-			result.broadcast_dim = b_node;
-			return result;
-		} else {
 			result.broadcast_dim = a_node;
 			return result;
 		}
@@ -1753,10 +1753,8 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	ShapeInfo shapeinfo = array->GetShapeInfo();
 	int old_dim = shapeinfo.dim;
 	Tensors perm_shape = Tensors();
-	int permuted_dim = 0;
-	for(auto perm: permutation) {
-		permuted_dim = max(permuted_dim, perm.second+1);
-	}
+	int permuted_dim = (int)permutation.size();
+
 	shapeinfo.ExpandDimensions(permuted_dim);
 	Tensors shape = shapeinfo.GetTensors();
 
@@ -1770,10 +1768,20 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 		indices.push_back(&Tensor::Index(perm_shape, i));
 	}
 	//permute indices to load the values
-	Tensors perm_indices = Tensors();
-	for (int i = 0; i < old_dim; i++) {
-		perm_indices.push_back(indices[permutation[permuted_dim - old_dim + i]]);
+	Tensors perm_indices = Tensors(old_dim, nullptr);
+	for (int i = 0; i < permuted_dim; i++) {
+		int old = permutation[i] - std::max(permuted_dim - old_dim, 0);
+		if(old >= 0) {
+			perm_indices[old] = indices[i];
+		}
 	}
+	//if any nullptr, then put a constant 0
+	for (int i = 0; i < old_dim; i++) {
+		if(perm_indices[i] == nullptr) {
+			perm_indices[i] = &Tensor::Constant(0);
+		}
+	}
+
 	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
 	loaded.SetDebugName("transposed");
 	return &loaded;
@@ -1914,6 +1922,7 @@ void IR::InsertAlgorithmicPrimitives() {
 			} else if (node->name == "transpose") {
 				//get the permutation
 				int dim = (int)inputs[0]->GetDimension();
+				dim = std::max(dim, std::max(axes[0], axes[1]) + 1);
 				map<int, int> permutation;
 				for (int i = 0; i < dim; i++) {
 					if(i == axes[0]) {
@@ -1931,7 +1940,8 @@ void IR::InsertAlgorithmicPrimitives() {
 				result = ComputeMatMul(inputs[0], inputs[1]);
 			} else if (node->name == "unsqueeze") {
 				map<int, int> permutation;
-				int dim = (int)inputs[0]->GetDimension() + 1;
+				int dim = (int)inputs[0]->GetDimension()+1;
+				dim = std::max(dim, axes[0] + 1);
 				for(int i = 0; i < dim; i++) {
 					if(i == axes[0]) {
 						permutation[i] = 0;
@@ -2079,12 +2089,16 @@ void IR::TryReplaceModificationsWithVersions()
 		//if this node has the same parent as the memory node, then it can be replaced with a version
 		if (memory_node->parent == set_node->parent) {
 			//replace the set node with the memory node
-			memory_node->MakeOutputsUseGivenNode(input_value, set_node->index_);
-			input_value->memory_type_ = memory_node->memory_type_;
-			input_value->special_index_ = memory_node->special_index_;
-			input_value->debug_name = memory_node->debug_name;
-			memory_node->memory_type_ = MemoryType::None;
-			nodes_to_remove.insert(set_node);
+			ExecuteExpressionAfter(input_value, [&]() {
+				Tensor& copied = Tensor::copy(*input_value->GetTensor());
+				Node* copynode = copied.node_;
+				memory_node->MakeOutputsUseGivenNode(copynode, set_node->index_, true);
+				copynode->memory_type_ = memory_node->memory_type_;
+				copynode->special_index_ = memory_node->special_index_;
+				copynode->debug_name = memory_node->debug_name;
+				memory_node->memory_type_ = MemoryType::None;
+				nodes_to_remove.insert(set_node);
+			});
 		}	
 
 		UpdateGraph();
@@ -2425,13 +2439,13 @@ void IR::CompileIR()
 	//CheckIR("Optimize operations", false, false);
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
-	ComputeAutodiff();
-	RemoveUnusedOperations();
+	//ComputeAutodiff();
+	//RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
 	InsertAlgorithmicPrimitives();
 	CheckIR("Insert Algorithmic Primitives", false, false);
-	UnrollLoops();
-	TryReplaceModificationsWithVersions();
+	//UnrollLoops();
+	//TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", false, false);
 	SeparateOperationsIntoKernels();
