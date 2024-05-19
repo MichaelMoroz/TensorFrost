@@ -1,5 +1,5 @@
-# 🔢🥶 TensorFrost (v0.4.0)
-Yet another Python tensor library with autodifferentiation (TODO). Currently very much a work in progress.
+# 🔢🥶 TensorFrost (v0.5.0 beta)
+A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
 
 Currently working platforms:
 | Backend/OS | CPU | OpenGL | CUDA | Vulkan |
@@ -424,11 +424,28 @@ while not tf.window_should_close(): #window will close if you press the close bu
 
 ### Autodifferentiation
 
-TODO
+Currently only backward mode autodifferentiation is supported, with the exception of scoped operations (loops, conditionals, etc.).
 
-### Advanced usage
+```python
+y_pred = x @ W + b
+loss = tf.sum((y - y_pred)**2)
+dW = tf.grad(loss, W)
+db = tf.grad(loss, b)
+```
+In this example, the `grad` function is used to compute the gradients of the loss with respect to the weights `W` and the bias `b`. If the gradient is taken from the same "loss" tensor, the compiler will still only do one backward pass. At the moment doing gradients from gradients might not work correctly.
 
-TODO
+Additionally, if the loss is not a scalar, the initial gradient tensor will be assumed to be the same shape as the loss tensor and equal to 1.0. For most cases this is quite useful, as you can compute the gradients of multiple outputs at the same time, as long as they are not dependent on each other. Like doing a gradient of a potential for N particles at the same time.
+
+```python
+dx = x1 - x2
+dist = tf.sqrt(tf.sum(dx**2))
+pot = 1.0 / dist
+force = - tf.grad(pot, dx)
+```
+
+In this example, the `grad` function is used to compute the gradient of the potential with respect to the distance between two particles. The force is then computed as the negative gradient of the potential with respect to the distance.
+
+Giving a custom gradient tensor is not supported yet, but it is planned for the future.
 
 ## Roadmap 
 
@@ -437,7 +454,9 @@ Core features:
 - [x] Basic kernel fusion and compilation
 - [x] Advanced built-in functions (random, special functions, etc.)
 - [x] Advanced operations (loops, conditionals, etc.)
-- [ ] Autodifferentiation
+- [x] Backward mode autodifferentiation
+- [ ] Forward mode autodifferentiation
+- [ ] Gradients of control flow operations and gradients from gradients
 - [ ] Kernel code and execution graph export and editing
 - [ ] Advanced data types and quantization
 - [ ] Compile from Python AST instead of tracing
