@@ -103,21 +103,15 @@ class OpenGLKernelManager : public KernelManager {
 		// Get memory
 		OpenGLMemoryManager* memory_manager =
 		    (OpenGLMemoryManager*)global_memory_manager;
-		GLuint memory_ssbo = memory_manager->memory;
-
-		// Bind the memory buffer to the shader
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, memory_ssbo);
 
 		// Set uniforms
 		if (info.tensor_count == 0) throw std::runtime_error("No tensors provided to kernel");
 
-		// Set offsets uniform array
-		std::vector<int> offsets;
-		offsets.resize(32);
-		for (int i = 0; i < (int)info.tensor_count; i++) {
-			offsets[i] = info.tensors[i].offset;
+		//bind all memory buffers
+		for (uint i = 0; i < info.tensor_count; i++) {
+			GLuint buffer = memory_manager->GetBufferAtOffset(info.tensors[i].offset);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffer);
 		}
-		glUniform1iv(getUniformLocation(program, "off"), info.tensor_count, offsets.data());
 
 		if (info.variable_count > 0)
 		{

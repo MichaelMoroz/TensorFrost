@@ -204,14 +204,13 @@ protected:
 			string address;
 
 			if (is_kernel) {
-				address = GetName("off") + "[" +
-				          to_string(offsets[args.Get(ArgType::Memory)]) + "]";
+				address = "0";
 				// if has index (not a scalar)
 				if (args.Has(ArgType::Index)) {
-					address += " + " + args.Name(ArgType::Index);
+					address = args.Name(ArgType::Index);
 				}
 
-				string memory_expression = GetName("mem") + "[" + address + "]";
+				string memory_expression = args.Name(ArgType::Memory) + "_mem[" + address + "]";
 				if (op->name_ == "load") {
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
@@ -235,7 +234,7 @@ protected:
 					string input_type_name = type_names[args.Type(ArgType::Input)];
 					expression += GenerateAtomicOp(op->name_, input_type_name,
 					                               output_type_name, address,
-					                               args.Name(ArgType::Input), name);
+					                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
 					right += "; // " + args.Name(ArgType::Memory);
 				}
 			} else {
@@ -375,7 +374,7 @@ protected:
 	virtual string GenerateAtomicOp(const string& op,
 	                                const string& input_type_name,
 	                                const string& output_type_name,
-	                                const string& address, const string& input, const string& output)
+	                                const string& address, const string& input, const string& output, const string& memory_name)
 	{
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}

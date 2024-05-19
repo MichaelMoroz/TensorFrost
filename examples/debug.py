@@ -82,16 +82,21 @@ tf.initialize(tf.opengl)
 #
 # test = tf.compile(settest)
 
-def memorygrad():
+def test():
     a = tf.input([256])
-    id = tf.input([64], tf.int32)
+    b = tf.input([256])
 
-    b = tf.sin(a[id])
-    b = b + tf.cos(a[id + 1])
-    b[id] = a[id] + 1.0
-    tf.scatterAdd(b[id/2], tf.sin(b[id]))
-    c = tf.grad(b, a)
+    c = a + b
 
     return [c]
 
-grad = tf.compile(memorygrad)
+grad = tf.compile(test)
+
+anp = np.random.rand(256).astype(np.float32)
+bnp = np.random.rand(256).astype(np.float32)
+a = tf.tensor(anp)
+b = tf.tensor(bnp)
+
+c, = grad(a, b)
+
+print(c.numpy - (anp + bnp))

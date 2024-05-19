@@ -78,8 +78,11 @@ class TensorMemoryManager {
 	virtual uint ReadbackValue(const TensorMemory* memory, uint index) = 0;
 	virtual void Writeback(const TensorMemory* memory, const vector<uint>& data) = 0;
 	virtual void WritebackValue(const TensorMemory* memory, uint index, uint value) = 0;
-	
+
+	virtual void FreeBuff(TensorMemory* memory) {}
+
 	void Free(TensorMemory* memory) {
+		FreeBuff(memory);
 		Frame* frame = memory->frame;
 		allocator.FreeFrame(*frame);
 		allocated_by_offset.erase(frame->start);
