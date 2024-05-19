@@ -23,13 +23,13 @@ class GLSLGenerator : public CodeGenerator {
 		if (op == "InterlockedAdd") {
 			if(input_type_name == "float")
 			{
-				return "atomicAdd(" + address + ", " + input + ")";
+				return "atomicAddF(" + address + ", " + input + ")";
 			}
 			return "atomicAdd(mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
-				return  output_type_name + "(atomicAdd(" + address + ", " + input +"))";
+				return  output_type_name + "(atomicAddF(" + address + ", " + input +"))";
 			}
 			return output_type_name + "(atomicAdd(mem[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
@@ -102,7 +102,7 @@ layout(std430, binding = 0) buffer memory {
   uint mem[];
 };
 
-float atomicAdd(int index, float val)
+float atomicAddF(int index, float val)
 {
     uint uval = floatBitsToUint(val);
     uint tmp0 = 0;

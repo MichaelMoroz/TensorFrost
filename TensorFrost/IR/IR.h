@@ -928,6 +928,9 @@ public:
 	void OptimizeHost();
 	void OptimizeOperations();
 	void OptimizeKernelLoadOperations();
+
+	unordered_set<Node *> GetDependencies(unordered_set<Node *> nodes);
+
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
 	void UnrollLoops();

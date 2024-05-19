@@ -82,13 +82,16 @@ tf.initialize(tf.opengl)
 #
 # test = tf.compile(settest)
 
-def loadgrad():
+def memorygrad():
     a = tf.input([256])
     id = tf.input([64], tf.int32)
 
     b = tf.sin(a[id])
+    b = b + tf.cos(a[id + 1])
+    b[id] = a[id] + 1.0
+    tf.scatterAdd(b[id/2], tf.sin(b[id]))
     c = tf.grad(b, a)
 
     return [c]
 
-grad = tf.compile(loadgrad)
+grad = tf.compile(memorygrad)

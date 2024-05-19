@@ -61,6 +61,8 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 		return arg_type == ArgType::Memory;
 	}
 
+	//if the input is a load
+
 	// shape should not be inside kernels
 	if (arg_type == ArgType::Shape) {
 		return true;
