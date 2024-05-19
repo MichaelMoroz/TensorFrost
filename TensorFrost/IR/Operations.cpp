@@ -128,7 +128,7 @@ const vector<Operation> operations = {
     Operation("min", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("max", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("abs", {"f_f", "u_u", "i_i"}, 1),
-    Operation("sign", {"f_f", "u_u", "i_i"}, 1),
+    Operation("sign", {"f_f", "i_i"}, 1),
     Operation("ceil", {"f_f"}, 1),
     Operation("floor", {"f_f"}, 1),
     Operation("round", {"f_f"}, 1),

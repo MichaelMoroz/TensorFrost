@@ -2380,6 +2380,11 @@ map<string, function<void(ArgumentManager, Tensor&, Tensor&, NodeGrads&)>> gradi
 		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
 		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
 	}},
+	{"set", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		//derivative of set is the gradient of the setted value to the input
+		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
+		grads.Add(ArgType::Input, 0, memory_grad);
+	}},
 };
 
 void ComputeNodeGradients(Node* value, Tensor* grad, NodeGrads& grads)
@@ -2464,9 +2469,10 @@ void IR::ComputeAutodiff()
 					Tensor& new_grad = *grads.GetGrad(arg.type_, arg.index_);
 					node_to_grad[input] = &new_grad;
 
+					//TODO: maybe add a function to get temp names
 					if(input->debug_name != "") {
 						new_grad.SetDebugName("d" + loss_value->debug_name + "_d" + input->debug_name);
-					} else {
+					} else if(input->var_name != "") {
 						new_grad.SetDebugName("d" + loss_value->debug_name + "_d" + input->var_name);
 					}
 				}

@@ -180,7 +180,7 @@ enum class NodeFlag {
 class Node {
  public:
 	int index_ = -1;
-	string var_name = "none";
+	string var_name = "";
 	string debug_name;
 	string name;
 	float cost_ = -1.0f;
