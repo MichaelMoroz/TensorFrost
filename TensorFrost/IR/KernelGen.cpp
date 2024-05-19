@@ -2274,10 +2274,43 @@ map<string, function<void(ArgumentManager, Tensor&, Tensor&, NodeGrads&)>> gradi
 	{"min", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f))); }},
 	{"pow", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] * Tensor::pow(in[0], in[1] - Tensor::Constant(1.0f)), grad * Tensor::log(in[0]) * out); }},
 	{"tanh", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * (Tensor::Constant(1.0f) - out * out)); }},
-	{"sigmoid", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * out * (Tensor::Constant(1.0f) - out)); }},
-	{"clamp", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] < in[1], Tensor::Constant(0.0f), Tensor::select(in[0] > in[2], Tensor::Constant(0.0f), grad))); }},
-	{"select", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
+	{"clamp", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		//clamp = min(max(x, min), max)
+		Tensor& dc_dx = Tensor::select((in[0] < in[1]) || (in[0] > in[2]), Tensor::Constant(0.0f), grad);
+		Tensor& dc_dmin = Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f));
+		Tensor& dc_dmax = Tensor::select(in[0] > in[2], grad, Tensor::Constant(0.0f));
+		grads.Add(dc_dx, dc_dmin, dc_dmax);
+	}},
+	{"ternary", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
 	{"lerp", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
+	{"smoothstep", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		//smoothstep equation:
+		//t = (x - e0) / (e1 - e0)
+		//tc = clamp(t, 0.0, 1.0);
+		//r = tc * tc * (3 - 2 * tc);
+		//derivative of smoothstep:
+		//dr/dx = dr/dtc * dtc/dt * dt/dx
+		//dr/dtc = 6 * tc * (tc - 1)
+		//dtc/dt = select((t < e0) || (t > e1), 0.0, 1.0)
+		//dt/dx = 1 / (e1 - e0)
+		//dt/dedge0 = (x - e1) / (e1 - e0)^2
+		//dt/dedge1 = (e0 - x) / (e1 - e0)^2
+		const Tensor& e0 = in[0];
+		const Tensor& e1 = in[1];
+		const Tensor& x = in[2];
+		const Tensor& t = (x - e0) / (e1 - e0);
+		const Tensor& tc = Tensor::clamp(t, Tensor::Constant(0.0f), Tensor::Constant(1.0f));
+		const Tensor& dr_dtc = Tensor::Constant(6.0f) * tc * (tc - Tensor::Constant(1.0f));
+		const Tensor& dtc_dt = Tensor::select((t < e0) || (t > e1), Tensor::Constant(0.0f), Tensor::Constant(1.0f));
+		const Tensor& grad_dt = grad * dr_dtc * dtc_dt;
+		const Tensor& dt_dx = Tensor::Constant(1.0f) / (e1 - e0);
+		const Tensor& dt_de0 = (x - e1) * (dt_dx * dt_dx);
+		const Tensor& dt_de1 = (e0 - x) * (dt_dx * dt_dx);
+		grads.Add( grad_dt * dt_de0, grad_dt * dt_de1, grad_dt * dt_dx);
+	}},
+	{"step", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::Constant(0.0f)); }},
+	{"modf", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad, Tensor::Constant(0.0f)); }},
+	{"fma", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(in[1] * grad, in[0] * grad, grad); }},
 
 	//matrix operations
 	{"matmul", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
@@ -2297,8 +2330,8 @@ map<string, function<void(ArgumentManager, Tensor&, Tensor&, NodeGrads&)>> gradi
 		grads.Add(Tensor::Unsqueeze(grad, out.data[0]));
 	}},
 	{"dim_norm", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.data[0]);
-		grads.Add((unsq_grad/out) * in[0]);
+		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.data[0]);
+		grads.Add(unsq * in[0]);
 	}},
 	{"dim_max", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.data[0]));
@@ -2332,7 +2365,7 @@ map<string, function<void(ArgumentManager, Tensor&, Tensor&, NodeGrads&)>> gradi
 		}
 
 		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, true));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
 	}},
 	{"InterlockedAdd", [](ArgumentManager in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		//derivative of scatter_add is load gradient at the scatter memory addresses
@@ -2345,7 +2378,7 @@ map<string, function<void(ArgumentManager, Tensor&, Tensor&, NodeGrads&)>> gradi
 		}
 
 		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, true));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
 	}},
 };
 
@@ -2372,6 +2405,7 @@ void IR::ComputeAutodiff()
 
 	set<Node*> loss_nodes;
 	map<pair<Node*, Node*>, Node*> loss_wrt_grad;
+	unordered_map<Node*, int> min_range; //index of earliest node required for the gradient, end of backpropagation
 
 	for (auto gradient : gradients) {
 		Arguments args = gradient->GetArguments(ArgType::Input);
@@ -2380,6 +2414,7 @@ void IR::ComputeAutodiff()
 		Node* last_loss_version = loss->GetLastVersion(gradient);
 
 		loss_nodes.insert(last_loss_version);
+		min_range[last_loss_version] = std::min(min_range[last_loss_version], wrt->index_);
 		loss_wrt_grad[{last_loss_version, wrt}] = gradient;
 	}
 
@@ -2393,7 +2428,8 @@ void IR::ComputeAutodiff()
 		//get all differentiable nodes that can change the loss
 		vector<Node*> queue;
 		for (auto dep : loss_deps) {
-			if(dep->index_ <= loss->index_ && !dep->op->HasAllTypes(OpClass::Nondiff) && (dep->GetTensor()->type == DataType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
+			bool in_range = (dep->index_ <= loss->index_ && dep->index_ >= min_range[loss]);
+			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) && (dep->GetTensor()->type == DataType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
 				queue.push_back(dep);
 			}
 		}
@@ -2444,7 +2480,7 @@ void IR::ComputeAutodiff()
 
 			Node* grad = wrt_grad.second;
 			if(!node_to_grad.contains(wrt_grad.first.second)) {
-				throw std::runtime_error("Gradient not computed for " + wrt_grad.first.second->debug_name);
+				throw std::runtime_error("Gradient not computed for " + wrt_grad.first.second->var_name);
 			}
 			Node* computed_grad = node_to_grad[wrt_grad.first.second]->node_;
 			grad_to_computed_grad[grad] = computed_grad;
@@ -2489,6 +2525,7 @@ void IR::CompileIR()
 	GetInputList();
 	OptimizeOperations();
 	//CheckIR("Optimize operations", false, false);
+	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 0", false, false);
 	ComputeAutodiff();
@@ -2510,7 +2547,7 @@ void IR::CompileIR()
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 5; i++) { //fusing kernels by loads (tensor product)
+	for (int i = 0; i < 8; i++) { //fusing kernels by loads (tensor product)
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();

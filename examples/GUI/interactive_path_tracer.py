@@ -330,11 +330,13 @@ def ray_marcher():
         #return fractal(p)
 
     def calcNormal(p, dx):
-        dx = tf.max(dx, 1e-4)
-        normal = (vec3(1.0, -1.0, -1.0) * map(p + vec3(1.0, -1.0, -1.0) * dx)[0] +
-                vec3(-1.0, -1.0, 1.0) * map(p + vec3(-1.0, -1.0, 1.0) * dx)[0] +
-                vec3(-1.0, 1.0, -1.0) * map(p + vec3(-1.0, 1.0, -1.0) * dx)[0] +
-                vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
+        # dx = tf.max(dx, 1e-4)
+        # normal = (vec3(1.0, -1.0, -1.0) * map(p + vec3(1.0, -1.0, -1.0) * dx)[0] +
+        #         vec3(-1.0, -1.0, 1.0) * map(p + vec3(-1.0, -1.0, 1.0) * dx)[0] +
+        #         vec3(-1.0, 1.0, -1.0) * map(p + vec3(-1.0, 1.0, -1.0) * dx)[0] +
+        #         vec3( 1.0,  1.0, 1.0) * map(p + vec3(1.0, 1.0, 1.0) * dx)[0])
+        sdf = map(p)[0]
+        normal = vec3(tf.grad(sdf, p.x), tf.grad(sdf, p.y), tf.grad(sdf, p.z))
         return normalize(normal)
                     
     def MarchRay(ro, rd, steps=1024):
@@ -458,7 +460,7 @@ def render_image(img, depth, envmap, camera, prev_camera, frame_id, params):
 
 tf.show_window(W, H, "Path Tracer")
 
-camera = Camera([0, 6.5, -5], axis_angle_quaternion([0, 0, 1], -np.pi/2))
+camera = Camera([0, -25, -7], axis_angle_quaternion([0, 0, 1], -np.pi/2))
 pmx, pmy = tf.get_mouse_position()
 
 angular_speed = 0.005
