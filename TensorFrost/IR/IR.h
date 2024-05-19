@@ -128,6 +128,10 @@ public:
 		}
 	}
 
+	const Tensor *GetTensor(ArgType type, int index = 0);
+
+	const Tensor& operator[](int index);
+
 	DataType Type(ArgType type, int index = 0) {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_types_.find(id);
@@ -165,10 +169,18 @@ public:
 	}
 };
 
+enum class NodeFlag {
+	HasBeenModified,
+	IsStatic,
+	OutputMemory,
+	InputMemory,
+	KeepDims,
+};
+
 class Node {
  public:
 	int index_ = -1;
-	string var_name = "none";
+	string var_name = "";
 	string debug_name;
 	string name;
 	float cost_ = -1.0f;
@@ -188,6 +200,22 @@ class Node {
 	vector<Arg*> outputs_;
 	MemoryType memory_type_ = MemoryType::None;
 	int special_index_ = 0;
+
+	unordered_map<NodeFlag, int> flags_;
+
+	void AddFlag(NodeFlag flag, int value = 1) {
+		flags_[flag] = value;
+	}
+
+	template<typename ...Args>
+	bool HasAllFlags(Args... args) {
+		for (auto flag : {args...}) {
+			if (!flags_.contains(flag)) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	bool has_been_modified_ = false;
 	bool is_static = false;
@@ -306,9 +334,12 @@ class Node {
 	/// </summary>
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
-	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1) {
+	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1, bool make_modified = false) {
 		for (Arg* output : outputs_) {
 			if (output->to_->get()->index_ >= min_index) {
+				if(make_modified) {
+					replacement->has_been_modified_ = true;
+				}
 				output->from_ = replacement->GetLable();
 			}
 		}
@@ -454,7 +485,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier)) {
+			if (output_node->op->HasAllTypes(OpClass::Modifier)) {
 				if (output_node->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
@@ -482,7 +513,7 @@ class Node {
 				continue;
 			}
 			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpType::Modifier) && !output_node->op->HasAllTypes(OpType::MemoryOp)) {
+			if (output_node->op->HasAllTypes(OpClass::Modifier) && !output_node->op->HasAllTypes(OpClass::MemoryOp)) {
 				if (output_node->index_ > last_index) {
 					last_index = output_node->index_;
 					final_version = output_node;
@@ -631,7 +662,7 @@ class NodeIterator {
 
 class ShapeInfo {
  public:
-	map<int, Node*> shape;
+	vector<Node*> shape;
 	int dim = 0;
 	string name;
 
@@ -655,38 +686,74 @@ class ShapeInfo {
 	                node->var_name != "" ? node->var_name : node->name) {}
 
 	void AddShape(int index, Node* node) {
+		if(shape.size() <= index) {
+			shape.resize(index + 1);
+		}
 		shape[index] = node;
 		dim = max(dim, index + 1);
 	}
 
+	bool CheckValidity(bool throw_error = false) const {
+		for (auto node : shape) {
+			if(node == nullptr) {
+				if (throw_error) {
+					throw std::runtime_error("Shape not fully defined");
+				}
+				return false;
+			}
+		}
+		return true;
+	}
+
 	Tensors GetTensors() const {
+		CheckValidity(true);
 		Tensors tensors = Tensors();
-		tensors.resize(dim);
-		for (auto& [index, node] : shape) {
-			tensors[index] = node->GetTensor();
+		for (auto node : shape) {
+			tensors.push_back(node->GetTensor());
 		}
 		return tensors;
 	}
 
 	Arguments GetArguments() const {
+		CheckValidity(true);
 		Arguments arguments;
-		for (auto& [index, node] : shape) {
-			arguments.emplace_back(ArgType::Shape, node->GetLable(), index);
+		for (int i = 0; i < shape.size(); i++) {
+			arguments.emplace_back(ArgType::Shape, shape[i]->GetLable(), i);
 		}
 		return arguments;
 	}
 
+	vector<int> GetShape(int default_value = 256) const;
+
 	static float GetSizeRatio(ShapeInfo& a, ShapeInfo& b);
+
+	void InsertDim(int index, Node* node) {
+		if (index >= shape.size()+1) {
+			shape.resize(index + 1);
+		}
+		shape.insert(shape.begin() + index, node);
+		dim++;
+	}
+
+	void ExpandDimensions(int new_dim);
 };
 
 struct ShapeCompareResult {
 	bool compatible;
-	bool is_broadcast;
 	ShapeInfo broadcast_shape;
+	bool broadcast;
 	int broadcast_dim;
 	int a_dim;
 	int b_dim;
 	int min_dim;
+};
+
+struct ShapeDimCompareResult {
+	bool compatible;
+	Node* broadcast_dim;
+	bool broadcast;
+	int a_dim;
+	int b_dim;
 };
 
 ShapeCompareResult CompareShape(const Node* a, const Node* b,
@@ -696,6 +763,8 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b,
 ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
                                 bool exact_match = false,
                                 bool throw_error = false);
+
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match = false);
 
 /// <summary>
 /// Class to select kernel scopes from the IR graph given the constraints and the root node
@@ -859,10 +928,14 @@ public:
 	void OptimizeHost();
 	void OptimizeOperations();
 	void OptimizeKernelLoadOperations();
+
+	unordered_set<Node *> GetDependencies(unordered_set<Node *> nodes);
+
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
 	void UnrollLoops();
 	void TryReplaceModificationsWithVersions();
+	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
@@ -918,7 +991,7 @@ public:
 			node->has_been_modified_ = false;
 			//go over all outputs and check if they are modifiers
 			for (auto& output : node->outputs_) {
-				if (output->to_->get()->op->HasAllTypes(OpType::Modifier) && output->type_ == ArgType::Memory) {
+				if (output->to_->get()->op->HasAllTypes(OpClass::Modifier) && output->type_ == ArgType::Memory) {
 					node->has_been_modified_ = true;
 					break;
 				}
@@ -936,7 +1009,7 @@ public:
 		return result;
 	}
 
-	vector<Node*> GetNodesOfType(OpType type) const {
+	vector<Node*> GetNodesOfType(OpClass type) const {
 		vector<Node*> result;
 		for (auto node = begin(); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(type)) {

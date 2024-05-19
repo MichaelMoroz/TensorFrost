@@ -10,40 +10,40 @@ unordered_map<DataType, string> type_names = {
 
 const vector<Operation> operations = {
     //Scope operations
-    Operation("host", {""}, 0, "", {OpType::Static, OpType::Special, OpType::HostOnly}),
-    Operation("kernel", {""}, 0, "", {OpType::Static, OpType::Special, OpType::HostOnly}),
+    Operation("host", {""}, 0, "", {OpClass::Static, OpClass::Special, OpClass::HostOnly, OpClass::Nondiff}),
+    Operation("kernel", {""}, 0, "", {OpClass::Static, OpClass::Special, OpClass::HostOnly, OpClass::Nondiff}),
 
     //Control operations
-    Operation("loop", {"iii_i"}, 100, "", {OpType::Static, OpType::Special}),
-    Operation("if", {"b_"}, 100, "", {OpType::Static, OpType::Special}),
-    Operation("break", {""}, 0, "break", {OpType::Keyword, OpType::Static}),
-    Operation("continue", {""}, 0, "continue", {OpType::Keyword, OpType::Static}),
-    Operation("discard", {""}, 0, "discard", {OpType::Keyword, OpType::Static}), //discard current thread
+    Operation("loop", {"iii_i"}, 100, "", {OpClass::Static, OpClass::Special, OpClass::Nondiff}),
+    Operation("if", {"b_"}, 100, "", {OpClass::Static, OpClass::Special, OpClass::Nondiff}),
+    Operation("break", {""}, 0, "break", {OpClass::Keyword, OpClass::Static, OpClass::Nondiff}),
+    Operation("continue", {""}, 0, "continue", {OpClass::Keyword, OpClass::Static, OpClass::Nondiff}),
+    Operation("discard", {""}, 0, "discard", {OpClass::Keyword, OpClass::Static, OpClass::Nondiff}), //discard current thread
     //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
-    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
-    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly, OpType::MemoryReuse}),
-    Operation("input_shape", {"_i"}, 0, "", {OpType::Special, OpType::Static, OpType::HostOnly}),
-    Operation("deallocate", {""}, 0, "", {OpType::Memory, OpType::Special, OpType::HostOnly}),
+    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpClass::Memory, OpClass::Special, OpClass::HostOnly, OpClass::Nondiff}),
+    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpClass::Memory, OpClass::Special, OpClass::HostOnly, OpClass::MemoryReuse}),
+    Operation("input_shape", {"_i"}, 0, "", {OpClass::Special, OpClass::Static, OpClass::HostOnly, OpClass::Nondiff}),
+    Operation("deallocate", {""}, 0, "", {OpClass::Memory, OpClass::Special, OpClass::HostOnly, OpClass::Nondiff}),
     //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
     //Algorithms
     //Reduction
-    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // sum of the last dimension
-    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // length(norm) of the last dimension
-    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // max of the last dimension
-    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // min of the last dimension
-    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // mean of the last dimension
-    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}), // product of the last dimension
-    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // any of the last dimension
-    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}), // all of the last dimension
+    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // sum of the last dimension
+    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // length(norm) of the last dimension
+    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // max of the last dimension
+    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // min of the last dimension
+    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // mean of the last dimension
+    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // product of the last dimension
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}), // any of the last dimension
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}), // all of the last dimension
     //Matrix
-    Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    Operation("dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // dot product of the last dimensions 
-    Operation("matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}), // matrix multiplication of the last dimensions
-    Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
+    Operation("dot", {"ff_f"}, 0, "", {OpClass::Algorithm}), // dot product of the last dimensions
+    Operation("matmul", {"ff_f"}, 0, "", {OpClass::Algorithm}), // matrix multiplication of the last dimensions
+    Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
+    Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
 
     //Native operations (built-in shader operations, only for size <= 4)
     //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
@@ -61,74 +61,74 @@ const vector<Operation> operations = {
     //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
     //Autodiff
-    Operation("backwards_grad", {"ff_f"}, 0, "", {OpType::Static, OpType::Gradient}),
-    Operation("forward_grad", {"ff_f"}, 0, "", {OpType::Static, OpType::Gradient}),
+    Operation("backwards_grad", {"ff_f"}, 0, "", {OpClass::Static, OpClass::Gradient}),
+    Operation("forward_grad", {"ff_f"}, 0, "", {OpClass::Static, OpClass::Gradient}),
 
     // Memory operations
     //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
     //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
     Operation("load", {"_f", "_u", "_i"}, 128, "",
-              {OpType::Load, OpType::MemoryOp}),
+              {OpClass::Load, OpClass::MemoryOp}),
     Operation("store", {"f_", "u_", "i_"}, 128, "",
-              {OpType::Store, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Store, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("set", {"f_", "u_", "i_"}, 1, "",
-              {OpType::Set, OpType::Modifier}),
+              {OpClass::Set, OpClass::Modifier, OpClass::Nondiff}), //TODO figure out how to make it differentiable
     Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("InterlockedMin", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("InterlockedMax", {"u_", "i_", "f_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("InterlockedAnd", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier, OpClass::Nondiff}),
     Operation("InterlockedOr", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier, OpClass::Nondiff}),
     Operation("InterlockedXor", {"u_", "i_"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier, OpClass::Nondiff}),
     Operation("InterlockedAdd_Prev", {"u_u", "i_i", "f_f"}, 256, "",
-              {OpType::Scatter, OpType::MemoryOp, OpType::Modifier, OpType::CantSubstitute}),
+              {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier, OpClass::CantSubstitute, OpClass::Nondiff}),
 
     // Index operations
-    Operation("dim_id", {"_i"}, 0, "dim", {OpType::DimensionIndex}),
-    Operation("block_thread_id", {"_i"}, 0, "", {OpType::DimensionIndex}), 
-    Operation("block_id", {"_i"}, 0, "", {OpType::Variable}), 
-    
+    Operation("dim_id", {"_i"}, 0, "dim", {OpClass::DimensionIndex, OpClass::Nondiff}),
+    Operation("block_thread_id", {"_i"}, 0, "", {OpClass::DimensionIndex, OpClass::Nondiff}),
+    Operation("block_id", {"_i"}, 0, "", {OpClass::Variable, OpClass::Nondiff}),
+
     //Compute operations
-    Operation("copy", {"f_f", "u_u", "i_i", "b_b"}, 1, "", {OpType::Copy}), //TODO: make sure no one copies memory objects
-    Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpType::Operator}),
-    Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpType::Operator}),
-    Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", {OpType::Operator}),
-    Operation("div", {"ff_f", "uu_u", "ii_i"}, 2, "/", {OpType::Operator}),
-    Operation("mod", {"ff_f", "uu_u", "ii_i"}, 4, "%", {OpType::Operator}),
-    Operation("lshift", {"uu_u", "ui_u", "ii_i"}, 1, "<<", {OpType::Operator}),
-    Operation("rshift", {"uu_u", "ui_u", "ii_i"}, 1, ">>", {OpType::Operator}),
-    Operation("and", {"uu_u", "ii_i", "bb_b"}, 1, "&", {OpType::Operator}),
-    Operation("or", {"uu_u", "ii_i", "bb_b"}, 1, "|", {OpType::Operator}),
-    Operation("xor", {"uu_u", "ii_i", "bb_b"}, 1, "^", {OpType::Operator}),
+    Operation("copy", {"f_f", "u_u", "i_i", "b_b"}, 1, "", {OpClass::Copy}), //TODO: make sure no one copies memory objects
+    Operation("add", {"ff_f", "uu_u", "ii_i"}, 1, "+", {OpClass::Operator}),
+    Operation("sub", {"ff_f", "uu_u", "ii_i"}, 1, "-", {OpClass::Operator}),
+    Operation("mul", {"ff_f", "uu_u", "ii_i"}, 1, "*", {OpClass::Operator}),
+    Operation("div", {"ff_f", "uu_u", "ii_i"}, 2, "/", {OpClass::Operator}),
+    Operation("mod", {"ff_f", "uu_u", "ii_i"}, 4, "%", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("lshift", {"uu_u", "ui_u", "ii_i"}, 1, "<<", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("rshift", {"uu_u", "ui_u", "ii_i"}, 1, ">>", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("and", {"uu_u", "ii_i", "bb_b"}, 1, "&", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("or", {"uu_u", "ii_i", "bb_b"}, 1, "|", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("xor", {"uu_u", "ii_i", "bb_b"}, 1, "^", {OpClass::Operator, OpClass::Nondiff}),
     Operation("eq", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1,
-              "==", {OpType::Operator}),
+              "==", {OpClass::Operator, OpClass::Nondiff}),
     Operation("neq", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1,
-              "!=", {OpType::Operator}),
-    Operation("lt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<", {OpType::Operator}),
-    Operation("lte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<=", {OpType::Operator}),
-    Operation("gt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">", {OpType::Operator}),
-    Operation("gte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">=", {OpType::Operator}),
-    Operation("not", {"b_b", "u_u", "i_i"}, 1, "!", {OpType::UnaryOperator}),
-    Operation("neg", {"f_f", "u_u", "i_i"}, 1, "-", {OpType::UnaryOperator}),
-    Operation("uint", {"f_u", "u_u", "i_u", "b_u"}, 1, "uint", {OpType::TypeCast}),
-    Operation("int", {"f_i", "u_i", "i_i", "b_i"}, 1, "int", {OpType::TypeCast}),
-    Operation("float", {"f_f", "u_f", "i_f", "b_f"}, 1, "float", {OpType::TypeCast}),
-    Operation("bool", {"f_b", "u_b", "i_b", "b_b"}, 1, "bool", {OpType::TypeCast}),
+              "!=", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("lt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("lte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<=", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("gt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("gte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">=", {OpClass::Operator, OpClass::Nondiff}),
+    Operation("not", {"b_b", "u_u", "i_i"}, 1, "!", {OpClass::UnaryOperator, OpClass::Nondiff}),
+    Operation("neg", {"f_f", "u_u", "i_i"}, 1, "-", {OpClass::UnaryOperator}),
+    Operation("uint", {"f_u", "u_u", "i_u", "b_u"}, 1, "uint", {OpClass::TypeCast, OpClass::Nondiff}),
+    Operation("int", {"f_i", "u_i", "i_i", "b_i"}, 1, "int", {OpClass::TypeCast, OpClass::Nondiff}),
+    Operation("float", {"f_f", "u_f", "i_f", "b_f"}, 1, "float", {OpClass::TypeCast, OpClass::Nondiff}),
+    Operation("bool", {"f_b", "u_b", "i_b", "b_b"}, 1, "bool", {OpClass::TypeCast, OpClass::Nondiff}),
     Operation("asuint", {"f_u", "u_u", "i_u"}, 0, "asuint",
-              {OpType::TypeReinterpret}),
+              {OpClass::TypeReinterpret, OpClass::Nondiff}),
     Operation("asint", {"f_i", "u_i", "i_i"}, 0, "asint",
-              {OpType::TypeReinterpret}),
+              {OpClass::TypeReinterpret, OpClass::Nondiff}),
     Operation("asfloat", {"f_f", "u_f", "i_f"}, 0, "asfloat",
-              {OpType::TypeReinterpret}),
+              {OpClass::TypeReinterpret, OpClass::Nondiff}),
     Operation("min", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("max", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("abs", {"f_f", "u_u", "i_i"}, 1),
-    Operation("sign", {"f_f", "u_u", "i_i"}, 1),
+    Operation("sign", {"f_f", "i_i"}, 1),
     Operation("ceil", {"f_f"}, 1),
     Operation("floor", {"f_f"}, 1),
     Operation("round", {"f_f"}, 1),
@@ -159,8 +159,8 @@ const vector<Operation> operations = {
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
     Operation("smoothstep", {"fff_f"}, 10),
-    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "", {OpType::TernaryOperator}),
-    Operation("const", {"_f", "_u", "_i"}, 0, "", {OpType::Constant}),
+    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "", {OpClass::TernaryOperator}),
+    Operation("const", {"_f", "_u", "_i"}, 0, "", {OpClass::Constant, OpClass::Nondiff}),
 };
 
 unordered_map<string, const Operation*> CreateOperationMap() {
@@ -190,7 +190,7 @@ const Operation* FindOperation(const string& name) {
 		return it->second;
 	}
 
-	throw runtime_error("Operation not found: " + name);
+	throw runtime_error("IR Operation not defined: " + name);
 }
 
 string DataTypeToString(DataType type) { return type_names[type]; }

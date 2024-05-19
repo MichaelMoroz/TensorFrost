@@ -88,6 +88,16 @@ inline float smoothstep(float a, float b, float t)
   return t * t * (3.0f - 2.0f * t);
 }
 
+inline float sign(float x)
+{
+  return x < 0.0f ? -1.0f : 1.0f;
+}
+
+inline int sign(int x)
+{
+  return x < 0 ? -1 : 1;
+}
+
 inline void InterlockedAdd(int* memory, int address, int value)
 {
   std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);

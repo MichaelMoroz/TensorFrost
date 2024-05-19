@@ -58,6 +58,42 @@ float pcgf(uint v)
 	return float(pcg(v)) / float(0xffffffffu);
 }
 
+float InterlockedAdd(RWStructuredBuffer<uint> buffer, int index, float val)
+{
+    uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
+    [allow_uav_condition] while (true) {
+        InterlockedCompareExchange(buffer[index], tmp0, uval, tmp1);
+        if (tmp1 == tmp0)  break;
+        tmp0 = tmp1;
+        uval = asuint(val + asfloat(tmp1));
+    }
+    return asfloat(tmp1);
+}
+
+float InterlockedMin(RWStructuredBuffer<uint> buffer, int index, float val)
+{
+	uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
+	[allow_uav_condition] while (true) {
+		InterlockedMin(buffer[index], tmp0, uval, tmp1);
+		if (tmp1 == tmp0)  break;
+		tmp0 = tmp1;
+		uval = asuint(min(val, asfloat(tmp1)));
+	}
+	return asfloat(tmp1);
+}
+
+float InterlockedMax(RWStructuredBuffer<uint> buffer, int index, float val)
+{
+	uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
+	[allow_uav_condition] while (true) {
+		InterlockedMax(buffer[index], tmp0, uval, tmp1);
+		if (tmp1 == tmp0)  break;
+		tmp0 = tmp1;
+		uval = asuint(max(val, asfloat(tmp1)));
+	}
+	return asfloat(tmp1);
+}
+
 RWStructuredBuffer<uint> mem : register(u0);
 
 struct UBO

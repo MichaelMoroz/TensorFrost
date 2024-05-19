@@ -21,10 +21,17 @@ class GLSLGenerator : public CodeGenerator {
 	                        const string& output_type_name,
 	                        const string& address, const string& input, const string& output) override {
 		if (op == "InterlockedAdd") {
+			if(input_type_name == "float")
+			{
+				return "atomicAddF(" + address + ", " + input + ")";
+			}
 			return "atomicAdd(mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
-			return output_type_name + "(atomicAdd(mem[" + address + "], uint(" + input +
-			       ")))";
+			if(input_type_name == "float")
+			{
+				return  output_type_name + "(atomicAddF(" + address + ", " + input +"))";
+			}
+			return output_type_name + "(atomicAdd(mem[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
 			return "atomicMin(mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedMax") {
@@ -94,6 +101,22 @@ uniform int var[32];
 layout(std430, binding = 0) buffer memory {
   uint mem[];
 };
+
+float atomicAddF(int index, float val)
+{
+    uint uval = floatBitsToUint(val);
+    uint tmp0 = 0;
+    uint tmp1 = 0;
+
+    while (true) {
+        tmp0 = atomicCompSwap(mem[index], tmp0, uval);
+        if (tmp1 == tmp0) break;
+        tmp1 = tmp0;
+        uval = floatBitsToUint(val + uintBitsToFloat(tmp1));
+    }
+
+    return uintBitsToFloat(tmp1);
+}
 )";
 }
 

@@ -4,44 +4,94 @@ import TensorFrost as tf
 import matplotlib.pyplot as plt
 
 tf.initialize(tf.opengl)
-def n_body():
-    X = tf.input([-1, 3], tf.float32)
-    N = X.shape[0]
-    V = tf.input([N, 3], tf.float32)
-    params = tf.input([-1], tf.float32)
+#
+# import math
+#
+# def softmax(X):
+#     exp = tf.exp(X)
+#     return exp / tf.unsqueeze(tf.sum(exp))
+#
+# def forward(W1, W2, W3, b1, b2, b3, X):
+#     L1 = tf.tanh(tf.matmul(X, W1) + b1)
+#     L2 = tf.tanh(tf.matmul(L1, W2) + b2)
+#     return softmax(tf.matmul(L2, W3) + b3)
+#
+# def loss(Y, Yhat): #cross entropy loss
+#     return tf.sum(tf.sum( - Y * tf.log(Yhat + 1e-5) - (1.0 - Y) * tf.log(1.0 - Yhat + 1e-5))) / tf.float(math.prod(Y.shape))
+#
+# def step():
+#     #input weights and biases
+#     W1 = tf.input([-1, -1], tf.float32)
+#     In, Hidden1 = W1.shape
+#     W2 = tf.input([Hidden1, -1], tf.float32)
+#     Hidden2 = W2.shape[1]
+#     W3 = tf.input([Hidden2, -1], tf.float32)
+#     Out = W3.shape[1]
+#     b1 = tf.input([Hidden1], tf.float32)
+#     b2 = tf.input([Hidden2], tf.float32)
+#     b3 = tf.input([Out], tf.float32)
+#
+#     #input data
+#     X = tf.input([-1, In], tf.float32)
+#     Y = tf.input([-1, Out], tf.float32)
+#
+#     info = tf.input([3], tf.float32)
+#     offset = tf.int(info[0])
+#     batch_size = tf.int(info[1])
+#     learning_rate = info[2]
+#
+#     #TODO: implement slicing instead of this crap
+#     i, j = tf.indices([batch_size, In])
+#     Xbatch = X[i + offset, j]
+#     i, j = tf.indices([batch_size, Out])
+#     Ybatch = Y[i + offset, j]
+#
+#     Yhat = forward(W1, W2, W3, b1, b2, b3, Xbatch)
+#     L = loss(Ybatch, Yhat)
+#
+#     W1 = W1 - learning_rate * tf.grad(L, W1)
+#     W2 = W2 - learning_rate * tf.grad(L, W2)
+#     W3 = W3 - learning_rate * tf.grad(L, W3)
+#     b1 = b1 - learning_rate * tf.grad(L, b1)
+#     b2 = b2 - learning_rate * tf.grad(L, b2)
+#     b3 = b3 - learning_rate * tf.grad(L, b3)
+#
+#     return [L, W1, W2, W3, b1, b2, b3]
+#
+# train_step = tf.compile(step)
 
-    sph_rad = params[0] # 0.015
-    rest_density = params[1] # 0.5
-    stiffness = params[2] # 20.0
-    viscosity = params[3] # 100.0
-    gravity = params[4] # 1.5
-    time_step = params[5] # 0.0001
 
-    i, j, k = tf.indices([N, N, 3])
-    dx = X[j,k] - X[i,k]
-    dv = V[j,k] - V[i,k]
+# def settest():
+#     a = tf.input([1], tf.float32)
+#     b = tf.input([1], tf.float32)
+#
+#     c = tf.const(0.0)
+#     t = tf.const(0.0)
+#     c.set(a)
+#     c.val += b
+#     c.val += 1.0
+#     with tf.loop(10):
+#         c.val += a
+#     t.val = c
+#     c.val += 2.0
+#
+#     with tf.loop(10):
+#         c.val += b
+#
+#     return [c, t]
+#
+# test = tf.compile(settest)
 
-    # Compute the SPH density
-    dist = tf.norm(dx)
-    weight = tf.exp(-dist / sph_rad)
-    rho = 1.0 * weight
-    rho = tf.sum(rho, axis=1)
+def memorygrad():
+    a = tf.input([256])
+    id = tf.input([64], tf.int32)
 
-    # Compute the SPH forces
-    dist = tf.unsqueeze(tf.norm(dx))
-    dvdotdx = tf.unsqueeze(tf.dot(dv, dx))
-    weight = tf.exp(-(dist / sph_rad)**2.0)
-    pressure = ((rho[i] + rho[j])*0.5 - rest_density)
-    Fg = gravity * dx / (dist ** 3.0 + 5e-3)
-    Fvisc = viscosity * dvdotdx * dx * weight / (dist*dist + 1e-5)
-    Fsph = - stiffness * pressure * dx * weight / (dist*dist + 1e-5)
-    Fij = Fsph + Fvisc + Fg
-    Fij = tf.select(i == j, 0.0, Fij)
-    Fi = tf.sum(Fij, axis=1)
+    b = tf.sin(a[id])
+    b = b + tf.cos(a[id + 1])
+    b[id] = a[id] + 1.0
+    tf.scatterAdd(b[id/2], tf.sin(b[id]))
+    c = tf.grad(b, a)
 
-    Vnew = V + Fi * time_step
-    Xnew = X + Vnew * time_step
+    return [c]
 
-    return [Xnew, Vnew]
-
-nbody = tf.compile(n_body)
+grad = tf.compile(memorygrad)

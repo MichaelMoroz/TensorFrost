@@ -8,6 +8,14 @@ int MaxIndexCount(ArgMap& map) {
 	return map.rbegin()->first + 1;
 }
 
+const Tensor *ArgumentManager::GetTensor(ArgType type, int index) {
+	return Get(type, index)->GetTensor();
+}
+
+const Tensor & ArgumentManager::operator[](int index) {
+	return *GetTensor(ArgType::Input, index);
+}
+
 void SwapLables(Node* a, Node* b) {
 	// first swap the node addresses
 	a->lable_->node_ = b;
@@ -41,17 +49,19 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 
 	// if this node loads something from another node, that node must not be in
 	// this kernel
-	if (output_op->HasAllTypes(OpType::Load, OpType::MemoryOp)) {
+	if (output_op->HasAllTypes(OpClass::Load, OpClass::MemoryOp)) {
 		return arg_type == ArgType::Memory &&
 		       !is_identity;  // if its an identity load its fine
 	}
 
 	// if we are modifying memory, then the modified memory must not be in the
 	// kernel
-	if (output_op->HasAnyType(OpType::Scatter, OpType::Store) &&
-	    !input_op->HasAnyType(OpType::Scatter, OpType::Store)) {
+	if (output_op->HasAnyType(OpClass::Scatter, OpClass::Store) &&
+	    !input_op->HasAnyType(OpClass::Scatter, OpClass::Store)) {
 		return arg_type == ArgType::Memory;
 	}
+
+	//if the input is a load
 
 	// shape should not be inside kernels
 	if (arg_type == ArgType::Shape) {
@@ -90,7 +100,7 @@ KernelScope::KernelScope(Node* node,
 	scope_shape = ShapeInfo(node);
 
 	// if host only, then this can not be a valid kernel scope
-	if (node->op->HasAllTypes(OpType::HostOnly)) {
+	if (node->op->HasAllTypes(OpClass::HostOnly)) {
 		begin = nullptr;
 		end = nullptr;
 		return;
