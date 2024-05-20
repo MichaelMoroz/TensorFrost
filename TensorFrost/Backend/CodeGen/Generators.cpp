@@ -51,7 +51,7 @@ void GenerateNodeNames(const IR& ir) {
 				name_count[debug] = 1;
 			}
 			if (IsForbiddenName(debug) ) {
-				debug = debug + "_";
+				debug = debug + "0";
 			}
 			node->var_name = debug;
 		} 

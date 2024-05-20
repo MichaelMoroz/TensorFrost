@@ -144,7 +144,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 // create a new ssbo with the same size as the tensor
 		 GLuint memory = GetBufferAtOffset(mem->frame->start);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, memory);
-		 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, size * sizeof(uint), buffer);
+		 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint), size * sizeof(uint), buffer);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
