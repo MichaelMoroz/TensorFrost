@@ -22,14 +22,22 @@ class HLSLGenerator : public CodeGenerator {
 	                        const string& output_type_name, const string& address,
 	                        const string& input, const string& output, const string& memory_name) override
 	{
-		if (op == "InterlockedAdd_Prev") {
-			additional_lines.push_back("InterlockedAdd(mem[" + address + "], " +
-			                           input + ", " + output + ");");
+		if (op == "InterlockedAdd") {
+			if(input_type_name == "float")
+			{
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ");";
+			}
+			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ");";
+		} else if (op == "InterlockedAdd_Prev") {
+			if(input_type_name == "float")
+			{
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ");";
+			}
+			additional_lines.push_back("InterlockedAdd("+memory_name+"_mem[" + address + "], " +
+									   input + ", " + output + ");");
 			return "0";
-		}
-		else
-		{
-			return op + "(mem[" + address + "], " + input + ")";
+		} else {
+			return op + "("+memory_name+"_mem[" + address + "], " + input + ")";
 		}
 	}
 
@@ -58,7 +66,7 @@ float pcgf(uint v)
 	return float(pcg(v)) / float(0xffffffffu);
 }
 
-float InterlockedAdd(RWStructuredBuffer<uint> buffer, int index, float val)
+float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 {
     uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
     [allow_uav_condition] while (true) {
@@ -95,6 +103,8 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 		string type_name = "uint";
 		final_source += HLSLBufferDeclaration(name, type_name, binding);
 	}
+
+	final_source += "\n\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector

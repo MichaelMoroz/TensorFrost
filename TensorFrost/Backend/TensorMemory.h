@@ -105,6 +105,10 @@ public:
 	uint32_t GetAllocatedSize() const {
 		return buffer_manager.GetRequiredAllocatedStorage();
 	}
+
+	uint32_t GetUnusedAllocatedSize() const {
+		return buffer_manager.GetUnusedAllocatedStorage();
+	}
 };
 
 

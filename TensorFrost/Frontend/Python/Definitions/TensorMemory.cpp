@@ -75,9 +75,11 @@ void TensorMemoryDefinition(py::module& m,
 	    },
 	    "Readback data from tensor memory to a numpy array", py::return_value_policy::take_ownership);
 
-	m.def("used_memory", []() { return global_memory_manager->GetAllocatedSize(); },
+	m.def("allocated_memory", []() { return global_memory_manager->GetAllocatedSize(); },
 	    "Get the amount of memory currently used by the memory manager");
 
+	m.def("unused_allocated_memory", []() { return global_memory_manager->GetUnusedAllocatedSize(); },
+	    "Get the amount of memory currently allocated but not used by the memory manager");
 }
 
 }  // namespace TensorFrost
