@@ -37,8 +37,8 @@ extern BackendType current_backend;
 extern CodeGenLang current_kernel_lang;
 extern CodeGenLang current_main_lang;
 
-vector<TensorMemory*> ExecuteProgram(
-    Program* program, vector<TensorMemory*> inputs);
+vector<TensorProp*> ExecuteProgram(
+    Program* program, vector<TensorProp*> inputs);
 
 void InitializeBackend(BackendType backendType, const string& compilerPath, CodeGenLang kernelType);
 

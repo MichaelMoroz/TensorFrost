@@ -99,7 +99,7 @@ uniform int var[32];
 )";
 }
 
-string GetBufferDeclaration(const string& name, const string& type_name, const int binding) {
+string GLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
 	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
 	//add atomic functions
 	decl += R"(
@@ -132,7 +132,7 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 		int binding = buffer.second;
 		string name = mem_node->var_name;
 		string type_name = "uint";
-		final_source += GetBufferDeclaration(name, type_name, binding);
+		final_source += GLSLBufferDeclaration(name, type_name, binding);
 	}
 
 	vector<int> group_size = kernel->root->group_size;

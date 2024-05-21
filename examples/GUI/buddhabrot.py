@@ -5,11 +5,11 @@ import time
 tf.initialize(tf.opengl)
 
 S = 1024
-MAX_ITER = 1000
-SAMPLES = 2
+MAX_ITER = 3000
+SAMPLES = 4
 
 T1 = MAX_ITER // 50
-T2 = MAX_ITER // 10
+T2 = MAX_ITER // 15
 T3 = MAX_ITER
 
 def buddhabrot():
@@ -23,18 +23,21 @@ def buddhabrot():
     seed = tf.uint(i + j * S + frame_id[0] * S * S)
     aspect = tf.float(S) / tf.float(S)
 
+    def rand():
+        seed.val = tf.pcg(seed)
+        return tf.float(seed) / tf.float(0xFFFFFFFF)
+    
+    def randn():
+        # Box-Muller transform
+        u1, u2 = rand(), rand()
+        r1 = tf.sqrt(-2.0 * tf.log(u1))
+        theta = 2.0 * np.pi * u2
+        return r1 * tf.cos(theta), r1 * tf.sin(theta)
+
     with tf.loop(SAMPLES):
-        seed.set(tf.pcg(seed))
-        u = (x + 2.0*tf.pcgf(seed)) / tf.float(S)
-        v = (y + 2.0*tf.pcgf(seed + tf.uint(5))) / tf.float(S)
-        u0 = (x + 2.0*tf.pcgf(seed + tf.uint(25))) / tf.float(S)
-        v0 = (y + 2.0*tf.pcgf(seed + tf.uint(388))) / tf.float(S)
-
-        cx = (u * 2.0 - 1.0) * aspect * 1.5
-        cy = (v * 2.0 - 1.0) * aspect * 1.5
-        z0x = (u0 * 2.0 - 1.0) * aspect * 1.5
-        z0y = (v0 * 2.0 - 1.0) * aspect * 1.5
-
+        cx, cy = randn()
+        z0x = tf.const(0.0)
+        z0y = tf.const(0.0)
         z_re = tf.copy(z0x)
         z_im = tf.copy(z0y)
         l = tf.zeros([], tf.int32)
@@ -46,7 +49,7 @@ def buddhabrot():
             z_im_new = 2.0*z_re*z_im + c_im
             z_re.val = z_re_new
             z_im.val = z_im_new
-            with tf.if_cond((z_re*z_re + z_im*z_im) > 4.0):
+            with tf.if_cond((z_re*z_re + z_im*z_im) > 8.0):
                 tf.break_loop()
 
         with tf.loop(MAX_ITER):
@@ -82,12 +85,13 @@ def buddhabrot():
     ry = y + z
     rz = z
 
-    norm = float(MAX_ITER * SAMPLES) / 12.0
+    norm = float(MAX_ITER * SAMPLES) / 20.0
 
     fid =  tf.float(frame_id[0])
-    canvas[i, j, 0] = (tf.smoothstep(0.0, 1.0, 2.5 * (rx/norm) ** 0.9) * 0.4 + prev_frame[i, j, 0] * 0.6)
-    canvas[i, j, 1] = (tf.smoothstep(0.0, 1.0, 2.5 * (ry/norm) ** 0.65) * 0.4 + prev_frame[i, j, 1] * 0.6)
-    canvas[i, j, 2] = (tf.smoothstep(0.0, 1.0, 2.5 * (rz/norm) ** 0.5) * 0.4 + prev_frame[i, j, 2] * 0.6)
+    k = 0.6
+    canvas[i, j, 0] = tf.lerp(tf.smoothstep(0.0, 1.0, 2.5 * (rx/norm) ** 0.9), prev_frame[i, j, 0], k)
+    canvas[i, j, 1] = tf.lerp(tf.smoothstep(0.0, 1.0, 2.5 * (ry/norm) ** 0.65), prev_frame[i, j, 1], k)
+    canvas[i, j, 2] = tf.lerp(tf.smoothstep(0.0, 1.0, 2.5 * (rz/norm) ** 0.5), prev_frame[i, j, 2], k)
 
     return [canvas, frame_id + 1]
 

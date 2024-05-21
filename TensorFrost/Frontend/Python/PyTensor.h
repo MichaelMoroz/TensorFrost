@@ -74,9 +74,6 @@ PyTensors PyTensorsFromTensors(const Tensors& tensors);
 Tensors TensorsFromVector(const std::vector<PyTensor*>& tensors);
 PyTensors PyTensorsFromVector(const std::vector<Tensor*>& tensors);
 
-vector<TensorMemory*> TensorMemoryFromTuple(const py::tuple& tuple);
-vector<TensorMemory*> TensorMemoryFromList(const py::list& list);
-
 std::string r_op(const std::string& name);
 std::string l_op(const std::string& name);
 

@@ -70,11 +70,8 @@ float InterlockedAdd(RWStructuredBuffer<uint> buffer, int index, float val)
     return asfloat(tmp1);
 }
 
-RWStructuredBuffer<uint> mem : register(u0);
-
 struct UBO
 {
-	int off[32];
 	int var[32];
 	int dispatch_size;
 };
@@ -84,8 +81,20 @@ cbuffer ubo : register(b1) { UBO ubo; }
 )";
 }
 
+string HLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
+}
+
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
+
+	for (auto& buffer : kernel->memory) {
+		Node* mem_node = buffer.first;
+		int binding = buffer.second;
+		string name = mem_node->var_name;
+		string type_name = "uint";
+		final_source += HLSLBufferDeclaration(name, type_name, binding);
+	}
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector

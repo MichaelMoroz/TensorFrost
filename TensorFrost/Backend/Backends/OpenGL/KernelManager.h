@@ -109,7 +109,7 @@ class OpenGLKernelManager : public KernelManager {
 
 		//bind all memory buffers
 		for (uint i = 0; i < info.tensor_count; i++) {
-			GLuint buffer = memory_manager->GetBufferAtOffset(info.tensors[i].offset);
+			GLuint buffer = memory_manager->GetNativeBuffer(&info.tensors[i]);
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffer);
 		}
 

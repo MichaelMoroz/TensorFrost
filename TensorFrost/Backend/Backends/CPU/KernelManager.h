@@ -29,16 +29,14 @@ class CpuKernelManager : public KernelManager {
 	{	
 		CpuMemoryManager* memory_manager = (CpuMemoryManager*)global_memory_manager;
 		cpu_dispatch_func* func = kernel_functions[info.kernel_id];
-		//get memory pointer
-		uint* memory = memory_manager->memory.data();
-		//get memory offsets
-		uint* offsets = new uint[info.tensor_count];
+		//get memory pointers
+		uint** memory = new uint*[info.tensor_count];
 		for (int i = 0; i < (int)info.tensor_count; i++) {
-			offsets[i] = info.tensors[i].offset;
+			memory[i] = memory_manager->GetNativeBuffer(&info.tensors[i]);
 		}
 		uint* variables = info.variables;
-		func(variables, offsets, memory, info.work_group_count);
-		delete[] offsets;
+		func(variables, memory, info.work_group_count);
+		delete[] memory;
 	}
 };
 

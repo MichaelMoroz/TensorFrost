@@ -43,8 +43,8 @@ void TensorProgram::CreateProgram(string name) {
 	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;
 }
 
-vector<TensorMemory*> TensorProgram::Evaluate(
-    const vector<TensorMemory*>& input) const {
+vector<TensorProp*> TensorProgram::Evaluate(
+    const vector<TensorProp*>& input) const {
 	return ExecuteProgram(program, input);
 }
 

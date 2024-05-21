@@ -17,60 +17,60 @@ using namespace std;
 
 class CpuMemoryManager : public TensorMemoryManager {
  public:
-	vector<uint> memory;
+	unordered_map<Buffer*, uint*> allocated_arrays;
 
-	TensorMemory* Allocate(const vector<int>& shape,
-	                       const DataType type = DataType::Float) override {
-		int size = GetLinearSize(shape);
-
-		if (size == 0) {
-			throw invalid_argument("Trying to allocate a tensor with size 0");
+	Buffer* TryGetBuffer(int size) override {
+		Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
+		if(!allocated_arrays.contains(buffer)) {
+			allocated_arrays[buffer] = CreateBuffer(size);
 		}
-
-		Frame* frame = allocator.AllocateFrame(size);
-		// reserve space in memory if needed
-		if (frame->end > memory.size()) {
-			memory.resize(frame->end * 3 / 2);
-		}
-
-		auto* tensor_memory = new TensorMemory(shape, frame, this);
-		tensor_memory->type = type;
-		allocated_by_offset[frame->start] = tensor_memory;
-		return tensor_memory;
+		return buffer;
 	}
 
-	TensorMemory* AllocateWithData(const vector<int>& shape,
-	                               const vector<uint>& data,
-	    const DataType type = DataType::Float) override {
-		TensorMemory* tensor_memory = Allocate(shape, type);
-		memcpy(memory.data() + tensor_memory->frame->start, data.data(),
-		       data.size() * sizeof(uint));
-		return tensor_memory;
+	uint* GetNativeBuffer(const TensorProp* mem) {
+		if(!allocated_arrays.contains(mem->buffer)) {
+			throw std::runtime_error("Tensor memory not allocated");
+		}
+		return allocated_arrays[mem->buffer];
 	}
 
-	vector<uint> Readback(const TensorMemory* mem) override {
-		vector<uint> data;
-		data.resize(mem->GetSize());
-		memcpy(data.data(), this->memory.data() + mem->frame->start,
-		       data.size() * sizeof(uint));
+	void SetDataAtOffset(const TensorProp* buffer, int offset, const vector<uint>& data) override {
+		uint* array = allocated_arrays[buffer->buffer];
+		memcpy(array + offset, data.data(), data.size() * sizeof(uint));
+	}
+
+	uint* CreateBuffer(int size) {
+		return new uint[size];
+	}
+
+	vector<uint> Readback(const TensorProp* mem) override {
+		uint* array = GetNativeBuffer(mem);
+		vector<uint> data(mem->buffer->size);
+		for(int i = 0; i < mem->buffer->size; i++) {
+			data[i] = array[i];
+		}
 		return data;
 	}
 
-	uint ReadbackValue(const TensorMemory* mem, uint index) override {
-		return memory[mem->frame->start + index];
+	uint ReadbackValue(const TensorProp* mem, uint index) override {
+		uint* array = GetNativeBuffer(mem);
+		return array[index];
 	}
 
-	void Writeback(const TensorMemory* mem, const vector<uint>& data) override {
-		memcpy(memory.data() + mem->frame->start, data.data(),
-					       data.size() * sizeof(uint));
+	void Writeback(const TensorProp* mem, const vector<uint>& data) override {
+		uint* array = GetNativeBuffer(mem);
+		memcpy(array, data.data(), data.size() * sizeof(uint));
 	}
 
-	void WritebackValue(const TensorMemory* mem, uint index, uint value) override {
-		memory[mem->frame->start + index] = value;
+	void WritebackValue(const TensorProp* mem, uint index, uint value) override {
+		uint* array = GetNativeBuffer(mem);
+		array[index] = value;
 	}
 
-	uint32_t GetAllocatedSize() const {
-		return (uint32_t)memory.capacity();
+	~CpuMemoryManager() {
+		for(auto& [buffer, array]: allocated_arrays) {
+			delete[] array;
+		}
 	}
 };
 

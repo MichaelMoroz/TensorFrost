@@ -2,6 +2,7 @@
 #include <vector>
 
 #include <Frontend/Python/PyTensor.h>
+#include <Frontend/Python/PyTensorMemory.h>
 
 namespace TensorFrost {
 
@@ -17,7 +18,7 @@ void WindowDefinitions(py::module& m) {
 	    "hide_window", []() { HideWindow(); }, "Hide the memory manager window");
 
 	m.def(
-	    "render_frame", [](const TensorMemory& t) { RenderFrame(t); },
+	    "render_frame", [](const PyTensorMemory& t) { RenderFrame(*t.tensor_); },
 	    "Render a frame from the tensor memory");
 
 	m.def(

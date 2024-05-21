@@ -2,6 +2,7 @@
 #include <vector>
 
 #include <Frontend/Python/PyTensor.h>
+#include <Frontend/Python/PyTensorMemory.h>
 
 namespace TensorFrost {
 
@@ -9,7 +10,7 @@ void PyTensorDefinition(py::module&, py::class_<PyTensor>&);
 void TensorFunctionsDefinition(py::module&);
 void TensorProgramDefinition(py::module&, py::class_<TensorProgram>&);
 void TensorMemoryDefinition(py::module& m,
-                            py::class_<TensorMemory>& py_tensor_mem);
+                            py::class_<PyTensorMemory>& py_tensor_mem);
 void WindowDefinitions(py::module& m);
 void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 
@@ -19,7 +20,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	auto code_gen_lang = py::enum_<CodeGenLang>(m, "CodeGenLang");
 	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
 	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
-	auto py_tensor_mem = py::class_<TensorMemory>(m, "TensorMemory");
+	auto py_tensor_mem = py::class_<PyTensorMemory>(m, "TensorMemory");
 
 	data_type.value("float", DataType::Float);
 	data_type.value("int", DataType::Int);

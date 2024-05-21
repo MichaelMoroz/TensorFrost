@@ -15,59 +15,9 @@ namespace TensorFrost {
 
 class OpenGLMemoryManager : public TensorMemoryManager {
  public:
-	 const int DEFAULT_SIZE = 1024 * 1024 * 64;
-	 const int MAX_BUFFER_SIZE = 2147483647 / sizeof(uint);
-
-	 unordered_map<int, unordered_set<GLuint>> allocated_buffers;
-	 unordered_map<const TensorMemory*, GLuint> tensor_buffers;
-	 unordered_set<GLuint> used_buffers;
+	 unordered_map<Buffer*, GLuint> allocated_ssbo;
 
 	 OpenGLMemoryManager() {}
-
-	 GLuint AllocateBuffer(int size) {
-		GLuint buffer = CreateBuffer(size);
-	 	//add the buffer to the list of allocated buffers
-	 	allocated_buffers[size].insert(buffer);
-	 	return buffer;
-	 }
-
-	 void DeallocateBuffer(GLuint buffer) {
-		 used_buffers.erase(buffer);
-	 }
-
-	 void RemoveBuffer(GLuint buffer) {
-		 for(auto& [size, buffers]: allocated_buffers) {
-			 buffers.erase(buffer);
-		 }
-		 DeallocateBuffer(buffer);
-		 DeleteBuffer(buffer);
-	 }
-
-	 GLuint GetBufferAtOffset(uint offset) {
-	 	 if(!allocated_by_offset.contains(offset)) {
-	 		 throw std::runtime_error("No tensor allocated at offset " + std::to_string(offset));
-	 	 }
-		 return tensor_buffers[allocated_by_offset[offset]];
-	 }
-
-	 GLuint AllocateTensor(int size) {
-		 //try to find a non-used buffer of the correct size
-	 	 GLuint buffer = 0;
-	 	 bool found = false;
-	 	 for(auto ssbo: allocated_buffers[size]) {
-	 		 if(used_buffers.contains(ssbo)) {
-	 			 continue;
-	 		 }
-	 	 	 buffer = ssbo;
-	 	 	 found = true;
-	 	 }
-	 	 //if no buffer was found, create a new one
-	 	 if(!found) {
-	 		 buffer = AllocateBuffer(size);
-	 	 }
-	 	 used_buffers.insert(buffer);
-	 	 return buffer;
-	 }
 
 	 GLuint CreateBuffer(int size) {
 		 GLint maxsize;
@@ -83,6 +33,21 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 return buffer;
 	 }
 
+	 Buffer* TryGetBuffer(int size) override {
+	 	Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
+	 	if(!allocated_ssbo.contains(buffer)) {
+	 		allocated_ssbo[buffer] = CreateBuffer(size);
+	 	}
+	 	return buffer;
+	 }
+
+	 GLuint GetNativeBuffer(const TensorProp* mem) {
+		 if(!allocated_ssbo.contains(mem->buffer)) {
+			 throw std::runtime_error("Tensor memory not allocated");
+		 }
+	 	 return allocated_ssbo[mem->buffer];
+	 }
+
 	 void CopyBuffer(GLuint source, GLuint dest, int size, int read_offset = 0, int write_offset = 0) {
 		 glBindBuffer(GL_COPY_READ_BUFFER, source);
 		 glBindBuffer(GL_COPY_WRITE_BUFFER, dest);
@@ -96,8 +61,8 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 CheckError("glDeleteBuffers");
 	 }
 
-	 void SetDataAtOffset(GLuint memory, uint offset, const std::vector<uint>& data) {
-		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, memory);
+	 void SetDataAtOffset(const TensorProp* buffer, int offset, const vector<uint>& data) override {
+		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(buffer));
 		 CheckError("glBindBuffer - GL_SHADER_STORAGE_BUFFER for SetDataAtOffset");
 
 		 glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint),
@@ -115,59 +80,31 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 }
 		 #endif
 	 }
-
-	 TensorMemory* Allocate(const vector<int>& shape, const DataType type = DataType::Float) override {
-		 int size = GetLinearSize(shape);
-
-		 if (size == 0) {
-			 throw invalid_argument("Trying to allocate a tensor with size 0");
-		 }
-
-		 Frame* frame = allocator.AllocateFrame(size);
-
-		 GLuint memory = AllocateTensor(size);
-
-		 auto* tensor_memory = new TensorMemory(shape, frame, this);
-	 	 tensor_buffers[tensor_memory] = memory;
-		 tensor_memory->type = type;
-		 allocated_by_offset[frame->start] = tensor_memory;
-		 return tensor_memory;
-	 }
-
-	 TensorMemory* AllocateWithData(const vector<int>& shape, const vector<uint>& data, const DataType type = DataType::Float) override {
-		 TensorMemory* tensor_memory = Allocate(shape, type);
-		 SetDataAtOffset(tensor_buffers[tensor_memory], 0, data);
-		 return tensor_memory;
-	 }
 	 
-	 void ReadbackBuffer(const TensorMemory* mem, uint offset, uint size, uint* buffer) {
+	 void ReadbackBuffer(const TensorProp* mem, uint offset, uint size, uint* buffer) {
 		 // create a new ssbo with the same size as the tensor
-		 GLuint memory = GetBufferAtOffset(mem->frame->start);
+		 GLuint memory = GetNativeBuffer(mem);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, memory);
 		 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint), size * sizeof(uint), buffer);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 uint ReadbackValue(const TensorMemory* mem, uint index) {
+	 uint ReadbackValue(const TensorProp* mem, uint index) {
 		 uint data;
 		 ReadbackBuffer(mem, index, 1, &data);
 		 return data;
 	 }
 
-	 vector<uint> Readback(const TensorMemory* mem) override {
+	 vector<uint> Readback(const TensorProp* mem) override {
 		  vector<uint> data;
-		  data.resize(mem->GetSize());
-		  ReadbackBuffer(mem, 0, mem->GetSize(), data.data());
+		  data.resize(GetSize(mem));
+		  ReadbackBuffer(mem, 0, GetSize(mem), data.data());
 		  return data;
 	  }
 
-	 void FreeBuff(TensorMemory *memory) override {
-		 DeallocateBuffer(GetBufferAtOffset(memory->frame->start));
-	 }
-
-	 void WritebackValue(const TensorMemory* mem, uint index, uint value) {
-		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, tensor_buffers[mem]);
+	 void WritebackValue(const TensorProp* mem, uint index, uint value) {
+		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(mem));
 		 glBufferSubData(GL_SHADER_STORAGE_BUFFER,
 		                 (index) * sizeof(uint), sizeof(uint),
 		                 &value);
@@ -175,29 +112,16 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 void Writeback(const TensorMemory* mem, const vector<uint>& data) override {
-		 SetDataAtOffset(tensor_buffers[mem], 0, data);
+	 void Writeback(const TensorProp* mem, const vector<uint>& data) override {
+		 SetDataAtOffset(mem, 0, data);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
 
 	 ~OpenGLMemoryManager() {
-	 	 for(auto& [mem, buffer]: tensor_buffers) {
-			 DeallocateBuffer(buffer);
+		 for(auto& [buf, buffer]: allocated_ssbo) {
+			DeleteBuffer(buffer);
 		 }
-		 for(auto& [size, buffers]: allocated_buffers) {
-			 for(auto buffer: buffers) {
-				 DeleteBuffer(buffer);
-			 }
-		 }
-	 }
-
-	 uint32_t GetAllocatedSize() const {
-		uint32_t allocated = 0;
-	 	for(auto& [size, buffers]: allocated_buffers) {
-	 		allocated += (uint32_t)size * (uint32_t)buffers.size();
-	 	}
-	 	return allocated;
 	 }
 };
 

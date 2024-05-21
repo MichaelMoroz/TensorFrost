@@ -232,6 +232,10 @@ inline float pcgf(uint v)
 }
 
 extern "C" {
+	struct Buffer {
+		int size = 0;
+    };
+
 	enum DataType {
 		Float,
 		Uint,
@@ -241,7 +245,7 @@ extern "C" {
 	};
 
 	struct TensorProp {
-		uint offset;
+		Buffer* buffer;
 		uint dim;
 		uint* shape;
 		DataType type;
@@ -261,7 +265,7 @@ extern "C" {
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
 	typedef void dispatch_func(DispatchInfo);
-	typedef void cpu_dispatch_func(uint*, uint*, uint*, uint*);
+	typedef void cpu_dispatch_func(uint* var, uint** mem, uint work_group_count);
 }
 
 std::unordered_map<DataType, std::string> DataTypeNames = {
@@ -332,7 +336,7 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 TensorProp reshape(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
 {
   TensorProp new_tensor = TensorProp();
-  new_tensor.offset = tensor.offset;
+  new_tensor.buffer = tensor.buffer;
   new_tensor.dim = shape.size();
   new_tensor.shape = new uint[shape.size()];
   new_tensor.type = type;
@@ -571,6 +575,13 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	string kernel_code = generator.AssembleString();
 
 	string loop = "";
+	for (auto& buffer : kernel->memory) {
+		Node* mem_node = buffer.first;
+		int binding = buffer.second;
+		string name = mem_node->var_name;
+		string type_name = "uint";
+		loop += "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
+	}
 	const int block_size = 4;
 	loop += "  #pragma omp parallel for\n";
 	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
@@ -596,7 +607,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		#endif
 	    "void " +
 	    kernel->kernel_name_ +
-	    "(uint* var, uint* off, uint* mem, uint work_group_count)\n"
+	    "(uint* var, uint** mem, uint work_group_count)\n"
 	    "{\n" + loop +
 	    "}\n";
 
