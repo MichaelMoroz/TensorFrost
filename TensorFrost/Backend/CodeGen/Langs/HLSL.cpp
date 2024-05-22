@@ -25,13 +25,13 @@ class HLSLGenerator : public CodeGenerator {
 		if (op == "InterlockedAdd") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ");";
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
 			}
-			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ");";
+			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ")";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ");";
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
 			}
 			additional_lines.push_back("InterlockedAdd("+memory_name+"_mem[" + address + "], " +
 									   input + ", " + output + ");");
@@ -96,15 +96,8 @@ string HLSLBufferDeclaration(const string& name, const string& type_name, const 
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
 
-	for (auto& buffer : kernel->memory) {
-		Node* mem_node = buffer.first;
-		int binding = buffer.second;
-		string name = mem_node->var_name;
-		string type_name = "uint";
-		final_source += HLSLBufferDeclaration(name, type_name, binding);
-	}
-
-	final_source += "\n\n";
+	final_source += GetBufferDeclarations(kernel, HLSLBufferDeclaration);
+	final_source += "\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector

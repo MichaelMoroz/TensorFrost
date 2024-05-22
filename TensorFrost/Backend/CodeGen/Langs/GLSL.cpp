@@ -126,14 +126,8 @@ float atomicAdd_)" + name + R"((int index, float val) {
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetGLSLHeader();
 
-	//add buffer declarations
-	for (auto& buffer : kernel->memory) {
-		Node* mem_node = buffer.first;
-		int binding = buffer.second;
-		string name = mem_node->var_name;
-		string type_name = "uint";
-		final_source += GLSLBufferDeclaration(name, type_name, binding);
-	}
+	final_source += GetBufferDeclarations(kernel, GLSLBufferDeclaration);
+	final_source += "\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	//reverse vector

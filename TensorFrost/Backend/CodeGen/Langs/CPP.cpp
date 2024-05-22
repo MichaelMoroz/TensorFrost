@@ -575,13 +575,10 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	string kernel_code = generator.AssembleString();
 
 	string loop = "";
-	for (auto& buffer : kernel->memory) {
-		Node* mem_node = buffer.first;
-		int binding = buffer.second;
-		string name = mem_node->var_name;
-		string type_name = "uint";
-		loop += "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
-	}
+	loop += GetBufferDeclarations(kernel, [](const string& name, const string& type_name, int binding) {
+		return "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
+	});
+
 	const int block_size = 4;
 	loop += "  #pragma omp parallel for\n";
 	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";

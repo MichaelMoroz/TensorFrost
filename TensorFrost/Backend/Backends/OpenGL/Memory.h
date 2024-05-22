@@ -33,10 +33,22 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 return buffer;
 	 }
 
+	 void CleanUp() {
+		 for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
+			 DeleteBuffer(allocated_ssbo[buf_to_delete]);
+			 allocated_ssbo.erase(buf_to_delete);
+		 	 buffer_manager.RemoveBuffer(buf_to_delete);
+		 }
+	 	 buffer_manager.buffers_to_delete.clear();
+	 }
+
 	 Buffer* TryGetBuffer(int size) override {
+	 	buffer_manager.UpdateTick();
+	 	CleanUp();
+
 	 	Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
 	 	if(!allocated_ssbo.contains(buffer)) {
-	 		allocated_ssbo[buffer] = CreateBuffer(size);
+	 		allocated_ssbo[buffer] = CreateBuffer(buffer->size);
 	 	}
 	 	return buffer;
 	 }

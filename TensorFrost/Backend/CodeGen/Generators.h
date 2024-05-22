@@ -15,6 +15,7 @@ string GetNodeName(const Node* node,  bool compact = false);
 string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
+string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, int)> get_name);
 string GetCPPHeader();
 string GetHLSLHeader();
 string GetGLSLHeader();

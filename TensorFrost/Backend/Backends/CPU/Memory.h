@@ -19,10 +19,22 @@ class CpuMemoryManager : public TensorMemoryManager {
  public:
 	unordered_map<Buffer*, uint*> allocated_arrays;
 
+	void CleanUp() {
+		for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
+			DeleteBuffer(allocated_arrays[buf_to_delete]);
+			allocated_arrays.erase(buf_to_delete);
+			buffer_manager.RemoveBuffer(buf_to_delete);
+		}
+		buffer_manager.buffers_to_delete.clear();
+	}
+
 	Buffer* TryGetBuffer(int size) override {
+		buffer_manager.UpdateTick();
+		CleanUp();
+
 		Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
 		if(!allocated_arrays.contains(buffer)) {
-			allocated_arrays[buffer] = CreateBuffer(size);
+			allocated_arrays[buffer] = CreateBuffer(buffer->size);
 		}
 		return buffer;
 	}
@@ -67,9 +79,13 @@ class CpuMemoryManager : public TensorMemoryManager {
 		array[index] = value;
 	}
 
+	void DeleteBuffer(uint* buffer) {
+		delete[] buffer;
+	}
+
 	~CpuMemoryManager() {
 		for(auto& [buffer, array]: allocated_arrays) {
-			delete[] array;
+			DeleteBuffer(array);
 		}
 	}
 };

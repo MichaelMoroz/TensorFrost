@@ -71,6 +71,23 @@ void GenerateNodeNames(const IR& ir) {
 	}
 }
 
+string GetBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, int)> get_name) {
+	vector<string> buffer_declarations = vector<string>(kernel->memory.size());
+	for (auto& buffer : kernel->memory) {
+		Node* mem_node = buffer.first;
+		int binding = buffer.second;
+		string name = mem_node->var_name;
+		string type_name = "uint";
+		buffer_declarations[binding] = get_name(name, type_name, binding);
+	}
+
+	string final_source;
+	for (auto& decl : buffer_declarations) {
+		final_source += decl;
+	}
+	return final_source;
+}
+
 string ReadVariable(Node* node) {
 	if (node->name == "const") {
 		return to_string(node->GetTensor()->data[0]);
