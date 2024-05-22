@@ -37,7 +37,7 @@ namespace TensorFrost {
         }
 
     public:
-        const int MAX_UNUSED_TIME = 32;
+        const int MAX_UNUSED_TIME = 512;
         map<int, unordered_set<Buffer*>> allocated_buffers;
         map<Buffer*, int> unused_time;
         unordered_set<Buffer*> buffers_to_delete;

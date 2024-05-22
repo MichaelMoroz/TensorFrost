@@ -47,6 +47,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	UNARY_FUNCTION(pcg);
 	UNARY_FUNCTION(pcgf);
+	UNARY_FUNCTION(reversebits);
 
 	m.def("float", [](const PyTensor& t) { return PT(Tensor::tofloat(T(t))); });
 	m.def("uint", [](const PyTensor& t) { return PT(Tensor::touint(T(t))); });
