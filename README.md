@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.5.0 beta)
+# 🔢🥶 TensorFrost (v0.5.1 beta)
 A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
 
 Currently working platforms:
