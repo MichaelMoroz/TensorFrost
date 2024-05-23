@@ -533,7 +533,7 @@ void IR::OptimizeKernels() {
 
 #define MAX_LOAD_COPY 5000.0f
 #define MAX_LOAD_COPY_COUNT 2
-#define MAX_LOAD_SIZE_RATIO 5.0f
+#define MAX_LOAD_SIZE_RATIO 0.5f
 void IR::OptimizeKernelLoadOperations() {
 	UpdateGraph();
 	ComputeNodeCost();
@@ -567,7 +567,7 @@ void IR::OptimizeKernelLoadOperations() {
 			int output_count = (int)memory_input->outputs_.size();
 			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
 			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
-			                          (size_ratio < MAX_LOAD_SIZE_RATIO);
+			                          (size_ratio <= MAX_LOAD_SIZE_RATIO);
 			bool cheap_enough = memory_input->cost_ >= 0.0f &&
 			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
 
@@ -2533,7 +2533,7 @@ void IR::CompileIR()
 	//CheckIR("Optimize operations", false, false);
 	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
-	CheckIR("Remove Unused Operations 0", false, false);
+	//CheckIR("Remove Unused Operations 0", false, false);
 	ComputeAutodiff();
 	RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
@@ -2548,35 +2548,35 @@ void IR::CompileIR()
 	//UnrollDimensions();
 	CheckIR("Separate Operations Into Kernels", false, false);
 	ReorderOperations();
-	CheckIR("Reorder Operations", true, false);
+	//CheckIR("Reorder Operations", true, false);
 	MoveShapeOutsideKernels();
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
-	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 8; i++) { //fusing kernels by loads (tensor product)
+	//CheckIR("Optimize kernels and host", true, false);
+	for (int i = 0; i < 10; i++) { //fusing kernels by loads (tensor product)
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
-		CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
+		//CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
 		OptimizeKernelLoadOperations();
 		CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
 	}
 	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
-	CheckIR("Add Kernel Global Memory Operations", true, true);
+	//CheckIR("Add Kernel Global Memory Operations", true, true);
 	AddMemoryOpIndices();
 	ReorderOperations();
 	OptimizeOperations();
 	AddMemoryOpIndices();
-	CheckIR("Final optimization", true, true);
+	//CheckIR("Final optimization", true, true);
 	FinalizeMemoryIndexing();
 	RemoveUnusedOperations();
-	CheckIR("Finalize Memory Indexing", false, false);
+	//CheckIR("Finalize Memory Indexing", false, false);
 	OptimizeKernels();
 	OptimizeHost();
 	//OptimizeLoops();
 	RemoveUnusedOperations();
-	CheckIR("Finalize Memory Indexing 2", true, true);
+	//CheckIR("Finalize Memory Indexing 2", true, true);
 	RemoveUnusedKernels();
 	OptimizeOperations();
 	RemoveUnusedOperations();

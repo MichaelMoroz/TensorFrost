@@ -21,7 +21,7 @@ void HideWindow();
 
 void Finish();
 
-void RenderFrame(const TensorMemory& tensor);
+void RenderFrame(const TensorProp& tensor);
 
 bool WindowShouldClose();
 

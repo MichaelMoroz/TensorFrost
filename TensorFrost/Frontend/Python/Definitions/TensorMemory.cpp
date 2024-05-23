@@ -2,214 +2,84 @@
 #include <vector>
 
 #include <Frontend/Python/PyTensor.h>
+#include <Frontend/Python/PyTensorMemory.h>
 
 namespace TensorFrost {
 
 void TensorMemoryDefinition(py::module& m,
-                            py::class_<TensorMemory>& py_tensor_mem) {
+                            py::class_<PyTensorMemory>& py_tensor_mem) {
+	//define constructors from numpy arrays
+	py_tensor_mem.def(py::init([](py::array_t<float> arr) {
+		return PyTensorMemory(arr, DataType::Float);
+	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
+
+	py_tensor_mem.def(py::init([](py::array_t<int> arr) {
+		return PyTensorMemory(arr, DataType::Int);
+	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
+
+	py_tensor_mem.def(py::init([](py::array_t<uint> arr) {
+		return PyTensorMemory(arr, DataType::Uint);
+	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
+
+	py_tensor_mem.def(py::init([](py::array_t<bool> arr) {
+		return PyTensorMemory(arr, DataType::Bool);
+	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
+
 	// "constructor"
 	m.def(
 	    "tensor",
-	    [](const std::vector<int>& shape, DataType /*type*/) {
-		    return global_memory_manager->Allocate(shape);
-	    },
-	    "Create a TensorMemory with the given shape");
+	    [](const std::vector<int>& shape, DataType type) {
+		    return PyTensorMemory(shape, type);
+	    },"Create a TensorMemory with the given shape", py::return_value_policy::take_ownership);
 
 	// "constructor" from numpy array
 	m.def(
 	    "tensor",
-	    [](std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>> arr) {
+	    [](std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>, py::array_t<bool>> arr) {
 		    if (std::holds_alternative<py::array_t<float>>(arr)) {
-			    py::array_t<float> arr_f = std::get<py::array_t<float>>(arr);
-			    py::buffer_info info = arr_f.request();
-
-			    // Get the shape
-			    std::vector<int> shape;
-			    for (int i = 0; i < info.ndim; i++) {
-				    shape.push_back((int)info.shape[i]);
-			    }
-
-			    // Create the data vector
-			    std::vector<uint> data;
-			    data.reserve(info.size);
-
-			    // Define a recursive lambda function for multi-dimensional iteration
-			    std::function<void(const int, std::vector<int>&)> iter_dims;
-			    iter_dims = [&iter_dims, &info, &data](const int dim,
-			                                           std::vector<int>& indices) {
-				    if (dim == info.ndim) {
-					    // Calculate the actual memory address using strides
-					    char* ptr = static_cast<char*>(info.ptr);
-					    for (int i = 0; i < info.ndim; ++i) {
-						    ptr += indices[i] * info.strides[i];
-					    }
-					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-				    } else {
-					    for (indices[dim] = 0; indices[dim] < info.shape[dim];
-					         ++indices[dim]) {
-						    iter_dims(dim + 1, indices);
-					    }
-				    }
-			    };
-
-			    // Start the multi-dimensional iteration
-			    std::vector<int> start_indices(info.ndim, 0);
-			    iter_dims(0, start_indices);
-
-			    // Allocate the memory
-			    return global_memory_manager->AllocateWithData(shape, data,
-			                                                   DataType::Float);
+		    	return new PyTensorMemory(std::get<py::array_t<float>>(arr), DataType::Float);
 		    } else if (std::holds_alternative<py::array_t<int>>(arr)) {
-			    py::array_t<int> arr_i = std::get<py::array_t<int>>(arr);
-			    py::buffer_info info = arr_i.request();
-
-			    // Get the shape
-			    std::vector<int> shape;
-			    for (int i = 0; i < info.ndim; i++) {
-				    shape.push_back((int)info.shape[i]);
-			    }
-
-			    // Create the data vector
-			    std::vector<uint> data;
-			    data.reserve(info.size);
-
-			    // Define a recursive lambda function for multi-dimensional iteration
-			    std::function<void(const int, std::vector<int>&)> iter_dims;
-			    iter_dims = [&iter_dims, &info, &data](const int dim,
-			                                           std::vector<int>& indices) {
-				    if (dim == info.ndim) {
-					    // Calculate the actual memory address using strides
-					    char* ptr = static_cast<char*>(info.ptr);
-					    for (int i = 0; i < info.ndim; ++i) {
-						    ptr += indices[i] * info.strides[i];
-					    }
-					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-				    } else {
-					    for (indices[dim] = 0; indices[dim] < info.shape[dim];
-					         ++indices[dim]) {
-						    iter_dims(dim + 1, indices);
-					    }
-				    }
-			    };
-
-			    // Start the multi-dimensional iteration
-			    std::vector<int> start_indices(info.ndim, 0);
-			    iter_dims(0, start_indices);
-
-			    // Allocate the memory
-			    return global_memory_manager->AllocateWithData(shape, data,
-			                                                   DataType::Int);
-			}
-			else if (std::holds_alternative<py::array_t<uint>>(arr)) {
-			    py::array_t<uint> arr_u = std::get<py::array_t<uint>>(arr);
-			    py::buffer_info info = arr_u.request();
-
-			    // Get the shape
-			    std::vector<int> shape;
-				for (int i = 0; i < info.ndim; i++) {
-				    shape.push_back((int)info.shape[i]);
-			    }
-
-			    // Create the data vector
-			    std::vector<uint> data;
-			    data.reserve(info.size);
-
-			    // Define a recursive lambda function for multi-dimensional iteration
-			    std::function<void(const int, std::vector<int>&)> iter_dims;
-				iter_dims = [&iter_dims, &info, &data](const int dim,
-					std::vector<int>& indices) {
-						if (dim == info.ndim) {
-					    // Calculate the actual memory address using strides
-					    char* ptr = static_cast<char*>(info.ptr);
-						for (int i = 0; i < info.ndim; ++i) {
-						    ptr += indices[i] * info.strides[i];
-					    }
-					    data.push_back(*(reinterpret_cast<uint*>(ptr)));
-						}
-						else {
-							for (indices[dim] = 0; indices[dim] < info.shape[dim];
-								++indices[dim]) {
-						    iter_dims(dim + 1, indices);
-					    }
-				    }
-			    };
-
-			    // Start the multi-dimensional iteration
-			    std::vector<int> start_indices(info.ndim, 0);
-			    iter_dims(0, start_indices);
-
-			    // Allocate the memory
-			    return global_memory_manager->AllocateWithData(shape, data,
-								                                                   DataType::Uint);
+				return new PyTensorMemory(std::get<py::array_t<int>>(arr), DataType::Int);
+		    } else if (std::holds_alternative<py::array_t<uint>>(arr)) {
+			    return new PyTensorMemory(std::get<py::array_t<uint>>(arr), DataType::Uint);
+		    } else if (std::holds_alternative<py::array_t<bool>>(arr)) {
+			    return new PyTensorMemory(std::get<py::array_t<bool>>(arr), DataType::Bool);
 		    } else {
 			    throw std::runtime_error("Unsupported data type");
 		    }
 	    },
-	    "Create a TensorMemory from a numpy array");
+	    "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	// properties
-	py_tensor_mem.def_property_readonly("shape", [](const TensorMemory& t) {
-		std::vector<int> shape = t.GetShape();
-		return py::make_tuple(shape);
+	py_tensor_mem.def_property_readonly("shape", [](const TensorProp& t) {
+		return py::make_tuple(GetShape(&t));
 	});
 
 	// to numpy array
 	py_tensor_mem.def_property_readonly(
 	    "numpy",
-	    [](const TensorMemory& t)
+	    [](const PyTensorMemory& t)
 	        -> std::variant<py::array_t<float>, py::array_t<int>,
-	                        py::array_t<uint>> {
-		    if (t.type == DataType::Float) {
-			    // create the numpy array
-			    py::array_t<float> arr(t.GetShape());
-
-			    // copy the data
-			    std::vector<uint> data = global_memory_manager->Readback(&t);
-			    float* ptr = static_cast<float*>(arr.request().ptr);
-			    for (int i = 0; i < data.size(); i++) {
-				    ptr[i] = *(reinterpret_cast<float*>(&data[i]));
-			    }
-
-			    return arr;
-		    } else if (t.type == DataType::Int) {
-			    // create the numpy array
-			    py::array_t<int> arr(t.GetShape());
-
-			    // copy the data
-			    std::vector<uint> data = global_memory_manager->Readback(&t);
-			    int* ptr = static_cast<int*>(arr.request().ptr);
-			    for (int i = 0; i < data.size(); i++) {
-				    ptr[i] = *(reinterpret_cast<int*>(&data[i]));
-			    }
-
-			    return arr;
-		    } else if (t.type == DataType::Uint) {
-			    // create the numpy array
-			    py::array_t<uint> arr(t.GetShape());
-
-			    // copy the data
-			    std::vector<uint> data = global_memory_manager->Readback(&t);
-			    uint* ptr = static_cast<uint*>(arr.request().ptr);
-
-			    for (int i = 0; i < data.size(); i++) {
-				    ptr[i] = data[i];
-			    }
-
-			    return arr;
+	                        py::array_t<uint>, py::array_t<bool>> {
+		    if (t.GetType() == DataType::Float) {
+		    	return t.ToPyArray<float>();
+		    } else if (t.GetType() == DataType::Int) {
+		    	return t.ToPyArray<int>();
+		    } else if (t.GetType() == DataType::Uint) {
+			    return t.ToPyArray<uint>();
+		    } else if (t.GetType() == DataType::Bool) {
+			    return t.ToPyArray<bool>();
 		    } else {
 			    throw std::runtime_error("Unsupported data type");
 		    }
 	    },
-	    "Readback data from tensor memory to a numpy array");
+	    "Readback data from tensor memory to a numpy array", py::return_value_policy::take_ownership);
 
-	m.def(
-	    "used_memory", []() { return global_memory_manager->GetAllocatedSize(); },
+	m.def("allocated_memory", []() { return global_memory_manager->GetAllocatedSize(); },
 	    "Get the amount of memory currently used by the memory manager");
 
-	m.def("free_memory", []() { global_memory_manager->FreeAll(); },
-			      "Free all memory allocated by the memory manager");
+	m.def("unused_allocated_memory", []() { return global_memory_manager->GetUnusedAllocatedSize(); },
+	    "Get the amount of memory currently allocated but not used by the memory manager");
 }
-
-TensorMemory::~TensorMemory() { manager->Free(this); }
 
 }  // namespace TensorFrost

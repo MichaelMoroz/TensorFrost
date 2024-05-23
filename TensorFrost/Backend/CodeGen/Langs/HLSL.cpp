@@ -20,16 +20,24 @@ class HLSLGenerator : public CodeGenerator {
 
 	string GenerateAtomicOp(const string& op, const string& input_type_name,
 	                        const string& output_type_name, const string& address,
-	                        const string& input, const string& output) override
+	                        const string& input, const string& output, const string& memory_name) override
 	{
-		if (op == "InterlockedAdd_Prev") {
-			additional_lines.push_back("InterlockedAdd(mem[" + address + "], " +
-			                           input + ", " + output + ");");
+		if (op == "InterlockedAdd") {
+			if(input_type_name == "float")
+			{
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+			}
+			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ")";
+		} else if (op == "InterlockedAdd_Prev") {
+			if(input_type_name == "float")
+			{
+				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+			}
+			additional_lines.push_back("InterlockedAdd("+memory_name+"_mem[" + address + "], " +
+									   input + ", " + output + ");");
 			return "0";
-		}
-		else
-		{
-			return op + "(mem[" + address + "], " + input + ")";
+		} else {
+			return op + "("+memory_name+"_mem[" + address + "], " + input + ")";
 		}
 	}
 
@@ -58,7 +66,7 @@ float pcgf(uint v)
 	return float(pcg(v)) / float(0xffffffffu);
 }
 
-float InterlockedAdd(RWStructuredBuffer<uint> buffer, int index, float val)
+float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 {
     uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
     [allow_uav_condition] while (true) {
@@ -70,35 +78,8 @@ float InterlockedAdd(RWStructuredBuffer<uint> buffer, int index, float val)
     return asfloat(tmp1);
 }
 
-float InterlockedMin(RWStructuredBuffer<uint> buffer, int index, float val)
-{
-	uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
-	[allow_uav_condition] while (true) {
-		InterlockedMin(buffer[index], tmp0, uval, tmp1);
-		if (tmp1 == tmp0)  break;
-		tmp0 = tmp1;
-		uval = asuint(min(val, asfloat(tmp1)));
-	}
-	return asfloat(tmp1);
-}
-
-float InterlockedMax(RWStructuredBuffer<uint> buffer, int index, float val)
-{
-	uint uval = asuint(val), tmp0 = 0, tmp1 = 0;
-	[allow_uav_condition] while (true) {
-		InterlockedMax(buffer[index], tmp0, uval, tmp1);
-		if (tmp1 == tmp0)  break;
-		tmp0 = tmp1;
-		uval = asuint(max(val, asfloat(tmp1)));
-	}
-	return asfloat(tmp1);
-}
-
-RWStructuredBuffer<uint> mem : register(u0);
-
 struct UBO
 {
-	int off[32];
 	int var[32];
 	int dispatch_size;
 };
@@ -108,8 +89,15 @@ cbuffer ubo : register(b1) { UBO ubo; }
 )";
 }
 
+string HLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
+}
+
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetHLSLHeader();
+
+	final_source += GetBufferDeclarations(kernel, HLSLBufferDeclaration);
+	final_source += "\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector

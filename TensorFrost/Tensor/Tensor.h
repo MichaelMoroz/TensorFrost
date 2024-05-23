@@ -887,6 +887,8 @@ class Tensor {
 	static Tensor& pcg(const Tensor& x) { return Op("pcg", &x); }
 	static Tensor& pcgf(const Tensor& x) { return Op("pcgf", &x); }
 
+	static Tensor& reversebits(const Tensor& x) { return Op("reversebits", &x); }
+
 	static Tensor& tofloat(const Tensor& x) { return Op("float", &x); }
 	static Tensor& toint(const Tensor& x) { return Op("int", &x); }
 	static Tensor& touint(const Tensor& x) { return Op("uint", &x); }

@@ -2,6 +2,7 @@
 #include <vector>
 
 #include <Frontend/Python/PyTensor.h>
+#include <Frontend/Python/PyTensorMemory.h>
 
 namespace TensorFrost {
 
@@ -35,26 +36,16 @@ void TensorProgramDefinition(py::module& m,
 	tensor_program.def(
 	    "__call__",
 	    [](TensorProgram& program, py::args py_inputs) {
-		    vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
-		    vector<TensorMemory*> outputs = program.Evaluate(inputs);
+		    vector<PyTensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
+	    	vector<TensorProp*> inputs_props;
+	    	for (auto input : inputs) {
+	    		inputs_props.push_back(input->tensor_);
+	    	}
+		    vector<TensorProp*> outputs = program.Evaluate(inputs_props);
 		    // output a tuple of tensor memories
 		    py::tuple py_outputs = py::tuple(outputs.size());
 		    for (size_t i = 0; i < outputs.size(); i++) {
-			    py_outputs[i] = py::cast(*outputs[i]);
-		    }
-		    return py_outputs;
-	    },
-	    "Evaluate the TensorProgram with the given inputs");
-
-	tensor_program.def(
-	    "__call__",
-	    [](TensorProgram& program, py::tuple py_inputs) {
-		    vector<TensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
-		    vector<TensorMemory*> outputs = program.Evaluate(inputs);
-		    // output a tuple of tensor memories
-		    py::tuple py_outputs = py::tuple(outputs.size());
-		    for (size_t i = 0; i < outputs.size(); i++) {
-			    py_outputs[i] = py::cast(*outputs[i]);
+			    py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
 		    }
 		    return py_outputs;
 	    },

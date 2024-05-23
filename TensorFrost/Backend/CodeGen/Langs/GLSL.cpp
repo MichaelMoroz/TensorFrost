@@ -10,6 +10,7 @@ class GLSLGenerator : public CodeGenerator {
 		{"modf", "mod"},
 		{"atan2", "atan"},
 		{"lerp", "mix"},
+        {"reversebits", "bitfieldReverse"}
 	};
 
  public:
@@ -19,29 +20,29 @@ class GLSLGenerator : public CodeGenerator {
 
 	string GenerateAtomicOp(const string& op, const string& input_type_name,
 	                        const string& output_type_name,
-	                        const string& address, const string& input, const string& output) override {
+	                        const string& address, const string& input, const string& output, const string& memory_name) override {
 		if (op == "InterlockedAdd") {
 			if(input_type_name == "float")
 			{
-				return "atomicAddF(" + address + ", " + input + ")";
+				return "atomicAdd_"+memory_name+"(" + address + ", " + input + ")";
 			}
-			return "atomicAdd(mem[" + address + "], uint(" + input + "))";
+			return "atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
-				return  output_type_name + "(atomicAddF(" + address + ", " + input +"))";
+				return  output_type_name + "(atomicAdd_"+memory_name+"(" + address + ", " + input +"))";
 			}
-			return output_type_name + "(atomicAdd(mem[" + address + "], uint(" + input + ")))";
+			return output_type_name + "(atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
-			return "atomicMin(mem[" + address + "], uint(" + input + "))";
+			return "atomicMin("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedMax") {
-			return "atomicMax(mem[" + address + "], uint(" + input + "))";
+			return "atomicMax("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAnd") {
-			return "atomicAnd(mem[" + address + "], uint(" + input + "))";
+			return "atomicAnd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedOr") {
-			return "atomicOr(mem[" + address + "], uint(" + input + "))";
+			return "atomicOr("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedXor") {
-			return "atomicXor(mem[" + address + "], uint(" + input + "))";
+			return "atomicXor("+memory_name+"_mem[" + address + "], uint(" + input + "))";
 		}
 		else
 		{
@@ -95,33 +96,39 @@ int asint(uint x) {
   return int(x);
 }
 
-uniform int off[32];
 uniform int var[32];
-
-layout(std430, binding = 0) buffer memory {
-  uint mem[];
-};
-
-float atomicAddF(int index, float val)
-{
-    uint uval = floatBitsToUint(val);
-    uint tmp0 = 0;
-    uint tmp1 = 0;
-
-    while (true) {
-        tmp0 = atomicCompSwap(mem[index], tmp0, uval);
-        if (tmp1 == tmp0) break;
-        tmp1 = tmp0;
-        uval = floatBitsToUint(val + uintBitsToFloat(tmp1));
-    }
-
-    return uintBitsToFloat(tmp1);
-}
 )";
+}
+
+string GLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
+	//add atomic functions
+	decl += R"(
+float atomicAdd_)" + name + R"((int index, float val) {
+	uint uval = floatBitsToUint(val);
+	uint tmp0 = 0;
+	uint tmp1 = 0;
+
+	while (true) {
+		tmp0 = atomicCompSwap()" + name + R"(_mem[index], tmp1, uval);
+		if (tmp1 == tmp0) break;
+		tmp1 = tmp0;
+		uval = floatBitsToUint(val + uintBitsToFloat(tmp1));
+	}
+
+	return uintBitsToFloat(tmp1);
+}
+
+)";
+
+	return decl;
 }
 
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	string final_source = GetGLSLHeader();
+
+	final_source += GetBufferDeclarations(kernel, GLSLBufferDeclaration);
+	final_source += "\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	//reverse vector

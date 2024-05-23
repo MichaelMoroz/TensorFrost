@@ -68,47 +68,33 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TensorProp GetTensorProp(TensorMemory* tensor) {
-	TensorProp prop;
-	prop.offset = tensor->frame->start;
-	auto shape = tensor->GetShape();
-	prop.dim = (uint)shape.size();
-	prop.shape = new uint[prop.dim];
-	for (uint i = 0; i < prop.dim; i++) {
-		prop.shape[i] = (uint)shape[i];
-	}
-	prop.type = tensor->type;
-	return prop;
-}
-
 TensorProp Allocator(uint* a, uint dim, DataType type) {
 	vector<int> shape;
 	for (uint i = 0; i < dim; i++) {
 		shape.push_back(a[i]);
 	}
-	TensorMemory* tensor = global_memory_manager->Allocate(shape, type);
-	return GetTensorProp(tensor);
+	return *global_memory_manager->Allocate(shape, type);
 }
 
 void Deallocator(TensorProp a) { 
-	global_memory_manager->Free(a.offset); 
+	global_memory_manager->Free(&a);
 	delete[] a.shape;
 }
 
 uint Readback(TensorProp a, uint b) {
-	return global_memory_manager->ReadbackValue(global_memory_manager->allocated_by_offset[a.offset], b);
+	return global_memory_manager->ReadbackValue(&a, b);
 }
 
 void Writeback(TensorProp a, uint b, uint c) {
-	global_memory_manager->WritebackValue(global_memory_manager->allocated_by_offset[a.offset], b, c);
+	global_memory_manager->WritebackValue(&a, b, c);
 }
 
 void Dispatch(DispatchInfo info) {
 	global_kernel_manager->DispatchKernel(info);
 }
 
-vector<TensorMemory*> ExecuteProgram(
-    Program* program, vector<TensorMemory*> inputs) {
+vector<TensorProp*> ExecuteProgram(
+    Program* program, vector<TensorProp*> inputs) {
 
 	if (current_backend == BackendType::CodeGen) {
 		throw std::runtime_error("Cannot execute program with code generation backend");
@@ -125,7 +111,7 @@ vector<TensorMemory*> ExecuteProgram(
 	vector<TensorProp> input_tensors;
 	for (int i = 0; i < memory_input_count; i++) {
 		// add input memory offset
-		input_tensors.push_back(GetTensorProp(inputs[i]));
+		input_tensors.push_back(*inputs[i]);
 	}
 
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
@@ -145,17 +131,9 @@ vector<TensorMemory*> ExecuteProgram(
 		//Finish();
 	}
 
-	vector<TensorMemory*> outputs;
-	outputs.resize(output_count);
-	for (int i = 0; i < output_count; i++)
-	{
-		outputs[i] = global_memory_manager->allocated_by_offset[out[i].offset];
-		//TODO this can potentially overwite some of the tensor properties used elsewhere
-		outputs[i]->shape.clear();
-		for (uint j = 0; j < out[i].dim; j++) {
-			outputs[i]->shape.push_back(out[i].shape[j]);
-		}
-		outputs[i]->type = out[i].type;
+	vector<TensorProp*> outputs = vector<TensorProp*>(output_count);
+	for (int i = 0; i < output_count; i++) {
+		outputs[i] = &out[i];
 	}
 
 	return outputs;

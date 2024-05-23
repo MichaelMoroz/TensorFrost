@@ -217,9 +217,9 @@ void Finish() {
 	glFinish();
 }
 
-void RenderFrame(const TensorMemory& tensor) {
+void RenderFrame(const TensorProp& tensor) {
 	//check if tensor is 2d + 3 channels
-	if (tensor.shape.size() != 3 || tensor.shape[2] != 3) {
+	if (tensor.dim != 3 || tensor.shape[2] != 3) {
 		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
 	}
 
@@ -232,13 +232,13 @@ void RenderFrame(const TensorMemory& tensor) {
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	GLuint ssbo = ((OpenGLMemoryManager*)global_memory_manager)->memory;
+	GLuint ssbo = ((OpenGLMemoryManager*)global_memory_manager)->GetNativeBuffer(&tensor);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
 	glUseProgram(quad_program);
 
 	// Set the uniforms
-	int offset = tensor.frame->start;
+	int offset = 0;
 	int width = tensor.shape[1];
 	int height = tensor.shape[0];
 	glUniform1i(glGetUniformLocation(quad_program, "offset"), offset);

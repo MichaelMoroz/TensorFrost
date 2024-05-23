@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "../Tensor/Tensor.h"
-#include "FrameAllocator.h"
+#include "BufferManager.h"
 
 namespace TensorFrost {
 
@@ -17,7 +17,7 @@ using namespace std;
 
 extern "C" {
 	struct TensorProp {
-		uint offset;
+		Buffer* buffer;
 		uint dim;
 		uint* shape;
 		DataType type;
@@ -37,73 +37,77 @@ extern "C" {
 	typedef uint readback_func(TensorProp, uint);
 	typedef void writeback_func(TensorProp, uint, uint);
 	typedef void dispatch_func(DispatchInfo);
-	typedef void cpu_dispatch_func(uint* var, uint* off, uint* mem, uint work_group_count);
+	typedef void cpu_dispatch_func(uint* var, uint** mem, uint work_group_count);
 }
 
 using uint = unsigned int;
 using main_func = void(TensorProp*, TensorProp*, alloc_func, dealloc_func, readback_func, writeback_func, dispatch_func);
 
 int GetLinearSize(const vector<int>& shape);
+vector<int> GetShape(const TensorProp* tensor);
+int GetSize(const TensorProp* tensor);
 
 class TensorMemoryManager;
 
-class TensorMemory {
- public:
-	DataType type = DataType::Float;
-	vector<int> shape;
-	TensorMemoryManager* manager;
-	Frame* frame;
-
-	TensorMemory(const vector<int>& shape, Frame* frame,
-	             TensorMemoryManager* used_manager)
-	    : shape(shape), frame(frame), manager(used_manager) {}
-
-	int GetSize() const { return GetLinearSize(shape); }
-
-	vector<int> GetShape() const { return shape; }
-
-	~TensorMemory();
-};
-
 class TensorMemoryManager {
- public:
-	FrameAllocator allocator;
-	map<uint, TensorMemory*> allocated_by_offset;
+public:
+	BufferManager buffer_manager;
 
-	virtual TensorMemory* Allocate(const vector<int>& shape,
-	                               const DataType type = DataType::Float) = 0;
-	virtual TensorMemory* AllocateWithData(const vector<int>& shape, const vector<uint>& data,
-	    const DataType type = DataType::Float) = 0;
-	virtual vector<uint> Readback(const TensorMemory* memory) = 0;
-	virtual uint ReadbackValue(const TensorMemory* memory, uint index) = 0;
-	virtual void Writeback(const TensorMemory* memory, const vector<uint>& data) = 0;
-	virtual void WritebackValue(const TensorMemory* memory, uint index, uint value) = 0;
-	
-	void Free(TensorMemory* memory) {
-		Frame* frame = memory->frame;
-		allocator.FreeFrame(*frame);
-		allocated_by_offset.erase(frame->start);
+	virtual Buffer* TryGetBuffer(int size) {
+		throw std::runtime_error("TryGetBuffer not implemented");
 	}
 
-	void Free(uint offset) { Free(allocated_by_offset[offset]); }
+	virtual void SetDataAtOffset(const TensorProp* buffer, int offset, const vector<uint>& data) {
+		throw std::runtime_error("SetDataAtOffset not implemented");
+	}
 
-	void FreeAll() {
-		vector<TensorMemory*> to_delete;
-		for (auto& pair : allocated_by_offset) {
-			to_delete.push_back(pair.second);
+	TensorProp* Allocate(const vector<int>& shape, const DataType type = DataType::Float) {
+		int size = GetLinearSize(shape);
+
+		if (size == 0) {
+			throw invalid_argument("Trying to allocate a tensor with size 0");
 		}
 
-		for (auto& memory : to_delete) {
-			Free(memory);
-		}
+		Buffer* buf = TryGetBuffer(size);
+		return MakeTensor(shape, buf, type);
 	}
 
-	~TensorMemoryManager() {
-		FreeAll();
+	TensorProp* AllocateWithData(const vector<int>& shape, const vector<uint>& data, const DataType type = DataType::Float) {
+		TensorProp* tensor_memory = Allocate(shape, type);
+		SetDataAtOffset(tensor_memory, 0, data);
+		return tensor_memory;
 	}
 
-	virtual uint32_t GetAllocatedSize() const {
-		return allocator.GetRequiredAllocatedStorage();
+	virtual vector<uint> Readback(const TensorProp* memory) = 0;
+	virtual uint ReadbackValue(const TensorProp* memory, uint index) = 0;
+	virtual void Writeback(const TensorProp* memory, const vector<uint>& data) = 0;
+	virtual void WritebackValue(const TensorProp* memory, uint index, uint value) = 0;
+
+	TensorProp* MakeTensor(uint* shape, uint dim, Buffer* buf, DataType type) {
+		TensorProp* tensor = new TensorProp();
+		tensor->buffer = buf;
+		tensor->dim = dim;
+		tensor->shape = shape;
+		tensor->type = type;
+		return tensor;
+	}
+
+	TensorProp* MakeTensor(const vector<int>& shape, Buffer* buf, DataType type) {
+		uint* shape_arr = new uint[shape.size()];
+		std::copy(shape.begin(), shape.end(), shape_arr);
+		return MakeTensor(shape_arr, (int)shape.size(), buf, type);
+	}
+
+	void Free(TensorProp* memory) {
+		buffer_manager.DeallocateBuffer(memory->buffer);
+	}
+
+	uint32_t GetAllocatedSize() const {
+		return buffer_manager.GetRequiredAllocatedStorage();
+	}
+
+	uint32_t GetUnusedAllocatedSize() const {
+		return buffer_manager.GetUnusedAllocatedStorage();
 	}
 };
 
