@@ -37,11 +37,18 @@ class KernelManager
 		return main_functions;
 	}
 
-	vector<string> GetAllKernels() {
-		vector<string> kernels;
+	vector<tuple<string, vector<tuple<string, int, string>>>> GetAllKernels() {
+		vector<tuple<string, vector<tuple<string, int, string>>>> kernels;
 		kernels.resize(kernel_map.size());
 		for (auto& kernel : kernel_map) {
-			kernels[kernel.first] = kernel.second->generated_code_;
+			vector<tuple<string, int, string>> args;
+			for (auto& [mem_node, binding] : kernel.second->memory) {
+				string name = mem_node->var_name + "_mem";
+				string type_name = "uint";
+				args.push_back({name, binding, type_name});
+			}
+			string code = kernel.second->generated_code_;
+			kernels[kernel.first] = {code, args};
 		}
 		return kernels;
 	}
