@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Backend/CodeGen/Generators.h"
 #include "IR/KernelGen.h"
 

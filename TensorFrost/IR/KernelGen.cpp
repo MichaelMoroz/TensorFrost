@@ -1,5 +1,3 @@
-#pragma once
-
 #include "IR/KernelGen.h"
 
 namespace TensorFrost {
@@ -9,6 +7,17 @@ namespace TensorFrost {
 		throw std::runtime_error("Fatal Error: Tensor node does not match");
 	}
 	return tensor_;
+}
+
+void ArgumentManager::UpdateArgument(ArgID id, Node *node) {
+	if(node == nullptr) {
+		throw std::runtime_error("Node is null");
+	}
+	if(!Has(id)) {
+		throw std::runtime_error("No argument to update");
+	}
+	inputs_[id] = node;
+	argument_types_[id] = node->GetTensor()->type;
 }
 
 //if shape nodes are compatible, then return the broadcast shape, if not return nullptr
@@ -130,8 +139,6 @@ ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, 
 
 //TODO: rewrite this function
 void IR::SeparateOperationsIntoKernels() {
-	UpdateGraph();
-
 	auto kernel_scopes = KernelScope::ComputeScopes(root);
 
 	// create kernel nodes for all kernel scopes
@@ -155,16 +162,12 @@ void IR::SeparateOperationsIntoKernels() {
 }
 
 string IR::PrintListing(map<Node*, string> node_debug) const {
-#ifdef NDEBUG
-	return "";
-#endif
 	return GetOperationListing(*this, false, node_debug) + "\n\n";
 }
 
 // check if all child nodes in a kernel have compatible shape to the kernel
 void IR::CheckKernelShapes() {
 	// get kernels
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	// go over all outputs of each kernel and create memory nodes to store the
@@ -175,6 +178,8 @@ void IR::CheckKernelShapes() {
 			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
 		}
 	}
+
+	UpdateGraph();
 }
 
 void IR::RemoveNode(Node* node) {
@@ -188,15 +193,6 @@ void IR::RemoveNode(Node* node) {
 			for (Node* child : to_delete) {
 				RemoveNode(child);
 			}
-		}
-
-		// remove from outputs of all inputs
-		for (auto& [id, input] : node->args.inputs_) {
-			if(input == nullptr) {
-				//throw std::runtime_error("Input is null for node " + node->name);
-				continue;
-			}
-			input->args.outputs_.erase(node);
 		}
 
 		// if direct child of its parent
@@ -254,7 +250,6 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
 
 void IR::ReorderOperations() {
 	// get kernel data
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	for (auto* kernel: kernels) {
@@ -262,13 +257,13 @@ void IR::ReorderOperations() {
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
-			for (auto& [id, input] : node->args.inputs_) {
-				bool outside_kernel = !input->HasParent(kernel);
+			for (auto& [id, from] : node->args.inputs_) {
+				bool outside_kernel = !from->HasParent(kernel);
 				if (outside_kernel && !node->args.CannotMoveArgument(id)) {
 					// if this node is a set and its input is outside of the cluser ->
 					// move it inside
 					if (node->op->HasAllTypes(OpClass::Set)) {
-						nodes_to_move.insert(input);
+						nodes_to_move.insert(from);
 					}
 				}
 			}
@@ -282,6 +277,8 @@ void IR::ReorderOperations() {
 			MoveNodeTo(kernel_begin, node);
 		}
 	}
+
+	UpdateGraph();
 }
 
 /// <summary>
@@ -302,7 +299,7 @@ map<Node*, Node*> IR::CopyNodes(
 	// if we have indices, we are basically rerunning the computation with a
 	// different set of indices (of possible different shape)
 	bool can_change_shape = !indices.empty();
-	Arguments shape_args = Arguments();
+	NodeArguments shape_args = NodeArguments();
 	if (can_change_shape) {
 		// get first index
 		int first_index = indices.begin()->first;
@@ -343,7 +340,7 @@ map<Node*, Node*> IR::CopyNodes(
 
 		if (no_index) {
 			// create new arguments
-			Arguments new_args;
+			NodeArguments new_args;
 			for (auto& [arg, from]: node->args.inputs_) {
 				auto& [type, index] = arg;
 				if (can_change_shape && type == ArgType::Shape) {
@@ -439,7 +436,7 @@ map<Node*, Node*> IR::CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
 	return copied_node_map;
 }
 
-void IR::CopyArguments(ArgumentEdges args_to_copy, Node* cursor)
+void IR::CopyArguments(ArgEdges args_to_copy, Node* cursor)
 {
 	unordered_set<Node*> nodes_to_copy;
 	for (auto& [arg, out] : args_to_copy) {
@@ -472,8 +469,8 @@ void IR::OptimizeKernels() {
 	// go over each kernel and copy computations outside the kernel if they are
 	// cheap enough
 	for (auto kernel : kernels) {
-		ArgumentEdges args_to_copy;
-		ArgumentEdges shape_args_to_copy;
+		ArgEdges args_to_copy;
+		ArgEdges shape_args_to_copy;
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
@@ -492,12 +489,12 @@ void IR::OptimizeKernels() {
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
 					bool has_only_one_output = from->args.outputs_.size() == 1;
 					if (cheap_enough || has_only_one_output) {
-						args_to_copy[Arg(arg, from)] = *node;
+						args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
 					}
 				}
 				//shape arguments can not be inside kernels
 				if (from_in_kernel && arg.first == ArgType::Shape) {
-					shape_args_to_copy[Arg(arg, from)] = *node;
+					shape_args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
 				}
 			}
 		}
@@ -507,7 +504,7 @@ void IR::OptimizeKernels() {
 			Node* shape_node = kernel->args.Get(ArgType::Shape, i);
 			bool from_in_kernel =shape_node->HasParent("kernel");
 			if (from_in_kernel) {
-				shape_args_to_copy[Arg(ArgID(ArgType::Shape, i), shape_node)] = kernel;
+				shape_args_to_copy.push_back(ArgEdge(Arg(ArgID(ArgType::Shape, i), shape_node), kernel));
 			}
 		}
 
@@ -522,7 +519,6 @@ void IR::OptimizeKernels() {
 #define MAX_LOAD_COPY_COUNT 2
 #define MAX_LOAD_SIZE_RATIO 0.5f
 void IR::OptimizeKernelLoadOperations() {
-	UpdateGraph();
 	ComputeNodeCost();
 
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -613,6 +609,8 @@ void IR::OptimizeKernelLoadOperations() {
 	for (auto node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 #define MAX_HOST_COPY_COST 8192.0f
@@ -626,7 +624,7 @@ void IR::OptimizeHost() {
 			continue;
 		}
 
-		ArgumentEdges args_to_copy;
+		ArgEdges args_to_copy;
 		// go over all inputs
 		for (auto& [arg, from] : node->args.inputs_) {
 			bool inside_kernel = from->HasParent("kernel");
@@ -642,7 +640,7 @@ void IR::OptimizeHost() {
 				bool has_only_one_output = from->args.outputs_.size() == 1;
 
 				if (cheap_enough || has_only_one_output) {
-					args_to_copy[Arg(arg, from)] = *node;
+					args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
 				} else {
 					throw std::runtime_error("Host optimization: Copy cost too high for node " + node->name + " with cost " + to_string(input_cost));
 				}
@@ -656,8 +654,6 @@ void IR::OptimizeHost() {
 
 
 void IR::MoveShapeOutsideKernels() {
-	UpdateGraph();
-
 	// find all nodes that are used as shapes and are inside kernels
 	map<Node*, Node*> nodes_to_copy;
 	for (auto node = begin(); !node.end(); node.next()) {
@@ -679,13 +675,13 @@ void IR::MoveShapeOutsideKernels() {
 
 	for (auto [ node, kernel ] : nodes_to_copy) {
 		//get all output arguments that are shapes
-		ArgumentEdges args_to_copy;
+		ArgEdges args_to_copy;
 		int earliest_output_index = INT_MAX;
 		Node* earliest_output = nullptr;
 		for (auto& [out, ids] : node->args.outputs_) {
 			for (auto& id : ids) {
 				if (id.first == ArgType::Shape) {
-					args_to_copy[Arg(id, out)] = kernel;
+					args_to_copy.push_back(ArgEdge(Arg(id, node), out));
 
 					//get the earliest output
 					if (out->index_ < earliest_output_index) { //wat
@@ -723,7 +719,14 @@ void IR::GetInputList() {
 			}
 
 			// set input memory index
-			node->special_index_ = input_memory_index++;
+			int input_index = input_memory_index++;
+			node->special_indices_[0] = input_index;
+			//if any of the inputs are "input_shape" then we need to add the input index to them
+			for (auto& [arg, from] : node->args.inputs_) {
+				if (arg.first == ArgType::Shape && from->name == "input_shape") {
+					from->special_indices_[1] = input_index;
+				}
+			}
 		}
 	}
 }
@@ -741,7 +744,7 @@ void IR::GetOutputList() {
 				                                                        // memory nodes
 				                                                        // at this point
 			}
-			output_memory_map[node->special_index_] = *node;
+			output_memory_map[node->special_indices_[0]] = *node;
 		}
 		if (node->op->HasAllTypes(OpClass::Modifier, OpClass::MemoryOp)) {
 			if (!node->HasParent("kernel")) {
@@ -962,8 +965,6 @@ unordered_set<Node*> IR::GetDependencies(unordered_set<Node*> nodes) {
 }
 
 void IR::RemoveUnusedOperations() {
-	UpdateGraph();
-
 	unordered_set<Node*> used_nodes;
 	//mark all output nodes as used
 	for (auto node = begin(); !node.end(); node.next()) {
@@ -1013,12 +1014,13 @@ void IR::ComputeNodeCost()
 	}
 }
 
-map<Node *, Arguments> IR::GetKernelOutputs(Node *kernel)
+map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 {
-	map<Node*, Arguments> node_output;
+	UpdateGraph();
+	map<Node*, ArgEdges> node_output;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 		bool is_output = node->memory_type_ == MemoryType::Output;
-		Arguments outputs = Arguments();
+		ArgEdges outputs = ArgEdges();
 
 		for (auto& [out, ids] : node->args.outputs_) {
 			if (out == nullptr) continue;
@@ -1026,7 +1028,8 @@ map<Node *, Arguments> IR::GetKernelOutputs(Node *kernel)
 			for(auto& id: ids) {
 				if (id.first == ArgType::Shape) continue;
 				if (!out->HasParent(kernel)) {
-					outputs[id] = out;
+					outputs.emplace_back(Arg(id, *node), out);
+					is_output = true;
 				}
 			}
 		}
@@ -1060,13 +1063,12 @@ void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
 
 void IR::AddKernelGlobalLoadOperations() {
 	// get kernels
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	for (auto kernel : kernels) {
 
 		// replace all inputs pointing to memory nodes with the memory node
 		unordered_set<Node*> nodes_to_load;
-		unordered_map<Node*, ArgumentEdges> load_arguments;
+		unordered_map<Node*, ArgEdges> load_arguments;
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			for (auto& [arg, input_node] : node->args.inputs_) {
 				if (arg.first == ArgType::Memory || arg.first == ArgType::Shape)
@@ -1078,7 +1080,7 @@ void IR::AddKernelGlobalLoadOperations() {
 
 				if (is_memory || (is_in_a_kernel && is_outside)) {
 					nodes_to_load.insert(input_node);
-					load_arguments[input_node][Arg(arg, input_node)] = node.get();
+					load_arguments[input_node].push_back(ArgEdge(Arg(arg, input_node), node.get()));
 				}
 			}
 		}
@@ -1089,21 +1091,22 @@ void IR::AddKernelGlobalLoadOperations() {
 				Tensor& loaded = Tensor::Load(*node->GetTensor(), {}, true);
 				for (auto [in, out] : load_arguments[node]) {
 					auto& [arg, from] = in;
-					node->args.UpdateArgument(arg, loaded.node_);
+					out->args.UpdateArgument(arg, loaded.node_);
 				}
 			});
 		}
+
+		UpdateGraph();
 	}
 }
 
 
 void IR::AddMemoryOpIndices() {
 	// get kernels
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	for (auto kernel : kernels) {
 		// get kernel shape arguments
-		Arguments shape_args = kernel->args.GetArguments(ArgType::Shape);
+		NodeArguments shape_args = kernel->args.GetArguments(ArgType::Shape);
 
 		Tensors indices = Tensors();
 		// add dimension index nodes
@@ -1146,17 +1149,18 @@ void IR::AddMemoryOpIndices() {
 			});
 		}
 	}
+
+	UpdateGraph();
 }
 
 void IR::AddKernelGlobalStoreOperations() {
 	// get kernels
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	// go over all outputs of each kernel and create memory nodes to store the
 	// output
 	for (auto kernel: kernels) {
-		map<Node*, Arguments> node_output = GetKernelOutputs(kernel);
+		map<Node*, ArgEdges> node_output = GetKernelOutputs(kernel);
 
 		for (auto [output, args] : node_output) {
 			// if the output is already a memory node, then skip
@@ -1172,14 +1176,15 @@ void IR::AddKernelGlobalStoreOperations() {
 
 				if (output->memory_type_ == MemoryType::Output) {
 					mem->memory_type_ = MemoryType::Output;
-					mem->special_index_ = output->special_index_;
+					mem->special_indices_ = output->special_indices_;
 					output->memory_type_ = MemoryType::None;
 				}
 			});
 
 			// go over all outputs of this node and replace their input with the
 			// memory node
-			for (auto& [id, to] : args) {
+			for (auto& [arg, to] : args) {
+				auto id = arg.first;
 				if (id.first != ArgType::Shape &&
 				    id.first != ArgType::Memory) {
 					// if not a memory or shape argument, then the memory needs to be
@@ -1226,11 +1231,12 @@ void IR::AddKernelGlobalStoreOperations() {
 			}
 		}
 	}
+
+	UpdateGraph();
 }
 
 void IR::AddMemoryDeallocation()
 {
-	UpdateGraph();
 	vector<Node*> memory_nodes = GetNodesOfType("memory");
 
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
@@ -1279,6 +1285,7 @@ void IR::AddMemoryDeallocation()
 			Tensor* deallocate = &Tensor::Deallocate(*memory->GetTensor());
 		});
 	}
+
 	UpdateGraph();
 }
 
@@ -1312,7 +1319,7 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 
 
 // compute the flat index (in C-order)
-Tensor* ComputeFlatIndex(Arguments memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, TensorIndexingMode mode = TensorIndexingMode::Clamp)
+Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, TensorIndexingMode mode = TensorIndexingMode::Clamp)
 {
 	if (memory_dim == 0)
 	{
@@ -1391,10 +1398,14 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 		}
 	}
 
+	UpdateGraph();
+
 	// remove all dim nodes
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
@@ -1511,7 +1522,7 @@ void ComputeAddress(Node* node, vector<Tensor*> indices)
 	// get the input memory node
 	const Tensor* memory = node->args.GetTensor(ArgType::Memory);
 
-	Arguments memory_shape = memory->node_->args.GetArguments(ArgType::Shape);
+	NodeArguments memory_shape = memory->node_->args.GetArguments(ArgType::Shape);
 
 	int memory_dim = (int)memory_shape.size();
 
@@ -1536,7 +1547,6 @@ void ComputeAddress(Node* node, vector<Tensor*> indices)
 }
 
 void IR::FinalizeMemoryIndexing() {
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	vector<Tensor*> dispatch_checks;
@@ -1595,7 +1605,6 @@ void IR::FinalizeMemoryIndexing() {
 
 void IR::RemoveUnusedKernels()
 {
-	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	vector<Node*> nodes_to_remove;
 
@@ -1620,6 +1629,8 @@ void IR::RemoveUnusedKernels()
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 int GetAxis(int dims, int axis)
@@ -1894,7 +1905,6 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 }
 
 void IR::InsertAlgorithmicPrimitives() {
-	UpdateGraph();
 	// get all nodes for each type
 	vector<Node*> nodes = GetNodesOfType(OpClass::Algorithm);
 
@@ -1991,7 +2001,7 @@ void IR::InsertAlgorithmicPrimitives() {
 			//copy over all memory flags to the new node
 			//TODO make a function for this
 			result->node_->memory_type_ = node->memory_type_;
-			result->node_->special_index_ = node->special_index_;
+			result->node_->special_indices_ = node->special_indices_;
 
 			if (node->debug_name != "") {
 				result->node_->debug_name = node->debug_name;
@@ -2008,13 +2018,14 @@ void IR::InsertAlgorithmicPrimitives() {
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 #define MAX_UNROLL_SIZE 8
 #define MAX_UNROLL_NODES 128
 void IR::UnrollLoops()
 {
-	UpdateGraph();
 	vector<Node*> loops = GetNodesOfType("loop");
 
 	unordered_set<Node*> loops_to_remove;
@@ -2081,11 +2092,12 @@ void IR::UnrollLoops()
 	for (auto* loop : loops_to_remove) {
 		RemoveNode(loop);
 	}
+
+	UpdateGraph();
 }
 
 void IR::TryReplaceModificationsWithVersions()
 {
-	UpdateGraph();
 	//get all "set" nodes
 	vector<Node*> nodes = GetNodesOfType("set");
 
@@ -2099,12 +2111,12 @@ void IR::TryReplaceModificationsWithVersions()
 		//if this node has the same parent as the memory node, then it can be replaced with a version
 		if (memory_node->parent == set_node->parent) {
 			//replace the set node with the memory node
-			ExecuteExpressionAfter(set_node, [&]() {
+			ExecuteExpressionBefore(set_node, [&]() {
 				Tensor& copied = Tensor::copy(*input_value->GetTensor());
 				Node* copynode = copied.node_;
 				memory_node->MakeOutputsUseGivenNode(copynode, set_node->index_, true);
 				copynode->memory_type_ = memory_node->memory_type_;
-				copynode->special_index_ = memory_node->special_index_;
+				copynode->special_indices_ = memory_node->special_indices_;
 				copynode->debug_name = memory_node->debug_name;
 				memory_node->memory_type_ = MemoryType::None;
 				nodes_to_remove.insert(set_node);
@@ -2118,10 +2130,11 @@ void IR::TryReplaceModificationsWithVersions()
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
-
-	const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target) {
+const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target) {
 	ShapeCompareResult shape_result = CompareShape(gradient.node_, target.node_);
 	if (!shape_result.compatible) {
 		throw std::runtime_error("Autodiff: gradient shape not compatible with target tensor");
@@ -2387,7 +2400,6 @@ void ComputeNodeGradients(Node* value, Tensor* grad, NodeGrads& grads)
 
 void IR::ComputeAutodiff()
 {
-	UpdateGraph();
 	vector<Node*> gradients = GetNodesOfType(OpClass::Gradient);
 
 	if(gradients.empty()) {
@@ -2490,7 +2502,7 @@ void IR::ComputeAutodiff()
 		//copy over all memory flags to the new node
 		//TODO make a function for this
 		computed_grad->memory_type_ = gradient->memory_type_;
-		computed_grad->special_index_ = gradient->special_index_;
+		computed_grad->special_indices_ = gradient->special_indices_;
 
 		if (gradient->debug_name != "") {
 			computed_grad->debug_name = gradient->debug_name;
@@ -2505,6 +2517,8 @@ void IR::ComputeAutodiff()
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
+
+	UpdateGraph();
 }
 
 void IR::CompileIR() 
@@ -2543,11 +2557,11 @@ void IR::CompileIR()
 		AddMemoryOpIndices();
 		//CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
 		OptimizeKernelLoadOperations();
-		CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
+		//CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
 	}
 	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
-	//CheckIR("Add Kernel Global Memory Operations", true, true);
+	CheckIR("Add Kernel Global Memory Operations", true, true);
 	AddMemoryOpIndices();
 	ReorderOperations();
 	OptimizeOperations();
@@ -2566,7 +2580,7 @@ void IR::CompileIR()
 	RemoveUnusedOperations();
 	//CheckIR("Remove Unused Operations 2", true, true);
 	AddMemoryDeallocation();
-	//CheckIR("Add deallocation", true, true);
+	CheckIR("Add deallocation", true, true);
 	GetOutputList();
 	ComputeStatistics();
 }
@@ -2584,7 +2598,7 @@ Program* GenerateProgram(IR* ir)
 		// get the kernel type
 		map<Node*, int> variables;
 		map<Node*, int> memory_nodes;
-		Arguments shape = kernel->args.GetArguments(ArgType::Shape);
+		NodeArguments shape = kernel->args.GetArguments(ArgType::Shape);
 
 		int variable_index = 0;
 		int memory_index = 0;

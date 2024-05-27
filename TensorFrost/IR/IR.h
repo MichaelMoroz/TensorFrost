@@ -45,10 +45,16 @@ enum class TensorIndexingMode {
 	Zero,
 };
 
+//argument type and index
 using ArgID = pair<ArgType, int>;
-using Arguments = map<ArgID, Node*>;
+//input nodes with argument type and index
+using NodeArguments = map<ArgID, Node*>;
+//argument type and input node
 using Arg = pair<ArgID, Node*>;
-using ArgumentEdges = map<Arg, Node*>;
+//argument type and input/output node - edge of the graph
+using ArgEdge = pair<Arg, Node*>;
+//vector of edges
+using ArgEdges = vector<ArgEdge>;
 
 struct HashArgID {
 	size_t operator()(const ArgID& id) const {
@@ -91,18 +97,9 @@ public:
 		AddArgument(ArgID(type, index), node);
 	}
 
-	void UpdateArgument(ArgID id, Node *node) {
-		if(node == nullptr) {
-			throw std::runtime_error("Node is null");
-		}
-		//if(!Has(id)) {
-		//	return;
-		//	//throw std::runtime_error("No argument to update");
-		//}
-		inputs_[id] = node;
-	}
+	void UpdateArgument(ArgID id, Node *node);
 
-	void AddArguments(Arguments new_args) {
+	void AddArguments(NodeArguments new_args) {
 		for (auto& [id, node] : new_args) {
 			AddArgument(id, node);
 		}
@@ -182,16 +179,16 @@ public:
 		}
 	}
 
-	Arguments GetArguments() const {
-		Arguments arguments;
+	NodeArguments GetArguments() const {
+		NodeArguments arguments;
 		for (auto& [id, node] : inputs_) {
 			arguments[id] = node;
 		}
 		return arguments;
 	}
 
-	Arguments GetArguments(ArgType type) const {
-		Arguments arguments;
+	NodeArguments GetArguments(ArgType type) const {
+		NodeArguments arguments;
 		for (auto& [id, node] : inputs_) {
 			if (id.first == type) {
 				arguments[id] = node;
@@ -238,7 +235,7 @@ class Node {
 
 	ArgumentManager args;
 	MemoryType memory_type_ = MemoryType::None;
-	int special_index_ = 0;
+	map<int, int> special_indices_;
 	bool has_been_modified_ = false;
 	bool is_static = false;
 
@@ -267,7 +264,7 @@ class Node {
 	}
 
     //initialize and create next/child placeholders
-    void initialize(Tensor* tensor, Arguments&& new_args, string&& new_name, bool set_static = false) {
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, bool set_static = false) {
         if(valid()) {
             throw runtime_error("Node already initialized");
         }
@@ -288,7 +285,7 @@ class Node {
 		name = other->name;
 		has_been_modified_ = other->has_been_modified_;
 		debug_name = other->debug_name;
-		special_index_ = other->special_index_;
+		special_indices_ = other->special_indices_;
 		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
@@ -296,7 +293,7 @@ class Node {
 
 	void CopyMetadata(Node* other) {
 		debug_name = other->debug_name;
-		special_index_ = other->special_index_;
+		special_indices_ = other->special_indices_;
 		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
@@ -400,7 +397,7 @@ class Node {
 			throw std::runtime_error("Memory type already set. Are you trying to output an input?");
 		}
 		memory_type_ = memory_type;
-		special_index_ = index;
+		special_indices_[0] = index;
 	}
 
 	void CheckNode() const {
@@ -663,9 +660,9 @@ class ShapeInfo {
 		return tensors;
 	}
 
-	Arguments GetArguments() const {
+	NodeArguments GetArguments() const {
 		CheckValidity(true);
-		Arguments arguments;
+		NodeArguments arguments;
 		for (int i = 0; i < shape.size(); i++) {
 			arguments[ArgID(ArgType::Shape, i)] = shape[i];
 		}
@@ -777,7 +774,7 @@ public:
         return NodeIterator(root);
     }
 
-    Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
+    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name) {
         if (cursor->valid()) { //already initialized, add new node before cursor
             Node* newNode = new Node(cursor->prev, cursor->parent);
 			if (cursor->prev) 
@@ -868,7 +865,7 @@ public:
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
-	void CopyArguments(ArgumentEdges args_to_copy, Node *cursor);
+	void CopyArguments(ArgEdges args_to_copy, Node *cursor);
 	map<Node*, Node*> CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
 	                          unordered_map<int, Node*> indices, Node* cursor);
 	void ReorderOperations();
@@ -888,7 +885,7 @@ public:
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 
-	map<Node *, Arguments> GetKernelOutputs(Node *kernel);
+	map<Node *, ArgEdges> GetKernelOutputs(Node *kernel);
 	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);
 	void AddKernelGlobalLoadOperations();
 	void AddMemoryOpIndices();
@@ -917,28 +914,32 @@ public:
 			prev = *node;
 		}
 
-		// update outputs
-		int index = 0;    
+		int index = 0;
 		for (auto node = begin(); !node.end(); node.next()) {
-			node->args.UpdateOutputs();
 			node->index_ = index++;
 		}
 
-
+		map<Node*, string> invalid_nodes;
 		// check if graph is valid
 		for (auto node = begin(); !node.end(); node.next()) {
 			// if there are null inputs throw an error
 			for (auto& [id, n] : (*node)->args.inputs_) {
-				if (!n) {
-					throw std::runtime_error("Null input found in node " +
-											 (*node)->var_name +
-											 ". Likely an icorrectly deleted node.");
-				}
-				//if input node is after current node, throw an error
-				if (n->index_ > (*node)->index_) {
-					throw std::runtime_error("Input node is after current node");
+				if (n == nullptr) {
+					throw std::runtime_error("Null input found in node " + (*node)->var_name + ". Likely an icorrectly deleted node.");
+				} else if (n->index_ > (*node)->index_) { //if input node is after current node, throw an error
+					invalid_nodes[*node] = "Argument " + TypeToString(id.first) + ":" +
+										to_string(id.second) + " " + n->var_name + " is after current node";
 				}
 			}
+		}
+
+		if(invalid_nodes.size() > 0) {
+			throw std::runtime_error("Invalid graph: " + PrintListing(invalid_nodes));
+		}
+
+		// update outputs
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->args.UpdateOutputs();
 		}
 
 		//update modified flags

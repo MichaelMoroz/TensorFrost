@@ -31,12 +31,7 @@ map<int, const Tensor *> ArgumentManager::GetTensors(ArgType type) const {
 }
 
 ArgumentManager::~ArgumentManager() {
-	//remove all output references
-	for (auto& [out, ids] : outputs_) {
-		for (auto& id : ids) {
-			out->args.inputs_[id] = nullptr;
-		}
-	}
+
 }
 
 bool ArgumentManager::CannotMoveArgument(ArgID id) {
@@ -65,17 +60,6 @@ bool ArgumentManager::IsChangingInput(ArgID arg) {
 	       node_->op->HasAllTypes(OpClass::Modifier);
 }
 
-void ArgumentManager::RemoveArguments(ArgType arg) {
-	unordered_set<ArgID, HashArgID> to_remove;
-	for (auto& [id, node] : inputs_) {
-		if (id.first == arg) {
-			to_remove.insert(id);
-		}
-	}
-	for (auto& id : to_remove) {
-		inputs_.erase(id);
-	}
-}
 
 Node* Node::GetLastChild() {
 	Node* last = nullptr;

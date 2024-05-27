@@ -52,8 +52,22 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 	argument_counts_[id.first]++;
 }
 
+void ArgumentManager::RemoveArguments(ArgType arg) {
+	unordered_set<ArgID, HashArgID> to_remove;
+	for (auto& [id, node] : inputs_) {
+		if (id.first == arg) {
+			to_remove.insert(id);
+		}
+	}
+	for (auto& id : to_remove) {
+		inputs_.erase(id);
+		argument_types_.erase(id);
+		argument_counts_[id.first]--;
+	}
+}
+
 int Node::TryComputeShape() {
-	Arguments shape = args.GetArguments(ArgType::Shape);
+	NodeArguments shape = args.GetArguments(ArgType::Shape);
 	int size = 1;
 	for (auto& [index, shape_node] : shape) {
 		if (shape_node->name != "const") {
@@ -64,7 +78,7 @@ int Node::TryComputeShape() {
 	return size;
 }
 
-Tensor* Tensor::GetCopy(const Tensor& other, Arguments args) {
+Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 	Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
 	copy->data = other.data;
 	copy->node_->CopyProperties(other.node_);
@@ -72,7 +86,7 @@ Tensor* Tensor::GetCopy(const Tensor& other, Arguments args) {
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other) {
-	Arguments new_args;
+	NodeArguments new_args;
 	for (auto& [id, from] : other.node_->args.inputs_) {
 		new_args[id] = from;
 	}

@@ -176,7 +176,7 @@ protected:
 				// if input memory type then just take the input and store it in the
 				// output
 				if (node->memory_type_ == MemoryType::Input) {
-					expression += "check_tensor(in" + to_string(node->special_index_) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					expression += "check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
@@ -190,13 +190,8 @@ protected:
 			}
 			else if (op->name_ == "input_shape")
 			{
-				if(args.outputs_.size() > 1)
-				{
-					throw std::runtime_error("Multiple outputs not supported for input_shape node");
-				}
-				Node* output_memory = args.outputs_.begin()->first;
 				left = "int " + node->var_name + " = ";
-				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
+				expression = "in" + to_string(node->special_indices_[1]) + ".shape[" + to_string(node->special_indices_[0]) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef TENSORFROST_BACKEND_CODEGEN_GENERATORS_CPP
+#define TENSORFROST_BACKEND_CODEGEN_GENERATORS_CPP
 
 #include "Backend/CodeGen/Generators.h"
 
@@ -287,3 +288,5 @@ string AddIndent(const string& input, const string& indent) {
 }
 
 }  // namespace TensorFrost
+
+#endif

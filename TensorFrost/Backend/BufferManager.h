@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <stdint.h>
 
 namespace TensorFrost {
     using namespace std;
