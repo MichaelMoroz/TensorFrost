@@ -81,10 +81,9 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 struct UBO
 {
 	int var[32];
-	int dispatch_size;
 };
 
-cbuffer ubo : register(b1) { UBO ubo; }
+cbuffer ubo : register(b0) { UBO ubo; }
 
 )";
 }
