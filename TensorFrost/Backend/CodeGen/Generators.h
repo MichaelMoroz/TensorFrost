@@ -75,7 +75,7 @@ protected:
 	unordered_map<string, int> name_count;
 
 	virtual void GenerateArgumentNames(ArgumentManager& args)  {
-		for (auto& arg : args.arguments_) {
+		for (auto& arg : args.inputs_) {
 			Node* node = arg.second;
 			ArgID id = arg.first;
 			string name = node->var_name;
@@ -96,7 +96,7 @@ protected:
 				}
 				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
-				bool has_single_output = (node->outputs_.size() == 1) || is_constant || is_variable;
+				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
 				bool modified = node->has_been_modified_;
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
@@ -132,7 +132,7 @@ protected:
 	}
 
 	virtual Line* GenerateLine(Node* node)  {
-		ArgumentManager args = node->GetArgumentManager();
+		ArgumentManager& args = node->args;
 		GenerateArgumentNames(args);
 		if (is_kernel) RegenerateNodeName(node);
 		const Operation* op = node->op;
@@ -190,7 +190,11 @@ protected:
 			}
 			else if (op->name_ == "input_shape")
 			{
-				Node* output_memory = node->outputs_[0]->to_->get();
+				if(args.outputs_.size() > 1)
+				{
+					throw std::runtime_error("Multiple outputs not supported for input_shape node");
+				}
+				Node* output_memory = args.outputs_.begin()->first;
 				left = "int " + node->var_name + " = ";
 				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
 				right = ";";

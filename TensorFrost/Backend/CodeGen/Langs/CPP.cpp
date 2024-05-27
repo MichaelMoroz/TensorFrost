@@ -477,7 +477,7 @@ void GenerateCode(Program* program) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
-			shape_args += "(uint)" + ReadVariable(kernel.shape[d]->from_->get());
+			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape,d)]);
 		}
 		shape_args += "}";
 

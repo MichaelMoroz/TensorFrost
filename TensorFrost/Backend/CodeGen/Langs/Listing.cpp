@@ -58,7 +58,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 
 		listing += node->name + "(";
 
-		ArgumentManager args = node->GetArgumentManager();
+		ArgumentManager& args = node->args;
 
 		auto ArgTypePrint = [&](string name, ArgType type) {
 			if (args.Has(type)) {

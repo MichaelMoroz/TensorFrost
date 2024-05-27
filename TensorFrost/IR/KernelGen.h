@@ -18,7 +18,7 @@ class Kernel {
 	Node* root;
 	map<Node*, int> variables;
 	map<Node*, int> memory;
-	ArgMap shape;
+	Arguments shape;
 	int dim = 0;
 
 	int kernel_id_;
@@ -40,7 +40,7 @@ class Program {
 	explicit Program(IR* ir) : ir_(ir) {}
 
 	void AddKernel(Node* kernel_node, map<Node*, int> variables, map<Node*, int> memory,
-	               ArgMap shape, int dim) 
+	               Arguments shape, int dim)
 	{
 		kernels_.push_back(
 		    {kernel_node, std::move(variables), std::move(memory), std::move(shape), dim});

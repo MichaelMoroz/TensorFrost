@@ -35,7 +35,7 @@ class Tensor {
 
 	static void AddArgument(Arguments& arguments, const Tensor* tensor,
 	                        ArgType type, int index = 0) {
-		arguments.emplace_back(type, tensor->node_->GetLable(), index);
+		arguments[ArgID(type, index)] = tensor->node_;
 	}
 
 	static void AddArguments(Arguments& arguments, const Tensors& tensors,
@@ -47,7 +47,7 @@ class Tensor {
 
 	static void AddArguments(Arguments& arguments, const Arguments& toadd) {
 		for (const auto& i : toadd) {
-			arguments.push_back(i);
+			arguments[i.first] = i.second;
 		}
 	}
 
@@ -204,7 +204,7 @@ class Tensor {
 		{
 			for (const Tensor* index : indices)
 			{
-				shape_arguments = index->node_->GetArguments(ArgType::Shape);
+				shape_arguments = index->node_->args.GetArguments(ArgType::Shape);
 				if (!shape_arguments.empty()) {
 					break;
 				}
@@ -457,21 +457,21 @@ class Tensor {
 
 	Tensor& ThreadIndex() const {
 		Tensor& output = Static(
-		    "thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		    "thread_id", node_->args.GetArguments(ArgType::Shape), DataType::Int);
 		output.type = DataType::Int;
 		return output;
 	}
 
 	Tensor& BlockIndex() const {
 		Tensor& output = Static(
-		    "block_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		    "block_id", node_->args.GetArguments(ArgType::Shape), DataType::Int);
 		output.type = DataType::Int;
 		return output;
 	}
 
 	Tensor& BlockThreadIndex(int i) const {
 		Tensor& output = Static(
-		    "block_thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
+		    "block_thread_id", node_->args.GetArguments(ArgType::Shape), DataType::Int);
 		output.type = DataType::Int;
 		output.data = std::vector<uint>(1, i);
 		return output;
@@ -485,7 +485,7 @@ class Tensor {
 	}
 
 	Tensor& Index(int dim) const {
-		Tensor& output = Static("dim_id", node_->GetArguments(ArgType::Shape),
+		Tensor& output = Static("dim_id", node_->args.GetArguments(ArgType::Shape),
 		                        DataType::Int);
 		output.data = std::vector<uint>(1, dim);
 		output.type = DataType::Int;

@@ -36,14 +36,18 @@ const vector<Operation> operations = {
     Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // min of the last dimension
     Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // mean of the last dimension
     Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // product of the last dimension
-    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}), // any of the last dimension
-    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}), // all of the last dimension
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm, OpClass::Nondiff}), // any of the last dimension
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm, OpClass::Nondiff}), // all of the last dimension
     //Matrix
     Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpClass::Algorithm}), // dot product of the last dimensions
     Operation("matmul", {"ff_f"}, 0, "", {OpClass::Algorithm}), // matrix multiplication of the last dimensions
     Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
     Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
+	//Texture
+	//Operation("interp1d", {"f_f"}, 0, "", {OpClass::Algorithm}),
+	//Operation("interp2d", {"f_f"}, 0, "", {OpClass::Algorithm}),
+	//Operation("interp3d", {"f_f"}, 0, "", {OpClass::Algorithm}),
 
     //Native operations (built-in shader operations, only for size <= 4)
     //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
@@ -72,7 +76,7 @@ const vector<Operation> operations = {
     Operation("store", {"f_", "u_", "i_"}, 128, "",
               {OpClass::Store, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("set", {"f_", "u_", "i_"}, 1, "",
-              {OpClass::Set, OpClass::Modifier, OpClass::Nondiff}), //TODO figure out how to make it differentiable
+              {OpClass::Set, OpClass::Modifier}),
     Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
               {OpClass::Scatter, OpClass::MemoryOp, OpClass::Modifier}),
     Operation("InterlockedMin", {"u_", "i_", "f_"}, 256, "",
