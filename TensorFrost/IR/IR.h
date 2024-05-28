@@ -72,7 +72,7 @@ private:
 	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
 public:
 	unordered_map<ArgID, Node*, HashArgID> inputs_;
-	unordered_map<Node*, unordered_set<ArgID, HashArgID>> outputs_; //
+	ArgEdges outputs_;
 
 	ArgumentManager(Node* node) {
 		if (node == nullptr) {
@@ -85,8 +85,8 @@ public:
 		add_parenthesis = add;
 	}
 
-	void UpdateOutput(ArgID id, Node* node) {
-		outputs_[node].insert(id);
+	void AddOutput(ArgID id, Node* node) {
+		outputs_.push_back({{id, node_}, node});
 	}
 
 	void UpdateOutputs();
@@ -338,16 +338,13 @@ class Node {
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
 	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1, bool make_modified = false) {
-		for (auto out : args.outputs_) {
-			Node* output = out.first;
-			unordered_set<ArgID, HashArgID> arg_ids = out.second;
-			if (output->index_ >= min_index) {
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
+			if (to->index_ >= min_index) {
 				if(make_modified) {
 					replacement->has_been_modified_ = true;
 				}
-				for (auto arg_id : arg_ids) {
-					output->args.UpdateArgument(arg_id, replacement);
-				}
+				to->args.UpdateArgument(id, replacement);
 			}
 		}
 	}
@@ -418,31 +415,28 @@ class Node {
 		int last_index = -1;
 		Node* loop_node = latest_node->GetParent("loop");
 		bool has_loop = loop_node != latest_node;
-		for (auto out : args.outputs_) {
-			Node* output_node = out.first;
-			unordered_set<ArgID, HashArgID> arg_ids = out.second;
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
 			bool is_memory = false;
-			for(auto arg_id : arg_ids) {
-				if (arg_id.first != ArgType::Memory) {
-					is_memory = true;
-				}
+			if (id.first != ArgType::Memory) {
+				is_memory = true;
 			}
 			if (is_memory) {
 				continue;
 			}
-			if (output_node->op->HasAllTypes(OpClass::Modifier)) {
-				if (output_node->index_>last_index) {
+			if (to->op->HasAllTypes(OpClass::Modifier)) {
+				if (to->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
 					// the previous iteration's modifier)
 					// if the loop is scalar, then it doesn't matter
-					bool before_latest = output_node->index_ < latest_node->index_;
-					bool inside_loop = has_loop && output_node->HasParent(loop_node);
-					bool not_same = output_node != latest_node;
+					bool before_latest = to->index_ < latest_node->index_;
+					bool inside_loop = has_loop && to->HasParent(loop_node);
+					bool not_same = to != latest_node;
 					if ((before_latest || inside_loop) && not_same)
 					{
-						last_index = output_node->index_;
-						last_modifier = output_node;
+						last_index = to->index_;
+						last_modifier = to;
 					}
 				}
 			}
@@ -453,22 +447,19 @@ class Node {
 	Node* GetFinalVersion() {
 		Node* final_version = this;
 		int last_index = -1;
-		for (auto out : args.outputs_) {
-			Node* output_node = out.first;
-			unordered_set<ArgID, HashArgID> arg_ids = out.second;
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
 			bool is_memory = false;
-			for(auto arg_id : arg_ids) {
-				if (arg_id.first != ArgType::Memory) {
-					is_memory = true;
-				}
+			if (id.first != ArgType::Memory) {
+				is_memory = true;
 			}
 			if (is_memory) {
 				continue;
 			}
-			if (output_node->op->HasAllTypes(OpClass::Modifier) && !output_node->op->HasAllTypes(OpClass::MemoryOp)) {
-				if (output_node->index_ > last_index) {
-					last_index = output_node->index_;
-					final_version = output_node;
+			if (to->op->HasAllTypes(OpClass::Modifier) && !to->op->HasAllTypes(OpClass::MemoryOp)) {
+				if (to->index_ > last_index) {
+					last_index = to->index_;
+					final_version = to;
 				}
 			}
 		}
@@ -946,13 +937,12 @@ public:
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->has_been_modified_ = false;
 			//go over all outputs and check if they are modifiers
-			for (auto& [out, ids] : node->args.outputs_) {
-				if (out->op->HasAllTypes(OpClass::Modifier)) {
+			for (auto [edge, to] : node->args.outputs_) {
+				auto& [id, from] = edge;
+				if (to->op->HasAllTypes(OpClass::Modifier)) {
 					bool is_memory = false;
-					for (auto id : ids) {
-						if (id.first != ArgType::Memory) {
-							is_memory = true;
-						}
+					if (id.first != ArgType::Memory) {
+						is_memory = true;
 					}
 					if (!is_memory) {
 						node->has_been_modified_ = true;

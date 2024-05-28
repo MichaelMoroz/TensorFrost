@@ -594,10 +594,9 @@ void IR::OptimizeKernelLoadOperations() {
 			copied_load->CopyMetadata(load_node);
 
 			//go over all outputs of the load node and replace them with the copied nodes
-			for (auto& [out, ids] : load_node->args.outputs_) {
-				for (auto& id : ids) {
-					out->args.UpdateArgument(id, copied_load);
-				}
+			for (auto [edge, to] : load_node->args.outputs_) {
+				auto& [id, from] = edge;
+				to->args.UpdateArgument(id, copied_load);
 			}
 
 			//remove the load node since it is not needed anymore
@@ -661,15 +660,13 @@ void IR::MoveShapeOutsideKernels() {
 		if (kernel == *node) continue;
 
 		// go over all outputs arguments
-		for (auto& [output, ids] : node->args.outputs_) {
-			for(auto& id: ids) {
-				if (id.first != ArgType::Shape) {
-					continue;
-				}
-
-				// add the node to the set
-				nodes_to_copy[node.get()] = kernel;
+		for (auto [edge, to] : node->args.outputs_) {
+			auto& [id, from] = edge;
+			if (id.first != ArgType::Shape) {
+				continue;
 			}
+			// add the node to the set
+			nodes_to_copy[node.get()] = kernel;
 		}
 	}
 
@@ -678,16 +675,15 @@ void IR::MoveShapeOutsideKernels() {
 		ArgEdges args_to_copy;
 		int earliest_output_index = INT_MAX;
 		Node* earliest_output = nullptr;
-		for (auto& [out, ids] : node->args.outputs_) {
-			for (auto& id : ids) {
-				if (id.first == ArgType::Shape) {
-					args_to_copy.push_back(ArgEdge(Arg(id, node), out));
+		for (auto [edge, to] : node->args.outputs_) {
+			auto& [id, from] = edge;
+			if (id.first == ArgType::Shape) {
+				args_to_copy.push_back(ArgEdge(Arg(id, node), to));
 
-					//get the earliest output
-					if (out->index_ < earliest_output_index) { //wat
-						earliest_output_index = out->index_;
-						earliest_output = out;
-					}
+				//get the earliest output
+				if (to->index_ < earliest_output_index) { //wat
+					earliest_output_index = to->index_;
+					earliest_output = to;
 				}
 			}
 		}
@@ -706,6 +702,7 @@ void IR::MoveShapeOutsideKernels() {
 /// </summary>
 void IR::GetInputList() {
 	int input_memory_index = 0;
+	//MUST BE IN ORDER
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (node->memory_type_ == MemoryType::Input) {
 			// add shapes to the memory inputs
@@ -724,7 +721,9 @@ void IR::GetInputList() {
 			//if any of the inputs are "input_shape" then we need to add the input index to them
 			for (auto& [arg, from] : node->args.inputs_) {
 				if (arg.first == ArgType::Shape && from->name == "input_shape") {
-					from->special_indices_[1] = input_index;
+					if(!from->special_indices_.contains(1)) { //ONLY FIRST TIME
+						from->special_indices_[1] = input_index;
+					}
 				}
 			}
 		}
@@ -948,11 +947,10 @@ unordered_set<Node*> IR::GetDependencies(unordered_set<Node*> nodes) {
 		}
 
 		//if the node is a memory node or used as memory, then all outputs are used
-		for (auto& [out, ids] : node->args.outputs_) {
-			for (auto& id : ids) {
-				if (out->args.IsChangingInput(id)) {
-					dfs(out);
-				}
+		for (auto [edge, to] : node->args.outputs_) {
+			auto& [id, from] = edge;
+			if (to->args.IsChangingInput(id)) {
+				dfs(to);
 			}
 		}
 	};
@@ -1022,15 +1020,14 @@ map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 		bool is_output = node->memory_type_ == MemoryType::Output;
 		ArgEdges outputs = ArgEdges();
 
-		for (auto& [out, ids] : node->args.outputs_) {
-			if (out == nullptr) continue;
+		for (auto [edge, to] : node->args.outputs_) {
+			auto& [id, from] = edge;
+			if (to == nullptr) continue;
 			// if is a shape or memory argument, then skip (shape is loaded on CPU)
-			for(auto& id: ids) {
-				if (id.first == ArgType::Shape) continue;
-				if (!out->HasParent(kernel)) {
-					outputs.emplace_back(Arg(id, *node), out);
-					is_output = true;
-				}
+			if (id.first == ArgType::Shape) continue;
+			if (!to->HasParent(kernel)) {
+				outputs.emplace_back(Arg(id, *node), to);
+				is_output = true;
 			}
 		}
 
@@ -1055,7 +1052,7 @@ void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
 			// load the memory node before this node
 			ExecuteExpressionBefore(node, [&]() {
 				Tensor& loaded = Tensor::Load(*input_node->GetTensor(), indices, true);
-				input_node->args.UpdateArgument(arg, loaded.node_);
+				node->args.UpdateArgument(arg, loaded.node_);
 			});
 		}
 	}
@@ -1258,14 +1255,14 @@ void IR::AddMemoryDeallocation()
 				return;
 			}
 
-			for (auto& [output_node, ids] : node->args.outputs_)
-			{
-				if (output_node->op->HasAllTypes(OpClass::MemoryReuse)) {
-					dfs(output_node);
+			for (auto [edge, to] : node->args.outputs_) {
+				auto& [id, from] = edge;
+				if (to->op->HasAllTypes(OpClass::MemoryReuse)) {
+					dfs(to);
 				} else {
-					if (last_output_index < output_node->index_) {
-						last_output_index = output_node->index_;
-						last_output = output_node;
+					if (last_output_index < to->index_) {
+						last_output_index = to->index_;
+						last_output = to;
 					}
 				}
 			}
@@ -1616,8 +1613,9 @@ void IR::RemoveUnusedKernels()
 				memory_modifiers++;
 			}
 			//if any output is outside the kernel, then the kernel is needed
-			for (auto& [output, ids] : node->args.outputs_) {
-				if (!output->HasParent(kernel)) {
+			for (auto [edge, to] : node->args.outputs_) {
+				auto& [id, from] = edge;
+				if (!to->HasParent(kernel)) {
 					memory_modifiers++;
 				}
 			}
@@ -2098,6 +2096,8 @@ void IR::UnrollLoops()
 
 void IR::TryReplaceModificationsWithVersions()
 {
+	UpdateGraph();
+
 	//get all "set" nodes
 	vector<Node*> nodes = GetNodesOfType("set");
 

@@ -4,7 +4,7 @@ namespace TensorFrost {
 
 void ArgumentManager::UpdateOutputs() {
 	for (auto& [id, node] : inputs_) {
-		node->args.UpdateOutput(id, node_);
+		node->args.AddOutput(id, node_);
 	}
 }
 
