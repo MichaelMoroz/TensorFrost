@@ -16,7 +16,7 @@ namespace TensorFrost {
 class KernelManager
 {
 	unordered_set<Program*> programs;
-	unordered_map<int, Kernel*> kernel_map;
+	unordered_map<uint, Kernel*> kernel_map;
 	int global_kernel_id = 0;
  public:
 	KernelManager() = default;

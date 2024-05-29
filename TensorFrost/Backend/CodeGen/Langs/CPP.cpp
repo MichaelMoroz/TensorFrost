@@ -243,7 +243,7 @@ extern "C" {
 		int size = 0;
     };
 
-	enum DataType {
+	enum TF_Type {
 		Float,
 		Uint,
 		Int,
@@ -251,34 +251,34 @@ extern "C" {
 		None,
 	};
 
-	struct TensorProp {
+	struct TF_Tensor {
 		Buffer* buffer;
 		uint dim;
 		uint* shape;
-		DataType type;
+		TF_Type type;
 	};
 
 	struct DispatchInfo {
-		int kernel_id;
+		uint kernel_id;
 		uint tensor_count;
-		TensorProp* tensors;
+		TF_Tensor* tensors;
 		uint variable_count;
 		uint* variables;
 		uint work_group_count;
 	};
 
-	typedef TensorProp alloc_func(uint*, uint, DataType);
-	typedef void dealloc_func(TensorProp);
-	typedef uint readback_func(TensorProp, uint);
-	typedef void writeback_func(TensorProp, uint, uint);
+	typedef TF_Tensor alloc_func(uint*, uint, TF_Type);
+	typedef void dealloc_func(TF_Tensor);
+	typedef uint readback_func(TF_Tensor, uint);
+	typedef void writeback_func(TF_Tensor, uint, uint);
 	typedef void dispatch_func(DispatchInfo);
 	typedef void cpu_dispatch_func(uint* var, uint** mem, uint work_group_count);
 }
 
-std::unordered_map<DataType, std::string> DataTypeNames = {
-    {DataType::Float, "Float"}, {DataType::Uint, "Uint"},
-    {DataType::Int, "Int"},     {DataType::Bool, "Bool"},
-    {DataType::None, "None"},
+std::unordered_map<TF_Type, std::string> TF_TypeNames = {
+    {TF_Type::Float, "Float"}, {TF_Type::Uint, "Uint"},
+    {TF_Type::Int, "Int"},     {TF_Type::Bool, "Bool"},
+    {TF_Type::None, "None"},
 };
 
 alloc_func* alloc;
@@ -287,7 +287,7 @@ readback_func* readback;
 writeback_func* writeback;
 dispatch_func* dispatch_ref;
 
-TensorProp allocate(std::string name, std::initializer_list<uint> shape, DataType type)
+TF_Tensor allocate(std::string name, std::initializer_list<uint> shape, TF_Type type)
 {
   uint* shape_arr = new uint[shape.size()];
   uint size = 1;
@@ -303,23 +303,23 @@ TensorProp allocate(std::string name, std::initializer_list<uint> shape, DataTyp
 	size *= shape_arr[i];
   }
 
-  TensorProp tensor = alloc(shape_arr, shape.size(), type);
+  TF_Tensor tensor = alloc(shape_arr, shape.size(), type);
 
   delete[] shape_arr;
 
   return tensor;
 }
 
-void deallocate(TensorProp tensor)
+void deallocate(TF_Tensor tensor)
 {
   dealloc(tensor);
 }
 
-TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
+TF_Tensor check_tensor(TF_Tensor tensor, std::string name, std::initializer_list<uint> shape, TF_Type type)
 {
 	if (tensor.type != type)
 	{
-		throw std::runtime_error("Invalid type for " + name + ". Expected " + DataTypeNames[type] + ", got " + DataTypeNames[tensor.type]);
+		throw std::runtime_error("Invalid type for " + name + ". Expected " + TF_TypeNames[type] + ", got " + TF_TypeNames[tensor.type]);
 	}
 
 	if (tensor.dim != shape.size())
@@ -340,9 +340,9 @@ TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_li
 	return tensor;
 }
 
-TensorProp reshape(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
+TF_Tensor reshape(TF_Tensor tensor, std::string name, std::initializer_list<uint> shape, TF_Type type)
 {
-  TensorProp new_tensor = TensorProp();
+  TF_Tensor new_tensor = TF_Tensor();
   new_tensor.buffer = tensor.buffer;
   new_tensor.dim = shape.size();
   new_tensor.shape = new uint[shape.size()];
@@ -367,22 +367,22 @@ TensorProp reshape(TensorProp tensor, std::string name, std::initializer_list<ui
   return new_tensor;
 }
 
-uint ReadFromMemory(TensorProp tensor, uint index)
+uint ReadFromMemory(TF_Tensor tensor, uint index)
 {
   return readback(tensor, index);
 }
 
-void WriteToMemory(TensorProp tensor, uint index, uint value)
+void WriteToMemory(TF_Tensor tensor, uint index, uint value)
 {
   writeback(tensor, index, value);
 }
 
-void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape, std::initializer_list<int> group)
+void dispatch(uint kernel_id, std::initializer_list<TF_Tensor> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape, std::initializer_list<int> group)
 {
   DispatchInfo info;
   info.kernel_id = kernel_id;
   info.tensor_count = tensors.size();
-  info.tensors = new TensorProp[tensors.size()];
+  info.tensors = new TF_Tensor[tensors.size()];
   info.variable_count = var.size();
   info.variables = new uint[var.size()];
 
@@ -505,11 +505,11 @@ void GenerateCode(Program* program) {
 	    "\n"
 	    "extern \"C\" "
 #ifdef _WIN32
-	    "__declspec(dllexport)"
+	    "__declspec(dllexport) "
 #endif
 	    "int "
 	    "main"
-	    "(TensorProp* in, TensorProp* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
+	    "(TF_Tensor* in, TF_Tensor* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
 	    "{\n"
 	    "  alloc = alloc_;\n"
 	    "  dealloc = dealloc_;\n"
@@ -545,7 +545,7 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
 
 	string main_code = "\nstd::tuple<";
 	for (int i = 0; i < output_count; i++) {
-		main_code += "TensorProp";
+		main_code += "TF_Tensor";
 		if (i != output_count - 1) {
 			main_code += ", ";
 		}
@@ -553,7 +553,7 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
 	main_code += "> " + program->program_name + "(";
 
 	for (int i = 0; i < input_count; i++) {
-		main_code += "TensorProp in" + to_string(i);
+		main_code += "TF_Tensor in" + to_string(i);
 		if (i != input_count - 1) {
 			main_code += ", ";
 		}

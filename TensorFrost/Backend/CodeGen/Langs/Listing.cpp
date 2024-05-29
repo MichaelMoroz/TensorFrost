@@ -45,11 +45,11 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		}
 		prev_depth = depth;
 		
-		if (node->tensor_->type != DataType::None) {
+		if (node->tensor_->type != TF_Type::None) {
 			listing += DataTypeToString(node->tensor_->type) + " ";
 		}
 
-		if (node->tensor_->type != DataType::None) {
+		if (node->tensor_->type != TF_Type::None) {
 			//  the tensor name
 			listing += node->var_name + " = ";
 		}

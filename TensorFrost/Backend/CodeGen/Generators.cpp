@@ -176,11 +176,11 @@ string format_float(double value) {
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
 		switch (type) {
-			case DataType::Float:
+			case TF_Type::Float:
 				return format_float(AsFloat(data[0]));
-			case DataType::Int:
+			case TF_Type::Int:
 				return to_string(AsInt(data[0]));
-			case DataType::Uint:
+			case TF_Type::Uint:
 				return to_string(data[0]) + "u";
 			default:
 				return "";

@@ -51,10 +51,10 @@ class CodeGenerator {
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
 
-	map<DataType, string> type_names = {
-	    {DataType::None, "void"},   {DataType::Bool, "bool"},
-	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
-	    {DataType::Int, "int"},
+	map<TF_Type, string> type_names = {
+	    {None, "void"},   {Bool, "bool"},
+	    {Float, "float"}, {Uint, "uint"},
+	    {Int, "int"},
 	};
 	
 	bool is_kernel = true;
@@ -140,7 +140,7 @@ protected:
 		string name = node->var_name;
 
 		// get output type
-		DataType output_type = node->tensor_->type;
+		TF_Type output_type = node->tensor_->type;
 
 		// generate line
 		string left = "";
@@ -172,16 +172,16 @@ protected:
 			} else if (op->name_ == "if") {
 				left += GenerateIf(&args);
 			} else if (op->name_ == "memory") {
-				left += "TensorProp " + node->var_name + " = ";
+				left += "TF_Tensor " + node->var_name + " = ";
 				// if input memory type then just take the input and store it in the
 				// output
 				if (node->memory_type_ == MemoryType::Input) {
-					expression += "check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					expression += "check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
 				else {
-					expression += "allocate(\"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					expression += "allocate(\"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 			} else if (op->name_ == "deallocate") {
@@ -196,8 +196,8 @@ protected:
 			}
 			else if (op->name_ == "reshape")
 			{
-				left = "TensorProp " + node->var_name + " = ";
-				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+				left = "TF_Tensor " + node->var_name + " = ";
+				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
@@ -215,19 +215,19 @@ protected:
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
 					expression +=
-					    (output_type == DataType::Uint)
+					    (output_type == Uint)
 					        ? memory_expression
 					        : TypeReinterpret(output_type_name, memory_expression);
 					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->name_ == "store") {
 					expression += memory_expression + " = ";
 					expression +=
-					    (output_type == DataType::Uint)
+					    (output_type == Uint)
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
 					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->HasAllTypes(OpClass::Scatter)) {
-					if (output_type != DataType::None) {
+					if (output_type != None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
 					string output_type_name = type_names[output_type];
@@ -249,7 +249,7 @@ protected:
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
 					string memory_expression = GetName("ReadFromMemory") + "(" + tensor_name + ", " + address + ")";
-					expression += (output_type == DataType::Uint)
+					expression += (output_type == Uint)
 						? memory_expression
 						: TypeReinterpret(output_type_name, memory_expression);
 					right += ";";
@@ -268,7 +268,7 @@ protected:
 			expression += args.Name(ArgType::Input);
 			right += ";";
 		} else {
-			if (output_type != DataType::None) {
+			if (output_type != None) {
 				left += type_names[output_type] + " " + name + " = ";
 			}
 			string line;
@@ -276,7 +276,7 @@ protected:
 			switch (op->op_classes[0]) {
 				case OpClass::Operator:
 					args.AddParenthesis(true);
-					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
+					if ((code == "&" || code == "|") && output_type == Bool) {
 						code = code + code;
 					}
 					line += args.Name(ArgType::Input, 0) + " " + code + " " +

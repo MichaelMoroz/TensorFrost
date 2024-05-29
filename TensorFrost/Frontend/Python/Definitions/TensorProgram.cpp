@@ -37,11 +37,11 @@ void TensorProgramDefinition(py::module& m,
 	    "__call__",
 	    [](TensorProgram& program, py::args py_inputs) {
 		    vector<PyTensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
-	    	vector<TensorProp*> inputs_props;
+	    	vector<TF_Tensor*> inputs_props;
 	    	for (auto input : inputs) {
 	    		inputs_props.push_back(input->tensor_);
 	    	}
-		    vector<TensorProp*> outputs = program.Evaluate(inputs_props);
+		    vector<TF_Tensor*> outputs = program.Evaluate(inputs_props);
 		    // output a tuple of tensor memories
 		    py::tuple py_outputs = py::tuple(outputs.size());
 		    for (size_t i = 0; i < outputs.size(); i++) {

@@ -68,7 +68,7 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TensorProp Allocator(uint* a, uint dim, DataType type) {
+TF_Tensor Allocator(uint* a, uint dim, TF_Type type) {
 	vector<int> shape;
 	for (uint i = 0; i < dim; i++) {
 		shape.push_back(a[i]);
@@ -76,16 +76,16 @@ TensorProp Allocator(uint* a, uint dim, DataType type) {
 	return *global_memory_manager->Allocate(shape, type);
 }
 
-void Deallocator(TensorProp a) { 
+void Deallocator(TF_Tensor a) {
 	global_memory_manager->Free(&a);
 	delete[] a.shape;
 }
 
-uint Readback(TensorProp a, uint b) {
+uint Readback(TF_Tensor a, uint b) {
 	return global_memory_manager->ReadbackValue(&a, b);
 }
 
-void Writeback(TensorProp a, uint b, uint c) {
+void Writeback(TF_Tensor a, uint b, uint c) {
 	global_memory_manager->WritebackValue(&a, b, c);
 }
 
@@ -93,8 +93,8 @@ void Dispatch(DispatchInfo info) {
 	global_kernel_manager->DispatchKernel(info);
 }
 
-vector<TensorProp*> ExecuteProgram(
-    Program* program, vector<TensorProp*> inputs) {
+vector<TF_Tensor*> ExecuteProgram(
+    Program* program, vector<TF_Tensor*> inputs) {
 
 	if (current_backend == BackendType::CodeGen) {
 		throw std::runtime_error("Cannot execute program with code generation backend");
@@ -108,7 +108,7 @@ vector<TensorProp*> ExecuteProgram(
 		    to_string(memory_input_count) + ", got " + to_string(inputs.size()));
 	}
 
-	vector<TensorProp> input_tensors;
+	vector<TF_Tensor> input_tensors;
 	for (int i = 0; i < memory_input_count; i++) {
 		// add input memory offset
 		input_tensors.push_back(*inputs[i]);
@@ -117,8 +117,8 @@ vector<TensorProp*> ExecuteProgram(
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
 	int output_count = (int)output_memory_map.size();
 
-	TensorProp* in = input_tensors.data();
-	TensorProp* out = new TensorProp[output_count];
+	TF_Tensor* in = input_tensors.data();
+	TF_Tensor* out = new TF_Tensor[output_count];
 
 	if (current_backend == BackendType::OpenGL) {
 		StartDebugRegion(program->program_name);
@@ -131,7 +131,7 @@ vector<TensorProp*> ExecuteProgram(
 		//Finish();
 	}
 
-	vector<TensorProp*> outputs = vector<TensorProp*>(output_count);
+	vector<TF_Tensor*> outputs = vector<TF_Tensor*>(output_count);
 	for (int i = 0; i < output_count; i++) {
 		outputs[i] = &out[i];
 	}
