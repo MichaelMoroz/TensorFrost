@@ -17,7 +17,7 @@ using namespace std;
 
 class CpuMemoryManager : public TensorMemoryManager {
  public:
-	unordered_map<Buffer*, uint*> allocated_arrays;
+	unordered_map<TFBuffer*, uint*> allocated_arrays;
 
 	void CleanUp() {
 		for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
@@ -28,25 +28,25 @@ class CpuMemoryManager : public TensorMemoryManager {
 		buffer_manager.buffers_to_delete.clear();
 	}
 
-	Buffer* TryGetBuffer(int size) override {
+	TFBuffer* TryGetBuffer(int size) override {
 		buffer_manager.UpdateTick();
 		CleanUp();
 
-		Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
+		TFBuffer* buffer = buffer_manager.TryAllocateBuffer(size);
 		if(!allocated_arrays.contains(buffer)) {
 			allocated_arrays[buffer] = CreateBuffer(buffer->size);
 		}
 		return buffer;
 	}
 
-	uint* GetNativeBuffer(const TF_Tensor* mem) {
+	uint* GetNativeBuffer(const TFTensor* mem) {
 		if(!allocated_arrays.contains(mem->buffer)) {
 			throw std::runtime_error("Tensor memory not allocated");
 		}
 		return allocated_arrays[mem->buffer];
 	}
 
-	void SetDataAtOffset(const TF_Tensor* buffer, int offset, const vector<uint>& data) override {
+	void SetDataAtOffset(const TFTensor* buffer, int offset, const vector<uint>& data) override {
 		uint* array = allocated_arrays[buffer->buffer];
 		memcpy(array + offset, data.data(), data.size() * sizeof(uint));
 	}
@@ -55,7 +55,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return new uint[size];
 	}
 
-	vector<uint> Readback(const TF_Tensor* mem) override {
+	vector<uint> Readback(const TFTensor* mem) override {
 		uint* array = GetNativeBuffer(mem);
 		vector<uint> data(mem->buffer->size);
 		for(int i = 0; i < mem->buffer->size; i++) {
@@ -64,17 +64,17 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return data;
 	}
 
-	uint ReadbackValue(const TF_Tensor* mem, uint index) override {
+	uint ReadbackValue(const TFTensor* mem, uint index) override {
 		uint* array = GetNativeBuffer(mem);
 		return array[index];
 	}
 
-	void Writeback(const TF_Tensor* mem, const vector<uint>& data) override {
+	void Writeback(const TFTensor* mem, const vector<uint>& data) override {
 		uint* array = GetNativeBuffer(mem);
 		memcpy(array, data.data(), data.size() * sizeof(uint));
 	}
 
-	void WritebackValue(const TF_Tensor* mem, uint index, uint value) override {
+	void WritebackValue(const TFTensor* mem, uint index, uint value) override {
 		uint* array = GetNativeBuffer(mem);
 		array[index] = value;
 	}

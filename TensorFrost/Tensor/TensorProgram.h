@@ -31,8 +31,8 @@ class TensorProgram {
 
 	void CreateProgram(string name);
 
-	vector<TF_Tensor*> Evaluate(
-	    const vector<TF_Tensor*>& input) const;
+	vector<TFTensor*> Evaluate(
+	    const vector<TFTensor*>& input) const;
 
 	string PrintProperties() const;
 

@@ -780,11 +780,11 @@ bool isConstantAndEqualTo(const Tensor* tensor, float value) {
 	}
 
 	switch (tensor->type) {
-		case TF_Type::Float:
+		case TFType::Float:
 			return AsFloat(tensor->data[0]) == value;
-		case TF_Type::Int:
+		case TFType::Int:
 			return AsInt(tensor->data[0]) == value;
-		case TF_Type::Uint:
+		case TFType::Uint:
 			return tensor->data[0] == value;
 		default:
 			throw std::runtime_error("Unexpected type in isConstantAndEqualTo");
@@ -797,11 +797,11 @@ bool isConstant(const Tensor* tensor) {
 
 Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32) {
 	switch (a->type) {
-		case TF_Type::Float:
+		case TFType::Float:
 			return &Tensor::Constant(opF32(AsFloat(a->data[0]), AsFloat(b->data[0])));
-		case TF_Type::Int:
+		case TFType::Int:
 			return &Tensor::Constant(opI32(AsInt(a->data[0]), AsInt(b->data[0])));
-		case TF_Type::Uint:
+		case TFType::Uint:
 			return &Tensor::Constant(opU32(a->data[0], b->data[0]));
 		default:
 			throw std::runtime_error("Unexpected type in ApplyMultiOP");
@@ -810,11 +810,11 @@ Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float
 
 Tensor* ApplyUnaryOP(const Tensor* a, std::function<float(float)> opF32, std::function<int(int)> opI32, std::function<uint(uint)> opU32) {
 	switch (a->type) {
-		case TF_Type::Float:
+		case TFType::Float:
 			return &Tensor::Constant(opF32(AsFloat(a->data[0])));
-		case TF_Type::Int:
+		case TFType::Int:
 			return &Tensor::Constant(opI32(AsInt(a->data[0])));
-		case TF_Type::Uint:
+		case TFType::Uint:
 			return &Tensor::Constant(opU32(a->data[0]));
 		default:
 			throw std::runtime_error("Unexpected type in ApplyUnaryOP");
@@ -1722,11 +1722,11 @@ Tensor* ComputeMean(const Tensor* array, int axis) {
 
 Tensor* ComputeMax(const Tensor* array, int axis) {
 	uint initial = 0;
-	if (array->type == TF_Type::Float) {
+	if (array->type == TFType::Float) {
 		float init = -FLT_MAX;
 		initial = *(uint*)&init;
 	}
-	else if (array->type == TF_Type::Int) {
+	else if (array->type == TFType::Int) {
 		int init = INT_MIN;
 		initial = *(uint*)&init;
 	}
@@ -1737,11 +1737,11 @@ Tensor* ComputeMax(const Tensor* array, int axis) {
 
 Tensor* ComputeMin(const Tensor* array, int axis) {
 	uint initial = UINT_MAX;
-	if (array->type == TF_Type::Float) {
+	if (array->type == TFType::Float) {
 		float init = FLT_MAX;
 		initial = *(uint*)&init;
 	}
-	else if (array->type == TF_Type::Int) {
+	else if (array->type == TFType::Int) {
 		int init = INT_MAX;
 		initial = *(uint*)&init;
 	}
@@ -1752,7 +1752,7 @@ Tensor* ComputeMin(const Tensor* array, int axis) {
 
 Tensor* ComputeProduct(const Tensor* array, int axis) {
 	uint initial = 1;
-	if (array->type == TF_Type::Float) {
+	if (array->type == TFType::Float) {
 		float init = 1.0f;
 		initial = *(uint*)&init;
 	}
@@ -2431,7 +2431,7 @@ void IR::ComputeAutodiff()
 		vector<Node*> queue;
 		for (auto dep : loss_deps) {
 			bool in_range = (dep->index_ <= loss->index_ && dep->index_ >= min_range[loss]);
-			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) && (dep->GetTensor()->type == TF_Type::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
+			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) && (dep->GetTensor()->type == TFType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
 				queue.push_back(dep);
 			}
 		}

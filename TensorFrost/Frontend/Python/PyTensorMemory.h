@@ -12,20 +12,20 @@ namespace py = pybind11;
 // Tensor wrapper for python
 class PyTensorMemory {
  public:
-	TF_Tensor* tensor_;
+	TFTensor* tensor_;
 
-	explicit PyTensorMemory(TF_Tensor* tensor) : tensor_(tensor) {}
+	explicit PyTensorMemory(TFTensor* tensor) : tensor_(tensor) {}
 
-	PyTensorMemory(vector<int> shape, TF_Type type = TF_Type::Float) {
+	PyTensorMemory(vector<int> shape, TFType type = TFType::Float) {
 		tensor_ = global_memory_manager->Allocate(shape, type);
 	}
 
-	TF_Type GetType() const {
+	TFType GetType() const {
 		return tensor_->type;
 	}
 
 	template <typename T>
-	PyTensorMemory(py::array_t<T> arr, TF_Type type = TF_Type::Float) {
+	PyTensorMemory(py::array_t<T> arr, TFType type = TFType::Float) {
 		py::buffer_info info = arr.request();
 
 		// Get the shape

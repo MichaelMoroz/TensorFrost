@@ -25,7 +25,7 @@ class CpuKernelManager : public KernelManager {
 		return kernel_functions[id];
 	}
 
-	virtual void DispatchKernel(DispatchInfo info) override
+	virtual void DispatchKernel(TFDispatchInfo info) override
 	{	
 		CpuMemoryManager* memory_manager = (CpuMemoryManager*)global_memory_manager;
 		cpu_dispatch_func* func = kernel_functions[info.kernel_id];
@@ -34,8 +34,7 @@ class CpuKernelManager : public KernelManager {
 		for (int i = 0; i < (int)info.tensor_count; i++) {
 			memory[i] = memory_manager->GetNativeBuffer(&info.tensors[i]);
 		}
-		uint* variables = info.variables;
-		func(variables, memory, info.work_group_count);
+		func(info.variables, memory, info.work_group_count);
 		delete[] memory;
 	}
 };

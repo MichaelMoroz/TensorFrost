@@ -66,7 +66,7 @@ class ArgumentManager {
 private:
 	Node* node_;
 	bool add_parenthesis = false;
-	unordered_map<ArgID, TF_Type, HashArgID> argument_types_;
+	unordered_map<ArgID, TFType, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
 	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
@@ -133,7 +133,7 @@ public:
 
 	const Tensor& operator[](int index) const;
 
-	TF_Type Type(ArgType type, int index = 0) const {
+	TFType Type(ArgType type, int index = 0) const {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_types_.find(id);
 		if (Arg != argument_types_.end()) {

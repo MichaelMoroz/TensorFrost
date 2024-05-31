@@ -83,7 +83,7 @@ class OpenGLKernelManager : public KernelManager {
 		return location;
 	}
 
-	void DispatchKernel(DispatchInfo info) override
+	void DispatchKernel(TFDispatchInfo info) override
 	{
 		GLuint program = kernel_map[info.kernel_id];
 		glUseProgram(program);

@@ -1,12 +1,12 @@
 #include "BufferManager.h"
 
 namespace TensorFrost {
-    void BufferManager::DeallocateBuffer(Buffer *buffer) {
+    void BufferManager::DeallocateBuffer(TFBuffer *buffer) {
         used_buffers.erase(buffer);
         unused_time[buffer] = 0;
     }
 
-    void BufferManager::RemoveBuffer(Buffer *buffer) {
+    void BufferManager::RemoveBuffer(TFBuffer *buffer) {
         if(!buffers_to_delete.contains(buffer)) {
             throw std::runtime_error("Buffer not marked for deletion");
         }
@@ -27,9 +27,9 @@ namespace TensorFrost {
         }
     }
 
-    Buffer * BufferManager::TryAllocateBuffer(int size) {
+    TFBuffer * BufferManager::TryAllocateBuffer(int size) {
         //try to find a non-used buffer of the correct size
-        Buffer* buffer = nullptr;
+        TFBuffer* buffer = nullptr;
         bool found = false;
         //find the smallest buffer that is larger than the requested size
         int min_size = size;

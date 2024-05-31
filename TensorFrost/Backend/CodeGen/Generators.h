@@ -51,7 +51,7 @@ class CodeGenerator {
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
 
-	map<TF_Type, string> type_names = {
+	map<TFType, string> type_names = {
 	    {None, "void"},   {Bool, "bool"},
 	    {Float, "float"}, {Uint, "uint"},
 	    {Int, "int"},
@@ -140,7 +140,7 @@ protected:
 		string name = node->var_name;
 
 		// get output type
-		TF_Type output_type = node->tensor_->type;
+		TFType output_type = node->tensor_->type;
 
 		// generate line
 		string left = "";
@@ -172,20 +172,20 @@ protected:
 			} else if (op->name_ == "if") {
 				left += GenerateIf(&args);
 			} else if (op->name_ == "memory") {
-				left += "TF_Tensor " + node->var_name + " = ";
+				left += "TFTensor " + node->var_name + " = ";
 				// if input memory type then just take the input and store it in the
 				// output
 				if (node->memory_type_ == MemoryType::Input) {
-					expression += "check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
+					expression += "tf.check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
 				else {
-					expression += "allocate(\"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
+					expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 			} else if (op->name_ == "deallocate") {
-				left = "deallocate(" + args.Name(ArgType::Memory) + ")";
+				left = "tf.deallocate(" + args.Name(ArgType::Memory) + ")";
 				right = ";";
 			}
 			else if (op->name_ == "input_shape")
@@ -196,8 +196,8 @@ protected:
 			}
 			else if (op->name_ == "reshape")
 			{
-				left = "TF_Tensor " + node->var_name + " = ";
-				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TF_Type::" + DataTypeNames[output_type] + ")";
+				left = "TFTensor " + node->var_name + " = ";
+				expression = "tf.reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
@@ -248,14 +248,14 @@ protected:
 					//do readback
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
-					string memory_expression = GetName("ReadFromMemory") + "(" + tensor_name + ", " + address + ")";
+					string memory_expression = GetName("tf.read") + "(" + tensor_name + ", " + address + ")";
 					expression += (output_type == Uint)
 						? memory_expression
 						: TypeReinterpret(output_type_name, memory_expression);
 					right += ";";
 				} else if (op->name_ == "store") {
 					//do writeback
-					string memory_expression = GetName("WriteToMemory") + "(" + tensor_name + ", " + address + ", ";
+					string memory_expression = GetName("tf.write") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
 				} else if (op->HasAllTypes(OpClass::Scatter)) {

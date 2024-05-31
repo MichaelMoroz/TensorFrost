@@ -10,7 +10,7 @@ int GetLinearSize(const vector<int>& shape) {
 	return size;
 }
 
-vector<int> GetShape(const TF_Tensor *tensor) {
+vector<int> GetShape(const TFTensor *tensor) {
 	vector<int> shape;
 	for (uint i = 0; i < tensor->dim; i++) {
 		shape.push_back(tensor->shape[i]);
@@ -18,7 +18,7 @@ vector<int> GetShape(const TF_Tensor *tensor) {
 	return shape;
 }
 
-int GetSize(const TF_Tensor *tensor) {
+int GetSize(const TFTensor *tensor) {
 	int size = 1;
 	for (uint i = 0; i < tensor->dim; i++) {
 		size *= tensor->shape[i];

@@ -21,7 +21,7 @@ class KernelManager
  public:
 	KernelManager() = default;
 
-	virtual void DispatchKernel(DispatchInfo info) = 0;
+	virtual void DispatchKernel(TFDispatchInfo info) = 0;
 
 	void AddKernelID(Program* program, Kernel* kernel) { 
 		programs.insert(program);

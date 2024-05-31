@@ -68,33 +68,30 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TF_Tensor Allocator(uint* a, uint dim, TF_Type type) {
-	vector<int> shape;
-	for (uint i = 0; i < dim; i++) {
-		shape.push_back(a[i]);
-	}
+TFTensor Allocator(const uint* a, uint dim, TFType type, void* data) {
+	vector<int> shape(a, a + dim);
 	return *global_memory_manager->Allocate(shape, type);
 }
 
-void Deallocator(TF_Tensor a) {
+void Deallocator(TFTensor a, void* data) {
 	global_memory_manager->Free(&a);
 	delete[] a.shape;
 }
 
-uint Readback(TF_Tensor a, uint b) {
+uint Readback(TFTensor a, uint b, void* data) {
 	return global_memory_manager->ReadbackValue(&a, b);
 }
 
-void Writeback(TF_Tensor a, uint b, uint c) {
+void Writeback(TFTensor a, uint b, uint c, void* data) {
 	global_memory_manager->WritebackValue(&a, b, c);
 }
 
-void Dispatch(DispatchInfo info) {
+void Dispatch(TFDispatchInfo info, void* data) {
 	global_kernel_manager->DispatchKernel(info);
 }
 
-vector<TF_Tensor*> ExecuteProgram(
-    Program* program, vector<TF_Tensor*> inputs) {
+vector<TFTensor*> ExecuteProgram(
+    Program* program, vector<TFTensor*> inputs) {
 
 	if (current_backend == BackendType::CodeGen) {
 		throw std::runtime_error("Cannot execute program with code generation backend");
@@ -108,7 +105,7 @@ vector<TF_Tensor*> ExecuteProgram(
 		    to_string(memory_input_count) + ", got " + to_string(inputs.size()));
 	}
 
-	vector<TF_Tensor> input_tensors;
+	vector<TFTensor> input_tensors;
 	for (int i = 0; i < memory_input_count; i++) {
 		// add input memory offset
 		input_tensors.push_back(*inputs[i]);
@@ -117,21 +114,23 @@ vector<TF_Tensor*> ExecuteProgram(
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
 	int output_count = (int)output_memory_map.size();
 
-	TF_Tensor* in = input_tensors.data();
-	TF_Tensor* out = new TF_Tensor[output_count];
+	TFTensor* in = input_tensors.data();
+	TFTensor* out = new TFTensor[output_count];
 
 	if (current_backend == BackendType::OpenGL) {
 		StartDebugRegion(program->program_name);
 	}
 
-	program->execute_callback(in, out, Allocator, Deallocator, Readback, Writeback, Dispatch);
+	TFRuntime runtime = {Allocator, Deallocator, Readback, Writeback, Dispatch, nullptr};
+
+	program->execute_callback(in, out, runtime);
 
 	if (current_backend == BackendType::OpenGL) {
 		EndDebugRegion();
 		//Finish();
 	}
 
-	vector<TF_Tensor*> outputs = vector<TF_Tensor*>(output_count);
+	vector<TFTensor*> outputs = vector<TFTensor*>(output_count);
 	for (int i = 0; i < output_count; i++) {
 		outputs[i] = &out[i];
 	}

@@ -10,25 +10,25 @@ void TensorMemoryDefinition(py::module& m,
                             py::class_<PyTensorMemory>& py_tensor_mem) {
 	//define constructors from numpy arrays
 	py_tensor_mem.def(py::init([](py::array_t<float> arr) {
-		return PyTensorMemory(arr, TF_Type::Float);
+		return PyTensorMemory(arr, TFType::Float);
 	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	py_tensor_mem.def(py::init([](py::array_t<int> arr) {
-		return PyTensorMemory(arr, TF_Type::Int);
+		return PyTensorMemory(arr, TFType::Int);
 	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	py_tensor_mem.def(py::init([](py::array_t<uint> arr) {
-		return PyTensorMemory(arr, TF_Type::Uint);
+		return PyTensorMemory(arr, TFType::Uint);
 	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	py_tensor_mem.def(py::init([](py::array_t<bool> arr) {
-		return PyTensorMemory(arr, TF_Type::Bool);
+		return PyTensorMemory(arr, TFType::Bool);
 	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	// "constructor"
 	m.def(
 	    "tensor",
-	    [](const std::vector<int>& shape, TF_Type type) {
+	    [](const std::vector<int>& shape, TFType type) {
 		    return PyTensorMemory(shape, type);
 	    },"Create a TensorMemory with the given shape", py::return_value_policy::take_ownership);
 
@@ -37,13 +37,13 @@ void TensorMemoryDefinition(py::module& m,
 	    "tensor",
 	    [](std::variant<py::array_t<float>, py::array_t<int>, py::array_t<uint>, py::array_t<bool>> arr) {
 		    if (std::holds_alternative<py::array_t<float>>(arr)) {
-		    	return new PyTensorMemory(std::get<py::array_t<float>>(arr), TF_Type::Float);
+		    	return new PyTensorMemory(std::get<py::array_t<float>>(arr), TFType::Float);
 		    } else if (std::holds_alternative<py::array_t<int>>(arr)) {
-				return new PyTensorMemory(std::get<py::array_t<int>>(arr), TF_Type::Int);
+				return new PyTensorMemory(std::get<py::array_t<int>>(arr), TFType::Int);
 		    } else if (std::holds_alternative<py::array_t<uint>>(arr)) {
-			    return new PyTensorMemory(std::get<py::array_t<uint>>(arr), TF_Type::Uint);
+			    return new PyTensorMemory(std::get<py::array_t<uint>>(arr), TFType::Uint);
 		    } else if (std::holds_alternative<py::array_t<bool>>(arr)) {
-			    return new PyTensorMemory(std::get<py::array_t<bool>>(arr), TF_Type::Bool);
+			    return new PyTensorMemory(std::get<py::array_t<bool>>(arr), TFType::Bool);
 		    } else {
 			    throw std::runtime_error("Unsupported data type");
 		    }
@@ -74,13 +74,13 @@ void TensorMemoryDefinition(py::module& m,
 	    [](const PyTensorMemory& t)
 	        -> std::variant<py::array_t<float>, py::array_t<int>,
 	                        py::array_t<uint>, py::array_t<bool>> {
-		    if (t.GetType() == TF_Type::Float) {
+		    if (t.GetType() == TFType::Float) {
 		    	return t.ToPyArray<float>();
-		    } else if (t.GetType() == TF_Type::Int) {
+		    } else if (t.GetType() == TFType::Int) {
 		    	return t.ToPyArray<int>();
-		    } else if (t.GetType() == TF_Type::Uint) {
+		    } else if (t.GetType() == TFType::Uint) {
 			    return t.ToPyArray<uint>();
-		    } else if (t.GetType() == TF_Type::Bool) {
+		    } else if (t.GetType() == TFType::Bool) {
 			    return t.ToPyArray<bool>();
 		    } else {
 			    throw std::runtime_error("Unsupported data type");

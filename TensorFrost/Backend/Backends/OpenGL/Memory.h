@@ -15,7 +15,7 @@ namespace TensorFrost {
 
 class OpenGLMemoryManager : public TensorMemoryManager {
  public:
-	 unordered_map<Buffer*, GLuint> allocated_ssbo;
+	 unordered_map<TFBuffer*, GLuint> allocated_ssbo;
 
 	 OpenGLMemoryManager() {}
 
@@ -42,18 +42,18 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 	 buffer_manager.buffers_to_delete.clear();
 	 }
 
-	 Buffer* TryGetBuffer(int size) override {
+	 TFBuffer* TryGetBuffer(int size) override {
 	 	buffer_manager.UpdateTick();
 	 	CleanUp();
 
-	 	Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
+	 	TFBuffer* buffer = buffer_manager.TryAllocateBuffer(size);
 	 	if(!allocated_ssbo.contains(buffer)) {
 	 		allocated_ssbo[buffer] = CreateBuffer(buffer->size);
 	 	}
 	 	return buffer;
 	 }
 
-	 GLuint GetNativeBuffer(const TF_Tensor* mem) {
+	 GLuint GetNativeBuffer(const TFTensor* mem) {
 		 if(!allocated_ssbo.contains(mem->buffer)) {
 			 throw std::runtime_error("Tensor memory not allocated");
 		 }
@@ -73,7 +73,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 CheckError("glDeleteBuffers");
 	 }
 
-	 void SetDataAtOffset(const TF_Tensor* buffer, int offset, const vector<uint>& data) override {
+	 void SetDataAtOffset(const TFTensor* buffer, int offset, const vector<uint>& data) override {
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(buffer));
 		 CheckError("glBindBuffer - GL_SHADER_STORAGE_BUFFER for SetDataAtOffset");
 
@@ -93,7 +93,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 #endif
 	 }
 	 
-	 void ReadbackBuffer(const TF_Tensor* mem, uint offset, uint size, uint* buffer) {
+	 void ReadbackBuffer(const TFTensor* mem, uint offset, uint size, uint* buffer) {
 		 // create a new ssbo with the same size as the tensor
 		 GLuint memory = GetNativeBuffer(mem);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, memory);
@@ -102,20 +102,20 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 uint ReadbackValue(const TF_Tensor* mem, uint index) {
+	 uint ReadbackValue(const TFTensor* mem, uint index) {
 		 uint data;
 		 ReadbackBuffer(mem, index, 1, &data);
 		 return data;
 	 }
 
-	 vector<uint> Readback(const TF_Tensor* mem) override {
+	 vector<uint> Readback(const TFTensor* mem) override {
 		  vector<uint> data;
 		  data.resize(GetSize(mem));
 		  ReadbackBuffer(mem, 0, GetSize(mem), data.data());
 		  return data;
 	  }
 
-	 void WritebackValue(const TF_Tensor* mem, uint index, uint value) {
+	 void WritebackValue(const TFTensor* mem, uint index, uint value) {
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(mem));
 		 glBufferSubData(GL_SHADER_STORAGE_BUFFER,
 		                 (index) * sizeof(uint), sizeof(uint),
@@ -124,7 +124,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 void Writeback(const TF_Tensor* mem, const vector<uint>& data) override {
+	 void Writeback(const TFTensor* mem, const vector<uint>& data) override {
 		 SetDataAtOffset(mem, 0, data);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }

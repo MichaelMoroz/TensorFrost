@@ -217,14 +217,14 @@ void Finish() {
 	glFinish();
 }
 
-void RenderFrame(const TF_Tensor& tensor) {
+void RenderFrame(const TFTensor& tensor) {
 	//check if tensor is 2d + 3 channels
 	if (tensor.dim != 3 || tensor.shape[2] != 3) {
 		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
 	}
 
 	//check if tensor is float32 (TODO: use int8 instead)
-	if (tensor.type != TF_Type::Float) {
+	if (tensor.type != TFType::Float) {
 		throw std::runtime_error("Window: Render tensor must be of type float32");
 	}
 

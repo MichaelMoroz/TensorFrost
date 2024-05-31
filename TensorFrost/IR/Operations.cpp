@@ -3,9 +3,9 @@
 
 namespace TensorFrost {
 
-unordered_map<TF_Type, string> type_names = {
-    {TF_Type::None, "void"}, {TF_Type::Bool, "bool"}, {TF_Type::Float, "float"},
-    {TF_Type::Uint, "uint"}, {TF_Type::Int, "int"},
+unordered_map<TFType, string> type_names = {
+    {TFType::None, "void"}, {TFType::Bool, "bool"}, {TFType::Float, "float"},
+    {TFType::Uint, "uint"}, {TFType::Int, "int"},
 };
 
 const vector<Operation> operations = {
@@ -181,7 +181,7 @@ unordered_map<string, const Operation*> CreateOperationMap() {
 
 unordered_map<string, const Operation*> operation_map = CreateOperationMap();
 
-DataTypeList Types(initializer_list<TF_Type> elements) {
+DataTypeList Types(initializer_list<TFType> elements) {
 	return DataTypeList(elements);
 }
 
@@ -198,17 +198,17 @@ const Operation* FindOperation(const string& name) {
 	throw runtime_error("IR Operation not defined: " + name);
 }
 
-string DataTypeToString(TF_Type type) { return type_names[type]; }
+string DataTypeToString(TFType type) { return type_names[type]; }
 
 string RemoveSpaces(string str) {
 	str.erase(remove(str.begin(), str.end(), ' '), str.end());
 	return str;
 }
 
-std::unordered_map<TF_Type, string> DataTypeNames = {
-    {TF_Type::Float, "Float"}, {TF_Type::Uint, "Uint"},
-    {TF_Type::Int, "Int"},     {TF_Type::Bool, "Bool"},
-    {TF_Type::None, "None"},
+std::unordered_map<TFType, string> DataTypeNames = {
+    {TFType::Float, "Float"}, {TFType::Uint, "Uint"},
+    {TFType::Int, "Int"},     {TFType::Bool, "Bool"},
+    {TFType::None, "None"},
 };
 
 }  // namespace TensorFrost
