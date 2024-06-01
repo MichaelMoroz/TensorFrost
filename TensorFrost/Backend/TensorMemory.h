@@ -65,33 +65,23 @@ vector<size_t> GetShape(const TFTensor* tensor);
 size_t GetSize(const TFTensor* tensor);
 
 class TensorMemoryManager {
-public:
+private:
 	const int MAX_UNUSED_TIME = 512;
 	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
 	map<TFBuffer*, int> unused_time;
 	unordered_set<TFBuffer*> buffers_to_delete;
 	unordered_set<TFBuffer*> used_buffers;
 
+	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
+	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);
+
+public:
 	virtual void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) {
 		throw std::runtime_error("SetDataAtOffset not implemented");
 	}
 
-	TFTensor* Allocate(const vector<size_t>& shape, const TFType type = TFType::Float, bool read_only = false) {
-		size_t size = GetLinearSize(shape);
-
-		if (size == 0) {
-			throw invalid_argument("Trying to allocate a tensor with size 0");
-		}
-
-		TFBuffer* buf = TryAllocateBuffer(size);
-		buf->read_only = read_only;
-		return MakeTensor(shape, buf, type);
-	}
-
-	TFTensor* AllocateWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false) {
-		TFTensor* tensor_memory = Allocate(shape, type);
-		SetDataAtOffset(tensor_memory, 0, data);
-		return tensor_memory;
+	virtual TFBuffer* CreateBuffer(size_t size) {
+		throw std::runtime_error("CreateBuffer not implemented");
 	}
 
 	virtual vector<uint32_t> Readback(const TFTensor* memory) = 0;
@@ -99,51 +89,17 @@ public:
 	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data) = 0;
 	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value) = 0;
 
-	TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type) {
-		TFTensor* tensor = new TFTensor();
-		tensor->buffer = buf;
-		tensor->dim = dim;
-		tensor->shape = shape;
-		tensor->type = type;
-		return tensor;
-	}
+	TFBuffer* AllocateBuffer(size_t size);
+	TFTensor* Allocate(const vector<size_t>& shape, const TFType type = TFType::Float, bool read_only = false);
+	TFTensor* AllocateWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false);
 
-	TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type) {
-		size_t* shape_arr = new size_t[shape.size()];
-		std::copy(shape.begin(), shape.end(), shape_arr);
-		return MakeTensor(shape_arr, (int)shape.size(), buf, type);
-	}
-
-	void Free(TFTensor* memory) {
-		DeallocateBuffer(memory->buffer);
-	}
-
-	size_t GetAllocatedSize() const {
-		return GetRequiredAllocatedStorage();
-	}
-
-	size_t GetUnusedAllocatedSize() const {
-		return GetUnusedAllocatedStorage();
-	}
-
-	virtual TFBuffer* CreateBuffer(size_t size) {
-		throw std::runtime_error("CreateBuffer not implemented");
-	}
-
-	TFBuffer* AllocateBuffer(size_t size) {
-		TFBuffer* buffer = CreateBuffer(size);
-		//add the buffer to the list of allocated buffers
-		allocated_buffers[size].insert(buffer);
-		return buffer;
-	}
-
+	void Free(TFTensor tensor);
+	size_t GetAllocatedSize() const;
+	size_t GetUnusedAllocatedSize() const;
 	void DeallocateBuffer(TFBuffer* buffer);
 	void RemoveBuffer(TFBuffer* buffer);
 	void UpdateTick();
 	TFBuffer* TryAllocateBuffer(size_t size);
-	size_t GetRequiredAllocatedStorage() const;
-	size_t GetUnusedAllocatedStorage() const;
-
 	~TensorMemoryManager();
 };
 

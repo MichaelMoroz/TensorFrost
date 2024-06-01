@@ -83,7 +83,7 @@ class PyTensorMemory {
 	}
 
 	~PyTensorMemory() {
-		global_memory_manager->Free(tensor_);
+		global_memory_manager->Free(*tensor_);
 	}
 
 };
