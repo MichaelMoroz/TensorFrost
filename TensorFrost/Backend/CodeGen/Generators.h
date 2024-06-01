@@ -57,11 +57,12 @@ class CodeGenerator {
 	    {Int, "int"},
 	};
 	
-	bool is_kernel = true;
+	Kernel* kernel = nullptr;
+	IR* ir = nullptr;
 
-	CodeGenerator() = default;
+	CodeGenerator(IR* ir) : ir(ir) {}
 
-	void GenerateKernelCode(const Kernel* kernel);
+	void GenerateKernelCode(Kernel *kernel_);
 	void GenerateCode(const Node* root);
 	string AssembleString();
 
@@ -134,7 +135,7 @@ protected:
 	virtual Line* GenerateLine(Node* node)  {
 		ArgumentManager& args = node->args;
 		GenerateArgumentNames(args);
-		if (is_kernel) RegenerateNodeName(node);
+		if (kernel) RegenerateNodeName(node);
 		const Operation* op = node->op;
 
 		string name = node->var_name;
@@ -172,15 +173,15 @@ protected:
 			} else if (op->name_ == "if") {
 				left += GenerateIf(&args);
 			} else if (op->name_ == "memory") {
-				left += "TFTensor " + node->var_name + " = ";
 				// if input memory type then just take the input and store it in the
 				// output
 				if (node->memory_type_ == MemoryType::Input) {
-					expression += "tf.check_tensor(in" + to_string(node->special_indices_[0]) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
 				else {
+					left += "TFTensor " + node->var_name + " = ";
 					expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
@@ -191,7 +192,7 @@ protected:
 			else if (op->name_ == "input_shape")
 			{
 				left = "int " + node->var_name + " = ";
-				expression = "in" + to_string(node->special_indices_[1]) + ".shape[" + to_string(node->special_indices_[0]) + "]";
+				expression = ir->input_memory_map[node->special_indices_[1]]->var_name + ".shape[" + to_string(node->special_indices_[0]) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")
@@ -203,7 +204,7 @@ protected:
 		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
 			string address;
 
-			if (is_kernel) {
+			if (kernel) {
 				address = "0";
 				// if has index (not a scalar)
 				if (args.Has(ArgType::Index)) {

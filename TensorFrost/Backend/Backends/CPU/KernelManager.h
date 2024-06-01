@@ -14,14 +14,14 @@
 namespace TensorFrost {
 
 class CpuKernelManager : public KernelManager {
-	unordered_map<int, cpu_dispatch_func*> kernel_functions;
+	unordered_map<size_t, cpu_dispatch_func*> kernel_functions;
  public:
 
 	void AddKernelFunction(Kernel* kernel, cpu_dispatch_func* func)	{ 
 		kernel_functions[kernel->kernel_id_] = func;
 	}
 
-	cpu_dispatch_func* GetKernel(int id) { 
+	cpu_dispatch_func* GetKernel(size_t id) {
 		return kernel_functions[id];
 	}
 

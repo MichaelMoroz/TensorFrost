@@ -14,7 +14,7 @@
 namespace TensorFrost {
 
 class OpenGLKernelManager : public KernelManager {
-	unordered_map<uint, GLuint> kernel_map;
+	unordered_map<size_t, GLuint> kernel_map;
 	const int WORK_GROUP_SIZE = 256;
  public:
 	

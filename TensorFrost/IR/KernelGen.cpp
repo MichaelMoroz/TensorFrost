@@ -705,9 +705,6 @@ void IR::GetInputList() {
 	//MUST BE IN ORDER
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (node->memory_type_ == MemoryType::Input) {
-			// add shapes to the memory inputs
-			memory_inputs.push_back(*node);
-
 			shape_memory_map[*node] = {};
 			// add shapes to the memory inputs
 			for (int i = 0; i < node->args.Count(ArgType::Shape); i++) {
@@ -717,6 +714,8 @@ void IR::GetInputList() {
 
 			// set input memory index
 			int input_index = input_memory_index++;
+			// add shapes to the memory inputs
+			input_memory_map[input_index] = *node;
 			node->special_indices_[0] = input_index;
 			//if any of the inputs are "input_shape" then we need to add the input index to them
 			for (auto& [arg, from] : node->args.inputs_) {

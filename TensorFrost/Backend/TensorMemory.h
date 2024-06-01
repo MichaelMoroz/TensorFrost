@@ -24,7 +24,7 @@ extern "C" {
 	};
 
 	struct TFDispatchInfo {
-		uint kernel_id;
+		size_t kernel_id;
 		uint tensor_count;
 		const TFTensor* tensors;
 		uint variable_count;

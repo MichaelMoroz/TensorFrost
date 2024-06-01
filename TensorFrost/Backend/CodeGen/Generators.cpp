@@ -190,7 +190,8 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelCode(const Kernel* kernel) {
+void CodeGenerator::GenerateKernelCode(Kernel* kernel_) {
+	kernel = kernel_;
 	variables = kernel->variables;
 	offsets = kernel->memory;
 	GenerateCode(kernel->root);

@@ -12,6 +12,8 @@ class GLSLGenerator : public CodeGenerator {
 	};
 
  public:
+	GLSLGenerator(IR* ir) : CodeGenerator(ir) {}
+
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
 	}
@@ -148,7 +150,7 @@ void main() {
 
 )";
 
-	GLSLGenerator generator;
+	GLSLGenerator generator = GLSLGenerator(program->ir_);
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 

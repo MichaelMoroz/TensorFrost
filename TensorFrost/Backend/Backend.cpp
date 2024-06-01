@@ -97,7 +97,7 @@ vector<TFTensor*> ExecuteProgram(
 		throw std::runtime_error("Cannot execute program with code generation backend");
 	}
 
-	int memory_input_count = (int)program->ir_->memory_inputs.size();
+	int memory_input_count = (int)program->ir_->input_memory_map.size();
 
 	if (memory_input_count != inputs.size()) {
 		throw std::runtime_error(
