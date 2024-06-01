@@ -42,10 +42,11 @@ class KernelManager
 		kernels.resize(kernel_map.size());
 		for (auto& kernel : kernel_map) {
 			vector<tuple<string, int, string>> args;
-			for (auto& [mem_node, binding] : kernel.second->memory) {
+			map<Node*, size_t> memory_bindings = kernel.second->GetMemoryBindings();
+			for (auto& [mem_node, binding] : memory_bindings) {
 				string name = mem_node->var_name + "_mem";
 				string type_name = "uint";
-				args.push_back({name, binding, type_name});
+				args.push_back({name, (int)binding, type_name});
 			}
 			string code = kernel.second->generated_code_;
 			kernels[kernel.first] = {code, args};

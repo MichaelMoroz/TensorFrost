@@ -374,9 +374,18 @@ public:
 		runtime.writeback(tensor, index, value, runtime.custom_data);
 	}
 
-	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> tensors, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group)
+	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group)
 	{
-		TFDispatchInfo info = {kernel_id, (uint)tensors.size(), tensors.begin(), 0, nullptr, (uint)var.size(), var.begin(), 0};
+		//currently only supports read_write tensors
+		std::vector<TFTensor> all_tensors;
+		all_tensors.insert(all_tensors.end(), read_write.begin(), read_write.end());
+		all_tensors.insert(all_tensors.end(), read_only.begin(), read_only.end());
+		TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)var.size(), var.begin(), 0};
+
+		const TFTensor* read_write_tensors = read_write.begin();
+		for (size_t i = 0; i < read_write.size(); i++) {
+			read_write_tensors[i].buffer->up_to_date = false;
+		}
 
 		const size_t* shape_arr = shape.begin();
 		const size_t* group_arr = group.begin();
@@ -421,10 +430,15 @@ void GenerateCode(Program* program) {
 		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel
-		vector<Node*> memory_nodes;
-		memory_nodes.resize(kernel.memory.size());
-		for (auto& memory : kernel.memory) {
-			memory_nodes[memory.second] = memory.first;
+		vector<Node*> read_write_nodes;
+		read_write_nodes.resize(kernel.read_write_memory.size());
+		for (auto& read_write : kernel.read_write_memory) {
+			read_write_nodes[read_write.second] = read_write.first;
+		}
+		vector<Node*> read_only_nodes;
+		read_only_nodes.resize(kernel.read_only_memory.size());
+		for (auto& read_only : kernel.read_only_memory) {
+			read_only_nodes[read_only.second] = read_only.first;
 		}
 
 		vector<Node*> variable_nodes;
@@ -433,14 +447,22 @@ void GenerateCode(Program* program) {
 			variable_nodes[variable.second] = variable.first;
 		}
 
-		string memory_args = "{";
-		for (int d = 0; d < memory_nodes.size(); d++) {
+		string read_write_args = "{";
+		for (int d = 0; d < read_write_nodes.size(); d++) {
 			if (d != 0) {
-				memory_args += ", ";
+				read_write_args += ", ";
 			}
-			memory_args += memory_nodes[d]->var_name;
+			read_write_args += read_write_nodes[d]->var_name;
 		}
-		memory_args += "}";
+		read_write_args += "}";
+		string read_only_args = "{";
+		for (int d = 0; d < read_only_nodes.size(); d++) {
+			if (d != 0) {
+				read_only_args += ", ";
+			}
+			read_only_args += read_only_nodes[d]->var_name;
+		}
+		read_only_args += "}";
 
 		string variable_args = "{";
 		for (int d = 0; d < variable_nodes.size(); d++) {
@@ -452,7 +474,7 @@ void GenerateCode(Program* program) {
 		variable_args += "}";
 
 		string shape_args = "{";
-		for (int d = 0; d < kernel.dim; d++) {
+		for (int d = 0; d < kernel.shape.size(); d++) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
@@ -475,7 +497,7 @@ void GenerateCode(Program* program) {
 			final_source += kernel.generated_code_;
 		}
 
-		dispatch_code[kernel.root] = "tf.dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
+		dispatch_code[kernel.root] = "tf.dispatch(" + to_string(kernel.kernel_id_) + ", " + read_write_args + ",  " + read_only_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
 	}
 
 	GenerateMain(program, dispatch_code, input_count, output_count);
@@ -558,7 +580,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	string kernel_code = generator.AssembleString();
 
 	string loop = "";
-	loop += GetBufferDeclarations(kernel, [](const string& name, const string& type_name, int binding) {
+	loop += GetBufferDeclarations(kernel, [](const string& name, const string& type_name, size_t binding) {
 		return "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
 	});
 

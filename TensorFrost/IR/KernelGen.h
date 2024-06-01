@@ -16,14 +16,25 @@ bool IsBoundary(const Node* input, const Node* output, int arg_index,
 class Kernel {
  public:
 	Node* root;
-	map<Node*, int> variables;
-	map<Node*, int> memory;
+	map<Node*, size_t> variables;
+	map<Node*, size_t> read_write_memory;
+	map<Node*, size_t> read_only_memory;
 	NodeArguments shape;
-	int dim = 0;
 
 	uint kernel_id_;
 	string kernel_name_;
 	string generated_code_;
+
+	map<Node*, size_t> GetMemoryBindings() {
+		map<Node*, size_t> result;
+		for (auto& mem : read_write_memory) {
+			result[mem.first] = mem.second;
+		}
+		for (auto& mem : read_only_memory) {
+			result[mem.first] = mem.second + read_write_memory.size();
+		}
+		return result;
+	}
 };
 
 class Program {
@@ -39,11 +50,11 @@ class Program {
 
 	explicit Program(IR* ir) : ir_(ir) {}
 
-	void AddKernel(Node* kernel_node, map<Node*, int> variables, map<Node*, int> memory,
-	               NodeArguments shape, int dim)
+	void AddKernel(Node* kernel_node, map<Node*, size_t> variables, map<Node*, size_t> read_write, map<Node*, size_t> read_only,
+	               NodeArguments shape)
 	{
 		kernels_.push_back(
-		    {kernel_node, std::move(variables), std::move(memory), std::move(shape), dim});
+		    {kernel_node, std::move(variables), std::move(read_write), std::move(read_only), std::move(shape)});
 	}
 };
 

@@ -15,7 +15,7 @@ string GetNodeName(const Node* node,  bool compact = false);
 string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
-string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, int)> get_name);
+string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
 string GetCPPHeader();
 string GetHLSLHeader();
 string GetGLSLHeader();
@@ -67,8 +67,9 @@ class CodeGenerator {
 	string AssembleString();
 
 protected:
-	map<Node*, int> offsets;
-	map<Node*, int> variables;
+	map<Node*, size_t> read_write_bindings;
+	map<Node*, size_t> read_only_bindings;
+	map<Node*, size_t> variables;
 	map<Node*, string> node_expression;
 	map<Node*, bool> requires_paranthesis;
 	unordered_set<Node*> lines_to_remove;

@@ -72,11 +72,14 @@ void GenerateNodeNames(const IR& ir) {
 	}
 }
 
-string GetBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, int)> get_name) {
-	vector<string> buffer_declarations = vector<string>(kernel->memory.size());
-	for (auto& buffer : kernel->memory) {
+
+string GetBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, size_t)> get_name) {
+	map<Node*, size_t> memory_bindings = kernel->GetMemoryBindings();
+
+	vector<string> buffer_declarations = vector<string>(memory_bindings.size());
+	for (auto& buffer : memory_bindings) {
 		Node* mem_node = buffer.first;
-		int binding = buffer.second;
+		size_t binding = buffer.second;
 		string name = mem_node->var_name;
 		string type_name = "uint";
 		buffer_declarations[binding] = get_name(name, type_name, binding);
@@ -193,7 +196,8 @@ inline string Tensor::GetConstantString() const {
 void CodeGenerator::GenerateKernelCode(Kernel* kernel_) {
 	kernel = kernel_;
 	variables = kernel->variables;
-	offsets = kernel->memory;
+	read_write_bindings = kernel->read_write_memory;
+	read_only_bindings = kernel->read_only_memory;
 	GenerateCode(kernel->root);
 }
 

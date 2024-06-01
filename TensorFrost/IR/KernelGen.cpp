@@ -2595,20 +2595,20 @@ Program* GenerateProgram(IR* ir)
 	for (auto kernel : kernels)
 	{
 		// get the kernel type
-		map<Node*, int> variables;
-		map<Node*, int> memory_nodes;
+		map<Node*, size_t> variables;
+		map<Node*, bool> read_write;
 		NodeArguments shape = kernel->args.GetArguments(ArgType::Shape);
-
-		int variable_index = 0;
-		int memory_index = 0;
+		size_t variable_index = 0;
 
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpClass::MemoryOp)) {
 				// get the memory node
 				const Tensor* memory = node->args.GetTensor(ArgType::Memory);
 
-				if (!memory_nodes.contains(memory->node_)) {
-					memory_nodes[memory->node_] = memory_index++;
+				if(node->op->HasAllTypes(OpClass::Modifier)) {
+					read_write[memory->node_] |= true;
+				} else {
+					read_write[memory->node_] |= false;
 				}
 			}
 
@@ -2624,10 +2624,20 @@ Program* GenerateProgram(IR* ir)
 			}
 		}
 
-		int dim = (int)shape.size();
+		map<Node*, size_t> read_write_memory;
+		map<Node*, size_t> read_only_memory;
+		size_t read_write_index = 0;
+		size_t read_only_index = 0;
+		for(auto [node, rw] : read_write) {
+			if(rw) {
+				read_write_memory[node] = read_write_index++;
+			} else {
+				read_only_memory[node] = read_only_index++;
+			}
+		}
 
 		// add the kernel to the program
-		program->AddKernel(kernel, variables, memory_nodes, shape, dim);
+		program->AddKernel(kernel, variables, read_write_memory, read_only_memory, shape);
 	}
 
 	return program;

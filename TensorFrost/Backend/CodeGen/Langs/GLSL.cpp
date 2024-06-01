@@ -100,7 +100,7 @@ uniform uint var[32];
 )";
 }
 
-string GLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+string GLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
 	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
 	//add atomic functions
 	decl += R"(

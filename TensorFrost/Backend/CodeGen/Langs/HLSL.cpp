@@ -88,7 +88,7 @@ cbuffer ubo : register(b0) { UBO ubo; }
 )";
 }
 
-string HLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+string HLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
 	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
 }
 
