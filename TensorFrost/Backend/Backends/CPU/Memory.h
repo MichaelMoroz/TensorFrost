@@ -17,7 +17,7 @@ using namespace std;
 
 class CpuMemoryManager : public TensorMemoryManager {
  public:
-	unordered_map<TFBuffer*, uint*> allocated_arrays;
+	unordered_map<TFBuffer*, uint32_t*> allocated_arrays;
 
 	void CleanUp() {
 		for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
@@ -28,7 +28,7 @@ class CpuMemoryManager : public TensorMemoryManager {
 		buffer_manager.buffers_to_delete.clear();
 	}
 
-	TFBuffer* TryGetBuffer(int size) override {
+	TFBuffer* TryGetBuffer(size_t size) override {
 		buffer_manager.UpdateTick();
 		CleanUp();
 
@@ -46,17 +46,17 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return allocated_arrays[mem->buffer];
 	}
 
-	void SetDataAtOffset(const TFTensor* buffer, int offset, const vector<uint>& data) override {
-		uint* array = allocated_arrays[buffer->buffer];
-		memcpy(array + offset, data.data(), data.size() * sizeof(uint));
+	void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) override {
+		uint32_t* array = allocated_arrays[buffer->buffer];
+		memcpy(array + offset, data.data(), data.size() * sizeof(uint32_t));
 	}
 
-	uint* CreateBuffer(int size) {
-		return new uint[size];
+	uint32_t* CreateBuffer(size_t size) {
+		return new uint32_t[size];
 	}
 
 	vector<uint> Readback(const TFTensor* mem) override {
-		uint* array = GetNativeBuffer(mem);
+		uint32_t* array = GetNativeBuffer(mem);
 		vector<uint> data(mem->buffer->size);
 		for(int i = 0; i < mem->buffer->size; i++) {
 			data[i] = array[i];
@@ -64,18 +64,18 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return data;
 	}
 
-	uint ReadbackValue(const TFTensor* mem, uint index) override {
-		uint* array = GetNativeBuffer(mem);
+	uint ReadbackValue(const TFTensor* mem, size_t index) override {
+		uint32_t* array = GetNativeBuffer(mem);
 		return array[index];
 	}
 
-	void Writeback(const TFTensor* mem, const vector<uint>& data) override {
-		uint* array = GetNativeBuffer(mem);
+	void Writeback(const TFTensor* mem, const vector<uint32_t>& data) override {
+		uint32_t* array = GetNativeBuffer(mem);
 		memcpy(array, data.data(), data.size() * sizeof(uint));
 	}
 
-	void WritebackValue(const TFTensor* mem, uint index, uint value) override {
-		uint* array = GetNativeBuffer(mem);
+	void WritebackValue(const TFTensor* mem, size_t index, uint32_t value) override {
+		uint32_t* array = GetNativeBuffer(mem);
 		array[index] = value;
 	}
 

@@ -96,7 +96,7 @@ int asint(uint x) {
   return int(x);
 }
 
-uniform int var[32];
+uniform uint var[32];
 )";
 }
 

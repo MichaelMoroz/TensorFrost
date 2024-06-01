@@ -2,25 +2,25 @@
 
 namespace TensorFrost {
 
-int GetLinearSize(const vector<int>& shape) {
-	int size = 1;
-	for (int dim : shape) {
+size_t GetLinearSize(const vector<size_t>& shape) {
+	size_t size = 1;
+	for (size_t dim : shape) {
 		size *= dim;
 	}
 	return size;
 }
 
-vector<int> GetShape(const TFTensor *tensor) {
-	vector<int> shape;
-	for (uint i = 0; i < tensor->dim; i++) {
+vector<size_t> GetShape(const TFTensor *tensor) {
+	vector<size_t> shape;
+	for (size_t i = 0; i < tensor->dim; i++) {
 		shape.push_back(tensor->shape[i]);
 	}
 	return shape;
 }
 
-int GetSize(const TFTensor *tensor) {
-	int size = 1;
-	for (uint i = 0; i < tensor->dim; i++) {
+size_t GetSize(const TFTensor *tensor) {
+	size_t size = 1;
+	for (size_t i = 0; i < tensor->dim; i++) {
 		size *= tensor->shape[i];
 	}
 	return size;

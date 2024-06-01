@@ -19,7 +19,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 
 	 OpenGLMemoryManager() {}
 
-	 GLuint CreateBuffer(int size) {
+	 GLuint CreateBuffer(size_t size) {
 		 GLint maxsize;
 		 glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxsize);
 
@@ -29,7 +29,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 
 		 GLuint buffer;
 		 glCreateBuffers(1, &buffer);
-		 glNamedBufferStorage(buffer, size * sizeof(uint), nullptr, GL_DYNAMIC_STORAGE_BIT);
+		 glNamedBufferStorage(buffer, size * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
 		 return buffer;
 	 }
 
@@ -42,7 +42,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 	 buffer_manager.buffers_to_delete.clear();
 	 }
 
-	 TFBuffer* TryGetBuffer(int size) override {
+	 TFBuffer* TryGetBuffer(size_t size) override {
 	 	buffer_manager.UpdateTick();
 	 	CleanUp();
 
@@ -60,7 +60,7 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 	 return allocated_ssbo[mem->buffer];
 	 }
 
-	 void CopyBuffer(GLuint source, GLuint dest, int size, int read_offset = 0, int write_offset = 0) {
+	 void CopyBuffer(GLuint source, GLuint dest, size_t size, size_t read_offset = 0, size_t write_offset = 0) {
 		 glBindBuffer(GL_COPY_READ_BUFFER, source);
 		 glBindBuffer(GL_COPY_WRITE_BUFFER, dest);
 		 glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, read_offset * sizeof(uint), write_offset * sizeof(uint), size * sizeof(uint));
@@ -73,12 +73,12 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 CheckError("glDeleteBuffers");
 	 }
 
-	 void SetDataAtOffset(const TFTensor* buffer, int offset, const vector<uint>& data) override {
+	 void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) override {
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(buffer));
 		 CheckError("glBindBuffer - GL_SHADER_STORAGE_BUFFER for SetDataAtOffset");
 
-		 glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint),
-		                 data.size() * sizeof(uint), data.data());
+		 glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint32_t),
+		                 data.size() * sizeof(uint32_t), data.data());
 		 CheckError("glBufferSubData");
 
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -93,38 +93,38 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 #endif
 	 }
 	 
-	 void ReadbackBuffer(const TFTensor* mem, uint offset, uint size, uint* buffer) {
+	 void ReadbackBuffer(const TFTensor* mem, size_t offset, size_t size, uint32_t* buffer) {
 		 // create a new ssbo with the same size as the tensor
 		 GLuint memory = GetNativeBuffer(mem);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, memory);
-		 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint), size * sizeof(uint), buffer);
+		 glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint32_t), size * sizeof(uint32_t), buffer);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 uint ReadbackValue(const TFTensor* mem, uint index) {
+	 uint ReadbackValue(const TFTensor* mem, size_t index) {
 		 uint data;
 		 ReadbackBuffer(mem, index, 1, &data);
 		 return data;
 	 }
 
-	 vector<uint> Readback(const TFTensor* mem) override {
-		  vector<uint> data;
+	 vector<uint32_t> Readback(const TFTensor* mem) override {
+		  vector<uint32_t> data;
 		  data.resize(GetSize(mem));
 		  ReadbackBuffer(mem, 0, GetSize(mem), data.data());
 		  return data;
 	  }
 
-	 void WritebackValue(const TFTensor* mem, uint index, uint value) {
+	 void WritebackValue(const TFTensor* mem, size_t index, uint32_t value) {
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, GetNativeBuffer(mem));
 		 glBufferSubData(GL_SHADER_STORAGE_BUFFER,
-		                 (index) * sizeof(uint), sizeof(uint),
+		                 (index) * sizeof(uint32_t), sizeof(uint32_t),
 		                 &value);
 		 glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }
 
-	 void Writeback(const TFTensor* mem, const vector<uint>& data) override {
+	 void Writeback(const TFTensor* mem, const vector<uint32_t>& data) override {
 		 SetDataAtOffset(mem, 0, data);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
 	 }

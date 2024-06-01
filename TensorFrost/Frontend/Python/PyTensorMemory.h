@@ -16,7 +16,7 @@ class PyTensorMemory {
 
 	explicit PyTensorMemory(TFTensor* tensor) : tensor_(tensor) {}
 
-	PyTensorMemory(vector<int> shape, TFType type = TFType::Float) {
+	PyTensorMemory(vector<size_t> shape, TFType type = TFType::Float) {
 		tensor_ = global_memory_manager->Allocate(shape, type);
 	}
 
@@ -29,35 +29,35 @@ class PyTensorMemory {
 		py::buffer_info info = arr.request();
 
 		// Get the shape
-		std::vector<int> shape;
-		for (int i = 0; i < info.ndim; i++) {
-			shape.push_back((int)info.shape[i]);
+		std::vector<size_t> shape;
+		for (size_t i = 0; i < (size_t)info.ndim; i++) {
+			shape.push_back(info.shape[i]);
 		}
 
 		// Create the data vector
-		std::vector<uint> data;
+		std::vector<uint32_t> data;
 		data.reserve(info.size);
 
 		// Define a recursive lambda function for multi-dimensional iteration
-		std::function<void(const int, std::vector<int>&)> iter_dims;
-		iter_dims = [&iter_dims, &info, &data](const int dim,
-											   std::vector<int>& indices) {
+		std::function<void(const size_t, std::vector<size_t>&)> iter_dims;
+		iter_dims = [&iter_dims, &info, &data](const size_t dim,
+											   std::vector<size_t>& indices) {
 			if (dim == info.ndim) {
 				// Calculate the actual memory address using strides
 				char* ptr = static_cast<char*>(info.ptr);
-				for (int i = 0; i < info.ndim; ++i) {
+				for (size_t i = 0; i < (size_t)info.ndim; ++i) {
 					ptr += indices[i] * info.strides[i];
 				}
-				data.push_back(*(reinterpret_cast<uint*>(ptr)));
+				data.push_back(*(reinterpret_cast<uint32_t*>(ptr)));
 			} else {
-				for (indices[dim] = 0; indices[dim] < info.shape[dim]; ++indices[dim]) {
+				for (indices[dim] = 0; indices[dim] < (size_t)info.shape[dim]; ++indices[dim]) {
 					iter_dims(dim + 1, indices);
 				}
 			}
 		};
 
 		// Start the multi-dimensional iteration
-		std::vector<int> start_indices(info.ndim, 0);
+		std::vector<size_t> start_indices(info.ndim, 0);
 		iter_dims(0, start_indices);
 
 		// Allocate the memory
@@ -67,7 +67,7 @@ class PyTensorMemory {
 	template <typename T>
 	py::array_t<T> ToPyArray() const {
 		// Get the shape
-		std::vector<int> shape = GetShape(tensor_);
+		std::vector<size_t> shape = GetShape(tensor_);
 
 		// Create the numpy array
 		py::array_t<T> arr(shape);

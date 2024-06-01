@@ -68,8 +68,8 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TFTensor Allocator(const uint* a, uint dim, TFType type, void* data) {
-	vector<int> shape(a, a + dim);
+TFTensor Allocator(const size_t* a, size_t dim, TFType type, void* data) {
+	vector<size_t> shape(a, a + dim);
 	return *global_memory_manager->Allocate(shape, type);
 }
 
@@ -78,12 +78,12 @@ void Deallocator(TFTensor a, void* data) {
 	delete[] a.shape;
 }
 
-uint Readback(TFTensor a, uint b, void* data) {
-	return global_memory_manager->ReadbackValue(&a, b);
+uint Readback(TFTensor a, size_t index, void* data) {
+	return global_memory_manager->ReadbackValue(&a, index);
 }
 
-void Writeback(TFTensor a, uint b, uint c, void* data) {
-	global_memory_manager->WritebackValue(&a, b, c);
+void Writeback(TFTensor a, size_t index, uint32_t value, void* data) {
+	global_memory_manager->WritebackValue(&a, index, value);
 }
 
 void Dispatch(TFDispatchInfo info, void* data) {

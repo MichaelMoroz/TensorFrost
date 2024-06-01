@@ -28,7 +28,7 @@ void TensorMemoryDefinition(py::module& m,
 	// "constructor"
 	m.def(
 	    "tensor",
-	    [](const std::vector<int>& shape, TFType type) {
+	    [](const std::vector<size_t>& shape, TFType type) {
 		    return PyTensorMemory(shape, type);
 	    },"Create a TensorMemory with the given shape", py::return_value_policy::take_ownership);
 
@@ -52,7 +52,7 @@ void TensorMemoryDefinition(py::module& m,
 
 	// properties
 	py_tensor_mem.def_property_readonly("shape", [](const PyTensorMemory& t) {
-		vector<int> shape = GetShape(t.tensor_);
+		vector<size_t> shape = GetShape(t.tensor_);
 		py::tuple shape_tuple(shape.size());
 		for (size_t i = 0; i < shape.size(); i++) {
 			shape_tuple[i] = shape[i];

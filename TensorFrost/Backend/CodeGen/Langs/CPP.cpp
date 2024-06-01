@@ -18,7 +18,7 @@ string GetCPPHeader() {
 #include <tuple>
 #include <unordered_map>
 
-typedef unsigned int uint;
+typedef uint32_t uint;
 
 inline int min(int a, int b)
 {
@@ -240,7 +240,10 @@ inline float pcgf(uint v)
 
 extern "C" {
 	struct TFBuffer {
-		int size = 0;
+        size_t size = 0;
+        bool up_to_date = true;
+        bool read_only = false;
+        //add type descriptor (for special kinds of buffers)
     };
 
 	enum TFType {
@@ -253,25 +256,28 @@ extern "C" {
 
 	struct TFTensor {
 		TFBuffer* buffer;
-		uint dim;
-		const uint* shape;
 		TFType type;
+		size_t dim;
+		const size_t* shape;
 	};
 
 	struct TFDispatchInfo {
 		size_t kernel_id;
-		uint tensor_count;
-		const TFTensor* tensors;
-		uint variable_count;
-		const uint* variables;
-		uint work_group_count;
+		size_t read_write_count;
+		const TFTensor* read_write_tensors;
+		size_t read_only_count;
+		const TFTensor* read_only_tensors;
+		size_t variable_count;
+		const uint32_t* variables;
+		size_t work_group_count;
 	};
 
-	typedef TFTensor alloc_func(const uint*, uint, TFType, void*);
+	typedef TFTensor alloc_func(const size_t*, size_t, TFType, void*);
 	typedef void dealloc_func(TFTensor, void*);
-	typedef uint readback_func(TFTensor, uint, void*);
-	typedef void writeback_func(TFTensor, uint, uint, void*);
+	typedef uint readback_func(TFTensor, size_t, void*);
+	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
+	typedef void cpu_dispatch_func(const uint32_t* var, uint32_t** mem, uint work_group_count);
 
 	struct TFRuntime {
 		alloc_func* alloc;
@@ -295,21 +301,21 @@ public:
 
 	TFContext(TFRuntime runtime) : runtime(runtime) {}
 
-	int compute_size(const uint* shape, uint dim) {
-		int size = 1;
-		for (uint i = 0; i < dim; i++) {
+	size_t compute_size(const size_t* shape, size_t dim) {
+		size_t size = 1;
+		for (size_t i = 0; i < dim; i++) {
 		  size *= shape[i];
 		}
 		return size;
 	}
 
-	TFTensor allocate(std::string name, std::initializer_list<uint> shape, TFType type)
+	TFTensor allocate(std::string name, std::initializer_list<size_t> shape, TFType type)
 	{
-		const uint* shape_arr = shape.begin();
-		uint dim = (uint)shape.size();
-		uint size = compute_size(shape_arr, dim);
+		const size_t* shape_arr = shape.begin();
+		size_t dim = shape.size();
+		size_t size = compute_size(shape_arr, dim);
 
-		for (int i = 0; i < dim; i++) {
+		for (size_t i = 0; i < dim; i++) {
 			if(shape_arr[i] < 1) {
 				throw std::runtime_error("Invalid shape on dimension " + std::to_string(i) + " for " + name + ". Expected positive integer, got " + std::to_string(shape_arr[i]));
 			}
@@ -323,11 +329,11 @@ public:
 		runtime.dealloc(tensor, runtime.custom_data);
 	}
 
-	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<uint> target_shape, TFType target_type)
+	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type)
 	{
-		const uint* shape_arr = tensor.shape;
-		const uint* target_shape_arr = target_shape.begin();
-		uint target_dim = (uint)target_shape.size();
+		const size_t* shape_arr = tensor.shape;
+		const size_t* target_shape_arr = target_shape.begin();
+		size_t target_dim = target_shape.size();
 
 		if (tensor.type != target_type) {
 			throw std::runtime_error("Invalid type for " + name + ". Expected " + TFTypeNames[target_type] + ", got " + TFTypeNames[tensor.type]);
@@ -337,19 +343,19 @@ public:
 			throw std::runtime_error("Invalid number of dimensions for " + name + ". Expected " + std::to_string(target_dim) + ", got " + std::to_string(tensor.dim));
 		}
 
-		for (int i = 0; i < tensor.dim; i++) {
+		for (size_t i = 0; i < tensor.dim; i++) {
 			if (shape_arr[i] != target_shape_arr[i] || target_shape_arr[i] < 1) {
 				throw std::runtime_error("Invalid shape for dimension " + std::to_string(i) + " in " + name + ". Expected " + std::to_string(target_shape_arr[i]) + ", got " + std::to_string(shape_arr[i]));
 			}
 		}
 	}
 
-	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<uint> shape, TFType type)
+	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type)
 	{
-		TFTensor new_tensor = {tensor.buffer, (uint)shape.size(), shape.begin(), type};
+		TFTensor new_tensor = {tensor.buffer, type, shape.size(), shape.begin()};
 
-		int old_size = compute_size(tensor.shape, tensor.dim);
-		int new_size = compute_size(new_tensor.shape, new_tensor.dim);
+		size_t old_size = compute_size(tensor.shape, tensor.dim);
+		size_t new_size = compute_size(new_tensor.shape, new_tensor.dim);
 
 		if(old_size != new_size) {
 			throw std::runtime_error("Cannot reshape " + name + ", expected " + std::to_string(new_size) + " elements, while input has " + std::to_string(old_size));
@@ -358,33 +364,33 @@ public:
 		return new_tensor;
 	}
 
-	uint read(TFTensor tensor, uint index)
+	uint read(TFTensor tensor, size_t index)
 	{
 		return runtime.readback(tensor, index, runtime.custom_data);
 	}
 
-	void write(TFTensor tensor, uint index, uint value)
+	void write(TFTensor tensor, size_t index, uint32_t value)
 	{
 		runtime.writeback(tensor, index, value, runtime.custom_data);
 	}
 
-	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape, std::initializer_list<uint> group)
+	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> tensors, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group)
 	{
-		TFDispatchInfo info = {kernel_id, (uint)tensors.size(), tensors.begin(), (uint)var.size(), var.begin(), 1};
+		TFDispatchInfo info = {kernel_id, (uint)tensors.size(), tensors.begin(), 0, nullptr, (uint)var.size(), var.begin(), 0};
 
-		const uint* shape_arr = shape.begin();
-		const uint* group_arr = group.begin();
-		uint dispatch_dim = (uint)shape.size();
-		uint group_dim = (uint)group.size();
+		const size_t* shape_arr = shape.begin();
+		const size_t* group_arr = group.begin();
+		size_t dispatch_dim = shape.size();
+		size_t group_dim = group.size();
 
-		int work_group_count = 1;
-		for (int i = 0; i < dispatch_dim - group_dim; i++) {
+		size_t work_group_count = 1;
+		for (size_t i = 0; i < dispatch_dim - group_dim; i++) {
 			work_group_count *= shape_arr[i];
 		}
 
 		//only the last dimensions are divided by the group size
-		for (int i = 0; i < group_dim; i++) {
-			int dim = shape_arr[dispatch_dim - group_dim + i];
+		for (size_t i = 0; i < group_dim; i++) {
+			size_t dim = shape_arr[dispatch_dim - group_dim + i];
 			work_group_count *= (dim + group_arr[i] - 1) / group_arr[i];
 		}
 

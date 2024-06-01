@@ -10,7 +10,7 @@ namespace TensorFrost {
         if(!buffers_to_delete.contains(buffer)) {
             throw std::runtime_error("Buffer not marked for deletion");
         }
-        int size = buffer->size;
+        size_t size = buffer->size;
         allocated_buffers[size].erase(buffer);
         unused_time.erase(buffer);
         delete buffer;
@@ -27,13 +27,13 @@ namespace TensorFrost {
         }
     }
 
-    TFBuffer * BufferManager::TryAllocateBuffer(int size) {
+    TFBuffer *BufferManager::TryAllocateBuffer(size_t size) {
         //try to find a non-used buffer of the correct size
         TFBuffer* buffer = nullptr;
         bool found = false;
         //find the smallest buffer that is larger than the requested size
-        int min_size = size;
-        int max_size = 8 * size;
+        size_t min_size = size;
+        size_t max_size = 8 * size;
         //get iterator to the first buffer that is larger than the requested size
         auto it = allocated_buffers.lower_bound(min_size);
         //if no buffer is larger than the requested size, get the first buffer
@@ -70,16 +70,16 @@ namespace TensorFrost {
         return buffer;
     }
 
-    uint32_t BufferManager::GetRequiredAllocatedStorage() const {
-        uint32_t total = 0;
+    size_t BufferManager::GetRequiredAllocatedStorage() const {
+        size_t total = 0;
         for(auto& [size, buffers]: allocated_buffers) {
             total += (uint32_t)size * (uint32_t)buffers.size();
         }
         return total;
     }
 
-    uint32_t BufferManager::GetUnusedAllocatedStorage() const {
-        uint32_t total = 0;
+    size_t BufferManager::GetUnusedAllocatedStorage() const {
+        size_t total = 0;
         for(auto& [size, buffers]: allocated_buffers) {
             for(auto& buffer: buffers) {
                 if(!used_buffers.contains(buffer)) {
