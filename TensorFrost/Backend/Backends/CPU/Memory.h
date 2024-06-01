@@ -15,44 +15,32 @@ namespace TensorFrost {
 
 using namespace std;
 
-class CpuMemoryManager : public TensorMemoryManager {
- public:
-	unordered_map<TFBuffer*, uint32_t*> allocated_arrays;
+class TFCPUBuffer: public TFBuffer {
+public:
+	uint32_t* data;
 
-	void CleanUp() {
-		for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
-			DeleteBuffer(allocated_arrays[buf_to_delete]);
-			allocated_arrays.erase(buf_to_delete);
-			buffer_manager.RemoveBuffer(buf_to_delete);
-		}
-		buffer_manager.buffers_to_delete.clear();
+	TFCPUBuffer(size_t size): TFBuffer(size) {
+		data = new uint32_t[size];
 	}
 
-	TFBuffer* TryGetBuffer(size_t size) override {
-		buffer_manager.UpdateTick();
-		CleanUp();
+	~TFCPUBuffer() {
+		delete[] data;
+	}
+};
 
-		TFBuffer* buffer = buffer_manager.TryAllocateBuffer(size);
-		if(!allocated_arrays.contains(buffer)) {
-			allocated_arrays[buffer] = CreateBuffer(buffer->size);
-		}
-		return buffer;
+class CpuMemoryManager : public TensorMemoryManager {
+ public:
+	TFBuffer* CreateBuffer(size_t size) override {
+		return new TFCPUBuffer(size);
 	}
 
 	uint* GetNativeBuffer(const TFTensor* mem) {
-		if(!allocated_arrays.contains(mem->buffer)) {
-			throw std::runtime_error("Tensor memory not allocated");
-		}
-		return allocated_arrays[mem->buffer];
+		return static_cast<TFCPUBuffer*>(mem->buffer)->data;
 	}
 
 	void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) override {
-		uint32_t* array = allocated_arrays[buffer->buffer];
+		uint32_t* array = GetNativeBuffer(buffer);
 		memcpy(array + offset, data.data(), data.size() * sizeof(uint32_t));
-	}
-
-	uint32_t* CreateBuffer(size_t size) {
-		return new uint32_t[size];
 	}
 
 	vector<uint> Readback(const TFTensor* mem) override {
@@ -77,16 +65,6 @@ class CpuMemoryManager : public TensorMemoryManager {
 	void WritebackValue(const TFTensor* mem, size_t index, uint32_t value) override {
 		uint32_t* array = GetNativeBuffer(mem);
 		array[index] = value;
-	}
-
-	void DeleteBuffer(uint* buffer) {
-		delete[] buffer;
-	}
-
-	~CpuMemoryManager() {
-		for(auto& [buffer, array]: allocated_arrays) {
-			DeleteBuffer(array);
-		}
 	}
 };
 

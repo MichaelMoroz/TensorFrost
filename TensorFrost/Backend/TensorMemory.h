@@ -9,13 +9,19 @@
 #include <vector>
 
 #include "../Tensor/Tensor.h"
-#include "BufferManager.h"
 
 namespace TensorFrost {
 
 using namespace std;
 
 extern "C" {
+	struct TFBuffer {
+		size_t size = 0;
+		bool up_to_date = true;
+		bool read_only = false;
+		//add type descriptor (for special kinds of buffers)
+	};
+
 	struct TFTensor {
 		TFBuffer* buffer;
 		TFType type;
@@ -58,15 +64,13 @@ size_t GetLinearSize(const vector<size_t>& shape);
 vector<size_t> GetShape(const TFTensor* tensor);
 size_t GetSize(const TFTensor* tensor);
 
-class TensorMemoryManager;
-
 class TensorMemoryManager {
 public:
-	BufferManager buffer_manager;
-
-	virtual TFBuffer* TryGetBuffer(size_t size) {
-		throw std::runtime_error("TryGetBuffer not implemented");
-	}
+	const int MAX_UNUSED_TIME = 512;
+	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
+	map<TFBuffer*, int> unused_time;
+	unordered_set<TFBuffer*> buffers_to_delete;
+	unordered_set<TFBuffer*> used_buffers;
 
 	virtual void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) {
 		throw std::runtime_error("SetDataAtOffset not implemented");
@@ -79,7 +83,7 @@ public:
 			throw invalid_argument("Trying to allocate a tensor with size 0");
 		}
 
-		TFBuffer* buf = TryGetBuffer(size);
+		TFBuffer* buf = TryAllocateBuffer(size);
 		buf->read_only = read_only;
 		return MakeTensor(shape, buf, type);
 	}
@@ -111,16 +115,36 @@ public:
 	}
 
 	void Free(TFTensor* memory) {
-		buffer_manager.DeallocateBuffer(memory->buffer);
+		DeallocateBuffer(memory->buffer);
 	}
 
 	size_t GetAllocatedSize() const {
-		return buffer_manager.GetRequiredAllocatedStorage();
+		return GetRequiredAllocatedStorage();
 	}
 
 	size_t GetUnusedAllocatedSize() const {
-		return buffer_manager.GetUnusedAllocatedStorage();
+		return GetUnusedAllocatedStorage();
 	}
+
+	virtual TFBuffer* CreateBuffer(size_t size) {
+		throw std::runtime_error("CreateBuffer not implemented");
+	}
+
+	TFBuffer* AllocateBuffer(size_t size) {
+		TFBuffer* buffer = CreateBuffer(size);
+		//add the buffer to the list of allocated buffers
+		allocated_buffers[size].insert(buffer);
+		return buffer;
+	}
+
+	void DeallocateBuffer(TFBuffer* buffer);
+	void RemoveBuffer(TFBuffer* buffer);
+	void UpdateTick();
+	TFBuffer* TryAllocateBuffer(size_t size);
+	size_t GetRequiredAllocatedStorage() const;
+	size_t GetUnusedAllocatedStorage() const;
+
+	~TensorMemoryManager();
 };
 
 

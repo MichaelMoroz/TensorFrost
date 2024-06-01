@@ -13,51 +13,47 @@
 
 namespace TensorFrost {
 
+class TFOpenGLBuffer: public TFBuffer {
+ public:
+	GLuint buffer;
+
+	static GLuint CreateBuffer(size_t size) {
+		GLint maxsize;
+		glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxsize);
+
+		if (size * sizeof(uint) > maxsize) {
+			throw std::runtime_error("SSBO memory size exceeded, max size is " + std::to_string(maxsize));
+		}
+
+		GLuint buffer;
+		glCreateBuffers(1, &buffer);
+		glNamedBufferStorage(buffer, size * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
+		return buffer;
+	}
+
+	static void DeleteBuffer(GLuint buffer) {
+		glDeleteBuffers(1, &buffer);
+	}
+
+	TFOpenGLBuffer(size_t size): TFBuffer(size) {
+		buffer = CreateBuffer(size);
+	}
+
+	~TFOpenGLBuffer() {
+		DeleteBuffer(buffer);
+	}
+};
+
 class OpenGLMemoryManager : public TensorMemoryManager {
  public:
-	 unordered_map<TFBuffer*, GLuint> allocated_ssbo;
-
 	 OpenGLMemoryManager() {}
 
-	 GLuint CreateBuffer(size_t size) {
-		 GLint maxsize;
-		 glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxsize);
-
-		 if (size * sizeof(uint) > maxsize) {
-			 throw std::runtime_error("SSBO memory size exceeded, max size is " + std::to_string(maxsize));
-		 }
-
-		 GLuint buffer;
-		 glCreateBuffers(1, &buffer);
-		 glNamedBufferStorage(buffer, size * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
-		 return buffer;
-	 }
-
-	 void CleanUp() {
-		 for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
-			 DeleteBuffer(allocated_ssbo[buf_to_delete]);
-			 allocated_ssbo.erase(buf_to_delete);
-		 	 buffer_manager.RemoveBuffer(buf_to_delete);
-		 }
-	 	 buffer_manager.buffers_to_delete.clear();
-	 }
-
-	 TFBuffer* TryGetBuffer(size_t size) override {
-	 	buffer_manager.UpdateTick();
-	 	CleanUp();
-
-	 	TFBuffer* buffer = buffer_manager.TryAllocateBuffer(size);
-	 	if(!allocated_ssbo.contains(buffer)) {
-	 		allocated_ssbo[buffer] = CreateBuffer(buffer->size);
-	 	}
-	 	return buffer;
+	 TFBuffer* CreateBuffer(size_t size) override {
+	 	return new TFOpenGLBuffer(size);
 	 }
 
 	 GLuint GetNativeBuffer(const TFTensor* mem) {
-		 if(!allocated_ssbo.contains(mem->buffer)) {
-			 throw std::runtime_error("Tensor memory not allocated");
-		 }
-	 	 return allocated_ssbo[mem->buffer];
+		 return static_cast<TFOpenGLBuffer*>(mem->buffer)->buffer;
 	 }
 
 	 void CopyBuffer(GLuint source, GLuint dest, size_t size, size_t read_offset = 0, size_t write_offset = 0) {
@@ -127,13 +123,6 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 void Writeback(const TFTensor* mem, const vector<uint32_t>& data) override {
 		 SetDataAtOffset(mem, 0, data);
 		 glMemoryBarrier(GL_BUFFER_UPDATE_BARRIER_BIT);
-	 }
-
-
-	 ~OpenGLMemoryManager() {
-		 for(auto& [buf, buffer]: allocated_ssbo) {
-			DeleteBuffer(buffer);
-		 }
 	 }
 };
 
