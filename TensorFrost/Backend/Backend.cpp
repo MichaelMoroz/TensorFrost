@@ -70,11 +70,11 @@ void CompileKernels(Program* program) {
 
 TFTensor Allocator(const size_t* a, size_t dim, TFType type, void* data) {
 	vector<size_t> shape(a, a + dim);
-	return *global_memory_manager->Allocate(shape, type);
+	return *global_memory_manager->AllocateTensor(shape, type);
 }
 
 void Deallocator(TFTensor a, void* data) {
-	global_memory_manager->Free(a);
+	global_memory_manager->DeallocateTensor(a);
 }
 
 uint Readback(TFTensor a, size_t index, void* data) {

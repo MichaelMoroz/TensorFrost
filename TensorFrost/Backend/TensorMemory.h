@@ -57,6 +57,18 @@ extern "C" {
 	};
 }
 
+class TFBufferTemplate : public TFBuffer {
+public:
+	TFBufferTemplate(size_t size) : TFBuffer(size) {}
+
+	virtual void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) {
+		throw std::runtime_error("SetDataAtOffset not implemented");
+	}
+	virtual void GetDataAtOffset(size_t offset, size_t size, uint32_t* data) {
+		throw std::runtime_error("GetDataAtOffset not implemented");
+	}
+};
+
 using uint = unsigned int;
 using main_func = void(TFTensor*, TFTensor*, TFRuntime);
 
@@ -73,12 +85,14 @@ private:
 
 	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
 	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);
+	void UpdateTick();
 
-public:
-	virtual void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) {
-		throw std::runtime_error("SetDataAtOffset not implemented");
-	}
+	TFBuffer* AllocateBuffer(size_t size);
+	TFBuffer* TryAllocateBuffer(size_t size);
+	void DeallocateBuffer(TFBuffer* buffer);
+	void RemoveBuffer(TFBuffer* buffer);
 
+protected:
 	virtual TFBuffer* CreateBuffer(size_t size) {
 		throw std::runtime_error("CreateBuffer not implemented");
 	}
@@ -87,22 +101,19 @@ public:
 		throw std::runtime_error("DeleteBuffer not implemented");
 	}
 
-	virtual vector<uint32_t> Readback(const TFTensor* memory) = 0;
-	virtual uint ReadbackValue(const TFTensor* memory, size_t index) = 0;
-	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data) = 0;
-	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value) = 0;
+public:
+	virtual vector<uint32_t> Readback(const TFTensor* memory);
+	virtual uint ReadbackValue(const TFTensor* memory, size_t index);
+	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data);
+	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value);
 
-	TFBuffer* AllocateBuffer(size_t size);
-	TFTensor* Allocate(const vector<size_t>& shape, const TFType type = TFType::Float, bool read_only = false);
-	TFTensor* AllocateWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false);
+	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFType type = TFType::Float);
+	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false);
+	void DeallocateTensor(TFTensor tensor);
 
-	void Free(TFTensor tensor);
 	size_t GetAllocatedSize() const;
 	size_t GetUnusedAllocatedSize() const;
-	void DeallocateBuffer(TFBuffer* buffer);
-	void RemoveBuffer(TFBuffer* buffer);
-	void UpdateTick();
-	TFBuffer* TryAllocateBuffer(size_t size);
+
 	~TensorMemoryManager();
 };
 

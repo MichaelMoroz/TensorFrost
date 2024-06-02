@@ -100,16 +100,13 @@ class OpenGLKernelManager : public KernelManager {
 		}
 		#endif
 
-		// Get memory
-		OpenGLMemoryManager* memory_manager =
-		    (OpenGLMemoryManager*)global_memory_manager;
 
 		// Set uniforms
 		if (info.read_write_count == 0) throw std::runtime_error("No tensors provided to kernel");
 
 		//bind all memory buffers
 		for (size_t i = 0; i < info.read_write_count; i++) {
-			GLuint buffer = memory_manager->GetNativeBuffer(&info.read_write_tensors[i]);
+			GLuint buffer = ((TFOpenGLBuffer*)info.read_write_tensors[i].buffer)->GetNative();
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, buffer);
 		}
 

@@ -256,7 +256,7 @@ void RenderFrame(const TFTensor& tensor) {
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	GLuint ssbo = ((OpenGLMemoryManager*)global_memory_manager)->GetNativeBuffer(&tensor);
+	GLuint ssbo = ((TFOpenGLBuffer*)tensor.buffer)->GetNative();
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
 	glUseProgram(quad_program);

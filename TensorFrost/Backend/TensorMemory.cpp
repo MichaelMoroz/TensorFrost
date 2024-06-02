@@ -33,7 +33,7 @@ TFBuffer * TensorMemoryManager::AllocateBuffer(size_t size) {
     return buffer;
 }
 
-TFTensor * TensorMemoryManager::Allocate(const vector<size_t> &shape, const TFType type, bool read_only) {
+TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, const TFType type) {
     size_t size = GetLinearSize(shape);
 
     if (size == 0) {
@@ -41,19 +41,21 @@ TFTensor * TensorMemoryManager::Allocate(const vector<size_t> &shape, const TFTy
     }
 
     TFBuffer* buf = TryAllocateBuffer(size);
-    buf->read_only = read_only;
+    buf->read_only = false;
     return MakeTensor(shape, buf, type);
 }
 
-TFTensor * TensorMemoryManager::AllocateWithData(const vector<size_t> &shape, const vector<uint32_t> &data,
+TFTensor * TensorMemoryManager::AllocateTensorWithData(const vector<size_t> &shape, const vector<uint32_t> &data,
     const TFType type, bool read_only) {
-    TFTensor* tensor_memory = Allocate(shape, type);
-    SetDataAtOffset(tensor_memory, 0, data);
+    TFTensor* tensor_memory = AllocateTensor(shape, type);
+    tensor_memory->buffer->read_only = read_only;
+    ((TFBufferTemplate*)tensor_memory->buffer)->SetDataAtOffset(0, data);
     return tensor_memory;
 }
 
-void TensorMemoryManager::Free(TFTensor tensor) {
+void TensorMemoryManager::DeallocateTensor(TFTensor tensor) {
     DeallocateBuffer(tensor.buffer);
+    delete[] tensor.shape;
 }
 
 TFTensor * TensorMemoryManager::MakeTensor(size_t *shape, size_t dim, TFBuffer *buf, TFType type) {
@@ -101,6 +103,26 @@ void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {
     allocated_buffers[size].erase(buffer);
     unused_time.erase(buffer);
     DeleteBuffer(buffer);
+}
+
+vector<uint32_t> TensorMemoryManager::Readback(const TFTensor *memory) {
+    vector<uint32_t> data(memory->buffer->size);
+    ((TFBufferTemplate*)memory->buffer)->GetDataAtOffset(0, GetSize(memory), data.data());
+    return data;
+}
+
+uint TensorMemoryManager::ReadbackValue(const TFTensor *memory, size_t index) {
+    uint32_t data;
+    ((TFBufferTemplate*)memory->buffer)->GetDataAtOffset(index, 1, &data);
+    return data;
+}
+
+void TensorMemoryManager::Writeback(const TFTensor *memory, const vector<uint32_t> &data) {
+    ((TFBufferTemplate*)memory->buffer)->SetDataAtOffset(0, data);
+}
+
+void TensorMemoryManager::WritebackValue(const TFTensor *memory, size_t index, uint32_t value) {
+    ((TFBufferTemplate*)memory->buffer)->SetDataAtOffset(index, {value});
 }
 
 void TensorMemoryManager::UpdateTick() {

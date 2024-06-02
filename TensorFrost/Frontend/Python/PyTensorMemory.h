@@ -17,7 +17,7 @@ class PyTensorMemory {
 	explicit PyTensorMemory(TFTensor* tensor) : tensor_(tensor) {}
 
 	PyTensorMemory(vector<size_t> shape, TFType type = TFType::Float) {
-		tensor_ = global_memory_manager->Allocate(shape, type);
+		tensor_ = global_memory_manager->AllocateTensor(shape, type);
 	}
 
 	TFType GetType() const {
@@ -61,7 +61,7 @@ class PyTensorMemory {
 		iter_dims(0, start_indices);
 
 		// Allocate the memory
-		tensor_ = global_memory_manager->AllocateWithData(shape, data, type);
+		tensor_ = global_memory_manager->AllocateTensorWithData(shape, data, type);
 	}
 
 	template <typename T>
@@ -83,7 +83,7 @@ class PyTensorMemory {
 	}
 
 	~PyTensorMemory() {
-		global_memory_manager->Free(*tensor_);
+		global_memory_manager->DeallocateTensor(*tensor_);
 	}
 
 };

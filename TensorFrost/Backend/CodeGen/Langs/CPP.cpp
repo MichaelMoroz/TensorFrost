@@ -240,11 +240,13 @@ inline float pcgf(uint v)
 
 extern "C" {
 	struct TFBuffer {
-        size_t size = 0;
-        bool up_to_date = true;
-        bool read_only = false;
-        //add type descriptor (for special kinds of buffers)
-    };
+		size_t size = 0;
+		bool up_to_date = true;
+		bool read_only = false;
+		//add type descriptor (for special kinds of buffers)
+
+		TFBuffer(size_t size) : size(size) {}
+	};
 
 	enum TFType {
 		Float,
