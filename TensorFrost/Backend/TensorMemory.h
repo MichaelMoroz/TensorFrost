@@ -45,7 +45,6 @@ extern "C" {
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
-	typedef void cpu_dispatch_func(const uint32_t* var, uint32_t** mem, uint work_group_count);
 
 	struct TFRuntime {
 		alloc_func* alloc;
@@ -55,6 +54,9 @@ extern "C" {
 		dispatch_func* dispatch;
 		void* custom_data;
 	};
+
+	typedef void cpu_dispatch_func(const uint32_t* var, uint32_t** mem, uint work_group_count);
+	typedef void main_func(TFTensor*, TFTensor*, TFRuntime);
 }
 
 class TFBufferTemplate : public TFBuffer {
@@ -70,7 +72,6 @@ public:
 };
 
 using uint = unsigned int;
-using main_func = void(TFTensor*, TFTensor*, TFRuntime);
 
 size_t GetLinearSize(const vector<size_t>& shape);
 vector<size_t> GetShape(const TFTensor* tensor);

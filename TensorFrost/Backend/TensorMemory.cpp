@@ -55,7 +55,7 @@ TFTensor * TensorMemoryManager::AllocateTensorWithData(const vector<size_t> &sha
 
 void TensorMemoryManager::DeallocateTensor(TFTensor tensor) {
     DeallocateBuffer(tensor.buffer);
-    delete[] tensor.shape;
+    //delete[] tensor.shape;
 }
 
 TFTensor * TensorMemoryManager::MakeTensor(size_t *shape, size_t dim, TFBuffer *buf, TFType type) {
