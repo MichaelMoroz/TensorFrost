@@ -120,6 +120,8 @@ void TensorMemoryManager::UpdateTick() {
     for(auto& buffer: buffers_to_delete) {
         RemoveBuffer(buffer);
     }
+
+    buffers_to_delete.clear();
 }
 
 TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
@@ -158,8 +160,7 @@ TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
     //if no buffer was found, create a new one
     if(!found) {
         buffer = AllocateBuffer(size);
-    }
-    else {
+    } else {
         unused_time.erase(buffer);
     }
     used_buffers.insert(buffer);
