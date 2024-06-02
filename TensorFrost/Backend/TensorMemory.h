@@ -69,7 +69,6 @@ private:
 	const int MAX_UNUSED_TIME = 512;
 	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
 	map<TFBuffer*, int> unused_time;
-	unordered_set<TFBuffer*> buffers_to_delete;
 	unordered_set<TFBuffer*> used_buffers;
 
 	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
@@ -82,6 +81,10 @@ public:
 
 	virtual TFBuffer* CreateBuffer(size_t size) {
 		throw std::runtime_error("CreateBuffer not implemented");
+	}
+
+	virtual void DeleteBuffer(TFBuffer * buffer) {
+		throw std::runtime_error("DeleteBuffer not implemented");
 	}
 
 	virtual vector<uint32_t> Readback(const TFTensor* memory) = 0;

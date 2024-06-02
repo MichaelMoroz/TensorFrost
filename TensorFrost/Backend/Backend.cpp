@@ -75,7 +75,6 @@ TFTensor Allocator(const size_t* a, size_t dim, TFType type, void* data) {
 
 void Deallocator(TFTensor a, void* data) {
 	global_memory_manager->Free(a);
-	delete[] a.shape;
 }
 
 uint Readback(TFTensor a, size_t index, void* data) {

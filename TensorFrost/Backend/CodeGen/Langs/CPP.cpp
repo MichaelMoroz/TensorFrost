@@ -352,7 +352,9 @@ public:
 
 	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type)
 	{
-		TFTensor new_tensor = {tensor.buffer, type, shape.size(), shape.begin()};
+		size_t* new_shape = new size_t[shape.size()];
+		std::copy(shape.begin(), shape.end(), new_shape);
+		TFTensor new_tensor = {tensor.buffer, type, shape.size(), new_shape};
 
 		size_t old_size = compute_size(tensor.shape, tensor.dim);
 		size_t new_size = compute_size(new_tensor.shape, new_tensor.dim);

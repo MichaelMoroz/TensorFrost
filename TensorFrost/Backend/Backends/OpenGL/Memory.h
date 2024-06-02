@@ -52,6 +52,10 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 	 	return new TFOpenGLBuffer(size);
 	 }
 
+	 void DeleteBuffer(TFBuffer* buffer) override {
+	 	delete (TFOpenGLBuffer*)buffer;
+	 }
+
 	 GLuint GetNativeBuffer(const TFTensor* mem) {
 		 return static_cast<TFOpenGLBuffer*>(mem->buffer)->buffer;
 	 }
@@ -62,11 +66,6 @@ class OpenGLMemoryManager : public TensorMemoryManager {
 		 glCopyBufferSubData(GL_COPY_READ_BUFFER, GL_COPY_WRITE_BUFFER, read_offset * sizeof(uint), write_offset * sizeof(uint), size * sizeof(uint));
 		 glBindBuffer(GL_COPY_READ_BUFFER, 0);
 		 glBindBuffer(GL_COPY_WRITE_BUFFER, 0);
-	 }
-
-	 void DeleteBuffer(GLuint buffer) {
-		 glDeleteBuffers(1, &buffer);
-		 CheckError("glDeleteBuffers");
 	 }
 
 	 void SetDataAtOffset(const TFTensor* buffer, size_t offset, const vector<uint32_t>& data) override {

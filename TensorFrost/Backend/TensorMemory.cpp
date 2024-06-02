@@ -68,13 +68,13 @@ TFTensor * TensorMemoryManager::MakeTensor(size_t *shape, size_t dim, TFBuffer *
 TFTensor * TensorMemoryManager::MakeTensor(const vector<size_t> &shape, TFBuffer *buf, TFType type) {
     size_t* shape_arr = new size_t[shape.size()];
     std::copy(shape.begin(), shape.end(), shape_arr);
-    return MakeTensor(shape_arr, (int)shape.size(), buf, type);
+    return MakeTensor(shape_arr, shape.size(), buf, type);
 }
 
 size_t TensorMemoryManager::GetAllocatedSize() const {
     size_t total = 0;
     for(auto& [size, buffers]: allocated_buffers) {
-        total += (uint32_t)size * (uint32_t)buffers.size();
+        total += size * buffers.size();
     }
     return total;
 }
@@ -97,16 +97,15 @@ void TensorMemoryManager::DeallocateBuffer(TFBuffer *buffer) {
 }
 
 void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {
-    if(!buffers_to_delete.contains(buffer)) {
-        throw std::runtime_error("Buffer not marked for deletion");
-    }
     size_t size = buffer->size;
     allocated_buffers[size].erase(buffer);
     unused_time.erase(buffer);
-    delete buffer;
+    DeleteBuffer(buffer);
 }
 
 void TensorMemoryManager::UpdateTick() {
+    unordered_set<TFBuffer*> buffers_to_delete;
+
     //increment the unused time of all buffers
     for(auto& [buffer, time]: unused_time) {
         if(time > MAX_UNUSED_TIME) {
@@ -120,12 +119,9 @@ void TensorMemoryManager::UpdateTick() {
     for(auto& buffer: buffers_to_delete) {
         RemoveBuffer(buffer);
     }
-
-    buffers_to_delete.clear();
 }
 
 TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
-    UpdateTick();
     //try to find a non-used buffer of the correct size
     TFBuffer* buffer = nullptr;
     bool found = false;
@@ -147,7 +143,7 @@ TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
             continue;
         }
         for(auto buf: it->second) {
-            if(used_buffers.contains(buf) && !buffers_to_delete.contains(buf)) {
+            if(used_buffers.contains(buf)) {
                 continue;
             }
             buffer = buf;
@@ -164,13 +160,14 @@ TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
         unused_time.erase(buffer);
     }
     used_buffers.insert(buffer);
+    UpdateTick();
     return buffer;
 }
 
 TensorMemoryManager::~TensorMemoryManager() {
     for(auto& [size, buffers]: allocated_buffers) {
         for(auto& buffer: buffers) {
-            delete buffer;
+            DeleteBuffer(buffer);
         }
     }
 }

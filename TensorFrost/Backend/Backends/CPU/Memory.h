@@ -34,6 +34,10 @@ class CpuMemoryManager : public TensorMemoryManager {
 		return new TFCPUBuffer(size);
 	}
 
+	void DeleteBuffer(TFBuffer* buffer) override {
+		delete (TFCPUBuffer*)buffer;
+	}
+
 	uint* GetNativeBuffer(const TFTensor* mem) {
 		return static_cast<TFCPUBuffer*>(mem->buffer)->data;
 	}
