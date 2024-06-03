@@ -52,7 +52,7 @@ class TFOpenGLBuffer: public TFBufferTemplate {
 	}
 
 	void GetDataAtOffset(size_t offset, size_t size, uint32_t* data) override {
-		if(size <= max_cache_size && up_to_date) {
+		if(up_to_date) {
 			memcpy(data, cached_data + offset, size * sizeof(uint32_t));
 			return;
 		}
@@ -71,6 +71,9 @@ class TFOpenGLBuffer: public TFBufferTemplate {
 
 	~TFOpenGLBuffer() {
 		glDeleteBuffers(1, &buffer);
+		if(cached_data != nullptr) {
+			delete[] cached_data;
+		}
 	}
 };
 

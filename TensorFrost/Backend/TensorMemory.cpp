@@ -96,6 +96,7 @@ void TensorMemoryManager::DeallocateBuffer(TFBuffer *buffer) {
     unused_buffers.insert(buffer);
     buffer->time_since_used = 0;
     buffer->used_size = 0;
+    buffer->up_to_date = false;
 }
 
 void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {
