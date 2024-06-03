@@ -17,6 +17,7 @@ void GenerateNodeNames(const IR& ir);
 
 string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
 string GetCPPHeader();
+string GetCPPImplementation();
 string GetHLSLHeader();
 string GetGLSLHeader();
 void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);

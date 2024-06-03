@@ -237,6 +237,14 @@ inline float pcgf(uint v)
 {
 	return (float)pcg(v) / (float)0xffffffffu;
 }
+)";
+
+	return header;
+}
+
+string GetCPPImplementation() {
+	string implementation = R"(
+
 
 extern "C" {
 	enum TFType {
@@ -413,13 +421,12 @@ public:
 };
 
 )";
-
-	return header;
+	return implementation;
 }
-
 
 void GenerateCode(Program* program) {
 	string final_source = GetCPPHeader();
+	final_source += GetCPPImplementation();
 
 	GenerateNodeNames(*program->ir_);
 	int input_count = (int)program->ir_->input_memory_map.size();

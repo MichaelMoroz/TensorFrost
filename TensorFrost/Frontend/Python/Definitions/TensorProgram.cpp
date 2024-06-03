@@ -89,6 +89,10 @@ void TensorProgramDefinition(py::module& m,
 		return GetCPPHeader();
 	});
 
+	m.def("get_cpp_implementation", []() {
+		return GetCPPImplementation();
+	});
+
 	m.def("get_glsl_header", []() {
 		return GetGLSLHeader();
 	});
