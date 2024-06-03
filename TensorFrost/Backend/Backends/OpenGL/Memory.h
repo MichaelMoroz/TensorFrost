@@ -32,40 +32,37 @@ class TFOpenGLBuffer: public TFBufferTemplate {
 		glNamedBufferStorage(buffer, size * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
 	}
 
+	void UpdateCache(size_t data_offset, size_t data_size, const uint32_t* data) {
+		if(data_offset == 0 && data_size == used_size && data_size <= max_cache_size) {
+			if(cached_data == nullptr) {
+				cached_data = new uint32_t[data_size];
+			}
+			memcpy(cached_data, data, data_size * sizeof(uint32_t));
+			up_to_date = true;
+		}
+	}
+
 	void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) override {
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffer);
 		glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint32_t),
 						data.size() * sizeof(uint32_t), data.data());
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-		// if(size <= max_cache_size) {
-		// 	if(cached_data == nullptr) {
-		// 		cached_data = new uint32_t[size];
-		// 	}
-		// 	memcpy(cached_data + offset, data.data(), data.size() * sizeof(uint32_t));
-		// 	up_to_date = true;
-		// }
+		UpdateCache(offset, data.size(), data.data());
 	}
 
 	void GetDataAtOffset(size_t offset, size_t size, uint32_t* data) override {
-		// if(size <= max_cache_size && up_to_date) {
-		// 	memcpy(data, cached_data + offset, size * sizeof(uint32_t));
-		// 	return;
-		// }
+		if(size <= max_cache_size && up_to_date) {
+			memcpy(data, cached_data + offset, size * sizeof(uint32_t));
+			return;
+		}
 
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, buffer);
 		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, offset * sizeof(uint32_t),
 						   size * sizeof(uint32_t), data);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
-		// //update cache
-		// if(size <= max_cache_size) {
-		// 	if(cached_data == nullptr) {
-		// 		cached_data = new uint32_t[size];
-		// 	}
-		// 	memcpy(cached_data + offset, data, size * sizeof(uint32_t));
-		// 	up_to_date = true;
-		// }
+		UpdateCache(offset, size, data);
 	}
 
 	GLuint GetNative() const {

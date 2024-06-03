@@ -17,7 +17,9 @@ using namespace std;
 extern "C" {
 	struct TFBuffer {
 		size_t size = 0;
-		bool up_to_date = true;
+		size_t used_size = 0;
+		size_t time_since_used = 0;
+		bool up_to_date = false;
 		bool read_only = false;
 		//add type descriptor (for special kinds of buffers)
 	};
@@ -81,8 +83,7 @@ class TensorMemoryManager {
 private:
 	const int MAX_UNUSED_TIME = 512;
 	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
-	map<TFBuffer*, int> unused_time;
-	unordered_set<TFBuffer*> used_buffers;
+	unordered_set<TFBuffer*> unused_buffers;
 
 	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
 	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);

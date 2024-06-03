@@ -239,21 +239,21 @@ inline float pcgf(uint v)
 }
 
 extern "C" {
-	struct TFBuffer {
-		size_t size = 0;
-		bool up_to_date = true;
-		bool read_only = false;
-		//add type descriptor (for special kinds of buffers)
-
-		TFBuffer(size_t size) : size(size) {}
-	};
-
 	enum TFType {
 		Float,
 		Uint,
 		Int,
 		Bool,
 		None,
+	};
+
+	struct TFBuffer {
+		size_t size = 0;
+		size_t used_size = 0;
+		size_t time_since_used = 0;
+		bool up_to_date = false;
+		bool read_only = false;
+		//add type descriptor (for special kinds of buffers)
 	};
 
 	struct TFTensor {
@@ -279,7 +279,6 @@ extern "C" {
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
-	typedef void cpu_dispatch_func(const uint32_t* var, uint32_t** mem, uint work_group_count);
 
 	struct TFRuntime {
 		alloc_func* alloc;
