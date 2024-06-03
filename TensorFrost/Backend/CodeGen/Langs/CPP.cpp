@@ -239,7 +239,7 @@ inline float pcgf(uint v)
 }
 
 extern "C" {
-	enum TFType {
+	enum class TFType {
 		Float,
 		Uint,
 		Int,
@@ -301,7 +301,7 @@ public:
 	void deallocate(TFTensor tensor);
 	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type);
 	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type);
-	uint read(TFTensor tensor, size_t index);
+	uint32_t read(TFTensor tensor, size_t index);
 	void write(TFTensor tensor, size_t index, uint32_t value);
 	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group);
 };
