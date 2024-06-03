@@ -12,30 +12,30 @@ These proto-kernels are optimized then to minimize the amount of links between t
 After minimizing links between protokernels, it creates actual tensors for inputs and outputs of these kernels, and replaces the links with load/store operations, and you get final list of kernel operations and memory allocations which is translated into C++ code and compiled into a shared library like  [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Algorithms/qr.ipynb):
 
 ```c++
-std::tuple<TFTensor, TFTensor> QRDecomposition(TFTensor in0)
+std::tuple<TFTensor, TFTensor> QRDecomposition(TFContext tf, TFTensor A)
 {
-  int m = in0.shape[0];
-  int n = in0.shape[1];
-  TFTensor A = check_tensor(in0, "A", {(uint)m, (uint)n}, TFType::Float);
-  TFTensor Q = allocate("Q", {(uint)m, (uint)n}, TFType::Float);
-  dispatch(0, {Q}, {asuint(n), asuint(m)}, {(uint)m, (uint)n}, {16, 16});
-  TFTensor R = allocate("R", {(uint)n, (uint)n}, TFType::Float);
-  dispatch(1, {R}, {asuint(n)}, {(uint)n, (uint)n}, {16, 16});
+  int m = A.shape[0];
+  int n = A.shape[1];
+  tf.check_tensor(A, "A", {(uint)m, (uint)n}, TFType::Float);
+  TFTensor Q = tf.allocate("Q", {(uint)m, (uint)n}, TFType::Float);
+  tf.dispatch(0, {Q},  {}, {asuint(n), asuint(m)}, {(uint)m, (uint)n}, {16, 16});
+  TFTensor R = tf.allocate("R", {(uint)n, (uint)n}, TFType::Float);
+  tf.dispatch(1, {R},  {}, {asuint(n)}, {(uint)n, (uint)n}, {16, 16});
   for (int i = 0; i < n - 1; i += 1)
   {
     int v8_0 = 1;
     int v8_1 = 1;
-    dispatch(2, {A, R}, {asuint(m), asuint(n), asuint(i)}, {(uint)1}, {1});
-    dispatch(3, {A, R, Q}, {asuint(m), asuint(n), asuint(i)}, {(uint)m}, {256});
+    tf.dispatch(2, {R},  {A}, {asuint(m), asuint(n), asuint(i)}, {(uint)1}, {1});
+    tf.dispatch(3, {Q},  {R, A}, {asuint(m), asuint(n), asuint(i)}, {(uint)m}, {256});
     int v16_2 = n - (i + 1);
     int v16_5 = n - (i + 1);
-    dispatch(4, {Q, A, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_2}, {256});
-    dispatch(5, {A, Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_2}, {16, 16});
+    tf.dispatch(4, {R},  {Q, A}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_2}, {256});
+    tf.dispatch(5, {A},  {Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_2}, {16, 16});
   }
   int v24_0 = 1;
   int v24_1 = 1;
-  dispatch(6, {A, R}, {asuint(m), asuint(n)}, {(uint)1}, {1});
-  dispatch(7, {A, R, Q}, {asuint(m), asuint(n)}, {(uint)m}, {256});
+  tf.dispatch(6, {R},  {A}, {asuint(m), asuint(n)}, {(uint)1}, {1});
+  tf.dispatch(7, {Q},  {R, A}, {asuint(m), asuint(n)}, {(uint)m}, {256});
   return {Q, R};
 }
 ```
