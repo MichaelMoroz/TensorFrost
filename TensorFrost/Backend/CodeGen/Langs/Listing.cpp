@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Backend/CodeGen/Generators.h"
 #include "IR/KernelGen.h"
 
@@ -47,18 +45,18 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		}
 		prev_depth = depth;
 		
-		if (node->tensor_->type != DataType::None) {
+		if (node->tensor_->type != TFType::None) {
 			listing += DataTypeToString(node->tensor_->type) + " ";
 		}
 
-		if (node->tensor_->type != DataType::None) {
+		if (node->tensor_->type != TFType::None) {
 			//  the tensor name
 			listing += node->var_name + " = ";
 		}
 
 		listing += node->name + "(";
 
-		ArgumentManager args = node->GetArgumentManager();
+		ArgumentManager& args = node->args;
 
 		auto ArgTypePrint = [&](string name, ArgType type) {
 			if (args.Has(type)) {

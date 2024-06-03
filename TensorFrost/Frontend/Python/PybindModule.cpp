@@ -15,17 +15,17 @@ void WindowDefinitions(py::module& m);
 void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 
 PYBIND11_MODULE(TensorFrost, m) {
-	auto data_type = py::enum_<DataType>(m, "DataType");
+	auto data_type = py::enum_<TFType>(m, "TFType");
 	auto backend_type = py::enum_<BackendType>(m, "BackendType");
 	auto code_gen_lang = py::enum_<CodeGenLang>(m, "CodeGenLang");
 	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
 	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
 	auto py_tensor_mem = py::class_<PyTensorMemory>(m, "TensorMemory");
 
-	data_type.value("float", DataType::Float);
-	data_type.value("int", DataType::Int);
-	data_type.value("uint", DataType::Uint);
-	data_type.value("bool", DataType::Bool);
+	data_type.value("float", TFType::Float);
+	data_type.value("int", TFType::Int);
+	data_type.value("uint", TFType::Uint);
+	data_type.value("bool", TFType::Bool);
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
 	backend_type.value("opengl", BackendType::OpenGL);
@@ -34,10 +34,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	code_gen_lang.value("glsl", CodeGenLang::GLSL);
 	code_gen_lang.value("hlsl", CodeGenLang::HLSL);
 
-	m.attr("float32") = DataType::Float;
-	m.attr("int32") = DataType::Int;
-	m.attr("uint32") = DataType::Uint;
-	m.attr("bool1") = DataType::Bool;
+	m.attr("float32") = TFType::Float;
+	m.attr("int32") = TFType::Int;
+	m.attr("uint32") = TFType::Uint;
+	m.attr("bool1") = TFType::Bool;
 
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("vulkan") = BackendType::Vulkan;

@@ -16,42 +16,15 @@ namespace TensorFrost {
 class KernelManager
 {
 	unordered_set<Program*> programs;
-	unordered_map<int, Kernel*> kernel_map;
+	unordered_map<uint, Kernel*> kernel_map;
 	int global_kernel_id = 0;
  public:
+
 	KernelManager() = default;
-
-	virtual void DispatchKernel(DispatchInfo info) = 0;
-
-	void AddKernelID(Program* program, Kernel* kernel) { 
-		programs.insert(program);
-		kernel->kernel_id_ = global_kernel_id++; 
-		kernel_map[kernel->kernel_id_] = kernel;
-	}
-
-	vector<string> GetAllMainFunctions() {
-		vector<string> main_functions;
-		for (auto& program : programs) {
-			main_functions.push_back(program->main_function_);
-		}
-		return main_functions;
-	}
-
-	vector<tuple<string, vector<tuple<string, int, string>>>> GetAllKernels() {
-		vector<tuple<string, vector<tuple<string, int, string>>>> kernels;
-		kernels.resize(kernel_map.size());
-		for (auto& kernel : kernel_map) {
-			vector<tuple<string, int, string>> args;
-			for (auto& [mem_node, binding] : kernel.second->memory) {
-				string name = mem_node->var_name + "_mem";
-				string type_name = "uint";
-				args.push_back({name, binding, type_name});
-			}
-			string code = kernel.second->generated_code_;
-			kernels[kernel.first] = {code, args};
-		}
-		return kernels;
-	}
+	virtual void DispatchKernel(TFDispatchInfo info) = 0;
+	void AddKernelID(Program* program, Kernel* kernel);
+	vector<string> GetAllMainFunctions();
+	vector<tuple<string, vector<tuple<string, int, string>>>> GetAllKernels();
 };
 
 extern KernelManager* global_kernel_manager;

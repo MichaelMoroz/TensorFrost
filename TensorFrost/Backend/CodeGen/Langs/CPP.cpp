@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
@@ -20,212 +18,212 @@ string GetCPPHeader() {
 #include <tuple>
 #include <unordered_map>
 
-typedef unsigned int uint;
+typedef uint32_t uint;
 
 inline int min(int a, int b)
 {
-  return a < b ? a : b;
+	return a < b ? a : b;
 }
 
 inline int max(int a, int b)
 {
-  return a > b ? a : b;
+	return a > b ? a : b;
 }
 
 inline float min(float a, float b)
 {
-  return a < b ? a : b;
+	return a < b ? a : b;
 }
 
 inline float max(float a, float b)
 {
-  return a > b ? a : b;
+	return a > b ? a : b;
 }
 
 inline float asfloat(uint x)
 {
-  return *(float*)&x;
+	return *(float*)&x;
 }
 
 inline uint asuint(float x)
 {
-  return *(uint*)&x;
+	return *(uint*)&x;
 }
 
 inline uint asuint(int x)
 {
-  return *(uint*)&x;
+	return *(uint*)&x;
 }
 
 inline uint asuint(uint x)
 {
-  return *(uint*)&x;
+	return *(uint*)&x;
 }
 
 inline int asint(uint x)
 {
-  return *(int*)&x;
+	return *(int*)&x;
 }
 
 inline int clamp(int x, int a, int b)
 {
-  return min(max(x, a), b);
+	return min(max(x, a), b);
 }
 
 inline float clamp(float x, float a, float b)
 {
-  return min(max(x, a), b);
+	return min(max(x, a), b);
 }
 
 inline float lerp(float a, float b, float t)
 {
-  return a + (b - a) * t;
+	return a + (b - a) * t;
 }
 
 inline float smoothstep(float a, float b, float t)
 {
-  t = clamp((t - a) / (b - a), 0.0f, 1.0f);
-  return t * t * (3.0f - 2.0f * t);
+	t = clamp((t - a) / (b - a), 0.0f, 1.0f);
+	return t * t * (3.0f - 2.0f * t);
 }
 
 inline float sign(float x)
 {
-  return x < 0.0f ? -1.0f : 1.0f;
+	return x < 0.0f ? -1.0f : 1.0f;
 }
 
 inline int sign(int x)
 {
-  return x < 0 ? -1 : 1;
+	return x < 0 ? -1 : 1;
 }
 
 inline uint reversebits(uint x)
 {
-  x = (((x & 0xaaaaaaaa) >> 1) | ((x & 0x55555555) << 1));
-  x = (((x & 0xcccccccc) >> 2) | ((x & 0x33333333) << 2));
-  x = (((x & 0xf0f0f0f0) >> 4) | ((x & 0x0f0f0f0f) << 4));
-  x = (((x & 0xff00ff00) >> 8) | ((x & 0x00ff00ff) << 8));
-  return ((x >> 16) | (x << 16));
+	x = (((x & 0xaaaaaaaa) >> 1) | ((x & 0x55555555) << 1));
+	x = (((x & 0xcccccccc) >> 2) | ((x & 0x33333333) << 2));
+	x = (((x & 0xf0f0f0f0) >> 4) | ((x & 0x0f0f0f0f) << 4));
+	x = (((x & 0xff00ff00) >> 8) | ((x & 0x00ff00ff) << 8));
+	return ((x >> 16) | (x << 16));
 }
 
 inline void InterlockedAdd(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  place->fetch_add(value, std::memory_order_relaxed);
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(uint* memory, int address, uint value)
 {
-  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
-  place->fetch_add(value, std::memory_order_relaxed);
+	std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+	place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAdd(float* memory, int address, float value)
 {
-  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
-  float current = place->load(std::memory_order_relaxed);
-  float goal = current + value;
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = current + value;
-  }
+	std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+	float current = place->load(std::memory_order_relaxed);
+	float goal = current + value;
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = current + value;
+	}
 }
 
 inline int InterlockedAdd_Prev(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  return place->fetch_add(value, std::memory_order_relaxed);
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline uint InterlockedAdd_Prev(uint* memory, int address, uint value)
 {
-  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
-  return place->fetch_add(value, std::memory_order_relaxed);
+	std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+	return place->fetch_add(value, std::memory_order_relaxed);
 }
 
 inline float InterlockedAdd_Prev(float* memory, int address, float value)
 {
-  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
-  float current = place->load(std::memory_order_relaxed);
-  float goal = current + value;
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = current + value;
-  }
-  return current;
+	std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+	float current = place->load(std::memory_order_relaxed);
+	float goal = current + value;
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = current + value;
+	}
+	return current;
 }
 
 inline void InterlockedAnd(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  place->fetch_or(value, std::memory_order_relaxed);
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedAnd(uint* memory, int address, uint value)
 {
-  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
-  place->fetch_and(value, std::memory_order_relaxed);
+	std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+	place->fetch_and(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  place->fetch_or(value, std::memory_order_relaxed);
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedOr(uint* memory, int address, uint value)
 {
-  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
-  place->fetch_or(value, std::memory_order_relaxed);
+	std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+	place->fetch_or(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  place->fetch_xor(value, std::memory_order_relaxed);
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedXor(uint* memory, int address, uint value)
 {
-  std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
-  place->fetch_xor(value, std::memory_order_relaxed);
+	std::atomic<uint>* place = reinterpret_cast<std::atomic<uint>*>(&memory[address]);
+	place->fetch_xor(value, std::memory_order_relaxed);
 }
 
 inline void InterlockedMin(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  int current = place->load(std::memory_order_relaxed);
-  int goal = min(current, value);
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = min(current, value);
-  }
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	int current = place->load(std::memory_order_relaxed);
+	int goal = min(current, value);
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = min(current, value);
+	}
 }
 
 inline void InterlockedMin(float* memory, int address, float value)
 {
-  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
-  float current = place->load(std::memory_order_relaxed);
-  float goal = min(current, value);
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = min(current, value);
-  }
+	std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+	float current = place->load(std::memory_order_relaxed);
+	float goal = min(current, value);
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = min(current, value);
+	}
 }
 
 inline void InterlockedMax(int* memory, int address, int value)
 {
-  std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
-  int current = place->load(std::memory_order_relaxed);
-  int goal = max(current, value);
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = max(current, value);
-  }
+	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);
+	int current = place->load(std::memory_order_relaxed);
+	int goal = max(current, value);
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = max(current, value);
+	}
 }
 
 inline void InterlockedMax(float* memory, int address, float value)
 {
-  std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
-  float current = place->load(std::memory_order_relaxed);
-  float goal = max(current, value);
-  while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
-      goal = max(current, value);
-  }
+	std::atomic<float>* place = reinterpret_cast<std::atomic<float>*>(&memory[address]);
+	float current = place->load(std::memory_order_relaxed);
+	float goal = max(current, value);
+	while (!place->compare_exchange_weak(current, goal, std::memory_order_release, std::memory_order_relaxed)) {
+		goal = max(current, value);
+	}
 }
 
 inline uint pcg(uint v)
@@ -241,11 +239,7 @@ inline float pcgf(uint v)
 }
 
 extern "C" {
-	struct Buffer {
-		int size = 0;
-    };
-
-	enum DataType {
+	enum TFType {
 		Float,
 		Uint,
 		Int,
@@ -253,173 +247,170 @@ extern "C" {
 		None,
 	};
 
-	struct TensorProp {
-		Buffer* buffer;
-		uint dim;
-		uint* shape;
-		DataType type;
+	struct TFBuffer {
+		size_t size = 0;
+		size_t used_size = 0;
+		size_t time_since_used = 0;
+		bool up_to_date = false;
+		bool read_only = false;
+		//add type descriptor (for special kinds of buffers)
 	};
 
-	struct DispatchInfo {
-		int kernel_id;
-		uint tensor_count;
-		TensorProp* tensors;
-		uint variable_count;
-		uint* variables;
-		uint work_group_count;
+	struct TFTensor {
+		TFBuffer* buffer;
+		TFType type;
+		size_t dim;
+		const size_t* shape;
 	};
 
-	typedef TensorProp alloc_func(uint*, uint, DataType);
-	typedef void dealloc_func(TensorProp);
-	typedef uint readback_func(TensorProp, uint);
-	typedef void writeback_func(TensorProp, uint, uint);
-	typedef void dispatch_func(DispatchInfo);
-	typedef void cpu_dispatch_func(uint* var, uint** mem, uint work_group_count);
+	struct TFDispatchInfo {
+		size_t kernel_id;
+		size_t read_write_count;
+		const TFTensor* read_write_tensors;
+		size_t read_only_count;
+		const TFTensor* read_only_tensors;
+		size_t variable_count;
+		const uint32_t* variables;
+		size_t work_group_count;
+	};
+
+	typedef TFTensor alloc_func(const size_t*, size_t, TFType, void*);
+	typedef void dealloc_func(TFTensor, void*);
+	typedef uint readback_func(TFTensor, size_t, void*);
+	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
+	typedef void dispatch_func(TFDispatchInfo, void*);
+
+	struct TFRuntime {
+		alloc_func* alloc;
+		dealloc_func* dealloc;
+		readback_func* readback;
+		writeback_func* writeback;
+		dispatch_func* dispatch;
+		void* custom_data;
+	};
 }
 
-std::unordered_map<DataType, std::string> DataTypeNames = {
-    {DataType::Float, "Float"}, {DataType::Uint, "Uint"},
-    {DataType::Int, "Int"},     {DataType::Bool, "Bool"},
-    {DataType::None, "None"},
+std::unordered_map<TFType, std::string> TFTypeNames = {
+    {TFType::Float, "Float"}, {TFType::Uint, "Uint"},
+    {TFType::Int, "Int"},     {TFType::Bool, "Bool"},
+    {TFType::None, "None"},
 };
 
-alloc_func* alloc;
-dealloc_func* dealloc;
-readback_func* readback;
-writeback_func* writeback;
-dispatch_func* dispatch_ref;
+class TFContext {
+public:
+	TFRuntime runtime;
 
-TensorProp allocate(std::string name, std::initializer_list<uint> shape, DataType type)
-{
-  uint* shape_arr = new uint[shape.size()];
-  uint size = 1;
+	TFContext(TFRuntime runtime) : runtime(runtime) {}
 
-  for (int i = 0; i < shape.size(); i++)
-  {
-	int shape_val = shape.begin()[i];
-	if(shape_val < 1)
-	{
-		throw std::runtime_error("Invalid shape on dimension " + std::to_string(i) + " for " + name + ". Expected positive integer, got " + std::to_string(shape_val));
-	}
-    shape_arr[i] = shape_val;
-	size *= shape_arr[i];
-  }
-
-  TensorProp tensor = alloc(shape_arr, shape.size(), type);
-
-  delete[] shape_arr;
-
-  return tensor;
-}
-
-void deallocate(TensorProp tensor)
-{
-  dealloc(tensor);
-}
-
-TensorProp check_tensor(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
-{
-	if (tensor.type != type)
-	{
-		throw std::runtime_error("Invalid type for " + name + ". Expected " + DataTypeNames[type] + ", got " + DataTypeNames[tensor.type]);
+	size_t compute_size(const size_t* shape, size_t dim) {
+		size_t size = 1;
+		for (size_t i = 0; i < dim; i++) {
+		  size *= shape[i];
+		}
+		return size;
 	}
 
-	if (tensor.dim != shape.size())
+	TFTensor allocate(std::string name, std::initializer_list<size_t> shape, TFType type)
 	{
-		throw std::runtime_error("Invalid number of dimensions for " + name + ". Expected " + std::to_string(shape.size()) + ", got " + std::to_string(tensor.dim));
+		const size_t* shape_arr = shape.begin();
+		size_t dim = shape.size();
+		size_t size = compute_size(shape_arr, dim);
+
+		for (size_t i = 0; i < dim; i++) {
+			if(shape_arr[i] < 1) {
+				throw std::runtime_error("Invalid shape on dimension " + std::to_string(i) + " for " + name + ". Expected positive integer, got " + std::to_string(shape_arr[i]));
+			}
+		}
+
+		return runtime.alloc(shape_arr, dim, type, runtime.custom_data);
 	}
 
-	uint* shape_arr = tensor.shape;
-	for (int i = 0; i < tensor.dim; i++)
+	void deallocate(TFTensor tensor)
 	{
-		int shape_val = shape.begin()[i];
-		if (shape_arr[i] != shape_val || shape_val < 1)
-		{
-			throw std::runtime_error("Invalid shape for dimension " + std::to_string(i) + " in " + name + ". Expected " + std::to_string(shape_val) + ", got " + std::to_string(shape_arr[i]));
+		runtime.dealloc(tensor, runtime.custom_data);
+	}
+
+	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type)
+	{
+		const size_t* shape_arr = tensor.shape;
+		const size_t* target_shape_arr = target_shape.begin();
+		size_t target_dim = target_shape.size();
+
+		if (tensor.type != target_type) {
+			throw std::runtime_error("Invalid type for " + name + ". Expected " + TFTypeNames[target_type] + ", got " + TFTypeNames[tensor.type]);
+		}
+
+		if (tensor.dim != target_dim) {
+			throw std::runtime_error("Invalid number of dimensions for " + name + ". Expected " + std::to_string(target_dim) + ", got " + std::to_string(tensor.dim));
+		}
+
+		for (size_t i = 0; i < tensor.dim; i++) {
+			if (shape_arr[i] != target_shape_arr[i] || target_shape_arr[i] < 1) {
+				throw std::runtime_error("Invalid shape for dimension " + std::to_string(i) + " in " + name + ". Expected " + std::to_string(target_shape_arr[i]) + ", got " + std::to_string(shape_arr[i]));
+			}
 		}
 	}
 
-	return tensor;
-}
+	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type)
+	{
+		size_t* new_shape = new size_t[shape.size()];
+		std::copy(shape.begin(), shape.end(), new_shape);
+		TFTensor new_tensor = {tensor.buffer, type, shape.size(), new_shape};
 
-TensorProp reshape(TensorProp tensor, std::string name, std::initializer_list<uint> shape, DataType type)
-{
-  TensorProp new_tensor = TensorProp();
-  new_tensor.buffer = tensor.buffer;
-  new_tensor.dim = shape.size();
-  new_tensor.shape = new uint[shape.size()];
-  new_tensor.type = type;
+		size_t old_size = compute_size(tensor.shape, tensor.dim);
+		size_t new_size = compute_size(new_tensor.shape, new_tensor.dim);
 
-  int old_size = 1;
-  for (int i = 0; i < tensor.dim; i++)
-  {
-	old_size *= tensor.shape[i];
-  }
-  int new_size = 1;
-  for (int i = 0; i < shape.size(); i++)
-  {
-	new_tensor.shape[i] = shape.begin()[i];
-	new_size *= new_tensor.shape[i];
-  }
-  if(old_size != new_size)
-  {
-	throw std::runtime_error("Cannot reshape " + name + ", expected " + std::to_string(new_size) + " elements, while input has " + std::to_string(old_size));
-  }
+		if(old_size != new_size) {
+			throw std::runtime_error("Cannot reshape " + name + ", expected " + std::to_string(new_size) + " elements, while input has " + std::to_string(old_size));
+		}
 
-  return new_tensor;
-}
+		return new_tensor;
+	}
 
-uint ReadFromMemory(TensorProp tensor, uint index)
-{
-  return readback(tensor, index);
-}
+	uint read(TFTensor tensor, size_t index)
+	{
+		return runtime.readback(tensor, index, runtime.custom_data);
+	}
 
-void WriteToMemory(TensorProp tensor, uint index, uint value)
-{
-  writeback(tensor, index, value);
-}
+	void write(TFTensor tensor, size_t index, uint32_t value)
+	{
+		runtime.writeback(tensor, index, value, runtime.custom_data);
+	}
 
-void dispatch(int kernel_id, std::initializer_list<TensorProp> tensors, std::initializer_list<uint> var, std::initializer_list<uint> shape, std::initializer_list<int> group)
-{
-  DispatchInfo info;
-  info.kernel_id = kernel_id;
-  info.tensor_count = tensors.size();
-  info.tensors = new TensorProp[tensors.size()];
-  info.variable_count = var.size();
-  info.variables = new uint[var.size()];
+	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group)
+	{
+		//currently only supports read_write tensors
+		std::vector<TFTensor> all_tensors;
+		all_tensors.insert(all_tensors.end(), read_write.begin(), read_write.end());
+		all_tensors.insert(all_tensors.end(), read_only.begin(), read_only.end());
+		TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)var.size(), var.begin(), 0};
 
-  int dispatch_dim = shape.size();
-  int group_dim = group.size();
+		const TFTensor* read_write_tensors = read_write.begin();
+		for (size_t i = 0; i < read_write.size(); i++) {
+			read_write_tensors[i].buffer->up_to_date = false;
+		}
 
-  int work_group_count = 1;
-  for (int i = 0; i < dispatch_dim - group_dim; i++) {
-  	int dim = shape.begin()[i];
-  	work_group_count *= dim;
-  }
-  //only the last dimensions are divided by the group size
-  for (int i = 0; i < group_dim; i++) {
-  	int dim = shape.begin()[dispatch_dim - group_dim + i];
-  	dim = (dim + group.begin()[i] - 1) / group.begin()[i];
-  	work_group_count *= dim;
-  }
+		const size_t* shape_arr = shape.begin();
+		const size_t* group_arr = group.begin();
+		size_t dispatch_dim = shape.size();
+		size_t group_dim = group.size();
 
-  info.work_group_count = work_group_count;
+		size_t work_group_count = 1;
+		for (size_t i = 0; i < dispatch_dim - group_dim; i++) {
+			work_group_count *= shape_arr[i];
+		}
 
-  for (int i = 0; i < tensors.size(); i++)
-  {
-  	info.tensors[i] = tensors.begin()[i];
-  }
+		//only the last dimensions are divided by the group size
+		for (size_t i = 0; i < group_dim; i++) {
+			size_t dim = shape_arr[dispatch_dim - group_dim + i];
+			work_group_count *= (dim + group_arr[i] - 1) / group_arr[i];
+		}
 
-  for (int i = 0; i < var.size(); i++)
-  {
-  	info.variables[i] = var.begin()[i];
-  }
+		info.work_group_count = work_group_count;
 
-  dispatch_ref(info);
-
-  delete[] info.tensors;
-  delete[] info.variables;
-} 
+		runtime.dispatch(info, runtime.custom_data);
+	}
+};
 
 )";
 
@@ -431,7 +422,7 @@ void GenerateCode(Program* program) {
 	string final_source = GetCPPHeader();
 
 	GenerateNodeNames(*program->ir_);
-	int input_count = (int)program->ir_->memory_inputs.size();
+	int input_count = (int)program->ir_->input_memory_map.size();
 	int output_count = (int)program->ir_->output_memory_map.size();
 
 	// Generate code for each compute kernel
@@ -442,10 +433,15 @@ void GenerateCode(Program* program) {
 		kernel.kernel_name_ = "kernel_" + to_string(kernel.kernel_id_);
 
 		// Generate kernel
-		vector<Node*> memory_nodes;
-		memory_nodes.resize(kernel.memory.size());
-		for (auto& memory : kernel.memory) {
-			memory_nodes[memory.second] = memory.first;
+		vector<Node*> read_write_nodes;
+		read_write_nodes.resize(kernel.read_write_memory.size());
+		for (auto& read_write : kernel.read_write_memory) {
+			read_write_nodes[read_write.second] = read_write.first;
+		}
+		vector<Node*> read_only_nodes;
+		read_only_nodes.resize(kernel.read_only_memory.size());
+		for (auto& read_only : kernel.read_only_memory) {
+			read_only_nodes[read_only.second] = read_only.first;
 		}
 
 		vector<Node*> variable_nodes;
@@ -454,14 +450,22 @@ void GenerateCode(Program* program) {
 			variable_nodes[variable.second] = variable.first;
 		}
 
-		string memory_args = "{";
-		for (int d = 0; d < memory_nodes.size(); d++) {
+		string read_write_args = "{";
+		for (int d = 0; d < read_write_nodes.size(); d++) {
 			if (d != 0) {
-				memory_args += ", ";
+				read_write_args += ", ";
 			}
-			memory_args += memory_nodes[d]->var_name;
+			read_write_args += read_write_nodes[d]->var_name;
 		}
-		memory_args += "}";
+		read_write_args += "}";
+		string read_only_args = "{";
+		for (int d = 0; d < read_only_nodes.size(); d++) {
+			if (d != 0) {
+				read_only_args += ", ";
+			}
+			read_only_args += read_only_nodes[d]->var_name;
+		}
+		read_only_args += "}";
 
 		string variable_args = "{";
 		for (int d = 0; d < variable_nodes.size(); d++) {
@@ -473,11 +477,11 @@ void GenerateCode(Program* program) {
 		variable_args += "}";
 
 		string shape_args = "{";
-		for (int d = 0; d < kernel.dim; d++) {
+		for (int d = 0; d < kernel.shape.size(); d++) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
-			shape_args += "(uint)" + ReadVariable(kernel.shape[d]->from_->get());
+			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape,d)]);
 		}
 		shape_args += "}";
 
@@ -496,7 +500,7 @@ void GenerateCode(Program* program) {
 			final_source += kernel.generated_code_;
 		}
 
-		dispatch_code[kernel.root] = "dispatch(" + to_string(kernel.kernel_id_) + ", " + memory_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
+		dispatch_code[kernel.root] = "tf.dispatch(" + to_string(kernel.kernel_id_) + ", " + read_write_args + ",  " + read_only_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
 	}
 
 	GenerateMain(program, dispatch_code, input_count, output_count);
@@ -507,18 +511,13 @@ void GenerateCode(Program* program) {
 	    "\n"
 	    "extern \"C\" "
 #ifdef _WIN32
-	    "__declspec(dllexport)"
+	    "__declspec(dllexport) "
 #endif
 	    "int "
 	    "main"
-	    "(TensorProp* in, TensorProp* out, alloc_func alloc_, dealloc_func dealloc_, readback_func readback_, writeback_func writeback_, dispatch_func dispatch_)\n"
+	    "(TFTensor* in, TFTensor* out, TFRuntime runtime)\n"
 	    "{\n"
-	    "  alloc = alloc_;\n"
-	    "  dealloc = dealloc_;\n"
-		"  readback = readback_; \n"
-		"  writeback = writeback_; \n"
-		"  dispatch_ref = dispatch_; \n"
-		"  auto outputs = " + program->program_name + "(";
+		"  auto outputs = " + program->program_name + "(TFContext(runtime), ";
 
 	for (int i = 0; i < input_count; i++) {
 		host_code += "in[" + to_string(i) + "]";
@@ -540,22 +539,22 @@ void GenerateCode(Program* program) {
 }
 void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
                   int input_count, int output_count) {
-	CodeGenerator generator;
+	CodeGenerator generator = CodeGenerator(program->ir_);
 	generator.custom_generated_code_ = dispatch_code;
-	generator.is_kernel = false;
 	generator.GenerateCode(program->ir_->root);
 
 	string main_code = "\nstd::tuple<";
 	for (int i = 0; i < output_count; i++) {
-		main_code += "TensorProp";
+		main_code += "TFTensor";
 		if (i != output_count - 1) {
 			main_code += ", ";
 		}
 	}
-	main_code += "> " + program->program_name + "(";
+	main_code += "> " + program->program_name + "(TFContext tf, ";
 
 	for (int i = 0; i < input_count; i++) {
-		main_code += "TensorProp in" + to_string(i);
+		Node* input_node = program->ir_->input_memory_map[i];
+		main_code += "TFTensor " + input_node->var_name;
 		if (i != input_count - 1) {
 			main_code += ", ";
 		}
@@ -579,12 +578,12 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
 }
 
 void GenerateCPPKernel(Program* program, Kernel* kernel) {
-	CodeGenerator generator;
+	CodeGenerator generator = CodeGenerator(program->ir_);
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
 	string loop = "";
-	loop += GetBufferDeclarations(kernel, [](const string& name, const string& type_name, int binding) {
+	loop += GetBufferDeclarations(kernel, [](const string& name, const string& type_name, size_t binding) {
 		return "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
 	});
 

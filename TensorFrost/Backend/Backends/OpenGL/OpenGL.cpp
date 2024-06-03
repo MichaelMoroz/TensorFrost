@@ -101,12 +101,20 @@ void WindowSizeCallback(GLFWwindow* window, int width, int height) {
 }
 
 void ImguiNewFrame() {
+	if (global_window == nullptr) {
+		throw std::runtime_error("Window: OpenGL not initialized");
+	}
+
 	ImGui_ImplOpenGL3_NewFrame();
 	ImGui_ImplGlfw_NewFrame();
 	ImGui::NewFrame();
 }
 
 void ImguiRender() {
+	if (global_window == nullptr) {
+		throw std::runtime_error("Window: OpenGL not initialized");
+	}
+
 	ImGui::Render();
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -185,6 +193,10 @@ void StartOpenGL() {
 }
 
 void StopOpenGL() {
+	if (global_window == nullptr) {
+		throw std::runtime_error("OpenGL not initialized");
+	}
+
 	glfwDestroyWindow(global_window);
 	glfwTerminate();
 
@@ -200,6 +212,10 @@ void StopOpenGL() {
 void ShowWindow(int width, int height, const char* title) {
 	window_open = true;
 
+	if(global_window == nullptr) {
+		throw std::runtime_error("Window: OpenGL not initialized");
+	}
+
 	glfwSetWindowSize(global_window, width, height);
 	glfwSetWindowTitle(global_window, title);
 	glfwShowWindow(global_window);
@@ -209,6 +225,10 @@ void ShowWindow(int width, int height, const char* title) {
 }
 
 void HideWindow() {
+	if(global_window == nullptr) {
+		throw std::runtime_error("Window: OpenGL not initialized");
+	}
+
 	window_open = false;
 	glfwHideWindow(global_window);
 }
@@ -217,14 +237,18 @@ void Finish() {
 	glFinish();
 }
 
-void RenderFrame(const TensorProp& tensor) {
+void RenderFrame(const TFTensor& tensor) {
+	if (global_window == nullptr) {
+		throw std::runtime_error("RenderFrame: OpenGL not initialized");
+	}
+
 	//check if tensor is 2d + 3 channels
 	if (tensor.dim != 3 || tensor.shape[2] != 3) {
 		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
 	}
 
 	//check if tensor is float32 (TODO: use int8 instead)
-	if (tensor.type != DataType::Float) {
+	if (tensor.type != TFType::Float) {
 		throw std::runtime_error("Window: Render tensor must be of type float32");
 	}
 
@@ -232,15 +256,15 @@ void RenderFrame(const TensorProp& tensor) {
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	GLuint ssbo = ((OpenGLMemoryManager*)global_memory_manager)->GetNativeBuffer(&tensor);
+	GLuint ssbo = ((TFOpenGLBuffer*)tensor.buffer)->GetNative();
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
 	glUseProgram(quad_program);
 
 	// Set the uniforms
 	int offset = 0;
-	int width = tensor.shape[1];
-	int height = tensor.shape[0];
+	int width = (int)tensor.shape[1];
+	int height = (int)tensor.shape[0];
 	glUniform1i(glGetUniformLocation(quad_program, "offset"), offset);
 	glUniform1i(glGetUniformLocation(quad_program, "width"), width);
 	glUniform1i(glGetUniformLocation(quad_program, "height"), height);

@@ -43,27 +43,42 @@ float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
 	return size_a / size_b;
 }
 
-void ArgumentManager::AddArgument(Arg* arg) {
-	ArgID id = ArgID(arg->type_, arg->index_);
-	arguments_[id] = arg->from_->node_;
-	argument_types_[id] = arg->from_->node_->GetTensor()->type;
+void ArgumentManager::AddArgument(ArgID id, Node* node) {
+	if(node == nullptr) {
+		throw std::runtime_error("Node is null");
+	}
+	inputs_[id] = node;
+	argument_types_[id] = node->GetTensor()->type;
 	argument_counts_[id.first]++;
 }
 
+void ArgumentManager::RemoveArguments(ArgType arg) {
+	unordered_set<ArgID, HashArgID> to_remove;
+	for (auto& [id, node] : inputs_) {
+		if (id.first == arg) {
+			to_remove.insert(id);
+		}
+	}
+	for (auto& id : to_remove) {
+		inputs_.erase(id);
+		argument_types_.erase(id);
+		argument_counts_[id.first]--;
+	}
+}
+
 int Node::TryComputeShape() {
-	ArgMap shape = GetArgumentMap(ArgType::Shape);
+	NodeArguments shape = args.GetArguments(ArgType::Shape);
 	int size = 1;
-	for (auto& [index, arg] : shape) {
-		Node* shape_node = arg->from_->get();
+	for (auto& [index, shape_node] : shape) {
 		if (shape_node->name != "const") {
 			return -1;  // can not compute shape at compile time
 		}
-		size *= arg->from_->get()->tensor_->data[0];
+		size *= shape_node->tensor_->data[0];
 	}
 	return size;
 }
 
-Tensor* Tensor::GetCopy(const Tensor& other, Arguments args) {
+Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 	Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
 	copy->data = other.data;
 	copy->node_->CopyProperties(other.node_);
@@ -71,17 +86,17 @@ Tensor* Tensor::GetCopy(const Tensor& other, Arguments args) {
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other) {
-	Arguments new_args;
-	for (auto& arg : other.node_->inputs_) {
-		new_args.push_back(arg);
+	NodeArguments new_args;
+	for (auto& [id, from] : other.node_->args.inputs_) {
+		new_args[id] = from;
 	}
 	return GetCopy(other, new_args);
 }
 
 void Tensor::SetShape(Tensors shape) const {
-	node_->RemoveArguments(ArgType::Shape);
+	node_->args.RemoveArguments(ArgType::Shape);
 	for (int i = 0; i < shape.size(); i++) {
-		node_->AddArgument(shape[i]->node_, ArgType::Shape, i);
+		node_->args.AddArgument(ArgType::Shape, i, shape[i]->node_);
 	}
 }
 
@@ -118,9 +133,9 @@ Tensor & Tensor::ReductionOP(string name, const Tensor &tensor, int axis, bool k
 	}
 	Tensor& op = OpShape(name, shape, &tensor);
 	op.data = vector<uint>(1, axis);
-	if(keepdims) {
-		op.node_->AddFlag(NodeFlag::KeepDims);
-	}
+	//if(keepdims) {
+	//	op.node_->AddFlag(NodeFlag::KeepDims);
+	//}
 	return op;
 }
 

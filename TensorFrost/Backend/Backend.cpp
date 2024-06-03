@@ -68,39 +68,35 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TensorProp Allocator(uint* a, uint dim, DataType type) {
-	vector<int> shape;
-	for (uint i = 0; i < dim; i++) {
-		shape.push_back(a[i]);
-	}
-	return *global_memory_manager->Allocate(shape, type);
+TFTensor Allocator(const size_t* a, size_t dim, TFType type, void* data) {
+	vector<size_t> shape(a, a + dim);
+	return *global_memory_manager->AllocateTensor(shape, type);
 }
 
-void Deallocator(TensorProp a) { 
-	global_memory_manager->Free(&a);
-	delete[] a.shape;
+void Deallocator(TFTensor a, void* data) {
+	global_memory_manager->DeallocateTensor(a);
 }
 
-uint Readback(TensorProp a, uint b) {
-	return global_memory_manager->ReadbackValue(&a, b);
+uint Readback(TFTensor a, size_t index, void* data) {
+	return global_memory_manager->ReadbackValue(&a, index);
 }
 
-void Writeback(TensorProp a, uint b, uint c) {
-	global_memory_manager->WritebackValue(&a, b, c);
+void Writeback(TFTensor a, size_t index, uint32_t value, void* data) {
+	global_memory_manager->WritebackValue(&a, index, value);
 }
 
-void Dispatch(DispatchInfo info) {
+void Dispatch(TFDispatchInfo info, void* data) {
 	global_kernel_manager->DispatchKernel(info);
 }
 
-vector<TensorProp*> ExecuteProgram(
-    Program* program, vector<TensorProp*> inputs) {
+vector<TFTensor*> ExecuteProgram(
+    Program* program, vector<TFTensor*> inputs) {
 
 	if (current_backend == BackendType::CodeGen) {
 		throw std::runtime_error("Cannot execute program with code generation backend");
 	}
 
-	int memory_input_count = (int)program->ir_->memory_inputs.size();
+	int memory_input_count = (int)program->ir_->input_memory_map.size();
 
 	if (memory_input_count != inputs.size()) {
 		throw std::runtime_error(
@@ -108,7 +104,7 @@ vector<TensorProp*> ExecuteProgram(
 		    to_string(memory_input_count) + ", got " + to_string(inputs.size()));
 	}
 
-	vector<TensorProp> input_tensors;
+	vector<TFTensor> input_tensors;
 	for (int i = 0; i < memory_input_count; i++) {
 		// add input memory offset
 		input_tensors.push_back(*inputs[i]);
@@ -117,21 +113,23 @@ vector<TensorProp*> ExecuteProgram(
 	unordered_map<int, Node*> output_memory_map = program->ir_->output_memory_map;
 	int output_count = (int)output_memory_map.size();
 
-	TensorProp* in = input_tensors.data();
-	TensorProp* out = new TensorProp[output_count];
+	TFTensor* in = input_tensors.data();
+	TFTensor* out = new TFTensor[output_count];
 
 	if (current_backend == BackendType::OpenGL) {
 		StartDebugRegion(program->program_name);
 	}
 
-	program->execute_callback(in, out, Allocator, Deallocator, Readback, Writeback, Dispatch);
+	TFRuntime runtime = {Allocator, Deallocator, Readback, Writeback, Dispatch, nullptr};
+
+	program->execute_callback(in, out, runtime);
 
 	if (current_backend == BackendType::OpenGL) {
 		EndDebugRegion();
 		//Finish();
 	}
 
-	vector<TensorProp*> outputs = vector<TensorProp*>(output_count);
+	vector<TFTensor*> outputs = vector<TFTensor*>(output_count);
 	for (int i = 0; i < output_count; i++) {
 		outputs[i] = &out[i];
 	}

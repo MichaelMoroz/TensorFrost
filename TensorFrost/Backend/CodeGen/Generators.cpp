@@ -1,4 +1,5 @@
-#pragma once
+#ifndef TENSORFROST_BACKEND_CODEGEN_GENERATORS_CPP
+#define TENSORFROST_BACKEND_CODEGEN_GENERATORS_CPP
 
 #include "Backend/CodeGen/Generators.h"
 
@@ -71,11 +72,14 @@ void GenerateNodeNames(const IR& ir) {
 	}
 }
 
-string GetBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, int)> get_name) {
-	vector<string> buffer_declarations = vector<string>(kernel->memory.size());
-	for (auto& buffer : kernel->memory) {
+
+string GetBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, size_t)> get_name) {
+	map<Node*, size_t> memory_bindings = kernel->GetMemoryBindings();
+
+	vector<string> buffer_declarations = vector<string>(memory_bindings.size());
+	for (auto& buffer : memory_bindings) {
 		Node* mem_node = buffer.first;
-		int binding = buffer.second;
+		size_t binding = buffer.second;
 		string name = mem_node->var_name;
 		string type_name = "uint";
 		buffer_declarations[binding] = get_name(name, type_name, binding);
@@ -175,11 +179,11 @@ string format_float(double value) {
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
 		switch (type) {
-			case DataType::Float:
+			case TFType::Float:
 				return format_float(AsFloat(data[0]));
-			case DataType::Int:
+			case TFType::Int:
 				return to_string(AsInt(data[0]));
-			case DataType::Uint:
+			case TFType::Uint:
 				return to_string(data[0]) + "u";
 			default:
 				return "";
@@ -189,9 +193,11 @@ inline string Tensor::GetConstantString() const {
 	}
 }
 
-void CodeGenerator::GenerateKernelCode(const Kernel* kernel) {
+void CodeGenerator::GenerateKernelCode(Kernel* kernel_) {
+	kernel = kernel_;
 	variables = kernel->variables;
-	offsets = kernel->memory;
+	read_write_bindings = kernel->read_write_memory;
+	read_only_bindings = kernel->read_only_memory;
 	GenerateCode(kernel->root);
 }
 
@@ -287,3 +293,5 @@ string AddIndent(const string& input, const string& indent) {
 }
 
 }  // namespace TensorFrost
+
+#endif

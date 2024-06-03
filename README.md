@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.5.1 beta)
+# 🔢🥶 TensorFrost (v0.5.2 beta)
 A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
 
 Currently working platforms:
@@ -12,14 +12,14 @@ These proto-kernels are optimized then to minimize the amount of links between t
 After minimizing links between protokernels, it creates actual tensors for inputs and outputs of these kernels, and replaces the links with load/store operations, and you get final list of kernel operations and memory allocations which is translated into C++ code and compiled into a shared library like  [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Algorithms/qr.ipynb):
 
 ```c++
-std::tuple<TensorProp, TensorProp> QRDecomposition(TensorProp in0)
+std::tuple<TFTensor, TFTensor> QRDecomposition(TFTensor in0)
 {
   int m = in0.shape[0];
   int n = in0.shape[1];
-  TensorProp A = check_tensor(in0, "A", {(uint)m, (uint)n}, DataType::Float);
-  TensorProp Q = allocate("Q", {(uint)m, (uint)n}, DataType::Float);
+  TFTensor A = check_tensor(in0, "A", {(uint)m, (uint)n}, TFType::Float);
+  TFTensor Q = allocate("Q", {(uint)m, (uint)n}, TFType::Float);
   dispatch(0, {Q}, {asuint(n), asuint(m)}, {(uint)m, (uint)n}, {16, 16});
-  TensorProp R = allocate("R", {(uint)n, (uint)n}, DataType::Float);
+  TFTensor R = allocate("R", {(uint)n, (uint)n}, TFType::Float);
   dispatch(1, {R}, {asuint(n)}, {(uint)n, (uint)n}, {16, 16});
   for (int i = 0; i < n - 1; i += 1)
   {
@@ -29,8 +29,8 @@ std::tuple<TensorProp, TensorProp> QRDecomposition(TensorProp in0)
     dispatch(3, {A, R, Q}, {asuint(m), asuint(n), asuint(i)}, {(uint)m}, {256});
     int v16_2 = n - (i + 1);
     int v16_5 = n - (i + 1);
-    dispatch(4, {Q, A, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_5}, {256});
-    dispatch(5, {A, Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_5}, {16, 16});
+    dispatch(4, {Q, A, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_2}, {256});
+    dispatch(5, {A, Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_2}, {16, 16});
   }
   int v24_0 = 1;
   int v24_1 = 1;

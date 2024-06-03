@@ -45,3 +45,27 @@ print("Error using TensorFrost:", np.linalg.norm(A - np.dot(Qnp, Rnp)))
 #print Q and R
 print("Q:\n", Qnp)
 print("R:\n", Rnp)
+
+# def test():
+#     a = tf.input([2, 2], tf.float32)
+#     b = tf.input([2, 2], tf.float32)
+#
+#     c = a + b
+#     d = a - b
+#     e = a * b
+#
+#     return [c, d, e]
+#
+# f = tf.compile(test)
+#
+# a = np.array([[1, 2], [3, 4]]).astype(np.float32)
+# b = np.array([[5, 6], [7, 8]]).astype(np.float32)
+#
+# atf = tf.tensor(a)
+# btf = tf.tensor(b)
+#
+# c, d, e = f(atf, btf)
+#
+# print(c.numpy)
+# print(d.numpy)
+# print(e.numpy)

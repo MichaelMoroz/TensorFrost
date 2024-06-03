@@ -14,7 +14,7 @@
 namespace TensorFrost {
 
 class OpenGLKernelManager : public KernelManager {
-	unordered_map<int, GLuint> kernel_map;
+	unordered_map<size_t, GLuint> kernel_map;
 	const int WORK_GROUP_SIZE = 256;
  public:
 	
@@ -83,7 +83,7 @@ class OpenGLKernelManager : public KernelManager {
 		return location;
 	}
 
-	void DispatchKernel(DispatchInfo info) override
+	void DispatchKernel(TFDispatchInfo info) override
 	{
 		GLuint program = kernel_map[info.kernel_id];
 		glUseProgram(program);
@@ -100,33 +100,29 @@ class OpenGLKernelManager : public KernelManager {
 		}
 		#endif
 
-		// Get memory
-		OpenGLMemoryManager* memory_manager =
-		    (OpenGLMemoryManager*)global_memory_manager;
 
 		// Set uniforms
-		if (info.tensor_count == 0) throw std::runtime_error("No tensors provided to kernel");
+		if (info.read_write_count == 0) throw std::runtime_error("No tensors provided to kernel");
 
 		//bind all memory buffers
-		for (uint i = 0; i < info.tensor_count; i++) {
-			GLuint buffer = memory_manager->GetNativeBuffer(&info.tensors[i]);
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, i, buffer);
+		for (size_t i = 0; i < info.read_write_count; i++) {
+			GLuint buffer = ((TFOpenGLBuffer*)info.read_write_tensors[i].buffer)->GetNative();
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, buffer);
 		}
 
 		if (info.variable_count > 0)
 		{
 			// Set variables uniform array
-			std::vector<int> variables;
+			std::vector<uint32_t> variables;
 			variables.resize(32);
-			for (int i = 0; i < (int)info.variable_count; i++) {
+			for (size_t i = 0; i < info.variable_count; i++) {
 				variables[i] = info.variables[i];
 			}
-			glUniform1iv(getUniformLocation(program, "var"), info.variable_count,
-			             variables.data());
+			glUniform1uiv(getUniformLocation(program, "var"), (GLsizei)info.variable_count, variables.data());
 		}
 
 		// Dispatch the kernel
-		glDispatchCompute(info.work_group_count, 1, 1);
+		glDispatchCompute((GLuint)info.work_group_count, 1, 1);
 
 		// Wait for the kernel to finish
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);

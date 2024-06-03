@@ -9,106 +9,114 @@
 #include <vector>
 
 #include "../Tensor/Tensor.h"
-#include "BufferManager.h"
 
 namespace TensorFrost {
 
 using namespace std;
 
 extern "C" {
-	struct TensorProp {
-		Buffer* buffer;
-		uint dim;
-		uint* shape;
-		DataType type;
+	struct TFBuffer {
+		size_t size = 0;
+		size_t used_size = 0;
+		size_t time_since_used = 0;
+		bool up_to_date = false;
+		bool read_only = false;
+		//add type descriptor (for special kinds of buffers)
 	};
 
-	struct DispatchInfo {
-		int kernel_id;
-		uint tensor_count;
-		TensorProp* tensors;
-		uint variable_count;
-		uint* variables;
-		uint work_group_count;
+	struct TFTensor {
+		TFBuffer* buffer;
+		TFType type;
+		size_t dim;
+		const size_t* shape;
 	};
 
-	typedef TensorProp alloc_func(uint*, uint, DataType);
-	typedef void dealloc_func(TensorProp);
-	typedef uint readback_func(TensorProp, uint);
-	typedef void writeback_func(TensorProp, uint, uint);
-	typedef void dispatch_func(DispatchInfo);
-	typedef void cpu_dispatch_func(uint* var, uint** mem, uint work_group_count);
+	struct TFDispatchInfo {
+		size_t kernel_id;
+		size_t read_write_count;
+		const TFTensor* read_write_tensors;
+		size_t read_only_count;
+		const TFTensor* read_only_tensors;
+		size_t variable_count;
+		const uint32_t* variables;
+		size_t work_group_count;
+	};
+
+	typedef TFTensor alloc_func(const size_t*, size_t, TFType, void*);
+	typedef void dealloc_func(TFTensor, void*);
+	typedef uint readback_func(TFTensor, size_t, void*);
+	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
+	typedef void dispatch_func(TFDispatchInfo, void*);
+
+	struct TFRuntime {
+		alloc_func* alloc;
+		dealloc_func* dealloc;
+		readback_func* readback;
+		writeback_func* writeback;
+		dispatch_func* dispatch;
+		void* custom_data;
+	};
+
+	typedef void cpu_dispatch_func(const uint32_t* var, uint32_t** mem, uint work_group_count);
+	typedef void main_func(TFTensor*, TFTensor*, TFRuntime);
 }
 
-using uint = unsigned int;
-using main_func = void(TensorProp*, TensorProp*, alloc_func, dealloc_func, readback_func, writeback_func, dispatch_func);
-
-int GetLinearSize(const vector<int>& shape);
-vector<int> GetShape(const TensorProp* tensor);
-int GetSize(const TensorProp* tensor);
-
-class TensorMemoryManager;
-
-class TensorMemoryManager {
+class TFBufferTemplate : public TFBuffer {
 public:
-	BufferManager buffer_manager;
+	TFBufferTemplate(size_t size) : TFBuffer(size) {}
 
-	virtual Buffer* TryGetBuffer(int size) {
-		throw std::runtime_error("TryGetBuffer not implemented");
-	}
-
-	virtual void SetDataAtOffset(const TensorProp* buffer, int offset, const vector<uint>& data) {
+	virtual void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) {
 		throw std::runtime_error("SetDataAtOffset not implemented");
 	}
+	virtual void GetDataAtOffset(size_t offset, size_t size, uint32_t* data) {
+		throw std::runtime_error("GetDataAtOffset not implemented");
+	}
+};
 
-	TensorProp* Allocate(const vector<int>& shape, const DataType type = DataType::Float) {
-		int size = GetLinearSize(shape);
+using uint = unsigned int;
 
-		if (size == 0) {
-			throw invalid_argument("Trying to allocate a tensor with size 0");
-		}
+size_t GetLinearSize(const vector<size_t>& shape);
+vector<size_t> GetShape(const TFTensor* tensor);
+size_t GetSize(const TFTensor* tensor);
 
-		Buffer* buf = TryGetBuffer(size);
-		return MakeTensor(shape, buf, type);
+class TensorMemoryManager {
+private:
+	const int MAX_UNUSED_TIME = 512;
+	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
+	unordered_set<TFBuffer*> unused_buffers;
+
+	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
+	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);
+	void UpdateTick();
+
+	TFBuffer* AllocateBuffer(size_t size);
+	TFBuffer* TryAllocateBuffer(size_t size);
+	void DeallocateBuffer(TFBuffer* buffer);
+	void RemoveBuffer(TFBuffer* buffer);
+
+protected:
+	virtual TFBuffer* CreateBuffer(size_t size) {
+		throw std::runtime_error("CreateBuffer not implemented");
 	}
 
-	TensorProp* AllocateWithData(const vector<int>& shape, const vector<uint>& data, const DataType type = DataType::Float) {
-		TensorProp* tensor_memory = Allocate(shape, type);
-		SetDataAtOffset(tensor_memory, 0, data);
-		return tensor_memory;
+	virtual void DeleteBuffer(TFBuffer * buffer) {
+		throw std::runtime_error("DeleteBuffer not implemented");
 	}
 
-	virtual vector<uint> Readback(const TensorProp* memory) = 0;
-	virtual uint ReadbackValue(const TensorProp* memory, uint index) = 0;
-	virtual void Writeback(const TensorProp* memory, const vector<uint>& data) = 0;
-	virtual void WritebackValue(const TensorProp* memory, uint index, uint value) = 0;
+public:
+	virtual vector<uint32_t> Readback(const TFTensor* memory);
+	virtual uint ReadbackValue(const TFTensor* memory, size_t index);
+	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data);
+	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value);
 
-	TensorProp* MakeTensor(uint* shape, uint dim, Buffer* buf, DataType type) {
-		TensorProp* tensor = new TensorProp();
-		tensor->buffer = buf;
-		tensor->dim = dim;
-		tensor->shape = shape;
-		tensor->type = type;
-		return tensor;
-	}
+	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFType type = TFType::Float);
+	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false);
+	void DeallocateTensor(TFTensor tensor);
 
-	TensorProp* MakeTensor(const vector<int>& shape, Buffer* buf, DataType type) {
-		uint* shape_arr = new uint[shape.size()];
-		std::copy(shape.begin(), shape.end(), shape_arr);
-		return MakeTensor(shape_arr, (int)shape.size(), buf, type);
-	}
+	size_t GetAllocatedSize() const;
+	size_t GetUnusedAllocatedSize() const;
 
-	void Free(TensorProp* memory) {
-		buffer_manager.DeallocateBuffer(memory->buffer);
-	}
-
-	uint32_t GetAllocatedSize() const {
-		return buffer_manager.GetRequiredAllocatedStorage();
-	}
-
-	uint32_t GetUnusedAllocatedSize() const {
-		return buffer_manager.GetUnusedAllocatedStorage();
-	}
+	~TensorMemoryManager();
 };
 
 

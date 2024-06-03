@@ -2,37 +2,64 @@
 
 namespace TensorFrost {
 
-int MaxIndexCount(ArgMap& map) {
-	if (map.empty()) return 0;
-	// maps are sorted by index, so the last element has the highest index
-	return map.rbegin()->first + 1;
+void ArgumentManager::UpdateOutputs() {
+	for (auto& [id, node] : inputs_) {
+		node->args.AddOutput(id, node_);
+	}
 }
 
-const Tensor *ArgumentManager::GetTensor(ArgType type, int index) {
+void ArgumentManager::ClearOutputs() {
+	outputs_.clear();
+}
+
+const Tensor *ArgumentManager::GetTensor(ArgType type, int index) const {
 	return Get(type, index)->GetTensor();
 }
 
-const Tensor & ArgumentManager::operator[](int index) {
+const Tensor & ArgumentManager::operator[](int index) const {
 	return *GetTensor(ArgType::Input, index);
 }
 
-void SwapLables(Node* a, Node* b) {
-	// first swap the node addresses
-	a->lable_->node_ = b;
-	b->lable_->node_ = a;
-
-	// now swap the labels
-	Lable* temp = a->lable_;
-	a->lable_ = b->lable_;
-	b->lable_ = temp;
+map<int, const Tensor *> ArgumentManager::GetTensors(ArgType type) const {
+	map<int, const Tensor *> tensors;
+	for (auto& [id, node] : inputs_) {
+		if (id.first == type) {
+			tensors[id.second] = node->GetTensor();
+		}
+	}
+	return tensors;
 }
 
-void CopyLable(Node* target, Node* copy) {
-	// make old lable point to copy
-	target->lable_->node_ = copy;
-	// make new lable for target
-	target->lable_ = new Lable(target);
+ArgumentManager::~ArgumentManager() {
+
 }
+
+bool ArgumentManager::CannotMoveArgument(ArgID id) {
+	Node* from = inputs_[id];
+	Node* to = node_;
+	return (id.first == ArgType::Memory &&
+	        !to->op->HasAllTypes(OpClass::Set)) ||
+	       (id.first  == ArgType::Shape && !to->op->HasAllTypes(OpClass::Memory)) ||
+	       from->op->HasAllTypes(OpClass::Memory) ||
+	       (from->name == "const" && to->op->HasAllTypes(OpClass::Memory)); //FIX THIS
+}
+
+bool ArgumentManager::CannotCopyArgument(ArgID id) {
+	Node* from = inputs_[id];
+	Node* to = node_;
+	bool shape = id.first == ArgType::Shape;
+	bool to_memory = to->op->HasAllTypes(OpClass::Memory);
+	bool shape_not_memory = shape && !to_memory;
+	return id.first == ArgType::Memory || shape_not_memory ||
+	       from->op->HasAllTypes(OpClass::Static) ||
+	       from->op->HasAllTypes(OpClass::Memory) || from->HasBeenModified();
+}
+
+bool ArgumentManager::IsChangingInput(ArgID arg) {
+	return arg.first == ArgType::Memory &&
+	       node_->op->HasAllTypes(OpClass::Modifier);
+}
+
 
 Node* Node::GetLastChild() {
 	Node* last = nullptr;
@@ -107,15 +134,14 @@ KernelScope::KernelScope(Node* node,
 	}
 
 	// find boundary nodes
-	Arguments indices = node->GetArguments(ArgType::Index);
-	bool identity = indices.empty();
+	bool identity = node->args.Count(ArgType::Index) == 0;
 
-	for (auto& input : node->inputs_) {
+	for (auto& input : node->args.inputs_) {
 		// get latest input version
-		Node* latest = input.from_->get()->GetLastVersion(node);
+		Node* latest = input.second->GetLastVersion(node);
 		// check if input is the boundary of this kernel
 		bool is_loop_boundary = latest->index_ > node->index_;
-		if (IsBoundary(latest, node, input.type_, identity)) {
+		if (IsBoundary(latest, node, input.first.first, identity)) {
 			if (is_loop_boundary) {
 				latest = latest->GetParent("loop");
 			}
@@ -210,18 +236,13 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 	return new_scope;
 }
 
-Arg::~Arg() {
-	// remove this arg from the output list of the from node
-	if (from_) {
-		if (from_->node_->outputs_.empty()) return;
-		for (auto it = from_->node_->outputs_.begin();
-		     it != from_->node_->outputs_.end(); ++it) {
-			if (*it == this) {
-				from_->node_->outputs_.erase(it);
-				break;
-			}
-		}
-	}
+const map<ArgType, string> type_names = {
+	{ArgType::Input, "Input"}, {ArgType::Index, "Index"}, {ArgType::Shape, "Shape"},
+	{ArgType::Memory, "Memory"}, {ArgType::None, "None"},
+};
+
+string TypeToString(ArgType type) {
+	return type_names.at(type);
 }
 
 }  // namespace TensorFrost

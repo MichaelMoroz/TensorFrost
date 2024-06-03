@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
@@ -14,6 +12,8 @@ class GLSLGenerator : public CodeGenerator {
 	};
 
  public:
+	GLSLGenerator(IR* ir) : CodeGenerator(ir) {}
+
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
 	}
@@ -96,11 +96,11 @@ int asint(uint x) {
   return int(x);
 }
 
-uniform int var[32];
+uniform uint var[32];
 )";
 }
 
-string GLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+string GLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
 	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
 	//add atomic functions
 	decl += R"(
@@ -150,7 +150,7 @@ void main() {
 
 )";
 
-	GLSLGenerator generator;
+	GLSLGenerator generator = GLSLGenerator(program->ir_);
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 

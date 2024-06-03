@@ -1,5 +1,3 @@
-#pragma once
-
 #include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
@@ -14,6 +12,8 @@ class HLSLGenerator : public CodeGenerator {
 	};
 
  public:
+	HLSLGenerator(IR* ir) : CodeGenerator(ir) {}
+
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
 	}
@@ -80,7 +80,7 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 
 struct UBO
 {
-	int var[32];
+	uint var[32];
 };
 
 cbuffer ubo : register(b0) { UBO ubo; }
@@ -88,7 +88,7 @@ cbuffer ubo : register(b0) { UBO ubo; }
 )";
 }
 
-string HLSLBufferDeclaration(const string& name, const string& type_name, const int binding) {
+string HLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
 	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
 }
 
@@ -118,7 +118,7 @@ void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 
 )";
 
-	HLSLGenerator generator;
+	HLSLGenerator generator = HLSLGenerator(program->ir_);
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 

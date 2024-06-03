@@ -8,16 +8,12 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
-# Set the output directory for the .pyd file
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_PDB_OUTPUT_DIRECTORY_RELEASE ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
-set(CMAKE_PDB_OUTPUT_DIRECTORY_DEBUG ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
+# Set the output directory for the .pyd file for all configurations and types
+foreach(TYPE ARCHIVE LIBRARY RUNTIME PDB)
+  foreach(CONFIG RELEASE DEBUG RELWITHDEBINFO MINSIZEREL)
+    set(CMAKE_${TYPE}_OUTPUT_DIRECTORY_${CONFIG} ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
+  endforeach()
+endforeach()
 
 # If PYBIND11_PYTHON_VERSION is not set just use the default python version
 if(NOT DEFINED PYBIND11_PYTHON_VERSION)

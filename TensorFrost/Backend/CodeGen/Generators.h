@@ -15,7 +15,7 @@ string GetNodeName(const Node* node,  bool compact = false);
 string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
-string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, int)> get_name);
+string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
 string GetCPPHeader();
 string GetHLSLHeader();
 string GetGLSLHeader();
@@ -51,23 +51,25 @@ class CodeGenerator {
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
 
-	map<DataType, string> type_names = {
-	    {DataType::None, "void"},   {DataType::Bool, "bool"},
-	    {DataType::Float, "float"}, {DataType::Uint, "uint"},
-	    {DataType::Int, "int"},
+	map<TFType, string> type_names = {
+	    {None, "void"},   {Bool, "bool"},
+	    {Float, "float"}, {Uint, "uint"},
+	    {Int, "int"},
 	};
 	
-	bool is_kernel = true;
+	Kernel* kernel = nullptr;
+	IR* ir = nullptr;
 
-	CodeGenerator() = default;
+	CodeGenerator(IR* ir) : ir(ir) {}
 
-	void GenerateKernelCode(const Kernel* kernel);
+	void GenerateKernelCode(Kernel *kernel_);
 	void GenerateCode(const Node* root);
 	string AssembleString();
 
 protected:
-	map<Node*, int> offsets;
-	map<Node*, int> variables;
+	map<Node*, size_t> read_write_bindings;
+	map<Node*, size_t> read_only_bindings;
+	map<Node*, size_t> variables;
 	map<Node*, string> node_expression;
 	map<Node*, bool> requires_paranthesis;
 	unordered_set<Node*> lines_to_remove;
@@ -75,7 +77,7 @@ protected:
 	unordered_map<string, int> name_count;
 
 	virtual void GenerateArgumentNames(ArgumentManager& args)  {
-		for (auto& arg : args.arguments_) {
+		for (auto& arg : args.inputs_) {
 			Node* node = arg.second;
 			ArgID id = arg.first;
 			string name = node->var_name;
@@ -96,7 +98,7 @@ protected:
 				}
 				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
-				bool has_single_output = (node->outputs_.size() == 1) || is_constant || is_variable;
+				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
 				bool modified = node->has_been_modified_;
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
@@ -132,15 +134,15 @@ protected:
 	}
 
 	virtual Line* GenerateLine(Node* node)  {
-		ArgumentManager args = node->GetArgumentManager();
+		ArgumentManager& args = node->args;
 		GenerateArgumentNames(args);
-		if (is_kernel) RegenerateNodeName(node);
+		if (kernel) RegenerateNodeName(node);
 		const Operation* op = node->op;
 
 		string name = node->var_name;
 
 		// get output type
-		DataType output_type = node->tensor_->type;
+		TFType output_type = node->tensor_->type;
 
 		// generate line
 		string left = "";
@@ -172,39 +174,38 @@ protected:
 			} else if (op->name_ == "if") {
 				left += GenerateIf(&args);
 			} else if (op->name_ == "memory") {
-				left += "TensorProp " + node->var_name + " = ";
 				// if input memory type then just take the input and store it in the
 				// output
 				if (node->memory_type_ == MemoryType::Input) {
-					expression += "check_tensor(in" + to_string(node->special_index_) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 				// if any other memory type - allocate it
 				else {
-					expression += "allocate(\"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+					left += "TFTensor " + node->var_name + " = ";
+					expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
 			} else if (op->name_ == "deallocate") {
-				left = "deallocate(" + args.Name(ArgType::Memory) + ")";
+				left = "tf.deallocate(" + args.Name(ArgType::Memory) + ")";
 				right = ";";
 			}
 			else if (op->name_ == "input_shape")
 			{
-				Node* output_memory = node->outputs_[0]->to_->get();
 				left = "int " + node->var_name + " = ";
-				expression = "in" + to_string(output_memory->special_index_) + ".shape[" + to_string(node->special_index_) + "]";
+				expression = ir->input_memory_map[node->special_indices_[1]]->var_name + ".shape[" + to_string(node->special_indices_[0]) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")
 			{
-				left = "TensorProp " + node->var_name + " = ";
-				expression = "reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", DataType::" + DataTypeNames[output_type] + ")";
+				left = "TFTensor " + node->var_name + " = ";
+				expression = "tf.reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
 			string address;
 
-			if (is_kernel) {
+			if (kernel) {
 				address = "0";
 				// if has index (not a scalar)
 				if (args.Has(ArgType::Index)) {
@@ -216,19 +217,19 @@ protected:
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
 					expression +=
-					    (output_type == DataType::Uint)
+					    (output_type == Uint)
 					        ? memory_expression
 					        : TypeReinterpret(output_type_name, memory_expression);
 					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->name_ == "store") {
 					expression += memory_expression + " = ";
 					expression +=
-					    (output_type == DataType::Uint)
+					    (output_type == Uint)
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
 					right += "; // " + args.Name(ArgType::Memory);
 				} else if (op->HasAllTypes(OpClass::Scatter)) {
-					if (output_type != DataType::None) {
+					if (output_type != None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
 					string output_type_name = type_names[output_type];
@@ -249,14 +250,14 @@ protected:
 					//do readback
 					string output_type_name = type_names[output_type];
 					left += output_type_name + " " + name + " = ";
-					string memory_expression = GetName("ReadFromMemory") + "(" + tensor_name + ", " + address + ")";
-					expression += (output_type == DataType::Uint)
+					string memory_expression = GetName("tf.read") + "(" + tensor_name + ", " + address + ")";
+					expression += (output_type == Uint)
 						? memory_expression
 						: TypeReinterpret(output_type_name, memory_expression);
 					right += ";";
 				} else if (op->name_ == "store") {
 					//do writeback
-					string memory_expression = GetName("WriteToMemory") + "(" + tensor_name + ", " + address + ", ";
+					string memory_expression = GetName("tf.write") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
 				} else if (op->HasAllTypes(OpClass::Scatter)) {
@@ -269,7 +270,7 @@ protected:
 			expression += args.Name(ArgType::Input);
 			right += ";";
 		} else {
-			if (output_type != DataType::None) {
+			if (output_type != None) {
 				left += type_names[output_type] + " " + name + " = ";
 			}
 			string line;
@@ -277,7 +278,7 @@ protected:
 			switch (op->op_classes[0]) {
 				case OpClass::Operator:
 					args.AddParenthesis(true);
-					if ((code == "&" || code == "|") && output_type == DataType::Bool) {
+					if ((code == "&" || code == "|") && output_type == Bool) {
 						code = code + code;
 					}
 					line += args.Name(ArgType::Input, 0) + " " + code + " " +

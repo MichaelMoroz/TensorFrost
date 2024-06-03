@@ -15,78 +15,39 @@ namespace TensorFrost {
 
 using namespace std;
 
-class CpuMemoryManager : public TensorMemoryManager {
- public:
-	unordered_map<Buffer*, uint*> allocated_arrays;
+class TFCPUBuffer: public TFBufferTemplate {
+public:
+	uint32_t* data;
 
-	void CleanUp() {
-		for(auto buf_to_delete: buffer_manager.buffers_to_delete) {
-			DeleteBuffer(allocated_arrays[buf_to_delete]);
-			allocated_arrays.erase(buf_to_delete);
-			buffer_manager.RemoveBuffer(buf_to_delete);
-		}
-		buffer_manager.buffers_to_delete.clear();
+	TFCPUBuffer(size_t size): TFBufferTemplate(size) {
+		data = new uint32_t[size];
 	}
 
-	Buffer* TryGetBuffer(int size) override {
-		buffer_manager.UpdateTick();
-		CleanUp();
-
-		Buffer* buffer = buffer_manager.TryAllocateBuffer(size);
-		if(!allocated_arrays.contains(buffer)) {
-			allocated_arrays[buffer] = CreateBuffer(buffer->size);
-		}
-		return buffer;
+	void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) override {
+		memcpy(this->data + offset, data.data(), data.size() * sizeof(uint32_t));
 	}
 
-	uint* GetNativeBuffer(const TensorProp* mem) {
-		if(!allocated_arrays.contains(mem->buffer)) {
-			throw std::runtime_error("Tensor memory not allocated");
-		}
-		return allocated_arrays[mem->buffer];
+	void GetDataAtOffset(size_t offset, size_t size, uint32_t* data) override {
+		memcpy(data, this->data + offset, size * sizeof(uint32_t));
 	}
 
-	void SetDataAtOffset(const TensorProp* buffer, int offset, const vector<uint>& data) override {
-		uint* array = allocated_arrays[buffer->buffer];
-		memcpy(array + offset, data.data(), data.size() * sizeof(uint));
-	}
-
-	uint* CreateBuffer(int size) {
-		return new uint[size];
-	}
-
-	vector<uint> Readback(const TensorProp* mem) override {
-		uint* array = GetNativeBuffer(mem);
-		vector<uint> data(mem->buffer->size);
-		for(int i = 0; i < mem->buffer->size; i++) {
-			data[i] = array[i];
-		}
+	uint32_t* GetNative() const {
 		return data;
 	}
 
-	uint ReadbackValue(const TensorProp* mem, uint index) override {
-		uint* array = GetNativeBuffer(mem);
-		return array[index];
+	~TFCPUBuffer() {
+		delete[] data;
+	}
+};
+
+class CpuMemoryManager : public TensorMemoryManager {
+ public:
+	TFBuffer* CreateBuffer(size_t size) override {
+		return new TFCPUBuffer(size);
 	}
 
-	void Writeback(const TensorProp* mem, const vector<uint>& data) override {
-		uint* array = GetNativeBuffer(mem);
-		memcpy(array, data.data(), data.size() * sizeof(uint));
-	}
-
-	void WritebackValue(const TensorProp* mem, uint index, uint value) override {
-		uint* array = GetNativeBuffer(mem);
-		array[index] = value;
-	}
-
-	void DeleteBuffer(uint* buffer) {
-		delete[] buffer;
-	}
-
-	~CpuMemoryManager() {
-		for(auto& [buffer, array]: allocated_arrays) {
-			DeleteBuffer(array);
-		}
+	void DeleteBuffer(TFBuffer* buffer) override {
+		delete (TFCPUBuffer*)buffer;
 	}
 };
 

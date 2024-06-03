@@ -20,7 +20,7 @@ class Tensor {
  private:
 	static IR* evaluation_context_ir_;
 
-	static Tensor& CreateNode(DataType type, Arguments args, string name) {
+	static Tensor& CreateNode(TFType type, NodeArguments args, string name) {
 		if (evaluation_context_ir_ == nullptr) {
 			throw std::runtime_error(
 			    "Evaluation context has not been set. Are you doing operations "
@@ -33,21 +33,21 @@ class Tensor {
 		return *tensor;
 	}
 
-	static void AddArgument(Arguments& arguments, const Tensor* tensor,
+	static void AddArgument(NodeArguments& arguments, const Tensor* tensor,
 	                        ArgType type, int index = 0) {
-		arguments.emplace_back(type, tensor->node_->GetLable(), index);
+		arguments[ArgID(type, index)] = tensor->node_;
 	}
 
-	static void AddArguments(Arguments& arguments, const Tensors& tensors,
+	static void AddArguments(NodeArguments& arguments, const Tensors& tensors,
 	                         ArgType type) {
 		for (int i = 0; i < tensors.size(); i++) {
 			AddArgument(arguments, tensors[i], type, i);
 		}
 	}
 
-	static void AddArguments(Arguments& arguments, const Arguments& toadd) {
+	static void AddArguments(NodeArguments& arguments, const NodeArguments& toadd) {
 		for (const auto& i : toadd) {
-			arguments.push_back(i);
+			arguments[i.first] = i.second;
 		}
 	}
 
@@ -55,9 +55,9 @@ class Tensor {
 		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
 	}
 
-	static tuple<const Operation*, DataType, ShapeInfo> GetOperation(const string& name,
+	static tuple<const Operation*, TFType, ShapeInfo> GetOperation(const string& name,
 	                                              const Tensors& tensors, bool check_shape = true) {
-		vector<DataType> input_types = vector<DataType>();
+		vector<TFType> input_types = vector<TFType>();
 		for (const auto& tensor : tensors) {
 			input_types.push_back(tensor->type);
 		}
@@ -74,10 +74,10 @@ class Tensor {
 			throw std::runtime_error(error);
 		}
 
-		ShapeInfo shape_info = ShapeInfo();	
+		ShapeInfo shape_info = ShapeInfo();
 
 		if (check_shape)
-		{	
+		{
 			//check if shapes are compatible and get the final broadcasted shape
 			for (int i = 0; i < tensors.size(); i++) {
 				ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
@@ -86,7 +86,7 @@ class Tensor {
 			}
 		}
 
-		DataType output_type = operation->GetOutputType(input_types);
+		TFType output_type = operation->GetOutputType(input_types);
 
 		return {operation, output_type, shape_info};
 	}
@@ -106,7 +106,7 @@ class Tensor {
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
 		// create argument list
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 
 		AddArguments(arguments, tensors, ArgType::Input);
 
@@ -130,7 +130,7 @@ class Tensor {
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors, false);
 
 		// create argument list
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 
 		AddArguments(arguments, tensors, ArgType::Input);
 		AddArguments(arguments, shape, ArgType::Shape);
@@ -153,7 +153,7 @@ class Tensor {
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors);
 
 		// create argument list
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 
 		AddArgument(arguments, memory, ArgType::Memory);
 		AddArguments(arguments, tensors, ArgType::Input);
@@ -173,7 +173,7 @@ class Tensor {
 
 		// check if indices are all integers
 		for (const Tensor* index : indices) {
-			if (index->type != DataType::Int) {
+			if (index->type != TFType::Int) {
 				throw std::runtime_error("Tensor indices must be integers");
 			}
 		}
@@ -190,21 +190,21 @@ class Tensor {
 		}
 
 		// create argument list
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 
 		AddArgument(arguments, memory, ArgType::Memory);
 		AddArguments(arguments, tensors, ArgType::Input);
 		AddArguments(arguments, indices, ArgType::Index);
 
 		// get an input node that has shape arguments
-		Arguments shape_arguments = shape_info.GetArguments();
+		NodeArguments shape_arguments = shape_info.GetArguments();
 
 		//use index shape instead if no input shape is found
 		if (shape_arguments.empty())
 		{
 			for (const Tensor* index : indices)
 			{
-				shape_arguments = index->node_->GetArguments(ArgType::Shape);
+				shape_arguments = index->node_->args.GetArguments(ArgType::Shape);
 				if (!shape_arguments.empty()) {
 					break;
 				}
@@ -218,8 +218,8 @@ class Tensor {
 		return CreateNode(output_type, arguments, op);
 	}
 
-	static Tensor& Static(string op, const Arguments& shape,
-	                      const DataType type) {
+	static Tensor& Static(string op, const NodeArguments& shape,
+	                      const TFType type) {
 		op = RemoveSpaces(op);
 
 		if (op.empty()) {
@@ -232,20 +232,20 @@ class Tensor {
 			throw std::runtime_error("Type " + DataTypeToString(type) +
 			                         " is not valid for operation " + op);
 		}
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape);
 		return CreateNode(type, arguments, op);
 	}
 
 	static Tensor& Static(const string& op, const Tensors& shape,
-	                      const DataType type) {
-		Arguments arguments = Arguments();
+	                      const TFType type) {
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape, ArgType::Shape);
 		return Static(op, arguments, type);
 	}
 
-	static Tensor& Static(const string& op, const DataType type) {
-		return Static(op, Arguments(), type);
+	static Tensor& Static(const string& op, const TFType type) {
+		return Static(op, NodeArguments(), type);
 	}
 
  public:
@@ -259,13 +259,13 @@ class Tensor {
 	string GetConstantString() const;
 
 	Node* node_ = nullptr;
-	DataType type = DataType::Float;
+	TFType type = TFType::Float;
 	std::vector<uint> data;
 
 	// Main constructor
-	explicit Tensor(DataType type) { this->type = type; }
+	explicit Tensor(TFType type) { this->type = type; }
 
-	static Tensor* GetCopy(const Tensor& other, Arguments args);
+	static Tensor* GetCopy(const Tensor& other, NodeArguments args);
 
 	static Tensor* GetCopy(const Tensor& other);
 
@@ -306,28 +306,28 @@ class Tensor {
 	}
 
 	static Tensor& Constant(float value) {
-		Tensor& output = Static("const", DataType::Float);
+		Tensor& output = Static("const", TFType::Float);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
 	static Tensor& Constant(int value) {
-		Tensor& output = Static("const", DataType::Int);
+		Tensor& output = Static("const", TFType::Int);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
 	static Tensor& Constant(uint value) {
-		Tensor& output = Static("const", DataType::Uint);
+		Tensor& output = Static("const", TFType::Uint);
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
-	static Tensor& Constant(uint value, DataType type) {
+	static Tensor& Constant(uint value, TFType type) {
 		Tensor& output = Static("const", type);
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
 
 	static Tensor& Constant(const vector<int>& shape, float* data) {
-		Tensor& output = Static("memory", GetConstantShape(shape), DataType::Float);
+		Tensor& output = Static("memory", GetConstantShape(shape), TFType::Float);
 		output.SetMemoryType(MemoryType::Constant);
 		int data_count = GetSize(shape);
 		for (int i = 0; i < data_count; i++) {
@@ -337,9 +337,9 @@ class Tensor {
 	}
 
 	static Tensor& Constant(const Tensors& shape, float value) {
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape, ArgType::Shape);
-		Tensor& output = Static("const", arguments, DataType::Float);
+		Tensor& output = Static("const", arguments, TFType::Float);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
@@ -347,9 +347,9 @@ class Tensor {
 		return Constant(GetConstantShape(shape), value);
 	}
 	static Tensor& Constant(const Tensors& shape, int value) {
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape, ArgType::Shape);
-		Tensor& output = Static("const", arguments, DataType::Int);
+		Tensor& output = Static("const", arguments, TFType::Int);
 		output.data = std::vector<uint>(1, AsUint(value));
 		return output;
 	}
@@ -358,9 +358,9 @@ class Tensor {
 	}
 
 	static Tensor& Constant(const Tensors& shape, uint value) {
-		Arguments arguments = Arguments();
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape, ArgType::Shape);
-		Tensor& output = Static("const", arguments, DataType::Uint);
+		Tensor& output = Static("const", arguments, TFType::Uint);
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
@@ -368,14 +368,14 @@ class Tensor {
 	static Tensor& Constant(const vector<int>& shape, uint value) {
 		return Constant(GetConstantShape(shape), value);
 	}
-	static Tensor& Constant(const Tensors shape, uint value, DataType type) {
-		Arguments arguments = Arguments();
+	static Tensor& Constant(const Tensors shape, uint value, TFType type) {
+		NodeArguments arguments = NodeArguments();
 		AddArguments(arguments, shape, ArgType::Shape);
 		Tensor& output = Static("const", arguments, type);
 		output.data = std::vector<uint>(1, value);
 		return output;
 	}
-	
+
 	static Tensors GetShapeTensors(const vector<int>& shape) {
 		Tensors result = Tensors();
 		for (int i : shape) {
@@ -384,17 +384,17 @@ class Tensor {
 		return result;
 	}
 
-	static Tensor& Memory(const DataType type) { return Static("memory", type); }
+	static Tensor& Memory(const TFType type) { return Static("memory", type); }
 	static Tensor& Memory(const Tensors& shape,
-	                      const DataType type = DataType::Float) {
+	                      const TFType type = TFType::Float) {
 		return Static("memory", shape, type);
 	}
-	static Tensor& Memory(const Arguments& shape,
-	                      const DataType type = DataType::Float) {
+	static Tensor& Memory(const NodeArguments& shape,
+	                      const TFType type = TFType::Float) {
 		return Static("memory", shape, type);
 	}
 	static Tensor& Memory(const vector<int>& shape,
-		const DataType type = DataType::Float) {
+		const TFType type = TFType::Float) {
 		return Memory(GetShapeTensors(shape), type);
 	}
 
@@ -405,44 +405,44 @@ class Tensor {
 			//check if tensor is a negative constant
 			if (tensor->node_->name == "const" && (*(int*)&(tensor->data[0])) < 0)
 			{
-				Tensor& mem = Static("input_shape", DataType::Int);
-				mem.node_->special_index_ = dim;
+				Tensor& mem = Static("input_shape", TFType::Int);
+				mem.node_->special_indices_[0] = dim;
 				result.push_back(&mem);
 			}
-			else 
+			else
 			{
 				result.push_back(tensor);
 			}
 		}
 		return result;
 	}
-	 
-	static Tensor& Input(const DataType type = DataType::Float) {
+
+	static Tensor& Input(const TFType type = TFType::Float) {
 		Tensor& output = Memory(type);
 		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static Tensor& Input(const Tensors& shape,
-	                     const DataType type = DataType::Float) {
+	                     const TFType type = TFType::Float) {
 		Tensor& output = Memory(GetInputShapeTensors(shape), type);
 		output.SetMemoryType(MemoryType::Input);
 		return output;
 	}
 	static Tensor& Input(const vector<int>& shape,
-	                     const DataType type = DataType::Float) {
+	                     const TFType type = TFType::Float) {
 		return Input(GetShapeTensors(shape), type);
 	}
 
-	static Tensor& Index(Arguments shape, int dim) {
-		Tensor& output = Static("dim_id", shape, DataType::Int);
+	static Tensor& Index(NodeArguments shape, int dim) {
+		Tensor& output = Static("dim_id", shape, TFType::Int);
 		output.data = std::vector<uint>(1, dim);
-		output.type = DataType::Int;
+		output.type = TFType::Int;
 		return output;
 	}
 	static Tensor& Index(Tensors shape, int dim) {
-		Tensor& output = Static("dim_id", shape, DataType::Int);
+		Tensor& output = Static("dim_id", shape, TFType::Int);
 		output.data = std::vector<uint>(1, dim);
-		output.type = DataType::Int;
+		output.type = TFType::Int;
 		return output;
 	}
 	static Tensor& Index(const vector<int>& shape, int dim) {
@@ -450,29 +450,29 @@ class Tensor {
 	}
 
 	static Tensor& ThreadIndex(const Tensors& shape) {
-		Tensor& output = Static("thread_id", shape, DataType::Int);
-		output.type = DataType::Int;
+		Tensor& output = Static("thread_id", shape, TFType::Int);
+		output.type = TFType::Int;
 		return output;
 	}
 
 	Tensor& ThreadIndex() const {
 		Tensor& output = Static(
-		    "thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
-		output.type = DataType::Int;
+		    "thread_id", node_->args.GetArguments(ArgType::Shape), TFType::Int);
+		output.type = TFType::Int;
 		return output;
 	}
 
 	Tensor& BlockIndex() const {
 		Tensor& output = Static(
-		    "block_id", node_->GetArguments(ArgType::Shape), DataType::Int);
-		output.type = DataType::Int;
+		    "block_id", node_->args.GetArguments(ArgType::Shape), TFType::Int);
+		output.type = TFType::Int;
 		return output;
 	}
 
 	Tensor& BlockThreadIndex(int i) const {
 		Tensor& output = Static(
-		    "block_thread_id", node_->GetArguments(ArgType::Shape), DataType::Int);
-		output.type = DataType::Int;
+		    "block_thread_id", node_->args.GetArguments(ArgType::Shape), TFType::Int);
+		output.type = TFType::Int;
 		output.data = std::vector<uint>(1, i);
 		return output;
 	}
@@ -485,10 +485,10 @@ class Tensor {
 	}
 
 	Tensor& Index(int dim) const {
-		Tensor& output = Static("dim_id", node_->GetArguments(ArgType::Shape),
-		                        DataType::Int);
+		Tensor& output = Static("dim_id", node_->args.GetArguments(ArgType::Shape),
+		                        TFType::Int);
 		output.data = std::vector<uint>(1, dim);
-		output.type = DataType::Int;
+		output.type = TFType::Int;
 		return output;
 	}
 
@@ -562,7 +562,7 @@ class Tensor {
 	static Tensor& Min(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_min", tensor, axis);
 	}
-	
+
 	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 
@@ -580,7 +580,7 @@ class Tensor {
 		return output;
 	}
 
-	//dot product of 
+	//dot product of
 	static Tensor& Dot(const Tensor& tensor1, const Tensor& tensor2, int axis = -1) {
 		Tensors shape = tensor1.GetShape();
 		int dims = (int)shape.size();
@@ -678,7 +678,7 @@ class Tensor {
 	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
 
 	void Enter() const
-	{ 
+	{
 		evaluation_context_ir_->BeginScope(node_->child);
 	}
 
@@ -728,7 +728,7 @@ class Tensor {
 
 	static Tensor& Kernel(const Tensors shape) {
 		// create the kernel
-		Tensor& kernel = Static("kernel", shape, DataType::None);
+		Tensor& kernel = Static("kernel", shape, TFType::None);
 		return kernel;
 	}
 
@@ -749,21 +749,21 @@ class Tensor {
 		return kernel;
 	}
 
-	static Tensor& Kernel(const Arguments& shape)
+	static Tensor& Kernel(const NodeArguments& shape)
 	{
 		// create the kernel
-		Tensor& kernel = Static("kernel", shape, DataType::None);
+		Tensor& kernel = Static("kernel", shape, TFType::None);
 		return kernel;
 	}
 
 	static void Break() {
 		// create the break
-		Tensor& break_tensor = Static("break", DataType::None);
+		Tensor& break_tensor = Static("break", TFType::None);
 	}
 
 	static void Continue() {
 		// create the continue
-		Tensor& continue_tensor = Static("continue", DataType::None);
+		Tensor& continue_tensor = Static("continue", TFType::None);
 	}
 
 	// destructor

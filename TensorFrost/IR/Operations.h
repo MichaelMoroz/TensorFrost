@@ -15,7 +15,7 @@ namespace TensorFrost {
 using namespace std;
 
 extern "C" {
-	enum DataType {
+	enum TFType {
 		Float,
 		Uint,
 		Int,
@@ -24,7 +24,7 @@ extern "C" {
 	};
 }
 
-extern std::unordered_map<DataType, string> DataTypeNames;
+extern std::unordered_map<TFType, string> DataTypeNames;
 
 enum class OpClass {
 	Operator,
@@ -56,15 +56,15 @@ enum class OpClass {
 	Copy,
 };
 
-using DataTypeList = vector<DataType>;
+using DataTypeList = vector<TFType>;
 
-DataTypeList Types(initializer_list<DataType> elements);
+DataTypeList Types(initializer_list<TFType> elements);
 
 class Operation {
 public:
 	string name_;
 	float cost_ = 0.0F;
-	vector<pair<vector<DataType>, DataType>> overloads_;
+	vector<pair<vector<TFType>, TFType>> overloads_;
 	string code_;
 	vector<OpClass> op_classes;
 
@@ -93,24 +93,24 @@ public:
 		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool,
 		// uint, float in, float out
 		for (const auto& oload : overloads) {
-			vector<DataType> inputs;
-			DataType output = DataType::None;
+			vector<TFType> inputs;
+			TFType output = TFType::None;
 			bool is_output = false;
 
 			for (const auto& c : oload) {
-				DataType parsed_type = DataType::None;
+				TFType parsed_type = TFType::None;
 				switch (c) {
 					case 'f':
-						parsed_type = DataType::Float;
+						parsed_type = TFType::Float;
 						break;
 					case 'u':
-						parsed_type = DataType::Uint;
+						parsed_type = TFType::Uint;
 						break;
 					case 'i':
-						parsed_type = DataType::Int;
+						parsed_type = TFType::Int;
 						break;
 					case 'b':
-						parsed_type = DataType::Bool;
+						parsed_type = TFType::Bool;
 						break;
 					case '_':
 						is_output = true;
@@ -153,7 +153,7 @@ public:
 
 	string GetName() const { return name_; }
 
-	vector<pair<vector<DataType>, DataType>> GetOverloads() const {
+	vector<pair<vector<TFType>, TFType>> GetOverloads() const {
 		return overloads_;
 	}
 
@@ -161,7 +161,7 @@ public:
 		return overloads_[0].first.size();
 	}
 
-	bool IsInputValid(const vector<DataType>& input_types) const {
+	bool IsInputValid(const vector<TFType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;
@@ -182,7 +182,7 @@ public:
 		return false;
 	}
 
-	bool IsOutputValid(const DataType& output_type) const {
+	bool IsOutputValid(const TFType& output_type) const {
 		for (const auto& overload : overloads_) {
 			if (overload.second == output_type) {
 				return true;
@@ -191,8 +191,8 @@ public:
 		return false;
 	}
 
-	DataType GetOutputType(
-	    const vector<DataType>& input_types) const {
+	TFType GetOutputType(
+	    const vector<TFType>& input_types) const {
 		for (const auto& overload : overloads_) {
 			if (overload.first.size() != input_types.size()) {
 				continue;
@@ -216,7 +216,7 @@ public:
 
 const Operation* FindOperation(const string& name);
 
-string DataTypeToString(DataType type);
+string DataTypeToString(TFType type);
 
 string RemoveSpaces(string str);
 

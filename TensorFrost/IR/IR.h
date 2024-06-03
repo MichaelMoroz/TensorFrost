@@ -18,16 +18,6 @@ namespace TensorFrost {
 class Tensor;
 class Node;
 
-class Lable {
- public:
-	Node* node_;
-	explicit Lable(Node* node) : node_(node) {}
-
-	Node* operator*() const { return node_; }
-	Node* operator->() const { return node_; }
-	Node* get() const { return node_; }
-};
-
 enum class ArgType {
 	Input,
 	Index,
@@ -37,34 +27,9 @@ enum class ArgType {
 	Count,
 };
 
-class Arg {
- public:
-	static inline const map<ArgType, string> type_names = {
-	    {ArgType::Input, "Input"}, {ArgType::Index, "Index"}, {ArgType::Shape, "Shape"},
-		{ArgType::Memory, "Memory"}, {ArgType::None, "None"},
-	};
+string TypeToString(ArgType type);
 
-	static string TypeToString(ArgType type) { return type_names.at(type); }
-
-	ArgType type_;
-	Lable* from_;
-	Lable* to_{nullptr};
-	int index_;
-
-	Arg(ArgType type, Lable* node, int index)
-	    : type_(type), from_(node), index_(index) {}
-
-	void SetOutput(Lable* output) { to_ = output; }
-
-	~Arg();
-};
-
-using ArgMap = map<int, const Arg*>;
-using Arguments = vector<Arg>;
-using ArgumentRefs = vector<const Arg*>;
 using Tensors = vector<const Tensor*>;
-
-int MaxIndexCount(ArgMap& map);
 
 enum class MemoryType {
 	None,
@@ -80,8 +45,16 @@ enum class TensorIndexingMode {
 	Zero,
 };
 
-
+//argument type and index
 using ArgID = pair<ArgType, int>;
+//input nodes with argument type and index
+using NodeArguments = map<ArgID, Node*>;
+//argument type and input node
+using Arg = pair<ArgID, Node*>;
+//argument type and input/output node - edge of the graph
+using ArgEdge = pair<Arg, Node*>;
+//vector of edges
+using ArgEdges = vector<ArgEdge>;
 
 struct HashArgID {
 	size_t operator()(const ArgID& id) const {
@@ -91,48 +64,76 @@ struct HashArgID {
 
 class ArgumentManager {
 private:
+	Node* node_;
 	bool add_parenthesis = false;
-	unordered_map<ArgID, DataType, HashArgID> argument_types_;
+	unordered_map<ArgID, TFType, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
 	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
-
 public:
-	unordered_map<ArgID, Node*, HashArgID> arguments_;
+	unordered_map<ArgID, Node*, HashArgID> inputs_;
+	ArgEdges outputs_;
 
-	ArgumentManager() {}
+	ArgumentManager(Node* node) {
+		if (node == nullptr) {
+			throw std::runtime_error("Node is null");
+		}
+		this->node_ = node;
+	}
 
 	void AddParenthesis(bool add) {
 		add_parenthesis = add;
 	}
 
-	void AddArgument(Arg* arg);
+	void AddOutput(ArgID id, Node* node) {
+		outputs_.push_back({{id, node_}, node});
+	}
+
+	void UpdateOutputs();
+	void ClearOutputs();
+
+	void AddArgument(ArgID id, Node *node);
+	void AddArgument(ArgType type, int index, Node *node) {
+		AddArgument(ArgID(type, index), node);
+	}
+
+	void UpdateArgument(ArgID id, Node *node);
+
+	void AddArguments(NodeArguments new_args) {
+		for (auto& [id, node] : new_args) {
+			AddArgument(id, node);
+		}
+	}
 
 	void SetName(ArgID id, string name, bool requires_parenthesis = false) {																																																		
 		argument_names_[id] = name; 
 	    argument_requires_parenthesis_[id] = requires_parenthesis;
 	}
 
-	bool Has(ArgType type, int index = 0) {
-		ArgID id = ArgID(type, index);
-		return arguments_.find(id) != arguments_.end();
+	bool Has(ArgID id) const {
+		return inputs_.find(id) != inputs_.end();
 	}
 
-	Node* Get(ArgType type, int index = 0) {
+	bool Has(ArgType type, int index = 0) const {
 		ArgID id = ArgID(type, index);
-		auto Arg = arguments_.find(id);
-		if (Arg != arguments_.end()) {
+		return Has(id);
+	}
+
+	Node* Get(ArgType type, int index = 0) const {
+		ArgID id = ArgID(type, index);
+		auto Arg = inputs_.find(id);
+		if (Arg != inputs_.end()) {
 			return Arg->second;
 		} else {
 			throw std::runtime_error("Argument not found");
 		}
 	}
 
-	const Tensor *GetTensor(ArgType type, int index = 0);
+	const Tensor *GetTensor(ArgType type, int index = 0) const;
 
-	const Tensor& operator[](int index);
+	const Tensor& operator[](int index) const;
 
-	DataType Type(ArgType type, int index = 0) {
+	TFType Type(ArgType type, int index = 0) const {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_types_.find(id);
 		if (Arg != argument_types_.end()) {
@@ -143,7 +144,7 @@ public:
 		}
 	}
 
-	int Count(ArgType type) {
+	int Count(ArgType type) const {
 		auto Arg = argument_counts_.find(type);
 		if (Arg != argument_counts_.end()) {
 			return Arg->second;
@@ -153,12 +154,22 @@ public:
 		}
 	}
 
-	string Name(ArgType type, int index = 0) {
+	bool RequiresParenthesis(ArgID id) const {
+		auto Arg = argument_requires_parenthesis_.find(id);
+		if (Arg != argument_requires_parenthesis_.end()) {
+			return Arg->second;
+		}
+		else {
+			return false;
+		}
+	}
+
+	string Name(ArgType type, int index = 0) const {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_names_.find(id);
 		if (Arg != argument_names_.end()) {
 			string name = Arg->second;
-			if (add_parenthesis && argument_requires_parenthesis_[id]) {
+			if (add_parenthesis && RequiresParenthesis(id)) {
 				name = "(" + name + ")";
 			}
 			return name;
@@ -167,6 +178,34 @@ public:
 			throw std::runtime_error("Argument name not found");
 		}
 	}
+
+	NodeArguments GetArguments() const {
+		NodeArguments arguments;
+		for (auto& [id, node] : inputs_) {
+			arguments[id] = node;
+		}
+		return arguments;
+	}
+
+	NodeArguments GetArguments(ArgType type) const {
+		NodeArguments arguments;
+		for (auto& [id, node] : inputs_) {
+			if (id.first == type) {
+				arguments[id] = node;
+			}
+		}
+		return arguments;
+	}
+
+	map<int, const Tensor *> GetTensors(ArgType type) const;
+
+	~ArgumentManager();
+
+	bool CannotMoveArgument(ArgID id);
+	bool CannotCopyArgument(ArgID id);
+	bool IsChangingInput(ArgID arg);
+
+	void RemoveArguments(ArgType arg);
 };
 
 enum class NodeFlag {
@@ -194,33 +233,13 @@ class Node {
 	const Operation* op;
 	const Tensor* tensor_;
 
-	Lable* lable_ = nullptr;
-
-	Arguments inputs_;
-	vector<Arg*> outputs_;
+	ArgumentManager args;
 	MemoryType memory_type_ = MemoryType::None;
-	int special_index_ = 0;
-
-	unordered_map<NodeFlag, int> flags_;
-
-	void AddFlag(NodeFlag flag, int value = 1) {
-		flags_[flag] = value;
-	}
-
-	template<typename ...Args>
-	bool HasAllFlags(Args... args) {
-		for (auto flag : {args...}) {
-			if (!flags_.contains(flag)) {
-				return false;
-			}
-		}
-		return true;
-	}
-
+	map<int, int> special_indices_;
 	bool has_been_modified_ = false;
 	bool is_static = false;
 
-	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev) {}
+	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {}
 
     bool valid() {
         return !placeholder;
@@ -245,7 +264,7 @@ class Node {
 	}
 
     //initialize and create next/child placeholders
-    void initialize(Tensor* tensor, Arguments&& new_args, string&& new_name, bool set_static = false) {
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, bool set_static = false) {
         if(valid()) {
             throw runtime_error("Node already initialized");
         }
@@ -253,11 +272,10 @@ class Node {
         placeholder = false;
 
 		tensor_ = tensor;
-		    inputs_ = std::move(new_args);
+		args.AddArguments(std::move(new_args));
+		args.UpdateOutputs();
 		name = std::move(new_name);
-		lable_ = new Lable(this);
 		is_static = set_static;
-		UpdateArgumentOutputs();
 		op = FindOperation(name);
 		CheckNode();
 		indexing_mode_ = TensorIndexingMode::Clamp;
@@ -267,7 +285,7 @@ class Node {
 		name = other->name;
 		has_been_modified_ = other->has_been_modified_;
 		debug_name = other->debug_name;
-		special_index_ = other->special_index_;
+		special_indices_ = other->special_indices_;
 		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
@@ -275,7 +293,7 @@ class Node {
 
 	void CopyMetadata(Node* other) {
 		debug_name = other->debug_name;
-		special_index_ = other->special_index_;
+		special_indices_ = other->special_indices_;
 		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
@@ -283,8 +301,6 @@ class Node {
 	}
 
 	const Tensor* GetTensor() const;
-
-	Lable* GetLable() const { return lable_; }
 
 	void SetAsModified()
 	{
@@ -297,19 +313,6 @@ class Node {
 	}
 
 	int TryComputeShape();
-
-	void UpdateArgumentOutputs() {
-		for (Arg& input : inputs_) {
-			input.SetOutput(lable_);
-		}
-	}
-
-	void UpdateOutputs() {
-		for (auto& input : inputs_) {
-			input.SetOutput(GetLable());
-			input.from_->get()->outputs_.push_back(&input);
-		}
-	}
 
 	int ComputeDepth(Node* root = nullptr) const {
 		int depth = 0;
@@ -335,12 +338,13 @@ class Node {
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
 	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1, bool make_modified = false) {
-		for (Arg* output : outputs_) {
-			if (output->to_->get()->index_ >= min_index) {
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
+			if (to->index_ >= min_index) {
 				if(make_modified) {
 					replacement->has_been_modified_ = true;
 				}
-				output->from_ = replacement->GetLable();
+				to->args.UpdateArgument(id, replacement);
 			}
 		}
 	}
@@ -390,76 +394,7 @@ class Node {
 			throw std::runtime_error("Memory type already set. Are you trying to output an input?");
 		}
 		memory_type_ = memory_type;
-		special_index_ = index;
-	}
-
-	int MaxIndex(ArgType type) const {
-		int max_index = 0;
-		for (const auto& input : inputs_) {
-			if (input.type_ == type) {
-				max_index = std::max(max_index, input.index_);
-			}
-		}
-		return max_index;
-	}
-
-	Arguments GetArguments(ArgType type) const {
-		Arguments result = Arguments();
-		for (const auto& input : inputs_) {
-			if (input.type_ == type) {
-				result.push_back(input);
-			}
-		}
-		// sort by index
-		std::sort(result.begin(), result.end(),
-		          [](const Arg& a, const Arg& b) {
-			          return a.index_ < b.index_;
-		          });
-		return result;
-	}
-
-	ArgMap GetArgumentMap(ArgType type) const {
-		ArgMap result = ArgMap();
-		for (auto& input : inputs_) {
-			if (input.type_ == type) {
-				result[input.index_] = &input;
-			}
-		}
-		return result;
-	}
-	
-	ArgumentManager GetArgumentManager() {
-		ArgumentManager result = ArgumentManager();
-		for (auto& input : inputs_) {
-			result.AddArgument(&input);
-		}
-		return result;
-	}
-
-	map<int, const Tensor*> GetArgumentTensors(
-	    ArgType type) const {
-		// get the arguments
-		Arguments arguments = GetArguments(type);
-		// convert to tensors
-		map<int, const Tensor*> result = map<int, const Tensor*>();
-		for (auto& argument : arguments) {
-			result[argument.index_] = argument.from_->node_->GetTensor();
-		}
-		return result;
-	}
-
-	void RemoveArguments(ArgType type) {
-		for (auto it = inputs_.begin(); it != inputs_.end();) {
-			if (it->type_ == type) {
-				it = inputs_.erase(it);
-			} else {
-				++it;
-			}
-		}
-	}
-
-	void AddArgument(Node* node, ArgType type, int index = 0) {
-		inputs_.emplace_back(type, node->GetLable(), index);
+		special_indices_[0] = index;
 	}
 
 	void CheckNode() const {
@@ -480,24 +415,28 @@ class Node {
 		int last_index = -1;
 		Node* loop_node = latest_node->GetParent("loop");
 		bool has_loop = loop_node != latest_node;
-		for (auto& output : outputs_) {
-			if (output->type_ != ArgType::Memory) {
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
+			bool is_memory = false;
+			if (id.first != ArgType::Memory) {
+				is_memory = true;
+			}
+			if (is_memory) {
 				continue;
 			}
-			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpClass::Modifier)) {
-				if (output_node->index_>last_index) {
+			if (to->op->HasAllTypes(OpClass::Modifier)) {
+				if (to->index_>last_index) {
 					// either find the last modifier or the last memory node
 					// or if there is a loop, find the last modifier inside the loop (i.e.
 					// the previous iteration's modifier)
 					// if the loop is scalar, then it doesn't matter
-					bool before_latest = output_node->index_ < latest_node->index_;
-					bool inside_loop = has_loop && output_node->HasParent(loop_node);
-					bool not_same = output_node != latest_node;
+					bool before_latest = to->index_ < latest_node->index_;
+					bool inside_loop = has_loop && to->HasParent(loop_node);
+					bool not_same = to != latest_node;
 					if ((before_latest || inside_loop) && not_same)
 					{
-						last_index = output_node->index_;
-						last_modifier = output_node;
+						last_index = to->index_;
+						last_modifier = to;
 					}
 				}
 			}
@@ -508,15 +447,19 @@ class Node {
 	Node* GetFinalVersion() {
 		Node* final_version = this;
 		int last_index = -1;
-		for (auto& output : outputs_) {
-			if (output->type_ != ArgType::Memory) {
+		for (auto [edge, to] : args.outputs_) {
+			auto& [id, from] = edge;
+			bool is_memory = false;
+			if (id.first != ArgType::Memory) {
+				is_memory = true;
+			}
+			if (is_memory) {
 				continue;
 			}
-			Node* output_node = output->to_->get();
-			if (output_node->op->HasAllTypes(OpClass::Modifier) && !output_node->op->HasAllTypes(OpClass::MemoryOp)) {
-				if (output_node->index_ > last_index) {
-					last_index = output_node->index_;
-					final_version = output_node;
+			if (to->op->HasAllTypes(OpClass::Modifier) && !to->op->HasAllTypes(OpClass::MemoryOp)) {
+				if (to->index_ > last_index) {
+					last_index = to->index_;
+					final_version = to;
 				}
 			}
 		}
@@ -525,9 +468,6 @@ class Node {
 
 	~Node();
 };
-
-void SwapLables(Node* a, Node* b);
-void CopyLable(Node* target, Node* copy);
 
 //NodeIterator is a depth first iterator that iterates through the child nodes of a root node
 class NodeIterator {
@@ -674,16 +614,13 @@ class ShapeInfo {
 		name = shape_info->name;
 	}
 
-	ShapeInfo(ArgMap shape, string name) {
-		for (auto& [index, arg] : shape) {
-			AddShape(arg->index_, arg->from_->node_);
+	ShapeInfo(const Node* node) {
+		dim = node->args.Count(ArgType::Shape);
+		for (int i = 0; i < dim; i++) {
+			AddShape(i, node->args.Get(ArgType::Shape, i));
 		}
-		this->name = name;
+		this->name = node->var_name != "" ? node->var_name : node->name;
 	}
-
-	ShapeInfo(const Node* node)
-	    : ShapeInfo(node->GetArgumentMap(ArgType::Shape),
-	                node->var_name != "" ? node->var_name : node->name) {}
 
 	void AddShape(int index, Node* node) {
 		if(shape.size() <= index) {
@@ -714,11 +651,11 @@ class ShapeInfo {
 		return tensors;
 	}
 
-	Arguments GetArguments() const {
+	NodeArguments GetArguments() const {
 		CheckValidity(true);
-		Arguments arguments;
+		NodeArguments arguments;
 		for (int i = 0; i < shape.size(); i++) {
-			arguments.emplace_back(ArgType::Shape, shape[i]->GetLable(), i);
+			arguments[ArgID(ArgType::Shape, i)] = shape[i];
 		}
 		return arguments;
 	}
@@ -828,7 +765,7 @@ public:
         return NodeIterator(root);
     }
 
-    Node* AddNode(Tensor* tensor, Arguments&& args, string&& name) {
+    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name) {
         if (cursor->valid()) { //already initialized, add new node before cursor
             Node* newNode = new Node(cursor->prev, cursor->parent);
 			if (cursor->prev) 
@@ -919,7 +856,7 @@ public:
 	void GetInputList();
 	void GetOutputList();
 	void ComputeStatistics();
-	void CopyArguments(unordered_set<Arg*> args_to_copy, Node* cursor);
+	void CopyArguments(ArgEdges args_to_copy, Node *cursor);
 	map<Node*, Node*> CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
 	                          unordered_map<int, Node*> indices, Node* cursor);
 	void ReorderOperations();
@@ -938,7 +875,8 @@ public:
 	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
-	map<Node*, vector<Arg*>> GetKernelOutputs(Node* kernel);
+
+	map<Node *, ArgEdges> GetKernelOutputs(Node *kernel);
 	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);
 	void AddKernelGlobalLoadOperations();
 	void AddMemoryOpIndices();
@@ -959,7 +897,7 @@ public:
 		Node* prev = nullptr;
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateEdges();
-			node->outputs_.clear();
+			node->args.ClearOutputs();
 			if (prev) {
 				prev->true_next = *node;
 				node->true_prev = prev;
@@ -967,33 +905,49 @@ public:
 			prev = *node;
 		}
 
+		int index = 0;
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->index_ = index++;
+		}
+
+		map<Node*, string> invalid_nodes;
 		// check if graph is valid
 		for (auto node = begin(); !node.end(); node.next()) {
 			// if there are null inputs throw an error
-			for (auto& input : (*node)->inputs_) {
-				if (!input.from_) {
-					throw std::runtime_error("Null input found in node " +
-					                         (*node)->var_name +
-					                         ". Likely an icorrectly deleted node.");
+			for (auto& [id, n] : (*node)->args.inputs_) {
+				if (n == nullptr) {
+					throw std::runtime_error("Null input found in node " + (*node)->var_name + ". Likely an icorrectly deleted node.");
+				} else if (n->index_ > (*node)->index_) { //if input node is after current node, throw an error
+					invalid_nodes[*node] = "Argument " + TypeToString(id.first) + ":" +
+										to_string(id.second) + " " + n->var_name + " is after current node";
 				}
 			}
 		}
 
+		if(invalid_nodes.size() > 0) {
+			throw std::runtime_error("Invalid graph: " + PrintListing(invalid_nodes));
+		}
+
 		// update outputs
-		int index = 0;    
 		for (auto node = begin(); !node.end(); node.next()) {
-			node->UpdateOutputs();
-			node->index_ = index++;
+			node->args.UpdateOutputs();
 		}
 
 		//update modified flags
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->has_been_modified_ = false;
 			//go over all outputs and check if they are modifiers
-			for (auto& output : node->outputs_) {
-				if (output->to_->get()->op->HasAllTypes(OpClass::Modifier) && output->type_ == ArgType::Memory) {
-					node->has_been_modified_ = true;
-					break;
+			for (auto [edge, to] : node->args.outputs_) {
+				auto& [id, from] = edge;
+				if (to->op->HasAllTypes(OpClass::Modifier)) {
+					bool is_memory = false;
+					if (id.first != ArgType::Memory) {
+						is_memory = true;
+					}
+					if (!is_memory) {
+						node->has_been_modified_ = true;
+						break;
+					}
 				}
 			}
 		}
@@ -1034,8 +988,8 @@ public:
 	int readbacks = 0;
 	int writebacks = 0;
 
-	vector<Node*> memory_inputs;
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
+	unordered_map<int, Node*> input_memory_map;
 	unordered_map<int, Node*> output_memory_map;
 };
 }  // namespace TensorFrost

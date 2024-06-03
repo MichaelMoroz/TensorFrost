@@ -8,7 +8,9 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 
 #if defined(_WIN32)
 #include <windows.h>
