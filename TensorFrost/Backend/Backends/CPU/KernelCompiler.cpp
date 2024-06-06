@@ -6,7 +6,7 @@ namespace TensorFrost {
 
 std::string kernel_compile_options;
 
-bool RunCompiler(char* tempPath, char* dllName) {
+bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 	std::basic_stringstream<char> ss;
 
 #if defined(_WIN32)
@@ -20,7 +20,7 @@ bool RunCompiler(char* tempPath, char* dllName) {
 	//what the fu..
 	ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl " 
 	   << kernel_compile_options << " /LD " << tempPath
-	   << "generated_lib.cpp /Fe:" << dllName 
+	   << sourcePath << " /Fe:" << dllName
 	   << "\"\"\\\"\"";  // MSVC
 #else
 	if (kernel_compile_options.empty()) {
@@ -101,10 +101,11 @@ bool RunCompiler(char* tempPath, char* dllName) {
 }
 
 void CompileKernelLibrary(const string& sourceCode, char* tempPath,
-                          char* dllName) {
+                          char* dllName, size_t program_id) {
 	// Append a file name to the tempPath
+	std::string source_name = "generated_lib_" + std::to_string(program_id) + ".cpp";
 	std::basic_stringstream<char> ss;
-	ss << tempPath << "generated_lib.cpp";  // Choose an appropriate file name
+	ss << tempPath << source_name;
 	std::basic_string<char> full_file_path = ss.str();
 
 	const std::string& file_path(full_file_path);
@@ -120,10 +121,10 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 	out_file << sourceCode;
 	out_file.close();
 
-	RunCompiler(tempPath, dllName);
+	RunCompiler(tempPath, dllName, source_name.c_str());
 }
 
-void CompileAndLoadKernelModule(Program* program) {
+void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 #if defined(_WIN32)
 	char temp_path[MAX_PATH];
 	DWORD path_length = GetTempPath(MAX_PATH, temp_path);
@@ -149,7 +150,7 @@ void CompileAndLoadKernelModule(Program* program) {
 	cout << "Temp file: " << temp_file_name << endl;
 
 	// Compile the library
-	CompileKernelLibrary(program->generated_code_, temp_path, temp_file_name);
+	CompileKernelLibrary(program->generated_code_, temp_path, temp_file_name, program_id);
 
 	// Load the library
 	#if defined(_WIN32)

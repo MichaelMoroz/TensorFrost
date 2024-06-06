@@ -20,6 +20,28 @@ Tensors TensorsFromTuple(const py::tuple& tuple) {
 	return tensors;
 }
 
+tuple<PyTensor*, PyTensor*, PyTensor*> SliceToTensors(const py::slice& slice) {
+	PyObject* pyslice = slice.ptr();
+	PySliceObject* slice_obj = (PySliceObject*)pyslice;
+	PyObject* start = slice_obj->start;
+	PyObject* stop = slice_obj->stop;
+	PyObject* step = slice_obj->step;
+
+	py::object start_obj = py::reinterpret_borrow<py::object>(start);
+	py::object stop_obj = py::reinterpret_borrow<py::object>(stop);
+	py::object step_obj = py::reinterpret_borrow<py::object>(step);
+
+	PyTensor* start_tensor = nullptr;
+	PyTensor* stop_tensor = nullptr;
+	PyTensor* step_tensor = nullptr;
+
+	start_tensor = &start_obj.cast<PyTensor&>();
+	stop_tensor = &stop_obj.cast<PyTensor&>();
+	step_tensor = &step_obj.cast<PyTensor&>();
+
+	return {start_tensor, stop_tensor, step_tensor};
+}
+
 //Tensors TensorsFromTensorIndices(const Tensor* t, const py::tuple& tuple) {
 //	Tensors tensors;
 //	for (auto arg : tuple) {

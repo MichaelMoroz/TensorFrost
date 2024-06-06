@@ -33,6 +33,7 @@ class TFOpenGLBuffer: public TFBufferTemplate {
 	}
 
 	void UpdateCache(size_t data_offset, size_t data_size, const uint32_t* data) {
+		return;
 		if(data_offset == 0 && data_size == used_size && data_size <= max_cache_size) {
 			if(cached_data == nullptr) {
 				cached_data = new uint32_t[data_size];

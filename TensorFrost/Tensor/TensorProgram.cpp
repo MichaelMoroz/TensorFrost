@@ -35,7 +35,7 @@ void TensorProgram::CreateProgram(string name) {
 
 	if (current_backend != BackendType::CodeGen) // no need to compile if we are in codegen mode
 	{
-		CompileAndLoadKernelModule(program);
+		CompileAndLoadKernelModule(program, program_id);
 		CompileKernels(program);
 	}
 
@@ -66,5 +66,7 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Compiler time: " + to_string(external_compile_time) + " ms\n";
 	return properties;
 }
+
+size_t TensorProgram::program_id = 0;
 
 }  // namespace TensorFrost
