@@ -23,6 +23,12 @@ public:
 		data = new uint32_t[size];
 	}
 
+	void UpdateName(const char* new_name) override {
+		if(new_name != nullptr) {
+			name = new_name;
+		}
+	}
+
 	void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) override {
 		memcpy(this->data + offset, data.data(), data.size() * sizeof(uint32_t));
 	}

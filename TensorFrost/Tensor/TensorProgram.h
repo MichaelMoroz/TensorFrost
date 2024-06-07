@@ -17,6 +17,7 @@ using namespace std;
 
 class TensorProgram {
  public:
+	static size_t program_id;
 	using EvaluateFunction = function<Tensors()>;
 	EvaluateFunction evaluate_callback;
 	IR ir;
@@ -27,6 +28,7 @@ class TensorProgram {
 
 	explicit TensorProgram(EvaluateFunction evaluate, string name) : evaluate_callback(std::move(evaluate)) {
 		CreateProgram(name);
+		program_id++;
 	}
 
 	void CreateProgram(string name);

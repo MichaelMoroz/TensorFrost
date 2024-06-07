@@ -1,6 +1,6 @@
 import TensorFrost as tf
 import numpy as np
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
 
 #dynamic size QR decomposition
 def QRDecomposition():

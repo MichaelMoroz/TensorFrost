@@ -32,6 +32,6 @@ using namespace std;
 
 extern std::string kernel_compile_options;
 
-void CompileAndLoadKernelModule(Program* program);
+void CompileAndLoadKernelModule(Program* program, size_t program_id);
 
 }  // namespace TensorFrost

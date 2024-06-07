@@ -21,6 +21,7 @@ extern "C" {
 		size_t time_since_used = 0;
 		bool up_to_date = false;
 		bool read_only = false;
+		const char* name = nullptr;
 		//add type descriptor (for special kinds of buffers)
 	};
 
@@ -42,7 +43,7 @@ extern "C" {
 		size_t work_group_count;
 	};
 
-	typedef TFTensor alloc_func(const size_t*, size_t, TFType, void*);
+	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFType, void*);
 	typedef void dealloc_func(TFTensor, void*);
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
@@ -65,6 +66,9 @@ class TFBufferTemplate : public TFBuffer {
 public:
 	TFBufferTemplate(size_t size) : TFBuffer(size) {}
 
+	virtual void UpdateName(const char* name) {
+		throw std::runtime_error("UpdateName not implemented");
+	}
 	virtual void SetDataAtOffset(size_t offset, const vector<uint32_t>& data) {
 		throw std::runtime_error("SetDataAtOffset not implemented");
 	}
@@ -109,8 +113,8 @@ public:
 	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data);
 	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value);
 
-	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFType type = TFType::Float);
-	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false);
+	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFType type = TFType::Float, const char* name = nullptr);
+	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false, const char* name = nullptr);
 	void DeallocateTensor(TFTensor tensor);
 
 	size_t GetAllocatedSize() const;

@@ -164,8 +164,8 @@ const vector<Operation> operations = {
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
     Operation("smoothstep", {"fff_f"}, 10),
-    Operation("ternary", {"bff_f", "buu_u", "bii_i"}, 4, "", {OpClass::TernaryOperator}),
-    Operation("const", {"_f", "_u", "_i"}, 0, "", {OpClass::Constant, OpClass::Nondiff}),
+    Operation("ternary", {"bff_f", "buu_u", "bii_i", "bbb_b"}, 4, "", {OpClass::TernaryOperator}),
+    Operation("const", {"_f", "_u", "_i", "_b"}, 0, "", {OpClass::Constant, OpClass::Nondiff}),
 };
 
 unordered_map<string, const Operation*> CreateOperationMap() {
