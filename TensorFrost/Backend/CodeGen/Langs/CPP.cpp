@@ -253,6 +253,7 @@ extern "C" {
 		size_t time_since_used = 0;
 		bool up_to_date = false;
 		bool read_only = false;
+		const char* name = nullptr;
 		//add type descriptor (for special kinds of buffers)
 	};
 
@@ -274,7 +275,7 @@ extern "C" {
 		size_t work_group_count;
 	};
 
-	typedef TFTensor alloc_func(const size_t*, size_t, TFType, void*);
+	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFType, void*);
 	typedef void dealloc_func(TFTensor, void*);
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
@@ -288,6 +289,7 @@ extern "C" {
 		dispatch_func* dispatch;
 		void* custom_data;
 	};
+
 }
 
 class TFContext
@@ -341,7 +343,7 @@ TFTensor TFContext::allocate(std::string name, std::initializer_list<size_t> sha
 		}
 	}
 
-	return runtime.alloc(shape_arr, dim, type, runtime.custom_data);
+	return runtime.alloc(name.c_str(), shape_arr, dim, type, runtime.custom_data);
 }
 
 void TFContext::deallocate(TFTensor tensor)

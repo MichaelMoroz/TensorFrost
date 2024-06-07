@@ -68,9 +68,9 @@ void CompileKernels(Program* program) {
 	}
 }
 
-TFTensor Allocator(const size_t* a, size_t dim, TFType type, void* data) {
+TFTensor Allocator(const char* name, const size_t* a, size_t dim, TFType type, void* data) {
 	vector<size_t> shape(a, a + dim);
-	return *global_memory_manager->AllocateTensor(shape, type);
+	return *global_memory_manager->AllocateTensor(shape, type, name);
 }
 
 void Deallocator(TFTensor a, void* data) {
@@ -120,9 +120,7 @@ vector<TFTensor*> ExecuteProgram(
 		StartDebugRegion(program->program_name);
 	}
 
-	TFRuntime runtime = {Allocator, Deallocator, Readback, Writeback, Dispatch, nullptr};
-
-	program->execute_callback(in, out, runtime);
+	program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, nullptr});
 
 	if (current_backend == BackendType::OpenGL) {
 		EndDebugRegion();

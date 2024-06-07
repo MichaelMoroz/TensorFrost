@@ -33,7 +33,7 @@ TFBuffer * TensorMemoryManager::AllocateBuffer(size_t size) {
     return buffer;
 }
 
-TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, const TFType type) {
+TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, const TFType type, const char* name) {
     size_t size = GetLinearSize(shape);
 
     if (size == 0) {
@@ -42,12 +42,13 @@ TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, cons
 
     TFBuffer* buf = TryAllocateBuffer(size);
     buf->read_only = false;
+    ((TFBufferTemplate*)buf)->UpdateName(name);
     return MakeTensor(shape, buf, type);
 }
 
 TFTensor * TensorMemoryManager::AllocateTensorWithData(const vector<size_t> &shape, const vector<uint32_t> &data,
-    const TFType type, bool read_only) {
-    TFTensor* tensor_memory = AllocateTensor(shape, type);
+    const TFType type, bool read_only, const char* name) {
+    TFTensor* tensor_memory = AllocateTensor(shape, type, name);
     tensor_memory->buffer->read_only = read_only;
     ((TFBufferTemplate*)tensor_memory->buffer)->SetDataAtOffset(0, data);
     return tensor_memory;
@@ -97,6 +98,7 @@ void TensorMemoryManager::DeallocateBuffer(TFBuffer *buffer) {
     buffer->time_since_used = 0;
     buffer->used_size = 0;
     buffer->up_to_date = false;
+    buffer->name = "none";
 }
 
 void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {

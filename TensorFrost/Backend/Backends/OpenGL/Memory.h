@@ -32,6 +32,13 @@ class TFOpenGLBuffer: public TFBufferTemplate {
 		glNamedBufferStorage(buffer, size * sizeof(uint32_t), nullptr, GL_DYNAMIC_STORAGE_BIT);
 	}
 
+	void UpdateName(const char* new_name) override {
+		if(new_name != nullptr && strcmp(new_name, "") != 0) {
+			name = new_name;
+			glObjectLabel(GL_BUFFER, buffer, -1, name);
+		}
+	}
+
 	void UpdateCache(size_t data_offset, size_t data_size, const uint32_t* data) {
 		return;
 		if(data_offset == 0 && data_size == used_size && data_size <= max_cache_size) {
