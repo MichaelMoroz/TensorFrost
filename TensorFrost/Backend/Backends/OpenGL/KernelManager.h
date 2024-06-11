@@ -58,7 +58,7 @@ class OpenGLKernelManager : public KernelManager {
 	void CompileKernel(Kernel* kernel) 
 	{
 	#ifndef NDEBUG
-		cout << "Compiling kernel \n" << kernel->generated_code_ << endl;
+		cout << "Compiling kernel \n" << kernel->full_generated_code_ << endl;
 	#endif
 		//print out source if debug is enabled
 		GLuint program = createShaderProgram(kernel->full_generated_code_);
