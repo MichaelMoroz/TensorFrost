@@ -68,7 +68,7 @@ void TensorProgramDefinition(py::module& m,
 	tensor_program.def("get_kernels", [](TensorProgram& program) {
 		vector<string> kernel_source;
 		for (auto& kernel : program.program->kernels_) {
-			kernel_source.push_back(kernel.generated_code_);
+			kernel_source.push_back(kernel.full_generated_code_);
 		}
 		return kernel_source;
 	});

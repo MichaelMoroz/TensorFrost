@@ -515,7 +515,7 @@ void GenerateCode(Program* program) {
 		GenerateKernel(program, &kernel);
 
 		if (current_backend == BackendType::CPU) {
-			final_source += kernel.generated_code_;
+			final_source += kernel.full_generated_code_;
 		}
 
 		dispatch_code[kernel.root] = "tf.dispatch(" + to_string(kernel.kernel_id_) + ", " + read_write_args + ",  " + read_only_args + ", " + variable_args + ", " + shape_args + ", " + group_args + ")";
@@ -634,7 +634,10 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	    "{\n" + loop +
 	    "}\n";
 
-	kernel->generated_code_ = kernel_source;
+	kernel->full_generated_code_ = kernel_source;
+	kernel->generated_header_ = "";
+	kernel->generated_bindings_ = "";
+	kernel->generated_main_ = kernel_source;
 }
 
 }  // namespace TensorFrost

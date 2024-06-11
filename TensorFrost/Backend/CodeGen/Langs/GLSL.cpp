@@ -95,8 +95,6 @@ uint asuint(uint x) {
 int asint(uint x) {
   return int(x);
 }
-
-uniform uint var[32];
 )";
 }
 
@@ -125,10 +123,11 @@ float atomicAdd_)" + name + R"((int index, float val) {
 }
 
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
-	string final_source = GetGLSLHeader();
+	kernel->generated_header_ = GetGLSLHeader();
 
-	final_source += GetBufferDeclarations(kernel, GLSLBufferDeclaration);
-	final_source += "\n";
+	string buffers = GetBufferDeclarations(kernel, GLSLBufferDeclaration) + "\n";
+	buffers += "uniform uint var[32];\n";
+	kernel->generated_bindings_ = buffers;
 
 	vector<int> group_size = kernel->root->group_size;
 	//reverse vector
@@ -138,10 +137,10 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 		group_size.push_back(1);
 	}
 
-	final_source += "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
+	string main_code = "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
 
 
-	final_source += R"(
+	main_code += R"(
 void main() {
   int block_id = int(gl_WorkGroupID.x);
   int block_thread_id0 = int(gl_LocalInvocationID.x);
@@ -154,11 +153,13 @@ void main() {
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
-	final_source += AddIndent(kernel_code, "  ");
+	main_code += AddIndent(kernel_code, "  ");
 
-	final_source += "}\n";
+	main_code += "}\n";
 
-    kernel->generated_code_ = final_source;
+    kernel->generated_main_ = main_code;
+
+	kernel->full_generated_code_ = kernel->generated_header_ + kernel->generated_bindings_ + kernel->generated_main_;
 }
 
 }  // namespace TensorFrost
