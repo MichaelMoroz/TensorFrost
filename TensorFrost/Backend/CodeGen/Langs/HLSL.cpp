@@ -83,8 +83,6 @@ struct UBO
 	uint var[32];
 };
 
-cbuffer ubo : register(b0) { UBO ubo; }
-
 )";
 }
 
@@ -93,10 +91,10 @@ string HLSLBufferDeclaration(const string& name, const string& type_name, const 
 }
 
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
-	string final_source = GetHLSLHeader();
+	kernel->generated_header_ = GetHLSLHeader();
 
-	final_source += GetBufferDeclarations(kernel, HLSLBufferDeclaration);
-	final_source += "\n";
+	kernel->generated_bindings_ = GetBufferDeclarations(kernel, HLSLBufferDeclaration) + "\n";
+	kernel->generated_bindings_ += "cbuffer ubo : register(b0) { UBO ubo; }\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector
@@ -106,9 +104,9 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 		group_size.push_back(1);
 	}
 
-	final_source += "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
+	string main_function = "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
 
-	final_source += R"(
+	main_function += R"(
 void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
   int block_id = gid.x;
@@ -122,11 +120,12 @@ void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
-	final_source += AddIndent(kernel_code, "  ");
+	main_function += AddIndent(kernel_code, "  ");
 
-	final_source += "}\n";
+	main_function += "}\n";
+	kernel->generated_main_ = main_function;
 
-    kernel->generated_code_ = final_source;
+	kernel->full_generated_code_ = kernel->generated_header_ + kernel->generated_bindings_ + kernel->generated_main_;
 }
 
 }  // namespace TensorFrost

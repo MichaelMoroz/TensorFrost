@@ -24,7 +24,8 @@ class KernelManager
 	virtual void DispatchKernel(TFDispatchInfo info) = 0;
 	void AddKernelID(Program* program, Kernel* kernel);
 	vector<string> GetAllMainFunctions();
-	vector<tuple<string, vector<tuple<string, int, string>>>> GetAllKernels();
+
+	vector<tuple<tuple<string, string, string>, vector<tuple<string, string>>>> GetAllKernels();
 };
 
 extern KernelManager* global_kernel_manager;
