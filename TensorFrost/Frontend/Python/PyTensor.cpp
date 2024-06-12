@@ -116,28 +116,22 @@ Tensors TensorsFromList(const py::list& list) {
 	return tensors;
 }
 
-PyTensors PyTensorsFromVector(const std::vector<Tensor*>& tensors) {
-	PyTensors py_tensors;
-	for (auto tensor : tensors) {
-		py_tensors.push_back(new PyTensor(tensor));
-	}
-	return py_tensors;
-}
-
-Tensors TensorsFromVector(const std::vector<PyTensor*>& tensors) {
-	Tensors ts;
-	for (auto tensor : tensors) {
-		ts.push_back(&tensor->Get());
-	}
-	return ts;
-}
-
 PyTensors PyTensorsFromTensors(const Tensors& tensors) {
 	PyTensors py_tensors;
 	for (const auto* tensor : tensors) {
 		py_tensors.push_back(new PyTensor(tensor));
 	}
 	return py_tensors;
+}
+
+std::variant<PyTensor *, py::tuple> PyTensorsToTupleVariant(const PyTensors &tensors) {
+	if (tensors.size() == 1) {
+		//if there is only one tensor, return the tensor
+		return tensors[0];
+	} else {
+		//convert to py::tuple of PyTensor*
+		return py::tuple(py::cast(tensors));
+	}
 }
 
 void UpdateTensorNames() {

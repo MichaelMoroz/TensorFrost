@@ -62,11 +62,9 @@ bool ArgumentManager::IsChangingInput(ArgID arg) {
 
 
 Node* Node::GetLastChild() {
-	Node* last = nullptr;
-	for (NodeIterator it = NodeIterator(this); !it.end(); it.next()) {
-		last = it.get();
-	}
-	return last;
+	NodeIterator it = NodeIterator(this);
+	for (; !it.end(); it.go_to_next()) {}
+	return it.get();
 }
 
 inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
@@ -149,38 +147,42 @@ KernelScope::KernelScope(Node* node,
 		}
 	}
 
-	unordered_set<KernelScope*> child_scopes = ComputeScopes(node);
+	pair<unordered_set<KernelScope*>, bool> all_scopes = ComputeScopes(node);
+	auto child_scopes = all_scopes.first;
+	bool host_only = all_scopes.second;
+
+	if(host_only) {
+		begin = nullptr;
+		end = nullptr;
+		return;
+	}
 
 	int scope_count = (int)child_scopes.size();
 	if (scope_count == 0) return;
 
 	output_scopes.insert(child_scopes.begin(), child_scopes.end());
 
-	if (scope_count == 1) {
-		KernelScope* child_scope = *child_scopes.begin();
-		AddBoundaryNodes(child_scope->boundary_nodes);
+	KernelScope* child_scope = *child_scopes.begin();
+	AddBoundaryNodes(child_scope->boundary_nodes);
 
-		ShapeCompareResult result =
-		    CompareShape(scope_shape, child_scope->scope_shape, true);
+	ShapeCompareResult result =
+	    CompareShape(scope_shape, child_scope->scope_shape, true);
 
-		if (result.compatible) {
-			scope_shape = result.broadcast_shape;
-		} else {
-			throw std::runtime_error("Something went wrong");
-			// this node cant be in the scope if it has incompatible shapes
-			begin = nullptr;
-			end = nullptr;
-		}
+	if (result.compatible) {
+		scope_shape = result.broadcast_shape;
 	} else {
-		// this node cant be in the scope if it has multiple child scopes
+		throw std::runtime_error("Something went wrong");
+		// this node cant be in the scope if it has incompatible shapes
 		begin = nullptr;
 		end = nullptr;
 	}
+
 }
 
-std::unordered_set<KernelScope*> KernelScope::ComputeScopes(Node* root) {
+pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *root) {
 	std::unordered_set<KernelScope*> scopes;
 	KernelScope* current_scope = new KernelScope();
+	bool host_only = false;
 	for (auto node = NodeIterator(root); !node.end(); node.go_to_next()) {
 		std::unordered_set<KernelScope*> child_scopes;
 		KernelScope* node_scope = new KernelScope(node.get(), child_scopes);
@@ -203,12 +205,13 @@ std::unordered_set<KernelScope*> KernelScope::ComputeScopes(Node* root) {
 			}
 			// create a new empty scope
 			current_scope = new KernelScope();
+			host_only = true;
 		}
 	}
 	if (current_scope->IsValid()) {
 		scopes.insert(current_scope);
 	}
-	return scopes;
+	return {scopes, host_only};
 }
 
 KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
