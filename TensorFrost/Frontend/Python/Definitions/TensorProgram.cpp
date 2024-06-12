@@ -19,12 +19,17 @@ void TensorProgramDefinition(py::module& m,
 		        [py_evaluate]() -> Tensors {
 			        py::gil_scoped_acquire acquire;
 			        py::object result = py_evaluate();
-			        auto py_outputs = py::cast<vector<PyTensor>>(result);
-			        Tensors outputs = Tensors();
-			        for (PyTensor output : py_outputs) {
-				        outputs.push_back(&output.Get());
-			        }
-			        return outputs;
+					Tensors outputs;
+					//if the result is a single tensor
+		        	if (py::isinstance<PyTensor>(result)) {
+		        		outputs.push_back(&py::cast<PyTensor&>(result).Get());
+		        	} else {
+		        		auto py_outputs = py::cast<vector<PyTensor>>(result);
+						for (PyTensor output : py_outputs) {
+							outputs.push_back(&output.Get());
+						}
+		        	}
+		        	return outputs;
 		        },
 		        func_name);
 		    
@@ -35,19 +40,30 @@ void TensorProgramDefinition(py::module& m,
 
 	tensor_program.def(
 	    "__call__",
-	    [](TensorProgram& program, py::args py_inputs) {
+	    [](TensorProgram& program, py::args py_inputs) -> std::variant<PyTensorMemory*, py::tuple> {
 		    vector<PyTensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
 	    	vector<TFTensor*> inputs_props;
 	    	for (auto input : inputs) {
 	    		inputs_props.push_back(input->tensor_);
 	    	}
 		    vector<TFTensor*> outputs = program.Evaluate(inputs_props);
-		    // output a tuple of tensor memories
-		    py::tuple py_outputs = py::tuple(outputs.size());
-		    for (size_t i = 0; i < outputs.size(); i++) {
-			    py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
-		    }
-		    return py_outputs;
+		    // // output a tuple of tensor memories
+		    // py::tuple py_outputs = py::tuple(outputs.size());
+		    // for (size_t i = 0; i < outputs.size(); i++) {
+			   //  py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
+		    // }
+		    // return py_outputs;
+	    	//if there is only one output, return the tensor memory
+	    	if (outputs.size() == 1) {
+	    		return new PyTensorMemory(outputs[0]);
+	    	} else {
+	    		//convert to py::tuple of PyTensorMemory*
+	    		py::tuple py_outputs = py::tuple(outputs.size());
+	    		for (size_t i = 0; i < outputs.size(); i++) {
+	    			py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
+	    		}
+	    		return py_outputs;
+	    	}
 	    },
 	    "Evaluate the TensorProgram with the given inputs");
 

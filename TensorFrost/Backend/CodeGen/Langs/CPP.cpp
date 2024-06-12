@@ -535,7 +535,11 @@ void GenerateCode(Program* program) {
 	    "main"
 	    "(TFTensor* in, TFTensor* out, TFRuntime runtime)\n"
 	    "{\n"
-		"  auto outputs = " + program->program_name + "(TFContext(runtime), ";
+		"  auto outputs = " + program->program_name + "(TFContext(runtime)";
+
+	if (input_count > 0) {
+		host_code += ", ";
+	}
 
 	for (int i = 0; i < input_count; i++) {
 		host_code += "in[" + to_string(i) + "]";
@@ -568,8 +572,10 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
 			main_code += ", ";
 		}
 	}
-	main_code += "> " + program->program_name + "(TFContext tf, ";
-
+	main_code += "> " + program->program_name + "(TFContext tf";
+	if (input_count > 0) {
+		main_code += ", ";
+	}
 	for (int i = 0; i < input_count; i++) {
 		Node* input_node = program->ir_->input_memory_map[i];
 		main_code += "TFTensor " + input_node->var_name;
