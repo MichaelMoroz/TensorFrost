@@ -4,6 +4,8 @@
 #include <Frontend/Python/PyTensor.h>
 #include <Frontend/Python/PyTensorMemory.h>
 
+#include "Backend/RenderDoc.h"
+
 namespace TensorFrost {
 
 void WindowDefinitions(py::module& m) {
@@ -104,6 +106,13 @@ void WindowDefinitions(py::module& m) {
 	m.attr("KEY_X") = GLFW_KEY_X;
 	m.attr("KEY_Y") = GLFW_KEY_Y;
 	m.attr("KEY_Z") = GLFW_KEY_Z;
+
+
+	//renderdoc
+	m.def("renderdoc_start_capture", []() { StartRenderDocCapture(); },
+	      "Start a RenderDoc capture");
+	m.def("renderdoc_end_capture", []() { EndRenderDocCapture(); },
+	      "End a RenderDoc capture");
 }
 
 }  // namespace TensorFrost
