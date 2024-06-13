@@ -47,12 +47,7 @@ void TensorProgramDefinition(py::module& m,
 	    		inputs_props.push_back(input->tensor_);
 	    	}
 		    vector<TFTensor*> outputs = program.Evaluate(inputs_props);
-		    // // output a tuple of tensor memories
-		    // py::tuple py_outputs = py::tuple(outputs.size());
-		    // for (size_t i = 0; i < outputs.size(); i++) {
-			   //  py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
-		    // }
-		    // return py_outputs;
+
 	    	//if there is only one output, return the tensor memory
 	    	if (outputs.size() == 1) {
 	    		return new PyTensorMemory(outputs[0]);
