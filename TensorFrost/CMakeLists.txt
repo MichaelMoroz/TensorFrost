@@ -26,6 +26,9 @@ file(GLOB IMGUI_BACKEND_SOURCE_LIST ${CMAKE_SOURCE_DIR}/external/imgui/backends/
 
 target_sources(TensorFrost PRIVATE ${IMGUI_SOURCE_LIST} ${IMGUI_BACKEND_SOURCE_LIST})
 
+#add renderdoc headers
+target_include_directories(TensorFrost PRIVATE ${CMAKE_SOURCE_DIR}/external/renderdoc)
+
 add_custom_command(
     TARGET TensorFrost
     POST_BUILD

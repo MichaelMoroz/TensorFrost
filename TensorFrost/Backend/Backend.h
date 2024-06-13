@@ -13,6 +13,7 @@
 #include "CodeGen/Generators.h"
 #include "KernelManager.h"
 #include "TensorMemory.h"
+#include "RenderDoc.h"
 
 namespace TensorFrost {
 
