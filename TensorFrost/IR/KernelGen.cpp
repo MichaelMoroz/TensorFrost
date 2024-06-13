@@ -142,7 +142,7 @@ void IR::SeparateOperationsIntoKernels() {
 	auto kernel_scopes = KernelScope::ComputeScopes(root);
 
 	// create kernel nodes for all kernel scopes
-	for (auto scope : kernel_scopes) {
+	for (auto scope : kernel_scopes.first) {
 		// create kernel node before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
 			//create kernel node
@@ -1083,7 +1083,7 @@ void IR::AddKernelGlobalLoadOperations() {
 
 		for (auto node : nodes_to_load) {
 			// load the memory node at the beginning of the kernel
-			ExecuteExpressionChild(kernel, [&]() {
+			ExecuteExpressionFirstChild(kernel, [&]() {
 				Tensor& loaded = Tensor::Load(*node->GetTensor(), {}, true);
 				for (auto [in, out] : load_arguments[node]) {
 					auto& [arg, from] = in;
@@ -1106,7 +1106,7 @@ void IR::AddMemoryOpIndices() {
 
 		Tensors indices = Tensors();
 		// add dimension index nodes
-		ExecuteExpressionChild(kernel, [&]() {
+		ExecuteExpressionFirstChild(kernel, [&]() {
 			for (int i = 0; i < shape_args.size(); i++) {
 				indices.push_back(&Tensor::Index(shape_args, i));
 			}
@@ -1407,7 +1407,7 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
 {
 	//add dim_id nodes at the beginning of the kernel
-	ExecuteExpressionChild(kernel_, [&]() {
+	ExecuteExpressionFirstChild(kernel_, [&]() {
 		for (int i = 0; i < dims; i++) {
 			indices[i] = &Tensor::Index(kernel_shape, i);
 		}
@@ -1467,7 +1467,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 {
 	Tensor* block_index = nullptr;
 	Tensor* if_tensor = nullptr;
-	ExecuteExpressionChild(kernel_, [&]() {
+	ExecuteExpressionFirstChild(kernel_, [&]() {
 		block_index = &kernel_->GetTensor()->BlockIndex();
 
 		switch (dims)

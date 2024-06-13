@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#include <variant>
 
 #include <math.h>
 
@@ -677,12 +678,24 @@ class Tensor {
 
 	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
 
-	void Enter() const
+	Tensors enter_tensors = Tensors();
+	bool already_entered = false;
+
+	std::variant<Tensor*, Tensors> Enter()
 	{
-		evaluation_context_ir_->BeginScope(node_->child);
+		if(already_entered) {
+			throw std::runtime_error("Already entered node scope");
+		}
+		evaluation_context_ir_->BeginScopeLastChild(node_); //begin at the last child
+		already_entered = true;
+		if(enter_tensors.size() > 0) {
+			return enter_tensors; //if we have some special info, like indices of kernel threads
+		} else {
+			return const_cast<Tensor*>(this);
+		}
 	}
 
-	void Exit() const
+	void Exit()
 	{
 		evaluation_context_ir_->EndScope();
 	}
@@ -697,7 +710,7 @@ class Tensor {
 		// create the loop
 		Tensor& loop = Loop(start, end, step);
 
-		evaluation_context_ir_->ExecuteExpressionChild(loop.node_, [&]() {
+		evaluation_context_ir_->ExecuteExpressionFirstChild(loop.node_, [&]() {
 			// create the body
 			body(loop);
 		});
@@ -714,7 +727,7 @@ class Tensor {
 		// create the if
 		Tensor& if_tensor = If(condition);
 
-		evaluation_context_ir_->ExecuteExpressionChild(if_tensor.node_, [&]() {
+		evaluation_context_ir_->ExecuteExpressionFirstChild(if_tensor.node_, [&]() {
 			// create the body
 			body();
 		});
@@ -729,21 +742,21 @@ class Tensor {
 	static Tensor& Kernel(const Tensors shape) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, TFType::None);
+		evaluation_context_ir_->ExecuteExpressionFirstChild(kernel.node_, [&]() {
+			for (int i = 0; i < shape.size(); i++) {
+				kernel.enter_tensors.push_back(&Index(shape, i)); //thread indices
+			}
+		});
 		return kernel;
 	}
 
-	static Tensor& Kernel(const Tensors shape, const std::function<void(vector<Tensor*>)>& body) {
+	static Tensor& Kernel(const Tensors shape, const std::function<void(Tensors)>& body) {
 		// create the kernel
 		Tensor& kernel = Kernel(shape);
 
-		evaluation_context_ir_->ExecuteExpressionChild(kernel.node_, [&]() {
-			//create indices
-			vector<Tensor*> indices;
-			for (int i = 0; i < shape.size(); i++) {
-				indices.push_back(&Index(shape, i));
-			}
+		evaluation_context_ir_->ExecuteExpressionLastChild(kernel.node_, [&]() {
 			// create the body
-			body(indices);
+			body(kernel.enter_tensors);
 		});
 
 		return kernel;

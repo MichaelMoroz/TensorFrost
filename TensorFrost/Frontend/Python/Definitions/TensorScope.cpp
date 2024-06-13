@@ -55,10 +55,10 @@ void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor) {
 	    "kernel",
 	    [](py::list shape, const py::function& body) {
 		    // wrap the function to convert the PyTensor to Tensor
-		    std::function<void(const vector<Tensor*>&)> f2 =
-		        [&body](const vector<Tensor*>& tensors) {
+		    std::function<void(const Tensors&)> f2 =
+		        [&body](const Tensors& tensors) {
 			        py::gil_scoped_acquire acquire;
-			        PyTensors py_tensors = PyTensorsFromVector(tensors);
+			        PyTensors py_tensors = PyTensorsFromTensors(tensors);
 			        body(py_tensors);
 		        };
 

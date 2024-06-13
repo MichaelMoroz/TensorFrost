@@ -730,7 +730,7 @@ class KernelScope {
 
 	bool IsValid() const;
 
-	static std::unordered_set<KernelScope*> ComputeScopes(Node* root);
+	static pair<std::unordered_set<KernelScope *>, bool> ComputeScopes(Node *root);
 
 	static KernelScope* Merge(KernelScope* a, KernelScope* b);
 
@@ -816,15 +816,19 @@ public:
 
 	stack<Node*> scope_stack;
 
+	void EndScope() {
+		if (scope_stack.empty()) throw std::runtime_error("No scope to end");
+		SetCursor(scope_stack.top());
+		scope_stack.pop();
+	}
+
 	void BeginScope(Node* node) {
 		scope_stack.push(*cursor);
 		SetCursor(node);
 	}
 
-	void EndScope() {
-		if (scope_stack.empty()) throw std::runtime_error("No scope to end");
-		SetCursor(scope_stack.top());
-		scope_stack.pop();
+	void BeginScopeLastChild(Node* node) {
+		BeginScope(node->GetLastChild());
 	}
 
     void ExecuteExpressionAfter(Node* node, const function<void()>&& expression) {
@@ -839,8 +843,14 @@ public:
 		EndScope();
     }
 
-	void ExecuteExpressionChild(Node* node, const function<void()>&& expression) {
+	void ExecuteExpressionFirstChild(Node* node, const function<void()>&& expression) {
 		BeginScope(node->child);
+		expression();
+		EndScope();
+	}
+
+	void ExecuteExpressionLastChild(Node* node, const function<void()>&& expression) {
+		BeginScopeLastChild(node);
 		expression();
 		EndScope();
 	}
