@@ -86,6 +86,7 @@ class OpenGLKernelManager : public KernelManager {
 	void DispatchKernel(TFDispatchInfo info) override
 	{
 		GLuint program = kernel_map[info.kernel_id];
+		Kernel* kernel = GetKernel(info.kernel_id);
 		glUseProgram(program);
 
 		#ifndef NDEBUG
@@ -113,12 +114,10 @@ class OpenGLKernelManager : public KernelManager {
 		if (info.variable_count > 0)
 		{
 			// Set variables uniform array
-			std::vector<uint32_t> variables;
-			variables.resize(32);
 			for (size_t i = 0; i < info.variable_count; i++) {
-				variables[i] = info.variables[i];
+				string var_name = "var." + kernel->var_names[i];
+				glUniform1ui(getUniformLocation(program, var_name), info.variables[i]);
 			}
-			glUniform1uiv(getUniformLocation(program, "var"), (GLsizei)info.variable_count, variables.data());
 		}
 
 		// Dispatch the kernel

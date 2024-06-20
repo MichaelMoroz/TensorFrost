@@ -16,8 +16,8 @@ namespace TensorFrost {
 class KernelManager
 {
 	unordered_set<Program*> programs;
-	unordered_map<uint, Kernel*> kernel_map;
-	int global_kernel_id = 0;
+	unordered_map<size_t, Kernel*> kernel_map;
+	size_t global_kernel_id = 0;
  public:
 
 	KernelManager() = default;
@@ -26,6 +26,7 @@ class KernelManager
 	vector<string> GetAllMainFunctions();
 
 	vector<tuple<tuple<string, string, string>, vector<tuple<string, string>>>> GetAllKernels();
+	Kernel* GetKernel(size_t kernel_id) { return kernel_map[kernel_id]; }
 };
 
 extern KernelManager* global_kernel_manager;

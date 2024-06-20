@@ -18,8 +18,8 @@ void GenerateNodeNames(const IR& ir);
 string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
 string GetCPPHeader();
 string GetCPPImplementation();
-string GetHLSLHeader();
-string GetGLSLHeader();
+string GetHLSLHeader(Kernel* kernel);
+string GetGLSLHeader(Kernel* kernel);
 void GenerateMain(Program* program, map<Node*, string>& dispatch_code, int input_count, int output_count);
 void GenerateKernel(Program* program, Kernel* kernel);
 void GenerateCPPKernel(Program* program, Kernel* kernel);
@@ -48,6 +48,8 @@ class Line {
 };
 
 class CodeGenerator {
+protected:
+	unordered_map<string, string> name_map_;
  public:
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
@@ -61,7 +63,11 @@ class CodeGenerator {
 	Kernel* kernel = nullptr;
 	IR* ir = nullptr;
 
-	CodeGenerator(IR* ir) : ir(ir) {}
+	CodeGenerator(IR* ir) : ir(ir) {
+		name_map_ = {
+			{"var", "var_"},
+		};
+	}
 
 	void GenerateKernelCode(Kernel *kernel_);
 	void GenerateCode(const Node* root);
@@ -84,7 +90,7 @@ protected:
 			string name = node->var_name;
 			bool need_parenthesis = false;
 			if (variables.contains(node)) {
-				name = GetName("var") + "[" + to_string(variables[node]) + "]";
+				name = GetName("var") + name;
 				name = "as" + type_names[node->GetTensor()->type] + "(" + name + ")";
 			}
 			else
@@ -382,8 +388,13 @@ protected:
 		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
 	}
 
-	virtual string GetName(const string& name)
-	{
+	string GetName(const string& name) {
+		// Check if the function name is in the map
+		if (name_map_.find(name) != name_map_.end()) {
+			return name_map_[name];
+		}
+
+		// If not, return the original name
 		return name;
 	}
 };

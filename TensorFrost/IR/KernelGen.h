@@ -21,12 +21,14 @@ class Kernel {
 	map<Node*, size_t> read_only_memory;
 	NodeArguments shape;
 
-	uint kernel_id_;
+	size_t kernel_id_;
 	string kernel_name_;
 	string full_generated_code_;
 	string generated_header_;
 	string generated_bindings_;
 	string generated_main_;
+
+	vector<string> var_names;
 
 	map<Node*, size_t> GetMemoryBindings() {
 		map<Node*, size_t> result;
