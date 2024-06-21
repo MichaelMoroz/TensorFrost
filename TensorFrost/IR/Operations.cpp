@@ -8,6 +8,12 @@ unordered_map<TFType, string> type_names = {
     {TFType::Uint, "uint"}, {TFType::Int, "int"},
 };
 
+std::unordered_map<TFType, string> DataTypeNames = {
+	{TFType::Float, "Float"}, {TFType::Uint, "Uint"},
+	{TFType::Int, "Int"},     {TFType::Bool, "Bool"},
+	{TFType::None, "None"},
+};
+
 const vector<Operation> operations = {
     //Scope operations
     Operation("host", {""}, 0, "", {OpClass::Static, OpClass::Special, OpClass::HostOnly, OpClass::Nondiff}),
@@ -204,11 +210,5 @@ string RemoveSpaces(string str) {
 	str.erase(remove(str.begin(), str.end(), ' '), str.end());
 	return str;
 }
-
-std::unordered_map<TFType, string> DataTypeNames = {
-    {TFType::Float, "Float"}, {TFType::Uint, "Uint"},
-    {TFType::Int, "Int"},     {TFType::Bool, "Bool"},
-    {TFType::None, "None"},
-};
 
 }  // namespace TensorFrost

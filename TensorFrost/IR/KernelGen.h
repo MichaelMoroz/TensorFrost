@@ -29,6 +29,7 @@ class Kernel {
 	string generated_main_;
 
 	vector<string> var_names;
+	vector<string> var_types;
 
 	map<Node*, size_t> GetMemoryBindings() {
 		map<Node*, size_t> result;

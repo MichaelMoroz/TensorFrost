@@ -67,12 +67,14 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 
 )";
 	kernel->var_names = vector<string>(kernel->variables.size());
+	kernel->var_types = vector<string>(kernel->variables.size());
 	header += "\nstruct UBO {\n";
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
+		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
 	}
-	for (auto var : kernel->var_names) {
-		header += "  uint " + var + ";\n";
+	for (int i = 0; i < kernel->var_names.size(); i++) {
+		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";
 	}
 	if(kernel->var_names.size() == 0)
 	{

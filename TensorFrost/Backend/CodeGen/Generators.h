@@ -53,12 +53,6 @@ protected:
  public:
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
-
-	map<TFType, string> type_names = {
-	    {None, "void"},   {Bool, "bool"},
-	    {Float, "float"}, {Uint, "uint"},
-	    {Int, "int"},
-	};
 	
 	Kernel* kernel = nullptr;
 	IR* ir = nullptr;
@@ -91,10 +85,7 @@ protected:
 			bool need_parenthesis = false;
 			if (variables.contains(node)) {
 				name = GetName("var") + name;
-				name = "as" + type_names[node->GetTensor()->type] + "(" + name + ")";
-			}
-			else
-			{
+			} else {
 				string expr = node_expression[node];
 				bool is_memory = node->op->HasAllTypes(OpClass::Memory);
 				bool is_static = node->op->HasAllTypes(OpClass::Static) || 

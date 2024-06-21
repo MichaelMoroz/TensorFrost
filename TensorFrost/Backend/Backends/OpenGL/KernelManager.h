@@ -116,7 +116,18 @@ class OpenGLKernelManager : public KernelManager {
 			// Set variables uniform array
 			for (size_t i = 0; i < info.variable_count; i++) {
 				string var_name = "var." + kernel->var_names[i];
-				glUniform1ui(getUniformLocation(program, var_name), info.variables[i]);
+				GLint location = getUniformLocation(program, var_name);
+				if (kernel->var_types[i] == "float") {
+					glUniform1f(location, *(float*)&info.variables[i]);
+				} else if (kernel->var_types[i] == "int") {
+					glUniform1i(location, *(int*)&info.variables[i]);
+				} else if (kernel->var_types[i] == "uint") {
+					glUniform1ui(location, info.variables[i]);
+				} else if(kernel->var_types[i] == "bool") {
+					glUniform1i(location, info.variables[i]);
+				} else {
+					throw std::runtime_error("Unsupported variable type: " + kernel->var_types[i]);
+				}
 			}
 		}
 
