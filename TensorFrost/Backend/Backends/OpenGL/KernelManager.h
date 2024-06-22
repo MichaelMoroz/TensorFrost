@@ -16,7 +16,21 @@ namespace TensorFrost {
 class OpenGLKernelManager : public KernelManager {
 	unordered_map<size_t, GLuint> kernel_map;
 	const int WORK_GROUP_SIZE = 256;
+	GLuint ubo;
  public:
+	OpenGLKernelManager() {
+        glGenBuffers(1, &ubo);
+		//allocate sizeof(uint32_t) * 32 bytes
+		glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+		glBufferData(GL_UNIFORM_BUFFER, sizeof(uint32_t) * 32, nullptr, GL_DYNAMIC_DRAW);
+		glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    }
+
+	void UpdateUBO(const uint32_t* data, size_t size) {
+        glBindBuffer(GL_UNIFORM_BUFFER, ubo);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(uint32_t) * size, data);
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    }
 	
 	GLuint createComputeShader(const std::string& source) {
 		GLuint shader = glCreateShader(GL_COMPUTE_SHADER);
@@ -101,7 +115,6 @@ class OpenGLKernelManager : public KernelManager {
 		}
 		#endif
 
-
 		// Set uniforms
 		if (info.read_write_count == 0) throw std::runtime_error("No tensors provided to kernel");
 
@@ -113,23 +126,11 @@ class OpenGLKernelManager : public KernelManager {
 
 		if (info.variable_count > 0)
 		{
-			// Set variables uniform array
-			for (size_t i = 0; i < info.variable_count; i++) {
-				string var_name = "var." + kernel->var_names[i];
-				GLint location = getUniformLocation(program, var_name);
-				if (kernel->var_types[i] == "float") {
-					glUniform1f(location, *(float*)&info.variables[i]);
-				} else if (kernel->var_types[i] == "int") {
-					glUniform1i(location, *(int*)&info.variables[i]);
-				} else if (kernel->var_types[i] == "uint") {
-					glUniform1ui(location, info.variables[i]);
-				} else if(kernel->var_types[i] == "bool") {
-					glUniform1i(location, info.variables[i]);
-				} else {
-					throw std::runtime_error("Unsupported variable type: " + kernel->var_types[i]);
-				}
-			}
+			UpdateUBO(info.variables, info.variable_count);
 		}
+
+		// Bind the UBO
+		glBindBufferBase(GL_UNIFORM_BUFFER, 0, ubo);
 
 		// Dispatch the kernel
 		glDispatchCompute((GLuint)info.work_group_count, 1, 1);
@@ -168,6 +169,7 @@ class OpenGLKernelManager : public KernelManager {
 	~OpenGLKernelManager()
 	{
 		FreeAllKernels();
+		glDeleteBuffers(1, &ubo);
 	}
 };
 

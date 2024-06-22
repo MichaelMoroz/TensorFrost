@@ -133,7 +133,7 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_header_ = GetGLSLHeader(kernel);
 
 	string buffers = GetBufferDeclarations(kernel, GLSLBufferDeclaration) + "\n";
-	buffers += "uniform UBO var;\n";
+	buffers += "layout(std140) uniform UBOBlock {\n  UBO var;\n};\n\n";
 	kernel->generated_bindings_ = buffers;
 
 	vector<int> group_size = kernel->root->group_size;
