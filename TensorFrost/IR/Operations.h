@@ -25,6 +25,7 @@ extern "C" {
 }
 
 extern std::unordered_map<TFType, string> DataTypeNames;
+extern std::unordered_map<TFType, string> type_names;
 
 enum class OpClass {
 	Operator,

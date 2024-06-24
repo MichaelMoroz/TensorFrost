@@ -611,6 +611,16 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		return "  uint* " + name + "_mem = mem[" + to_string(binding) + "];\n";
 	});
 
+	kernel->var_names = vector<string>(kernel->variables.size());
+	kernel->var_types = vector<string>(kernel->variables.size());
+	for (auto var : kernel->variables) {
+		kernel->var_names[var.second] = var.first->var_name;
+		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+	}
+	for (int i = 0; i < kernel->var_names.size(); i++) {
+		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";
+	}
+
 	const int block_size = 4;
 	loop += "  #pragma omp parallel for\n";
 	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";

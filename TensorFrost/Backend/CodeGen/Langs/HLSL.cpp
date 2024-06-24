@@ -4,15 +4,12 @@ namespace TensorFrost {
 using namespace std;
 
 class HLSLGenerator : public CodeGenerator {
-	unordered_map<string, string> name_map_ = {
-	    {"off", "ubo.off"},
-	    {"var", "ubo.var"},
-	    {"dispatch_size", "ubo.dispatch_size"},
-
-	};
-
  public:
-	HLSLGenerator(IR* ir) : CodeGenerator(ir) {}
+	HLSLGenerator(IR* ir) : CodeGenerator(ir) {
+		name_map_ = {
+			{"var", "var."},
+		};
+	}
 
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
@@ -40,20 +37,10 @@ class HLSLGenerator : public CodeGenerator {
 			return op + "("+memory_name+"_mem[" + address + "], " + input + ")";
 		}
 	}
-
-	string GetName(const string& name) override {
-		// Check if the function name is in the map
-		if (name_map_.find(name) != name_map_.end()) {
-			return name_map_[name];
-		}
-
-		// If not, return the original name
-		return name;
-	}
 };
 
-string GetHLSLHeader() { 
-	return R"(
+string GetHLSLHeader(Kernel* kernel) {
+	string header =R"(
 uint pcg(uint v)
 {
 	uint state = v * 747796405u + 2891336453u;
@@ -78,12 +65,23 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
     return asfloat(tmp1);
 }
 
-struct UBO
-{
-	uint var[32];
-};
-
 )";
+	kernel->var_names = vector<string>(kernel->variables.size());
+	kernel->var_types = vector<string>(kernel->variables.size());
+	header += "\nstruct UBO {\n";
+	for (auto var : kernel->variables) {
+		kernel->var_names[var.second] = var.first->var_name;
+		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+	}
+	for (int i = 0; i < kernel->var_names.size(); i++) {
+		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";
+	}
+	if(kernel->var_names.size() == 0)
+	{
+		header += "  uint dummy;\n";
+	}
+	header += "};\n\n";
+	return header;
 }
 
 string HLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
@@ -91,10 +89,10 @@ string HLSLBufferDeclaration(const string& name, const string& type_name, const 
 }
 
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
-	kernel->generated_header_ = GetHLSLHeader();
+	kernel->generated_header_ = GetHLSLHeader(kernel);
 
 	kernel->generated_bindings_ = GetBufferDeclarations(kernel, HLSLBufferDeclaration) + "\n";
-	kernel->generated_bindings_ += "cbuffer ubo : register(b0) { UBO ubo; }\n";
+	kernel->generated_bindings_ += "cbuffer ubo : register(b0) { UBO var; }\n";
 
 	vector<int> group_size = kernel->root->group_size;
 	// reverse vector

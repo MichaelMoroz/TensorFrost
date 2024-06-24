@@ -239,13 +239,13 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 	return new_scope;
 }
 
-const map<ArgType, string> type_names = {
+const map<ArgType, string> arg_type_names = {
 	{ArgType::Input, "Input"}, {ArgType::Index, "Index"}, {ArgType::Shape, "Shape"},
 	{ArgType::Memory, "Memory"}, {ArgType::None, "None"},
 };
 
 string TypeToString(ArgType type) {
-	return type_names.at(type);
+	return arg_type_names.at(type);
 }
 
 }  // namespace TensorFrost

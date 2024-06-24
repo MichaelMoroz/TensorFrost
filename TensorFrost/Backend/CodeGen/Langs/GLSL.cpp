@@ -4,15 +4,16 @@ namespace TensorFrost {
 using namespace std;
 
 class GLSLGenerator : public CodeGenerator {
-	unordered_map<string, string> name_map_ = {
-		{"modf", "mod"},
-		{"atan2", "atan"},
-		{"lerp", "mix"},
-        {"reversebits", "bitfieldReverse"}
-	};
-
  public:
-	GLSLGenerator(IR* ir) : CodeGenerator(ir) {}
+	GLSLGenerator(IR* ir) : CodeGenerator(ir) {
+		name_map_ = {
+			{"var", "var."},
+			{"modf", "mod"},
+			{"atan2", "atan"},
+			{"lerp", "mix"},
+			{"reversebits", "bitfieldReverse"}
+		};
+	}
 
 	string TypeCast(string type_name, string input) override {
 		return type_name + "(" + input + ")";
@@ -50,20 +51,10 @@ class GLSLGenerator : public CodeGenerator {
 		}
 	}
 
-	string GetName(const string& name) override {
-		// Check if the function name is in the map
-		if (name_map_.find(name) != name_map_.end()) {
-			return name_map_[name];
-		}
-
-		// If not, return the original name
-		return name;
-	}
 };
 
-string GetGLSLHeader()
-{
-	return R"(
+string GetGLSLHeader(Kernel* kernel) {
+	string header = R"(
 #version 460
 
 uint pcg(uint v) {
@@ -96,6 +87,22 @@ int asint(uint x) {
   return int(x);
 }
 )";
+	kernel->var_names = vector<string>(kernel->variables.size());
+	kernel->var_types = vector<string>(kernel->variables.size());
+	header += "\nstruct UBO {\n";
+	for (auto var : kernel->variables) {
+		kernel->var_names[var.second] = var.first->var_name;
+		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+	}
+	for (int i = 0; i < kernel->var_names.size(); i++) {
+		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";
+	}
+	if(kernel->var_names.size() == 0)
+	{
+		header += "  uint dummy;\n";
+	}
+	header += "};\n\n";
+	return header;
 }
 
 string GLSLBufferDeclaration(const string& name, const string& type_name, const size_t binding) {
@@ -123,10 +130,10 @@ float atomicAdd_)" + name + R"((int index, float val) {
 }
 
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
-	kernel->generated_header_ = GetGLSLHeader();
+	kernel->generated_header_ = GetGLSLHeader(kernel);
 
 	string buffers = GetBufferDeclarations(kernel, GLSLBufferDeclaration) + "\n";
-	buffers += "uniform uint var[32];\n";
+	buffers += "layout(std140) uniform UBOBlock {\n  UBO var;\n};\n\n";
 	kernel->generated_bindings_ = buffers;
 
 	vector<int> group_size = kernel->root->group_size;

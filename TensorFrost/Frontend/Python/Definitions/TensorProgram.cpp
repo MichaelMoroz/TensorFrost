@@ -103,14 +103,6 @@ void TensorProgramDefinition(py::module& m,
 	m.def("get_cpp_implementation", []() {
 		return GetCPPImplementation();
 	});
-
-	m.def("get_glsl_header", []() {
-		return GetGLSLHeader();
-	});
-
-	m.def("get_hlsl_header", []() {
-		return GetHLSLHeader();
-	});
 }
 
 }  // namespace TensorFrost
