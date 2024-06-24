@@ -1701,6 +1701,62 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 	return reduced;
 }
 
+Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*, Tensor*)> scan_op, string debug_name = "", uint initial = 0) {
+	// Get shape of the array
+	Tensors shape = array->GetShape();
+
+	Tensor* scan_result = &Tensor::Memory(shape, array->type);
+
+	axis = GetAxis((int)shape.size(), axis);
+
+	// Get the number of dimensions
+	int dims = (int)shape.size();
+
+	Tensors sum_shape = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			continue;
+		}
+		sum_shape.push_back(shape[i]);
+	}
+
+	// get indices for all dimensions but the last
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims - 1; i++) {
+		indices.push_back(&Tensor::Index(sum_shape, i));
+	}
+
+	// if no dimensions, then add constant 1
+	if (sum_shape.empty()) {
+		sum_shape.push_back(&Tensor::Constant(1));
+	}
+
+	Tensors load_index = Tensors();
+	for (int id = 0, d = 0; d < dims; d++) {
+		if (d == axis) {
+			load_index.push_back(&Tensor::Constant(sum_shape, 0));
+		} else {
+			load_index.push_back(indices[id++]);
+		}
+	}
+
+	// start with the first value
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->type);
+	reduced->SetDebugName(debug_name);
+
+	// create a loop over the last dimension starting from the second value
+	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
+	[&](const Tensor& i) {
+		load_index[axis] = &i;
+		// load the value
+		Tensor* value = &Tensor::Load(*array, load_index, true);
+		reduced->Set(*scan_op(reduced, value));
+		Tensor::Store(*scan_result, *reduced, load_index, true);
+	});
+
+	return scan_result;
+}
+
 Tensor* ComputeSum(const Tensor* array, int axis) {
 	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) {
 	return &(*a + *b); }, "sum");
@@ -1766,6 +1822,10 @@ Tensor* ComputeAny(const Tensor* array, int axis) {
 Tensor* ComputeAll(const Tensor* array, int axis) {
 	return ComputeReduction(
 	    array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, "all", ~0);
+}
+
+Tensor* ComputePrefixSum(const Tensor* array, int axis) {
+	return ComputeScan(array, axis, [](Tensor* a, Tensor* b) { return &(*a + *b); }, "prefix_sum");
 }
 
 Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
@@ -1937,6 +1997,8 @@ void IR::InsertAlgorithmicPrimitives() {
 				result = ComputeAny(inputs[0], axes[0]);
 			} else if (node->name == "dim_all") {
 				result = ComputeAll(inputs[0], axes[0]);
+			} else if (node->name == "dim_prefix_sum") {
+				result = ComputePrefixSum(inputs[0], axes[0]);
 			} else if (node->name == "transpose") {
 				//get the permutation
 				int dim = (int)inputs[0]->GetDimension();

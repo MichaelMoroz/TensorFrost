@@ -221,6 +221,9 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
 	    py::arg("t"), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 
+	m.def("prefix_sum", [](const PyTensor& t, const int axis) { return PT(Tensor::PrefixSum(T(t), axis)); },
+	    py::arg("t"), py::arg("axis") = -1, "Compute the prefix sum of the tensor along the axis");
+
 	m.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
 		return PT(Tensor::Transpose(T(t), dim1, dim2));
 	}, py::arg("t"), py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");

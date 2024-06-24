@@ -139,6 +139,12 @@ Tensor & Tensor::ReductionOP(string name, const Tensor &tensor, int axis, bool k
 	return op;
 }
 
+Tensor & Tensor::ScanOP(string name, const Tensor &tensor, int axis) {
+	Tensor& op = Op(name, &tensor);
+	op.data = vector<uint>(1, axis);
+	return op;
+}
+
 Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);

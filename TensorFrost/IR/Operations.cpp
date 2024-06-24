@@ -44,7 +44,8 @@ const vector<Operation> operations = {
     Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}), // product of the last dimension
     Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm, OpClass::Nondiff}), // any of the last dimension
     Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm, OpClass::Nondiff}), // all of the last dimension
-	Operation("dim_scan", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
+	//Scan
+	Operation("dim_prefix_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
     //Matrix
     Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpClass::Algorithm}), // dot product of the last dimensions
