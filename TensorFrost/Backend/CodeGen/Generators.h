@@ -218,14 +218,14 @@ protected:
 					    (output_type == Uint)
 					        ? memory_expression
 					        : TypeReinterpret(output_type_name, memory_expression);
-					right += "; // " + args.Name(ArgType::Memory);
+					right += ";";
 				} else if (op->name_ == "store") {
 					expression += memory_expression + " = ";
 					expression +=
 					    (output_type == Uint)
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
-					right += "; // " + args.Name(ArgType::Memory);
+					right += ";";
 				} else if (op->HasAllTypes(OpClass::Scatter)) {
 					if (output_type != None) {
 						left += type_names[output_type] + " " + name + " = ";
@@ -235,7 +235,7 @@ protected:
 					expression += GenerateAtomicOp(op->name_, input_type_name,
 					                               output_type_name, address,
 					                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
-					right += "; // " + args.Name(ArgType::Memory);
+					right += ";";
 				}
 			} else {
 				string tensor_name = args.Name(ArgType::Memory);

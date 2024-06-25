@@ -1701,6 +1701,62 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 	return reduced;
 }
 
+Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*, Tensor*)> scan_op, string debug_name = "", uint initial = 0) {
+	// Get shape of the array
+	Tensors shape = array->GetShape();
+
+	Tensor* scan_result = &Tensor::Memory(shape, array->type);
+
+	axis = GetAxis((int)shape.size(), axis);
+
+	// Get the number of dimensions
+	int dims = (int)shape.size();
+
+	Tensors sum_shape = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			continue;
+		}
+		sum_shape.push_back(shape[i]);
+	}
+
+	// get indices for all dimensions but the last
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims - 1; i++) {
+		indices.push_back(&Tensor::Index(sum_shape, i));
+	}
+
+	// if no dimensions, then add constant 1
+	if (sum_shape.empty()) {
+		sum_shape.push_back(&Tensor::Constant(1));
+	}
+
+	Tensors load_index = Tensors();
+	for (int id = 0, d = 0; d < dims; d++) {
+		if (d == axis) {
+			load_index.push_back(&Tensor::Constant(sum_shape, 0));
+		} else {
+			load_index.push_back(indices[id++]);
+		}
+	}
+
+	// start with the first value
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->type);
+	reduced->SetDebugName(debug_name);
+
+	// create a loop over the last dimension starting from the second value
+	Tensor::Loop(Tensor::Constant(0), *shape[axis], Tensor::Constant(1),
+	[&](const Tensor& i) {
+		load_index[axis] = &i;
+		// load the value
+		Tensor* value = &Tensor::Load(*array, load_index, true);
+		reduced->Set(*scan_op(reduced, value));
+		Tensor::Store(*scan_result, *reduced, load_index, true);
+	});
+
+	return scan_result;
+}
+
 Tensor* ComputeSum(const Tensor* array, int axis) {
 	return ComputeReduction(array, axis, [](Tensor* a, Tensor* b) {
 	return &(*a + *b); }, "sum");
@@ -1768,6 +1824,10 @@ Tensor* ComputeAll(const Tensor* array, int axis) {
 	    array, axis, [](Tensor* a, Tensor* b) { return &(*a && *b); }, "all", ~0);
 }
 
+Tensor* ComputePrefixSum(const Tensor* array, int axis) {
+	return ComputeScan(array, axis, [](Tensor* a, Tensor* b) { return &(*a + *b); }, "prefix_sum");
+}
+
 Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	ShapeInfo shapeinfo = array->GetShapeInfo();
 	int old_dim = shapeinfo.dim;
@@ -1803,6 +1863,23 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 
 	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
 	loaded.SetDebugName("transposed");
+	return &loaded;
+}
+
+Tensor* ReverseDim(const Tensor* array, int axis) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	Tensors shape = shapeinfo.GetTensors();
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			indices.push_back(&(*shape[i] - Tensor::Constant(1) - Tensor::Index(shape, i)));
+		} else {
+			indices.push_back(&Tensor::Index(shape, i));
+		}
+	}
+	Tensor& loaded = Tensor::Load(*array, indices, true);
+	loaded.SetDebugName("reversed");
 	return &loaded;
 }
 
@@ -1937,6 +2014,8 @@ void IR::InsertAlgorithmicPrimitives() {
 				result = ComputeAny(inputs[0], axes[0]);
 			} else if (node->name == "dim_all") {
 				result = ComputeAll(inputs[0], axes[0]);
+			} else if (node->name == "dim_prefix_sum") {
+				result = ComputePrefixSum(inputs[0], axes[0]);
 			} else if (node->name == "transpose") {
 				//get the permutation
 				int dim = (int)inputs[0]->GetDimension();
@@ -1983,6 +2062,8 @@ void IR::InsertAlgorithmicPrimitives() {
 				}
 				result = Transpose(inputs[0], permutation);
 				result->SetDebugName("squeezed");
+			} else if (node->name == "dim_reverse") {
+				result = ReverseDim(inputs[0], axes[0]);
 			} else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
 			}
@@ -2337,8 +2418,20 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	{"dim_min", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.data[0]));
 	}},
-
-
+	{"dim_prefix_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		//b_i = a_0 + ... + a_i
+		//db_i/da_j = 1 if i >= j, 0 otherwise
+		//dL/da_j = sum_i dL/db_i * db_i/da_j
+		//dL/da_j = sum_i dL/db_i * (i >= j)
+		//g_i == dL/db_i
+		//dL/da_j = g_j + g_{j+1} + ... + g_n = g_n + g_{n-1} + ... + g_j
+		//c_i == g_{n-i}
+		//dL/da_j = c_0 + c_1 + ... + c_j = prefix_sum(c)_j
+		grads.Add(Tensor::PrefixSum(Tensor::Reverse(grad, out.data[0]), out.data[0]));
+	}},
+	{"reverse", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		grads.Add(Tensor::Reverse(grad, out.data[0]));
+	}},
 	//memory operations
 	{"load", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		//derivative of load is scatter gradient to the load memory addresses

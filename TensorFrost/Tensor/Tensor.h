@@ -543,6 +543,7 @@ class Tensor {
 	}
 
 	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1, bool keepdims = false);
+	static Tensor& ScanOP(string name, const Tensor& tensor, int axis = -1);
 
 	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_sum", tensor, axis);
@@ -562,6 +563,19 @@ class Tensor {
 
 	static Tensor& Min(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_min", tensor, axis);
+	}
+
+	static Tensor& PrefixSum(const Tensor& tensor, int axis = -1) {
+		return ScanOP("dim_prefix_sum", tensor, axis);
+	}
+
+	static Tensor& Reverse(const Tensor& tensor, int axis = -1) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		Tensor& output = OpShape("dim_reverse", shape, &tensor);
+		output.data = vector<uint>(1, axis);
+		return output;
 	}
 
 	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
