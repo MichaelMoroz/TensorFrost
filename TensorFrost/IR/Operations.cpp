@@ -50,14 +50,23 @@ const vector<Operation> operations = {
     Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpClass::Algorithm}), // dot product of the last dimensions
     Operation("matmul", {"ff_f"}, 0, "", {OpClass::Algorithm}), // matrix multiplication of the last dimensions
-    Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
-    Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
-	//Texture
+ 	//Texture
 	//Operation("interp1d", {"f_f"}, 0, "", {OpClass::Algorithm}),
 	//Operation("interp2d", {"f_f"}, 0, "", {OpClass::Algorithm}),
 	//Operation("interp3d", {"f_f"}, 0, "", {OpClass::Algorithm}),
+	//Other
+	Operation("dim_reverse", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("tile_reduce", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("dim_concat", {"ff_f", "uu_u", "ii_i", "bb_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("dim_pad", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("split_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	// Operation("merge_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpClass::Algorithm}),
+	Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
+	Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpClass::Algorithm}),
 
-    //Native operations (built-in shader operations, only for size <= 4)
+	//Native operations (built-in shader operations, only for size <= 4)
     //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
     //Operation("native_matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
     //Operation("native_norm", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
@@ -68,9 +77,6 @@ const vector<Operation> operations = {
 
     //Advanced
     //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
-    //stack and vector operations
-    //Operation("vector", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
-    //Operation("stack", {"_f", "_u", "_i"}, 0, "", {OpType::Special}),
 
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpClass::Static, OpClass::Gradient}),

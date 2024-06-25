@@ -569,6 +569,15 @@ class Tensor {
 		return ScanOP("dim_prefix_sum", tensor, axis);
 	}
 
+	static Tensor& Reverse(const Tensor& tensor, int axis = -1) {
+		Tensors shape = tensor.GetShape();
+		int dims = (int)shape.size();
+		axis = GetAxis(dims, axis);
+		Tensor& output = OpShape("dim_reverse", shape, &tensor);
+		output.data = vector<uint>(1, axis);
+		return output;
+	}
+
 	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 

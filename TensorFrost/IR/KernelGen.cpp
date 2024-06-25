@@ -1866,6 +1866,23 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	return &loaded;
 }
 
+Tensor* ReverseDim(const Tensor* array, int axis) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	Tensors shape = shapeinfo.GetTensors();
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			indices.push_back(&(*shape[i] - Tensor::Constant(1) - Tensor::Index(shape, i)));
+		} else {
+			indices.push_back(&Tensor::Index(shape, i));
+		}
+	}
+	Tensor& loaded = Tensor::Load(*array, indices, true);
+	loaded.SetDebugName("reversed");
+	return &loaded;
+}
+
 Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
 	Tensors shape_a = a->GetShape();
 	Tensors shape_b = b->GetShape();
@@ -2045,6 +2062,8 @@ void IR::InsertAlgorithmicPrimitives() {
 				}
 				result = Transpose(inputs[0], permutation);
 				result->SetDebugName("squeezed");
+			} else if (node->name == "dim_reverse") {
+				result = ReverseDim(inputs[0], axes[0]);
 			} else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
 			}
@@ -2399,8 +2418,20 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	{"dim_min", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.data[0]));
 	}},
-
-
+	{"dim_prefix_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		//b_i = a_0 + ... + a_i
+		//db_i/da_j = 1 if i >= j, 0 otherwise
+		//dL/da_j = sum_i dL/db_i * db_i/da_j
+		//dL/da_j = sum_i dL/db_i * (i >= j)
+		//g_i == dL/db_i
+		//dL/da_j = g_j + g_{j+1} + ... + g_n = g_n + g_{n-1} + ... + g_j
+		//c_i == g_{n-i}
+		//dL/da_j = c_0 + c_1 + ... + c_j = prefix_sum(c)_j
+		grads.Add(Tensor::PrefixSum(Tensor::Reverse(grad, out.data[0]), out.data[0]));
+	}},
+	{"reverse", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		grads.Add(Tensor::Reverse(grad, out.data[0]));
+	}},
 	//memory operations
 	{"load", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		//derivative of load is scatter gradient to the load memory addresses
