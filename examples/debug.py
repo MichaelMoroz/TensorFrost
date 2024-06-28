@@ -70,13 +70,28 @@ tf.initialize(tf.cpu)
 # print(d.numpy)
 # print(e.numpy)
 
-def PrefixSumGrad():
-    data = tf.input([128], tf.float32)
+def Trilinear(tex, x, y, z):
+    xi, yi, zi = tf.floor(x), tf.floor(y), tf.floor(z)
+    xf, yf, zf = x-xi, y-yi, z-zi
+    xi, yi, zi = tf.int(xi), tf.int(yi), tf.int(zi)
+    oxf, oyf, ozf = 1.0-xf, 1.0-yf, 1.0-zf
+    return tex[xi, yi, zi]*oxf*oyf*ozf + tex[xi+1, yi, zi]*xf*oyf*ozf + tex[xi, yi+1, zi]*oxf*yf*ozf + tex[xi+1, yi+1, zi]*xf*yf*ozf + tex[xi, yi, zi+1]*oxf*oyf*zf + tex[xi+1, yi, zi+1]*xf*oyf*zf + tex[xi, yi+1, zi+1]*oxf*yf*zf + tex[xi+1, yi+1, zi+1]*xf*yf*zf
 
-    a = tf.sin(data)
-    prefix = tf.cos(tf.prefix_sum(a))
-    prefix_grad = tf.grad(prefix, data)
+def InterpGrad():
+    tex = tf.input([16, 16, 16], tf.float32)
+    pos = tf.input([-1, 3], tf.float32)
+    N = pos.shape[0]
+    vals = tf.input([N], tf.float32)
 
-    return prefix_grad
+    i, = vals.indices
+    x, y, z = pos[i, 0], pos[i, 1], pos[i, 2]
 
-prefix_sum_grad = tf.compile(PrefixSumGrad)
+    samp = Trilinear(tex, x, y, z)
+    diff = samp-vals
+    loss = tf.sum(diff*diff)
+
+    g = tf.grad(loss, tex)
+
+    return g
+
+test = tf.compile(InterpGrad)

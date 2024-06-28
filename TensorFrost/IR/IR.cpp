@@ -75,8 +75,7 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 	// if this node loads something from another node, that node must not be in
 	// this kernel
 	if (output_op->HasAllTypes(OpClass::Load, OpClass::MemoryOp)) {
-		return arg_type == ArgType::Memory &&
-		       !is_identity;  // if its an identity load its fine
+		return arg_type == ArgType::Memory;
 	}
 
 	// if we are modifying memory, then the modified memory must not be in the

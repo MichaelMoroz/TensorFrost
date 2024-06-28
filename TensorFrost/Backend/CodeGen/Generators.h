@@ -376,7 +376,7 @@ protected:
 	                                const string& output_type_name,
 	                                const string& address, const string& input, const string& output, const string& memory_name)
 	{
-		return op + "((" + input_type_name + "*)mem" + ", " + address + ", " + input + ")";
+		return op + "((" + input_type_name + "*)"+memory_name+"_mem" + ", " + address + ", " + input + ")";
 	}
 
 	string GetName(const string& name) {
