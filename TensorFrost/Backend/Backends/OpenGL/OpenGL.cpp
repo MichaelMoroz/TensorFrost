@@ -330,7 +330,13 @@ void ImGuiSlider(std::string text, float* value, float min, float max) {
 	ImGui::SliderFloat(text.c_str(), value, min, max);
 }
 
-bool ImGuiButton(std::string text) { return ImGui::Button(text.c_str()); }
+bool ImGuiButton(std::string text) {
+	return ImGui::Button(text.c_str());
+}
+
+bool ImGuiCheckbox(std::string text, bool* value) {
+	return ImGui::Checkbox(text.c_str(), value);
+}
 
 void StartDebugRegion(const std::string& name) {
 	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, (GLsizei)name.size(), name.c_str());

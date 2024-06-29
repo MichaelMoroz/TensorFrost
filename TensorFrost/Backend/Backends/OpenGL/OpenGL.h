@@ -37,7 +37,7 @@ void ImGuiEnd();
 void ImGuiText(std::string text);
 void ImGuiSlider(std::string text, int* value, int min, int max);
 void ImGuiSlider(std::string text, float* value, float min, float max);
-
+bool ImGuiCheckbox(std::string text, bool* value);
 bool ImGuiButton(std::string text);
 
 void StartDebugRegion(const std::string& name);
