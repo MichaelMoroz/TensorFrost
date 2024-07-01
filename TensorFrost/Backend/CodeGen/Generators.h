@@ -97,7 +97,7 @@ protected:
 				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
 				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
-				bool modified = node->has_been_modified_;
+				bool modified = node->HasFlags(NodeFlags::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
 				if (can_substitude) {
@@ -140,7 +140,7 @@ protected:
 		string name = node->var_name;
 
 		// get output type
-		TFType output_type = node->tensor_->type;
+		TFType output_type = node->type;
 
 		// generate line
 		string left = "";
@@ -306,7 +306,7 @@ protected:
 					line += op->code_;
 					break;
 				case OpClass::DimensionIndex:
-					line += op->code_ + to_string(node->GetTensor()->data[0]);
+					line += op->code_ + to_string(node->data[0]);
 					break;
 				case OpClass::Variable:
 					line += op->code_;
@@ -354,7 +354,7 @@ protected:
 
 	virtual string TypeCast(string type_name, string input)
 	{
-		return "(" + type_name + ")" + input;
+		return "((" + type_name + ")(" + input + "))";
 	}
 
 	virtual string TypeReinterpret(string type_name, string input) {

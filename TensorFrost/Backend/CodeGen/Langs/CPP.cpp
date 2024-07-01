@@ -615,7 +615,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	kernel->var_types = vector<string>(kernel->variables.size());
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
-		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+		kernel->var_types[var.second] = type_names[var.first->type];
 	}
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";

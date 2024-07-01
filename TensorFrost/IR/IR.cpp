@@ -52,7 +52,7 @@ bool ArgumentManager::CannotCopyArgument(ArgID id) {
 	bool shape_not_memory = shape && !to_memory;
 	return id.first == ArgType::Memory || shape_not_memory ||
 	       from->op->HasAllTypes(OpClass::Static) ||
-	       from->op->HasAllTypes(OpClass::Memory) || from->HasBeenModified();
+	       from->op->HasAllTypes(OpClass::Memory) || from->HasFlags(NodeFlags::Modified);
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {

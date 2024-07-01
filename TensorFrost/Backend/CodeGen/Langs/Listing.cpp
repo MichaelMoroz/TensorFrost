@@ -45,11 +45,11 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		}
 		prev_depth = depth;
 		
-		if (node->tensor_->type != TFType::None) {
-			listing += DataTypeToString(node->tensor_->type) + " ";
+		if (node->type != TFType::None) {
+			listing += DataTypeToString(node->type) + " ";
 		}
 
-		if (node->tensor_->type != TFType::None) {
+		if (node->type != TFType::None) {
 			//  the tensor name
 			listing += node->var_name + " = ";
 		}
@@ -75,11 +75,11 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		listing += ArgTypePrint("inputs", ArgType::Input);
 		listing += ArgTypePrint("indices", ArgType::Index);
 
-		if (!node->tensor_->data.empty()) {
+		if (!node->data.empty()) {
 			listing += "data=[";
-			for (int i = 0; i < node->tensor_->data.size(); i++) {
+			for (int i = 0; i < node->data.size(); i++) {
 				if (i != 0) listing += ",";
-				listing += to_string(node->tensor_->data[i]);
+				listing += to_string(node->data[i]);
 			}
 			listing += "], ";
 		}
@@ -102,7 +102,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 			listing += "cost=" + to_string(node->cost_) + ", ";
 		}
 
-		if (node->HasBeenModified())
+		if (node->HasFlags(NodeFlags::Modified))
 		{
 			listing += "modified, ";
 		}

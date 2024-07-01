@@ -27,6 +27,18 @@ enum class ArgType {
 	Count,
 };
 
+enum class NodeFlags {
+	Placeholder,
+	Modified,
+	IsStatic,
+	OutputMemory,
+	InputMemory,
+	KeepDims,
+	DetachGrad,
+	PassGrad,
+	Count,
+};
+
 string TypeToString(ArgType type);
 
 using Tensors = vector<const Tensor*>;
@@ -208,13 +220,6 @@ public:
 	void RemoveArguments(ArgType arg);
 };
 
-enum class NodeFlag {
-	HasBeenModified,
-	IsStatic,
-	OutputMemory,
-	InputMemory,
-	KeepDims,
-};
 
 class Node {
  public:
@@ -225,7 +230,7 @@ class Node {
 	float cost_ = -1.0f;
 	
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
-    bool placeholder = true;
+	unordered_set<NodeFlags> flags = {NodeFlags::Placeholder};
 
 	//only true after graph has been updated
 	Node *true_prev = nullptr, *true_next = nullptr;
@@ -236,13 +241,39 @@ class Node {
 	ArgumentManager args;
 	MemoryType memory_type_ = MemoryType::None;
 	map<int, int> special_indices_;
-	bool has_been_modified_ = false;
-	bool is_static = false;
+
+	TFType type = TFType::Float;
+	std::vector<uint> data;
+
+	bool HasFlags(NodeFlags flag) const {
+		return flags.contains(flag);
+	}
+
+	template <typename... Args>
+	bool HasFlags(NodeFlags flag, Args... args) const {
+		return HasFlags(flag) && HasFlags(args...);
+	}
+
+	void RemoveFlag(NodeFlags flag) {
+		flags.erase(flag);
+	}
+
+	void AddFlag(NodeFlags flag) {
+		flags.insert(flag);
+	}
+
+	void SetFlag(NodeFlags flag, bool set) {
+		if (set) {
+			AddFlag(flag);
+		} else {
+			RemoveFlag(flag);
+		}
+	}
 
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {}
 
     bool valid() {
-        return !placeholder;
+        return !HasFlags(NodeFlags::Placeholder);
     }
 
 	//clamp unless otherwise specified
@@ -264,18 +295,19 @@ class Node {
 	}
 
     //initialize and create next/child placeholders
-    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, bool set_static = false) {
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type, bool set_static = false) {
         if(valid()) {
             throw runtime_error("Node already initialized");
         }
 		UpdateEdges();
-        placeholder = false;
+        RemoveFlag(NodeFlags::Placeholder);
 
 		tensor_ = tensor;
+		type = new_type;
 		args.AddArguments(std::move(new_args));
 		args.UpdateOutputs();
+		SetFlag(NodeFlags::IsStatic, set_static);
 		name = std::move(new_name);
-		is_static = set_static;
 		op = FindOperation(name);
 		CheckNode();
 		indexing_mode_ = TensorIndexingMode::Clamp;
@@ -283,36 +315,29 @@ class Node {
 
 	void CopyProperties(Node* other) {
 		name = other->name;
-		has_been_modified_ = other->has_been_modified_;
 		debug_name = other->debug_name;
 		special_indices_ = other->special_indices_;
-		is_static = other->is_static;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
+		type = other->type;
+
+		//copy flags
+		flags.clear();
+		for (auto flag : other->flags) {
+			flags.insert(flag);
+		}
 	}
 
 	void CopyMetadata(Node* other) {
 		debug_name = other->debug_name;
 		special_indices_ = other->special_indices_;
-		is_static = other->is_static;
+		SetFlag(NodeFlags::IsStatic, other->HasFlags(NodeFlags::IsStatic));
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
 		memory_type_ = other->memory_type_;
 	}
 
 	const Tensor* GetTensor() const;
-
-	void SetAsModified()
-	{
-		has_been_modified_ = true;
-	}
-
-	bool HasBeenModified() const
-	{
-		return has_been_modified_;
-	}
-
-	int TryComputeShape();
 
 	int ComputeDepth(Node* root = nullptr) const {
 		int depth = 0;
@@ -342,7 +367,7 @@ class Node {
 			auto& [id, from] = edge;
 			if (to->index_ >= min_index) {
 				if(make_modified) {
-					replacement->has_been_modified_ = true;
+					replacement->AddFlag(NodeFlags::Modified);
 				}
 				to->args.UpdateArgument(id, replacement);
 			}
@@ -404,7 +429,7 @@ class Node {
 		}
 
 		// must have tensor
-		if (tensor_ == nullptr && !is_static) {
+		if (tensor_ == nullptr && !HasFlags(NodeFlags::IsStatic)) {
 			throw std::runtime_error("Tensor not found");
 		}
 	}
@@ -746,7 +771,7 @@ public:
 
 	IR() {
         root = new Node();
-        root->initialize(nullptr, {}, "host", true);
+        root->initialize(nullptr, {}, "host", TFType::None, true);
         cursor = NodeIterator(root);
     }
 
@@ -765,7 +790,7 @@ public:
         return NodeIterator(root);
     }
 
-    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name) {
+    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name, TFType type) {
         if (cursor->valid()) { //already initialized, add new node before cursor
             Node* newNode = new Node(cursor->prev, cursor->parent);
 			if (cursor->prev) 
@@ -774,10 +799,10 @@ public:
 				cursor->parent->child = newNode;
             cursor->prev = newNode;
 			newNode->next = *cursor;
-            newNode->initialize(tensor, std::move(args), std::move(name));
+            newNode->initialize(tensor, std::move(args), std::move(name), type);
 			return newNode;
         } else {
-            cursor->initialize(tensor, std::move(args), std::move(name));
+            cursor->initialize(tensor, std::move(args), std::move(name), type);
 			cursor.go_to_next();
 			return cursor->prev;
         }
@@ -945,7 +970,7 @@ public:
 
 		//update modified flags
 		for (auto node = begin(); !node.end(); node.next()) {
-			node->has_been_modified_ = false;
+			node->RemoveFlag(NodeFlags::Modified);
 			//go over all outputs and check if they are modifiers
 			for (auto [edge, to] : node->args.outputs_) {
 				auto& [id, from] = edge;
@@ -955,7 +980,7 @@ public:
 						is_memory = true;
 					}
 					if (!is_memory) {
-						node->has_been_modified_ = true;
+						node->AddFlag(NodeFlags::Modified);
 						break;
 					}
 				}

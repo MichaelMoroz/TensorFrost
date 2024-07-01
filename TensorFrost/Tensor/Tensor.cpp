@@ -48,7 +48,7 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 		throw std::runtime_error("Node is null");
 	}
 	inputs_[id] = node;
-	argument_types_[id] = node->GetTensor()->type;
+	argument_types_[id] = node->type;
 	argument_counts_[id.first]++;
 }
 
@@ -66,21 +66,84 @@ void ArgumentManager::RemoveArguments(ArgType arg) {
 	}
 }
 
-int Node::TryComputeShape() {
-	NodeArguments shape = args.GetArguments(ArgType::Shape);
-	int size = 1;
-	for (auto& [index, shape_node] : shape) {
-		if (shape_node->name != "const") {
-			return -1;  // can not compute shape at compile time
-		}
-		size *= shape_node->tensor_->data[0];
+tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &name, const Tensors &tensors,
+	bool check_shape) {
+	vector<TFType> input_types = vector<TFType>();
+	for (const auto& tensor : tensors) {
+		input_types.push_back(tensor->node_->type);
 	}
-	return size;
+
+	const Operation* operation = FindOperation(name);
+
+	// check if input is valid
+	if (!operation->IsInputValid(input_types)) {
+		string error = "Input types ";
+		for (const auto& type : input_types) {
+			error += DataTypeToString(type) + ", ";
+		}
+		error += "are not valid for operation " + name;
+		throw std::runtime_error(error);
+	}
+
+	ShapeInfo shape_info = ShapeInfo();
+
+	if (check_shape)
+	{
+		//check if shapes are compatible and get the final broadcasted shape
+		for (int i = 0; i < tensors.size(); i++) {
+			ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
+			auto result = CompareShape(shape_info, shape_info2, false, true);
+			shape_info = result.broadcast_shape;
+		}
+	}
+
+	TFType output_type = operation->GetOutputType(input_types);
+
+	return {operation, output_type, shape_info};
+}
+
+bool Tensor::CheckIndices(const Tensors &indices) {
+	for (const Tensor* index : indices) {
+		if (index->node_->type != TFType::Int) {
+			return false;
+		}
+	}
+	return true;
+}
+
+TFType Tensor::GetType() const { return node_->type; }
+
+void Tensor::SetData(const vector<uint> &data) const {
+	node_->data = data;
+}
+
+void Tensor::SetData(uint data) const {
+	SetData(vector<uint>(1, data));
+}
+
+void Tensor::SetData(float data) const {
+	SetData(vector<uint>(1, AsUint(data)));
+}
+
+void Tensor::SetData(int data) const {
+	SetData(vector<uint>(1, AsUint(data)));
+}
+
+void Tensor::SetType(TFType type) const {
+	node_->type = type;
+}
+
+void Tensor::DetachGrad() const {
+	node_->AddFlag(NodeFlags::DetachGrad);
+}
+
+void Tensor::PassGrad() const {
+	node_->AddFlag(NodeFlags::PassGrad);
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
-	Tensor* copy = &CreateNode(other.type, std::move(args), other.node_->name);
-	copy->data = other.data;
+	Tensor* copy = &CreateNode(other.node_->type, std::move(args), other.node_->name);
+	copy->node_->data = other.node_->data;
 	copy->node_->CopyProperties(other.node_);
 	return copy;
 }
@@ -98,6 +161,25 @@ void Tensor::SetShape(Tensors shape) const {
 	for (int i = 0; i < shape.size(); i++) {
 		node_->args.AddArgument(ArgType::Shape, i, shape[i]->node_);
 	}
+}
+
+Tensors Tensor::GetInputShapeTensors(Tensors shape) {
+	Tensors result = Tensors();
+	for (int dim = 0; dim < shape.size(); dim++) {
+		const Tensor* tensor = shape[dim];
+		//check if tensor is a negative constant
+		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
+		{
+			Tensor& mem = Static("input_shape", TFType::Int);
+			mem.node_->special_indices_[0] = dim;
+			result.push_back(&mem);
+		}
+		else
+		{
+			result.push_back(tensor);
+		}
+	}
+	return result;
 }
 
 //Get values from a tensor at the given indices
@@ -132,7 +214,7 @@ Tensor & Tensor::ReductionOP(string name, const Tensor &tensor, int axis, bool k
 		shape.push_back(&Constant(1));
 	}
 	Tensor& op = OpShape(name, shape, &tensor);
-	op.data = vector<uint>(1, axis);
+	op.node_->data = vector<uint>(1, axis);
 	//if(keepdims) {
 	//	op.node_->AddFlag(NodeFlag::KeepDims);
 	//}
@@ -141,14 +223,24 @@ Tensor & Tensor::ReductionOP(string name, const Tensor &tensor, int axis, bool k
 
 Tensor & Tensor::ScanOP(string name, const Tensor &tensor, int axis) {
 	Tensor& op = Op(name, &tensor);
-	op.data = vector<uint>(1, axis);
+	op.node_->data = vector<uint>(1, axis);
 	return op;
+}
+
+bool Tensor::AreTensorsEqual(const Tensor &a, const Tensor &b) {
+	if(a.node_->op->HasAllTypes(OpClass::Constant) && b.node_->op->HasAllTypes(OpClass::Constant)) {
+		return a.node_->data[0] == b.node_->data[0];
+	}
+	if(a.node_ == b.node_) {
+		return true;
+	}
+	return false;
 }
 
 Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
-	out.type = tensor.type;
+	out.node_->type = tensor.node_->type;
 	return out;
 }
 
