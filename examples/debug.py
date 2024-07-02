@@ -1,7 +1,7 @@
 import TensorFrost as tf
 import numpy as np
 tf.initialize(tf.cpu)
-#
+# #
 #dynamic size QR decomposition
 def QRDecomposition():
     A = tf.input([-1, -1], tf.float32)
@@ -95,3 +95,78 @@ print("R:\n", Rnp)
 #     return g
 #
 # test = tf.compile(InterpGrad)
+
+EN = 16 #embedding size
+CH = 3 #number of channels
+
+ImageW = 1000
+ImageH = 1000
+
+def Sample(tex, i, j, k):
+    #return tex[i, j, k]
+    res = tf.clamp(tf.round(127.0*tex[i, j, k]).pass_grad(), -127.0, 127.0)
+    return res / 127.0
+
+def Bilinear(tex, x, y, ch):
+    #offset each channel to avoid discontinuities
+    chidx = ch/4
+    offset_x = tf.float(chidx%2) / 2.0
+    offset_y = tf.float(chidx/2) / 2.0
+    x, y = x+offset_x, y+offset_y
+    xi, yi = tf.floor(x), tf.floor(y)
+    xf, yf = x-xi, y-yi
+    xi, yi = tf.int(xi), tf.int(yi)
+
+    #fake cubic interpolation
+    xf = tf.smoothstep(0.0, 1.0, xf)
+    yf = tf.smoothstep(0.0, 1.0, yf)
+
+    oxf, oyf = 1.0-xf, 1.0-yf
+    #return tex[xi, yi, ch]*oxf*oyf + tex[xi+1, yi, ch]*xf*oyf + tex[xi, yi+1, ch]*oxf*yf + tex[xi+1, yi+1, ch]*xf*yf
+    return Sample(tex, xi, yi, ch)*oxf*oyf + Sample(tex, xi+1, yi, ch)*xf*oyf + Sample(tex, xi, yi+1, ch)*oxf*yf + Sample(tex, xi+1, yi+1, ch)*xf*yf
+
+def mul_bias(X, W):
+    ids = tf.indices(list(X.shape[:-1]) + [W.shape[-2]])
+    return tf.select(ids[-1] == X.shape[-1], 0.01, X[ids]) @ W
+
+def GELU(x):
+    return 0.5*x*(1.0+tf.tanh(0.7978845608*(x+0.044715*x*x*x)))
+
+def Decode(tex, W1, W2, x, y):
+    embed = Bilinear(tex, x, y, x.indices[-1])
+    #small neural network
+    embed = tf.sin(mul_bias(embed, W1))
+    return (mul_bias(embed, W2))
+
+def NeuralEmbed():
+    tex = tf.input([-1, -1, EN], tf.float32)
+    RN = tex.shape[0]
+    pos = tf.input([-1, 2], tf.float32)
+    N = pos.shape[0]
+    vals = tf.input([N, CH], tf.float32)
+    W1 = tf.input([EN+1, -1], tf.float32)
+    HiddenSize = W1.shape[1]
+    W2 = tf.input([HiddenSize+1, CH], tf.float32)
+
+    params = tf.input([-1], tf.float32)
+    tex_lr = params[0]
+    weight_lr = params[1]
+    normalize = tf.int(params[2])
+
+    i, j = tf.indices([N, EN])
+
+    with tf.if_cond(normalize == 1):
+        tex[tex.indices] = tex / (tf.mean(tf.mean(tf.abs(tex), axis=0), axis=0) + 1e-6)
+
+    samp = Decode(tex, W1, W2, pos[i, 0], pos[i, 1])
+
+    diff = samp-vals
+    loss = tf.sum(tf.sum(diff*diff)) / tf.float(N)
+
+    W1 -= weight_lr*tf.grad(loss, W1)
+    W2 -= weight_lr*tf.grad(loss, W2)
+    tex -= tex_lr*tf.grad(loss, tex)
+
+    return tex, W1, W2, loss
+
+reconstruct = tf.compile(NeuralEmbed)

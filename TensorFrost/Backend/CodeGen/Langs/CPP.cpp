@@ -264,6 +264,11 @@ extern "C" {
 		const size_t* shape;
 	};
 
+	struct TFTensorList {
+		size_t count;
+		const TFTensor* tensors;
+	};
+
 	struct TFDispatchInfo {
 		size_t kernel_id;
 		size_t read_write_count;

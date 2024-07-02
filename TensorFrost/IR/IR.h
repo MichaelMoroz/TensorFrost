@@ -33,6 +33,7 @@ enum class NodeFlags {
 	IsStatic,
 	OutputMemory,
 	InputMemory,
+	InputMemoryList,
 	KeepDims,
 	DetachGrad,
 	PassGrad,
@@ -409,6 +410,16 @@ class Node {
 	}
 
 	Node* GetLastChild();
+
+	//checks if the other node has all parents as this node
+	bool HasCommonParents(Node* other) {
+		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+			if (!other->HasParent(cur_parent)) {
+				return false;
+			}
+		}
+		return true;
+	}
 
 	bool HasParent(string name) {
 		return GetParent(name) != this;

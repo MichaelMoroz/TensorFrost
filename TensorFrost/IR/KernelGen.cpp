@@ -2408,6 +2408,13 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	{"dim_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(grad, out.node_->data[0]));
 	}},
+	{"dim_mean", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		int axis = (int)out.node_->data[0];
+		Tensors shape = in[0].GetShape();
+		axis = GetAxis((int)shape.size(), axis);
+		Tensor& dim_size = Tensor::tofloat(*shape[axis]);
+		grads.Add(Tensor::Unsqueeze(grad / dim_size, axis));
+	}},
 	{"dim_norm", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.node_->data[0]);
 		grads.Add(unsq * in[0]);
@@ -2535,7 +2542,9 @@ void IR::ComputeAutodiff()
 		vector<Node*> queue;
 		for (auto dep : loss_deps) {
 			bool in_range = (dep->index_ <= loss->index_ && dep->index_ >= min_range[loss]);
-			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) && (dep->type == TFType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
+			bool dep_is_accessible = dep->HasCommonParents(loss); //is it in scope of the loss
+			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) &&
+			   dep_is_accessible && (dep->type == TFType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
 				queue.push_back(dep);
 			}
 		}

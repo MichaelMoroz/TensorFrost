@@ -161,6 +161,13 @@ KernelScope::KernelScope(Node* node,
 
 	output_scopes.insert(child_scopes.begin(), child_scopes.end());
 
+	//if there is more than one child scope, then this node can not be in the scope
+	if (scope_count > 1) {
+		begin = nullptr;
+		end = nullptr;
+		return;
+	}
+
 	KernelScope* child_scope = *child_scopes.begin();
 	AddBoundaryNodes(child_scope->boundary_nodes);
 
