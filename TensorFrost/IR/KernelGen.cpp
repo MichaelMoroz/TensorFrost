@@ -262,7 +262,7 @@ void IR::ReorderOperations() {
 				if (outside_kernel && !node->args.CannotMoveArgument(id)) {
 					// if this node is a set and its input is outside of the cluser ->
 					// move it inside
-					if (node->op->HasAllTypes(OpClass::Set)) {
+					if (node->op->HasAllTypes(OpProp::Set)) {
 						nodes_to_move.insert(from);
 					}
 				}
@@ -542,7 +542,7 @@ void IR::OptimizeKernelLoadOperations() {
 			bool inside_kernel = memory_input->HasParent("kernel");
 			if (!inside_kernel) continue;
 
-			bool is_not_modified = !memory_input->flags.has(NodeFlags::Modified);
+			bool is_not_modified = !memory_input->flags.has(NodeProp::Modified);
 			if (!is_not_modified) continue;
 
 			float size_ratio = ShapeInfo::GetSizeRatio(kernel_shape, memory_shape);
@@ -704,7 +704,7 @@ void IR::GetInputList() {
 	int input_memory_index = 0;
 	//MUST BE IN ORDER
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->flags.has(NodeFlags::InputMemory)) {
+		if (node->flags.has(NodeProp::InputMemory)) {
 			shape_memory_map[*node] = {};
 			// add shapes to the memory inputs
 			for (int i = 0; i < node->args.Count(ArgType::Shape); i++) {
@@ -716,12 +716,12 @@ void IR::GetInputList() {
 			int input_index = input_memory_index++;
 			// add shapes to the memory inputs
 			input_memory_map[input_index] = *node;
-			node->flags.set(NodeFlags::InputMemory, input_index);
+			node->flags.set(NodeProp::InputMemory, input_index);
 			//if any of the inputs are "input_shape" then we need to add the input index to them
 			for (auto& [arg, from] : node->args.inputs_) {
 				if (arg.first == ArgType::Shape && from->name == "input_shape") {
-					if(from->flags.get(NodeFlags::InputShape, 1, false) == -1) { //ONLY FIRST TIME
-						from->flags.set(NodeFlags::InputShape, input_index, 1);
+					if(from->flags.get(NodeProp::InputShape, 1, false) == -1) { //ONLY FIRST TIME
+						from->flags.set(NodeProp::InputShape, input_index, 1);
 					}
 				}
 			}
@@ -734,21 +734,21 @@ void IR::GetInputList() {
 /// </summary>
 void IR::GetOutputList() {
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->flags.has(NodeFlags::OutputMemory)) {
-			if (!node->op->HasAllTypes(OpClass::Memory)) {
+		if (node->flags.has(NodeProp::OutputMemory)) {
+			if (!node->op->HasAllTypes(OpProp::Memory)) {
 				throw std::runtime_error(
 				    "Compilation error: output is not a memory node");  // all outputs
 				                                                        // should be
 				                                                        // memory nodes
 				                                                        // at this point
 			}
-			output_memory_map[node->flags.get(NodeFlags::OutputMemory)] = *node;
+			output_memory_map[node->flags.get(NodeProp::OutputMemory)] = *node;
 		}
-		if (node->op->HasAllTypes(OpClass::Modifier, OpClass::MemoryOp)) {
+		if (node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp)) {
 			if (!node->HasParent("kernel")) {
 				writebacks++;
 			}
-		} else if (node->op->HasAllTypes(OpClass::Load, OpClass::MemoryOp)) {
+		} else if (node->op->HasAllTypes(OpProp::Load, OpProp::MemoryOp)) {
 			if (!node->HasParent("kernel")) {
 				readbacks++;
 			}
@@ -762,8 +762,8 @@ void IR::GetOutputList() {
 void IR::ComputeStatistics() {
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (node->name == "memory") {
-			bool is_input = node->flags.has(NodeFlags::InputMemory);
-			bool is_output = node->flags.has(NodeFlags::OutputMemory);
+			bool is_input = node->flags.has(NodeProp::InputMemory);
+			bool is_output = node->flags.has(NodeProp::OutputMemory);
 			if (is_input) {
 				input_memory_count++;
 			}
@@ -778,7 +778,7 @@ void IR::ComputeStatistics() {
 }
 
 bool isConstantAndEqualTo(const Tensor* tensor, float value) {
-	if (tensor->node_->name != "const" || tensor->node_->flags.has(NodeFlags::Modified)) {
+	if (tensor->node_->name != "const" || tensor->node_->flags.has(NodeProp::Modified)) {
 		return false;
 	}
 
@@ -795,7 +795,7 @@ bool isConstantAndEqualTo(const Tensor* tensor, float value) {
 }
 
 bool isConstant(const Tensor* tensor) {
-	return tensor->node_->name == "const" && !tensor->node_->flags.has(NodeFlags::Modified);
+	return tensor->node_->name == "const" && !tensor->node_->flags.has(NodeProp::Modified);
 }
 
 Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32) {
@@ -969,9 +969,9 @@ void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> used_nodes;
 	//mark all output nodes as used
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (node->flags.has(NodeFlags::OutputMemory) ||
-		    node->flags.has(NodeFlags::InputMemory) ||
-		    node->op->HasAllTypes(OpClass::Static)) {
+		if (node->flags.has(NodeProp::OutputMemory) ||
+		    node->flags.has(NodeProp::InputMemory) ||
+		    node->op->HasAllTypes(OpProp::Static)) {
 			used_nodes.insert(node.get());
 		}
 	}
@@ -982,7 +982,7 @@ void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (!used_nodes.contains(node.get())) {
-			if (!node->flags.has(NodeFlags::InputMemory) && !node->flags.has(NodeFlags::OutputMemory))
+			if (!node->flags.has(NodeProp::InputMemory) && !node->flags.has(NodeProp::OutputMemory))
 			{
 				nodes_to_remove.insert(node.get());
 			}
@@ -999,7 +999,7 @@ void IR::RemoveUnusedOperations() {
 void IR::ComputeNodeCost()
 {
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->op->HasAllTypes(OpClass::Memory);
+		bool is_memory = node->op->HasAllTypes(OpProp::Memory);
 		unordered_map<Node*, float> input_costs;
 		for (auto& [id, from] : node->args.inputs_) {
 			if (id.first != ArgType::Memory &&
@@ -1020,7 +1020,7 @@ map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 	UpdateGraph();
 	map<Node*, ArgEdges> node_output;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-		bool is_output = node->flags.has(NodeFlags::OutputMemory);
+		bool is_output = node->flags.has(NodeProp::OutputMemory);
 		ArgEdges outputs = ArgEdges();
 
 		for (auto [edge, to] : node->args.outputs_) {
@@ -1049,7 +1049,7 @@ void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
 
 		bool is_in_a_kernel = input_node->HasParent("kernel");
 		bool is_outside = !input_node->HasParent(kernel);
-		bool is_memory = input_node->op->HasAllTypes(OpClass::Memory);
+		bool is_memory = input_node->op->HasAllTypes(OpProp::Memory);
 
 		if (is_memory || (is_in_a_kernel && is_outside)) {
 			// load the memory node before this node
@@ -1076,7 +1076,7 @@ void IR::AddKernelGlobalLoadOperations() {
 
 				bool is_in_a_kernel = input_node->HasParent("kernel");
 				bool is_outside = !input_node->HasParent(kernel);
-				bool is_memory = input_node->op->HasAllTypes(OpClass::Memory);
+				bool is_memory = input_node->op->HasAllTypes(OpProp::Memory);
 
 				if (is_memory || (is_in_a_kernel && is_outside)) {
 					nodes_to_load.insert(input_node);
@@ -1119,7 +1119,7 @@ void IR::AddMemoryOpIndices() {
 
 		// replace all inputs pointing to memory nodes with the memory node
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			if (!node->op->HasAllTypes(OpClass::MemoryOp)) {
+			if (!node->op->HasAllTypes(OpProp::MemoryOp)) {
 				continue;
 			}
 
@@ -1164,7 +1164,7 @@ void IR::AddKernelGlobalStoreOperations() {
 
 		for (auto [output, args] : node_output) {
 			// if the output is already a memory node, then skip
-			if (output->op->HasAllTypes(OpClass::Memory)) {
+			if (output->op->HasAllTypes(OpProp::Memory)) {
 				continue;
 			}
 
@@ -1174,9 +1174,9 @@ void IR::AddKernelGlobalStoreOperations() {
 				mem = Tensor::Memory(kernel->args.GetArguments(ArgType::Shape), output->type).node_;
 				mem->debug_name = output->debug_name;
 
-				if (output->flags.has(NodeFlags::OutputMemory)) {
-					mem->flags.copy_from_only(output->flags, { NodeFlags::OutputMemory });
-					output->flags.remove(NodeFlags::OutputMemory);
+				if (output->flags.has(NodeProp::OutputMemory)) {
+					mem->flags.copy_all_given(output->flags, { NodeProp::OutputMemory });
+					output->flags.remove(NodeProp::OutputMemory);
 				}
 			});
 
@@ -1214,14 +1214,14 @@ void IR::AddKernelGlobalStoreOperations() {
 
 	// replace all inputs pointing to memory nodes with the memory node
 	for (auto node = begin(); !node.end(); node.next()) {
-		bool is_memory = node->op->HasAllTypes(OpClass::Memory);
+		bool is_memory = node->op->HasAllTypes(OpProp::Memory);
 
 		for (auto& [id, from] : node->args.inputs_) {
 			if (id.first == ArgType::Memory ||
 			    (id.first  == ArgType::Shape && !is_memory))
 				continue;
 
-			if (from->op->HasAllTypes(OpClass::Memory)) {
+			if (from->op->HasAllTypes(OpProp::Memory)) {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
 					Tensor& loaded = Tensor::Load(*from->GetTensor(), {}, true);
@@ -1241,7 +1241,7 @@ void IR::AddMemoryDeallocation()
 	// go over all outputs of each memory and and put a deallocation node after the last time it is used
 	for (auto memory : memory_nodes) {
 		// skip input and output memories, they are deallocated manually
-		if (memory->flags.has(NodeFlags::InputMemory)) {
+		if (memory->flags.has(NodeProp::InputMemory)) {
 			continue;
 		}
 
@@ -1252,14 +1252,14 @@ void IR::AddMemoryDeallocation()
 
 		//do a dfs to find the last output
 		std::function<void(Node*)> dfs = [&](Node* node) {
-			if (node->flags.has(NodeFlags::OutputMemory)) {
+			if (node->flags.has(NodeProp::OutputMemory)) {
 				is_an_output = true;
 				return;
 			}
 
 			for (auto [edge, to] : node->args.outputs_) {
 				auto& [id, from] = edge;
-				if (to->op->HasAllTypes(OpClass::MemoryReuse)) {
+				if (to->op->HasAllTypes(OpProp::MemoryReuse)) {
 					dfs(to);
 				} else {
 					if (last_output_index < to->index_) {
@@ -1573,7 +1573,7 @@ void IR::FinalizeMemoryIndexing() {
 
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			if (node->op->HasAllTypes(OpClass::MemoryOp)) {
+			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
 				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), indices); });
 			}
 		}
@@ -1581,7 +1581,7 @@ void IR::FinalizeMemoryIndexing() {
 
 	//now compute address for all nodes that are not in a kernel
 	for (auto node = begin(); !node.end(); node.next()) {
-		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpClass::MemoryOp)) {
+		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpProp::MemoryOp)) {
 			ExecuteExpressionBefore(node.get(), [&]() {
 				vector<Tensor*> indices = {};
 				ComputeAddress(node.get(), indices);
@@ -1611,7 +1611,7 @@ void IR::RemoveUnusedKernels()
 		// remove all kernel nodes that dont do anything
 		int memory_modifiers = 0;
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			if (node->op->HasAllTypes(OpClass::Modifier, OpClass::MemoryOp)) {
+			if (node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp)) {
 				memory_modifiers++;
 			}
 			//if any output is outside the kernel, then the kernel is needed
@@ -1983,7 +1983,7 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 
 void IR::InsertAlgorithmicPrimitives() {
 	// get all nodes for each type
-	vector<Node*> nodes = GetNodesOfType(OpClass::Algorithm);
+	vector<Node*> nodes = GetNodesOfType(OpProp::Algorithm);
 
 	unordered_set<Node*> nodes_to_remove;
 
@@ -2080,10 +2080,7 @@ void IR::InsertAlgorithmicPrimitives() {
 			}
 
 			//copy over all memory flags to the new node
-			//TODO make a function for this
-			//result->node_->memory_type_ = node->memory_type_;
-			//result->node_->special_indices_ = node->special_indices_;
-			result->node_->CopyFlagsOnly(node, {NodeFlags::InputMemory, NodeFlags::OutputMemory});
+			result->node_->flags.copy_all_given(node->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
 
 			if (node->debug_name != "") {
 				result->node_->debug_name = node->debug_name;
@@ -2144,7 +2141,7 @@ void IR::UnrollLoops()
 		set<Node*> nodes_to_copy;
 		bool can_unroll = true;
 		for (auto child : children) {
-			if (child->op->HasAllTypes(OpClass::Keyword) || child->child->valid()) {
+			if (child->op->class_ == OpClass::Keyword || child->child->valid()) {
 				can_unroll = false;
 				break;
 			}
@@ -2199,9 +2196,9 @@ void IR::TryReplaceModificationsWithVersions()
 				Tensor& copied = Tensor::copy(*input_value->GetTensor());
 				Node* copynode = copied.node_;
 				memory_node->MakeOutputsUseGivenNode(copynode, set_node->index_, true);
-				copynode->flags.copy_from_only(memory_node->flags, {NodeFlags::InputMemory, NodeFlags::OutputMemory});
+				copynode->flags.copy_all_given(memory_node->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
 				copynode->debug_name = memory_node->debug_name;
-				memory_node->flags.remove(NodeFlags::InputMemory, NodeFlags::OutputMemory);
+				memory_node->flags.remove(NodeProp::InputMemory, NodeProp::OutputMemory);
 				nodes_to_remove.insert(set_node);
 			});
 		}	
@@ -2500,10 +2497,10 @@ void ComputeNodeGradients(Node* value, Tensor* grad, NodeGrads& grads)
 {
 	string op_name = value->name;
 	//add input arguments
-	if(value->flags.has(NodeFlags::PassGrad)) {
+	if(value->flags.has(NodeProp::PassGrad)) {
 		op_name = "passthrough_grad";
 	}
-	if(value->flags.has(NodeFlags::DetachGrad)) {
+	if(value->flags.has(NodeProp::DetachGrad)) {
 		op_name = "detached_grad";
 	}
 
@@ -2517,7 +2514,7 @@ void ComputeNodeGradients(Node* value, Tensor* grad, NodeGrads& grads)
 
 void IR::ComputeAutodiff()
 {
-	vector<Node*> gradients = GetNodesOfType(OpClass::Gradient);
+	vector<Node*> gradients = GetNodesOfType(OpProp::Gradient);
 
 	if(gradients.empty()) {
 		return;
@@ -2549,8 +2546,8 @@ void IR::ComputeAutodiff()
 		for (auto dep : loss_deps) {
 			bool in_range = (dep->index_ <= loss->index_ && dep->index_ >= min_range[loss]);
 			bool dep_is_accessible = dep->HasCommonParents(loss); //is it in scope of the loss
-			if(in_range && !dep->op->HasAllTypes(OpClass::Nondiff) &&
-			   dep_is_accessible && (dep->type == TFType::Float || dep->op->HasAllTypes(OpClass::Modifier))) {
+			if(in_range && !dep->op->HasAllTypes(OpProp::Nondiff) &&
+			   dep_is_accessible && (dep->type == TFType::Float || dep->op->HasAllTypes(OpProp::Modifier))) {
 				queue.push_back(dep);
 			}
 		}
@@ -2561,14 +2558,14 @@ void IR::ComputeAutodiff()
 		});
 
 		Node* loss_value = loss;
-		if(loss->op->HasAllTypes(OpClass::Modifier)) {
+		if(loss->op->HasAllTypes(OpProp::Modifier)) {
 			loss_value = loss->args.Get(ArgType::Memory);
 		}
 
 		ExecuteExpressionAfter(loss, [&]() {
 			node_to_grad[loss_value] = &Tensor::Constant(1.0f);
 			for(auto node : queue) {
-				if(!node_to_grad.contains(node) && !node->op->HasAllTypes(OpClass::Modifier)) {
+				if(!node_to_grad.contains(node) && !node->op->HasAllTypes(OpProp::Modifier)) {
 					continue;
 				}
 
@@ -2619,7 +2616,7 @@ void IR::ComputeAutodiff()
 		gradient->MakeOutputsUseGivenNode(computed_grad);
 
 		//copy over all memory flags to the new node
-		computed_grad->CopyFlagsOnly(gradient, {NodeFlags::InputMemory, NodeFlags::OutputMemory});
+		computed_grad->flags.copy_all_given(gradient->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
 
 		if (gradient->debug_name != "") {
 			computed_grad->debug_name = gradient->debug_name;
@@ -2719,11 +2716,11 @@ Program* GenerateProgram(IR* ir)
 		size_t variable_index = 0;
 
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			if (node->op->HasAllTypes(OpClass::MemoryOp)) {
+			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
 				// get the memory node
 				const Tensor* memory = node->args.GetTensor(ArgType::Memory);
 
-				if(node->op->HasAllTypes(OpClass::Modifier)) {
+				if(node->op->HasAllTypes(OpProp::Modifier)) {
 					read_write[memory->node_] |= true;
 				} else {
 					read_write[memory->node_] |= false;

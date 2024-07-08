@@ -38,26 +38,26 @@ bool ArgumentManager::CannotMoveArgument(ArgID id) {
 	Node* from = inputs_[id];
 	Node* to = node_;
 	return (id.first == ArgType::Memory &&
-	        !to->op->HasAllTypes(OpClass::Set)) ||
-	       (id.first  == ArgType::Shape && !to->op->HasAllTypes(OpClass::Memory)) ||
-	       from->op->HasAllTypes(OpClass::Memory) ||
-	       (from->name == "const" && to->op->HasAllTypes(OpClass::Memory)); //FIX THIS
+	        !to->op->HasAllTypes(OpProp::Set)) ||
+	       (id.first  == ArgType::Shape && !to->op->HasAllTypes(OpProp::Memory)) ||
+	       from->op->HasAllTypes(OpProp::Memory) ||
+	       (from->name == "const" && to->op->HasAllTypes(OpProp::Memory)); //FIX THIS
 }
 
 bool ArgumentManager::CannotCopyArgument(ArgID id) {
 	Node* from = inputs_[id];
 	Node* to = node_;
 	bool shape = id.first == ArgType::Shape;
-	bool to_memory = to->op->HasAllTypes(OpClass::Memory);
+	bool to_memory = to->op->HasAllTypes(OpProp::Memory);
 	bool shape_not_memory = shape && !to_memory;
 	return id.first == ArgType::Memory || shape_not_memory ||
-	       from->op->HasAllTypes(OpClass::Static) ||
-	       from->op->HasAllTypes(OpClass::Memory) || from->flags.has(NodeFlags::Modified);
+	       from->op->HasAllTypes(OpProp::Static) ||
+	       from->op->HasAllTypes(OpProp::Memory) || from->flags.has(NodeProp::Modified);
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {
 	return arg.first == ArgType::Memory &&
-	       node_->op->HasAllTypes(OpClass::Modifier);
+	       node_->op->HasAllTypes(OpProp::Modifier);
 }
 
 
@@ -74,14 +74,14 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 
 	// if this node loads something from another node, that node must not be in
 	// this kernel
-	if (output_op->HasAllTypes(OpClass::Load, OpClass::MemoryOp)) {
+	if (output_op->HasAllTypes(OpProp::Load, OpProp::MemoryOp)) {
 		return arg_type == ArgType::Memory;
 	}
 
 	// if we are modifying memory, then the modified memory must not be in the
 	// kernel
-	if (output_op->HasAnyType(OpClass::Scatter, OpClass::Store) &&
-	    !input_op->HasAnyType(OpClass::Scatter, OpClass::Store)) {
+	if (output_op->HasAnyType(OpProp::Scatter, OpProp::Store) &&
+	    !input_op->HasAnyType(OpProp::Scatter, OpProp::Store)) {
 		return arg_type == ArgType::Memory;
 	}
 
@@ -124,7 +124,7 @@ KernelScope::KernelScope(Node* node,
 	scope_shape = ShapeInfo(node);
 
 	// if host only, then this can not be a valid kernel scope
-	if (node->op->HasAllTypes(OpClass::HostOnly)) {
+	if (node->op->HasAllTypes(OpProp::HostOnly)) {
 		begin = nullptr;
 		end = nullptr;
 		return;
@@ -254,15 +254,15 @@ string TypeToString(ArgType type) {
 	return arg_type_names.at(type);
 }
 
-const map<NodeFlags, string> flag_names = {
-	{NodeFlags::Modified, "Modified"}, {NodeFlags::Placeholder, "Placeholder"},
-	{NodeFlags::DetachGrad, "DetachGrad"}, {NodeFlags::PassGrad, "PassGrad"},
-	{NodeFlags::KeepDims, "KeepDims"}, {NodeFlags::IsStatic, "IsStatic"},
-	{NodeFlags::OutputMemory, "OutputMemory"}, {NodeFlags::InputMemory, "InputMemory"},
-	{NodeFlags::InputMemoryList, "InputMemoryList"}, {NodeFlags::InputShape, "InputShape"},
+const map<NodeProp, string> flag_names = {
+	{NodeProp::Modified, "Modified"}, {NodeProp::Placeholder, "Placeholder"},
+	{NodeProp::DetachGrad, "DetachGrad"}, {NodeProp::PassGrad, "PassGrad"},
+	{NodeProp::KeepDims, "KeepDims"}, {NodeProp::IsStatic, "IsStatic"},
+	{NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
+	{NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShape, "InputShape"},
 };
 
-string NodeFlagsToString(NodeFlags flags) {
+string NodeFlagsToString(NodeProp flags) {
 	return flag_names.at(flags);
 }
 

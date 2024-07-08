@@ -15,7 +15,7 @@ void TensorProgram::CreateProgram(string name) {
 	Tensors outputs = evaluate_callback();
 	// set outputs
 	for (int i = 0; i < outputs.size(); i++) {
-		outputs[i]->SetMemoryType(NodeFlags::OutputMemory, i);
+		outputs[i]->SetMemoryType(NodeProp::OutputMemory, i);
 	}
 
 	if (outputs.size() == 0) {

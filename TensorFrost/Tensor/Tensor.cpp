@@ -9,7 +9,7 @@ Node::~Node() { delete tensor_; }
 vector<int> ShapeInfo::GetShape(int default_value) const {
 	vector<int> shape;
 	for (auto node: this->shape) {
-		if(node->op->HasAllTypes(OpClass::Constant)) {
+		if(node->op->class_ == OpClass::Constant) {
 			shape.push_back(node->tensor_->TryGetConstant());
 		} else {
 			shape.push_back(default_value);
@@ -134,11 +134,11 @@ void Tensor::SetType(TFType type) const {
 }
 
 void Tensor::DetachGrad() const {
-	node_->flags.set(NodeFlags::DetachGrad);
+	node_->flags.set(NodeProp::DetachGrad);
 }
 
 void Tensor::PassGrad() const {
-	node_->flags.set(NodeFlags::PassGrad);
+	node_->flags.set(NodeProp::PassGrad);
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
@@ -171,7 +171,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
-			mem.node_->flags.set(NodeFlags::InputShape, dim);
+			mem.node_->flags.set(NodeProp::InputShape, dim);
 			result.push_back(&mem);
 		}
 		else
@@ -228,7 +228,7 @@ Tensor & Tensor::ScanOP(string name, const Tensor &tensor, int axis) {
 }
 
 bool Tensor::AreTensorsEqual(const Tensor &a, const Tensor &b) {
-	if(a.node_->op->HasAllTypes(OpClass::Constant) && b.node_->op->HasAllTypes(OpClass::Constant)) {
+	if(a.node_->op->class_ == OpClass::Constant  && b.node_->op->class_ == OpClass::Constant) {
 		return a.node_->data[0] == b.node_->data[0];
 	}
 	if(a.node_ == b.node_) {

@@ -87,17 +87,17 @@ protected:
 				name = GetName("var") + name;
 			} else {
 				string expr = node_expression[node];
-				bool is_memory = node->op->HasAllTypes(OpClass::Memory);
-				bool is_static = node->op->HasAllTypes(OpClass::Static) || 
-								 node->op->HasAllTypes(OpClass::CantSubstitute);
-				bool is_constant = node->op->HasAllTypes(OpClass::Constant);
+				bool is_memory = node->op->HasAllTypes(OpProp::Memory);
+				bool is_static = node->op->HasAllTypes(OpProp::Static) ||
+								 node->op->HasAllTypes(OpProp::CantSubstitute);
+				bool is_constant = node->op->class_ == OpClass::Constant;
+				bool is_variable = node->op->class_ == OpClass::Variable;
 				if (is_constant && expr == "") {
 					expr = node->GetTensor()->GetConstantString();
 				}
-				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
 				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
-				bool modified = node->flags.has(NodeFlags::Modified);
+				bool modified = node->flags.has(NodeProp::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
 				if (can_substitude) {
@@ -148,7 +148,7 @@ protected:
 		string right = "";
 		bool needs_paranthesis = false;
 
-		if (op->HasAllTypes(OpClass::Special)) {
+		if (op->HasAllTypes(OpProp::Special)) {
 			int dims = args.Count(ArgType::Shape);
 
 			string shape_arg = "{";
@@ -174,7 +174,7 @@ protected:
 			} else if (op->name_ == "memory") {
 				// if input memory type then just take the input and store it in the
 				// output
-				if (node->flags.has(NodeFlags::InputMemory)) {
+				if (node->flags.has(NodeProp::InputMemory)) {
 					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
@@ -191,7 +191,7 @@ protected:
 			else if (op->name_ == "input_shape")
 			{
 				left = "int " + node->var_name + " = ";
-				expression = ir->input_memory_map[node->flags.get(NodeFlags::InputShape, 1)]->var_name + ".shape[" + to_string(node->flags.get(NodeFlags::InputShape, 0)) + "]";
+				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShape, 1)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShape, 0)) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")
@@ -200,7 +200,7 @@ protected:
 				expression = "tf.reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
-		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
+		} else if (op->HasAllTypes(OpProp::MemoryOp)) {
 			string address;
 
 			if (kernel) {
@@ -226,7 +226,7 @@ protected:
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
 					right += ";";
-				} else if (op->HasAllTypes(OpClass::Scatter)) {
+				} else if (op->HasAllTypes(OpProp::Scatter)) {
 					if (output_type != None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
@@ -258,7 +258,7 @@ protected:
 					string memory_expression = GetName("tf.write") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
-				} else if (op->HasAllTypes(OpClass::Scatter)) {
+				} else if (op->HasAllTypes(OpProp::Scatter)) {
 					throw std::runtime_error("Scatter operation not supported in non-kernel mode");
 				}
 			}
@@ -273,7 +273,7 @@ protected:
 			}
 			string line;
 			string code = op->code_;
-			switch (op->op_classes[0]) {
+			switch (op->class_) {
 				case OpClass::Operator:
 					args.AddParenthesis(true);
 					if ((code == "&" || code == "|") && output_type == Bool) {
@@ -328,7 +328,7 @@ protected:
 					needs_paranthesis = true;
 					break;
 				default:
-					line += "";
+					throw std::runtime_error("Unknown operation class");
 					break;
 			}
 			expression += line;

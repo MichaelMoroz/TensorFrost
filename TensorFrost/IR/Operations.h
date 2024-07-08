@@ -10,6 +10,8 @@
 #include <vector>
 #include <algorithm>
 
+#include "Utility/Utility.h"
+
 namespace TensorFrost {
 
 using namespace std;
@@ -27,24 +29,31 @@ extern "C" {
 extern std::unordered_map<TFType, string> DataTypeNames;
 extern std::unordered_map<TFType, string> type_names;
 
+//op can have only one class
 enum class OpClass {
 	Operator,
+	UnaryOperator,
 	Function,
+	Copy,
 	Keyword,
+	DimensionIndex,
+	Variable,
+	TypeCast,
+	TypeReinterpret,
+	Constant,
+	TernaryOperator,
+	None,
+};
+
+//op can have multiple properties
+enum class OpProp {
 	Load,
 	Store,
 	Set,
 	Scatter,
 	Special,
-	Variable,
 	Memory,
-	UnaryOperator,
-	TernaryOperator,
-	TypeCast,
-	TypeReinterpret,
-	DimensionIndex,
 	CantSubstitute,
-	Constant,
 	MemoryOp,
 	Static, //can not be removed or copied
 	HostOnly,
@@ -54,8 +63,10 @@ enum class OpClass {
 	MemoryReuse,
 	Gradient,
 	Nondiff,
-	Copy,
+	Count,
 };
+
+using OpProps = FlagSet<OpProp, (int)OpProp::Count>;
 
 using DataTypeList = vector<TFType>;
 
@@ -67,12 +78,14 @@ public:
 	float cost_ = 0.0F;
 	vector<pair<vector<TFType>, TFType>> overloads_;
 	string code_;
-	vector<OpClass> op_classes;
+	//vector<OpClass> op_classes;
+	OpProps props_;
+	OpClass class_;
 
 	Operation() = default;
 
 	Operation(string name, initializer_list<string> overloads, float cost,
-	          string code = "", initializer_list <OpClass> op_type = {})
+	          string code = "", initializer_list<OpProp> op_props = {},  OpClass op_class = OpClass::Function)
 	    : name_(std::move(name)){
 		if (code.empty()) {
 			code = name_;
@@ -82,13 +95,11 @@ public:
 		cost_ = cost;
 
 		//add op types
-		for (const auto& type : op_type) {
-			op_classes.push_back(type);
+		for (const auto& type : op_props) {
+			props_.set(type);
 		}
 
-		if (op_classes.empty()) {
-			op_classes.push_back(OpClass::Function);
-		}
+		class_ = op_class;
 
 		// parse the overloads
 		// example: "ff_f" means two floats in, one float out, "buf_f" means a bool,
@@ -132,21 +143,21 @@ public:
 		}
 	}
 
-	bool HasAllTypes(OpClass type) const {
-		return std::find(op_classes.begin(), op_classes.end(), type) != op_classes.end();
+	bool HasAllTypes(OpProp type) const {
+		return props_.has(type);
 	}
 
 	template <typename... Args>
-	bool HasAllTypes(OpClass type, Args... args) const {
+	bool HasAllTypes(OpProp type, Args... args) const {
 		return HasAllTypes(type) && HasAllTypes(args...);
 	}
 
-	bool HasAnyType(OpClass type) const {
+	bool HasAnyType(OpProp type) const {
 		return HasAllTypes(type);
 	}
 
 	template <typename... Args>
-	bool HasAnyType(OpClass type, Args... args) const {
+	bool HasAnyType(OpProp type, Args... args) const {
 		return HasAllTypes(type) || HasAnyType(args...);
 	}
 
