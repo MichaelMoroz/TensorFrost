@@ -53,7 +53,9 @@ class FlagV {
 public:
 	FlagV() {
 		flags.reset();
-		data.fill(array<int, MV>{-1});
+		for (int i = 0; i < N; i++) {
+			data[i].fill(-1);
+		}
 	}
 
 	void set(T flag) {
