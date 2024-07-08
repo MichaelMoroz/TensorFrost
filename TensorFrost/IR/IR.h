@@ -10,6 +10,8 @@
 #include <vector>
 #include <stack>
 #include <set>
+#include <bitset>
+#include <array>
 
 #include "Operations.h"
 #include "Utility/Utility.h"
@@ -32,6 +34,7 @@ enum class NodeFlags {
 	Modified,
 	IsStatic,
 	OutputMemory,
+	InputShape,
 	InputMemory,
 	InputMemoryList,
 	KeepDims,
@@ -40,9 +43,115 @@ enum class NodeFlags {
 	Count,
 };
 
+string NodeFlagsToString(NodeFlags flag);
+
+template <typename T, int N, int MV = 8>
+class FlagV {
+	bitset<N> flags;
+	array<array<int, MV>, N> data;
+
+public:
+	FlagV() {
+		flags.reset();
+		data.fill(array<int, MV>{-1});
+	}
+
+	void set(T flag) {
+		flags.set((int)flag);
+	}
+
+	template <typename... Args>
+	void set(T flag, Args... args) {
+		set(flag);
+		set(args...);
+	}
+
+	void set(T flag, bool value) {
+		flags.set((int)flag, value);
+	}
+
+	void set(T flag, int value, int index = 0) {
+		flags.set((int)flag);
+		if (index >= MV) {
+			throw std::runtime_error("Index out of bounds");
+		}
+		data[(int)flag][index] = value;
+	}
+
+	void remove(T flag) {
+		flags.reset((int)flag);
+	}
+
+	template <typename... Args>
+	void remove(T flag, Args... args) {
+		remove(flag);
+		remove(args...);
+	}
+
+	bool has(T flag) const {
+		return flags.test((int)flag);
+	}
+
+	template <typename... Args>
+	bool has(T flag, Args... args) const {
+		return has(flag) && has(args...);
+	}
+
+	int get(T flag, int index = 0, bool throw_error = true) const {
+		int res = data[(int)flag][index];
+		if (throw_error && res == -1) {
+			throw std::runtime_error("Flag not found");
+		}
+		return res;
+	}
+
+	void copy_from_only(const FlagV<T, N>& other, unordered_set<T> only) {
+		flags.reset();
+		for (T flag : only) {
+			if (other.has(flag)) {
+				flags.set((int)flag);
+				data[(int)flag] = other.data[(int)flag];
+			}
+		}
+	}
+
+	void copy_from_except(const FlagV<T, N>& other, unordered_set<T> except) {
+		flags.reset();
+		for (int i = 0; i < N; i++) {
+			T flag = (T)i;
+			if (other.has(flag) && !except.contains(flag)) {
+				flags.set((int)flag);
+				data[(int)flag] = other.data[(int)flag];
+			}
+		}
+	}
+
+	size_t count() const {
+		return flags.count();
+	}
+
+	unordered_map<T, map<int, int>> get_data() {
+		unordered_map<T, map<int, int>> res;
+		for (int i = 0; i < N; i++) {
+			T flag = (T)i;
+			if (has(flag)) {
+				map<int, int> flag_data;
+				for (int j = 0; j < MV; j++) {
+					if (data[i][j] != -1) {
+						flag_data[j] = data[i][j];
+					}
+				}
+				res[flag] = flag_data;
+			}
+		}
+		return res;
+	}
+};
+
 string TypeToString(ArgType type);
 
 using Tensors = vector<const Tensor*>;
+using NodeFlagSet = FlagV<NodeFlags, (int)NodeFlags::Count>;
 
 enum class MemoryType {
 	None,
@@ -231,7 +340,8 @@ class Node {
 	float cost_ = -1.0f;
 	
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
-	unordered_set<NodeFlags> flags = {NodeFlags::Placeholder};
+	//unordered_map<NodeFlags, map<int, int>> flags = {{NodeFlags::Placeholder, {}}};
+	NodeFlagSet flags;
 
 	//only true after graph has been updated
 	Node *true_prev = nullptr, *true_next = nullptr;
@@ -240,41 +350,16 @@ class Node {
 	const Tensor* tensor_;
 
 	ArgumentManager args;
-	MemoryType memory_type_ = MemoryType::None;
-	map<int, int> special_indices_;
 
 	TFType type = TFType::Float;
 	std::vector<uint> data;
 
-	bool HasFlags(NodeFlags flag) const {
-		return flags.contains(flag);
+	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
+		flags.set(NodeFlags::Placeholder);
 	}
-
-	template <typename... Args>
-	bool HasFlags(NodeFlags flag, Args... args) const {
-		return HasFlags(flag) && HasFlags(args...);
-	}
-
-	void RemoveFlag(NodeFlags flag) {
-		flags.erase(flag);
-	}
-
-	void AddFlag(NodeFlags flag) {
-		flags.insert(flag);
-	}
-
-	void SetFlag(NodeFlags flag, bool set) {
-		if (set) {
-			AddFlag(flag);
-		} else {
-			RemoveFlag(flag);
-		}
-	}
-
-	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {}
 
     bool valid() {
-        return !HasFlags(NodeFlags::Placeholder);
+        return !flags.has(NodeFlags::Placeholder);
     }
 
 	//clamp unless otherwise specified
@@ -301,41 +386,43 @@ class Node {
             throw runtime_error("Node already initialized");
         }
 		UpdateEdges();
-        RemoveFlag(NodeFlags::Placeholder);
+        flags.remove(NodeFlags::Placeholder);
 
 		tensor_ = tensor;
 		type = new_type;
 		args.AddArguments(std::move(new_args));
 		args.UpdateOutputs();
-		SetFlag(NodeFlags::IsStatic, set_static);
+		flags.set(NodeFlags::IsStatic, set_static);
 		name = std::move(new_name);
 		op = FindOperation(name);
 		CheckNode();
 		indexing_mode_ = TensorIndexingMode::Clamp;
     }
 
+	void CopyFlags(Node* other, unordered_set<NodeFlags> except = {}) {
+		flags.copy_from_except(other->flags, except);
+	}
+
+	void CopyFlagsOnly(Node* other, unordered_set<NodeFlags> only) {
+		flags.copy_from_only(other->flags, only);
+	}
+
 	void CopyProperties(Node* other) {
 		name = other->name;
 		debug_name = other->debug_name;
-		special_indices_ = other->special_indices_;
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
 		type = other->type;
 
-		//copy flags
-		flags.clear();
-		for (auto flag : other->flags) {
-			flags.insert(flag);
-		}
+		CopyFlags(other);
 	}
 
 	void CopyMetadata(Node* other) {
 		debug_name = other->debug_name;
-		special_indices_ = other->special_indices_;
-		SetFlag(NodeFlags::IsStatic, other->HasFlags(NodeFlags::IsStatic));
 		indexing_mode_ = other->indexing_mode_;
 		group_size = other->group_size;
-		memory_type_ = other->memory_type_;
+
+		CopyFlags(other, {NodeFlags::Modified});
 	}
 
 	const Tensor* GetTensor() const;
@@ -368,7 +455,7 @@ class Node {
 			auto& [id, from] = edge;
 			if (to->index_ >= min_index) {
 				if(make_modified) {
-					replacement->AddFlag(NodeFlags::Modified);
+					replacement->flags.set(NodeFlags::Modified);
 				}
 				to->args.UpdateArgument(id, replacement);
 			}
@@ -425,12 +512,8 @@ class Node {
 		return GetParent(name) != this;
 	}
 
-	void SetMemoryType(MemoryType memory_type, int index = 0) {
-		if (memory_type_ != MemoryType::None) {
-			throw std::runtime_error("Memory type already set. Are you trying to output an input?");
-		}
-		memory_type_ = memory_type;
-		special_indices_[0] = index;
+	void SetMemoryType(NodeFlags memory_type, int index = 0) {
+		flags.set(memory_type, index);
 	}
 
 	void CheckNode() const {
@@ -440,7 +523,7 @@ class Node {
 		}
 
 		// must have tensor
-		if (tensor_ == nullptr && !HasFlags(NodeFlags::IsStatic)) {
+		if (tensor_ == nullptr && !flags.has(NodeFlags::IsStatic)) {
 			throw std::runtime_error("Tensor not found");
 		}
 	}
@@ -981,7 +1064,7 @@ public:
 
 		//update modified flags
 		for (auto node = begin(); !node.end(); node.next()) {
-			node->RemoveFlag(NodeFlags::Modified);
+			node->flags.remove(NodeFlags::Modified);
 			//go over all outputs and check if they are modifiers
 			for (auto [edge, to] : node->args.outputs_) {
 				auto& [id, from] = edge;
@@ -991,7 +1074,7 @@ public:
 						is_memory = true;
 					}
 					if (!is_memory) {
-						node->AddFlag(NodeFlags::Modified);
+						node->flags.set(NodeFlags::Modified);
 						break;
 					}
 				}

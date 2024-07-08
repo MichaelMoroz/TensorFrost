@@ -153,7 +153,7 @@ class Tensor {
 
 		if (operation->HasAllTypes(OpClass::Modifier))
 		{
-			memory->node_->AddFlag(NodeFlags::Modified);
+			memory->node_->flags.set(NodeFlags::Modified);
 		}
 
 		// create argument list
@@ -240,7 +240,7 @@ class Tensor {
 
 	static Tensor* GetCopy(const Tensor& other);
 
-	void SetMemoryType(MemoryType memory_type, int index = 0) const {
+	void SetMemoryType(NodeFlags memory_type, int index = 0) const {
 		node_->SetMemoryType(memory_type, index);
 	}
 
@@ -363,13 +363,13 @@ class Tensor {
 
 	static Tensor& Input(const TFType type = TFType::Float) {
 		Tensor& output = Memory(type);
-		output.SetMemoryType(MemoryType::Input);
+		output.SetMemoryType(NodeFlags::InputMemory);
 		return output;
 	}
 	static Tensor& Input(const Tensors& shape,
 	                     const TFType type = TFType::Float) {
 		Tensor& output = Memory(GetInputShapeTensors(shape), type);
-		output.SetMemoryType(MemoryType::Input);
+		output.SetMemoryType(NodeFlags::InputMemory);
 		return output;
 	}
 	static Tensor& Input(const vector<int>& shape,

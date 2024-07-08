@@ -134,11 +134,11 @@ void Tensor::SetType(TFType type) const {
 }
 
 void Tensor::DetachGrad() const {
-	node_->AddFlag(NodeFlags::DetachGrad);
+	node_->flags.set(NodeFlags::DetachGrad);
 }
 
 void Tensor::PassGrad() const {
-	node_->AddFlag(NodeFlags::PassGrad);
+	node_->flags.set(NodeFlags::PassGrad);
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
@@ -171,7 +171,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
-			mem.node_->special_indices_[0] = dim;
+			mem.node_->flags.set(NodeFlags::InputShape, dim);
 			result.push_back(&mem);
 		}
 		else

@@ -84,27 +84,28 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 			listing += "], ";
 		}
 
-		switch (node->memory_type_) {
-			case MemoryType::Input:
-				listing += "memory_type=input, ";
-				break;
-			case MemoryType::Output:
-				listing += "memory_type=output, ";
-				break;
-			case MemoryType::Constant:
-				listing += "memory_type=constant, ";
-				break;
-			default:
-				break;
+		if(node->flags.count() > 0) {
+			listing += "flags={";
+			auto flags = node->flags.get_data();
+			for(auto flad_data : flags) {
+				NodeFlags flag = flad_data.first;
+				map<int, int> data = flad_data.second;
+				listing += NodeFlagsToString(flag);
+				if(data.size() > 0) {
+					listing += "(";
+					for (int i = 0; i < data.size(); i++) {
+						if (i != 0) listing += ",";
+						listing += to_string(data[i]);
+					}
+					listing += ")";
+				}
+				listing += ", ";
+			}
+			listing += "}, ";
 		}
 
 		if (node->cost_ >= 0) {
 			listing += "cost=" + to_string(node->cost_) + ", ";
-		}
-
-		if (node->HasFlags(NodeFlags::Modified))
-		{
-			listing += "modified, ";
 		}
 
 		listing += ArgTypePrint("shape", ArgType::Shape);

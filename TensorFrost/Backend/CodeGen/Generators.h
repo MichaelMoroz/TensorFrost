@@ -97,7 +97,7 @@ protected:
 				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
 				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
-				bool modified = node->HasFlags(NodeFlags::Modified);
+				bool modified = node->flags.has(NodeFlags::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
 				if (can_substitude) {
@@ -174,7 +174,7 @@ protected:
 			} else if (op->name_ == "memory") {
 				// if input memory type then just take the input and store it in the
 				// output
-				if (node->memory_type_ == MemoryType::Input) {
+				if (node->flags.has(NodeFlags::InputMemory)) {
 					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
@@ -191,7 +191,7 @@ protected:
 			else if (op->name_ == "input_shape")
 			{
 				left = "int " + node->var_name + " = ";
-				expression = ir->input_memory_map[node->special_indices_[1]]->var_name + ".shape[" + to_string(node->special_indices_[0]) + "]";
+				expression = ir->input_memory_map[node->flags.get(NodeFlags::InputShape, 1)]->var_name + ".shape[" + to_string(node->flags.get(NodeFlags::InputShape, 0)) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")

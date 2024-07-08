@@ -52,7 +52,7 @@ bool ArgumentManager::CannotCopyArgument(ArgID id) {
 	bool shape_not_memory = shape && !to_memory;
 	return id.first == ArgType::Memory || shape_not_memory ||
 	       from->op->HasAllTypes(OpClass::Static) ||
-	       from->op->HasAllTypes(OpClass::Memory) || from->HasFlags(NodeFlags::Modified);
+	       from->op->HasAllTypes(OpClass::Memory) || from->flags.has(NodeFlags::Modified);
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {
@@ -252,6 +252,18 @@ const map<ArgType, string> arg_type_names = {
 
 string TypeToString(ArgType type) {
 	return arg_type_names.at(type);
+}
+
+const map<NodeFlags, string> flag_names = {
+	{NodeFlags::Modified, "Modified"}, {NodeFlags::Placeholder, "Placeholder"},
+	{NodeFlags::DetachGrad, "DetachGrad"}, {NodeFlags::PassGrad, "PassGrad"},
+	{NodeFlags::KeepDims, "KeepDims"}, {NodeFlags::IsStatic, "IsStatic"},
+	{NodeFlags::OutputMemory, "OutputMemory"}, {NodeFlags::InputMemory, "InputMemory"},
+	{NodeFlags::InputMemoryList, "InputMemoryList"}, {NodeFlags::InputShape, "InputShape"},
+};
+
+string NodeFlagsToString(NodeFlags flags) {
+	return flag_names.at(flags);
 }
 
 }  // namespace TensorFrost
