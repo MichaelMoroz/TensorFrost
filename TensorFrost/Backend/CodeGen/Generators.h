@@ -191,7 +191,7 @@ protected:
 			else if (op->name_ == "input_shape")
 			{
 				left = "int " + node->var_name + " = ";
-				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShape, 1)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShape, 0)) + "]";
+				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShapeDim)) + "]";
 				right = ";";
 			}
 			else if (op->name_ == "reshape")

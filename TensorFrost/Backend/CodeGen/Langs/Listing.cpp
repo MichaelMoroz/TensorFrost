@@ -89,15 +89,10 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 			auto flags = node->flags.get_data();
 			for(auto flad_data : flags) {
 				NodeProp flag = flad_data.first;
-				map<int, int> data = flad_data.second;
+				int data = flad_data.second;
 				listing += NodeFlagsToString(flag);
-				if(data.size() > 0) {
-					listing += "(";
-					for (int i = 0; i < data.size(); i++) {
-						if (i != 0) listing += ",";
-						listing += to_string(data[i]);
-					}
-					listing += ")";
+				if(data >= 0) {
+					listing += "(" + to_string(data) + ")";
 				}
 				listing += ", ";
 			}

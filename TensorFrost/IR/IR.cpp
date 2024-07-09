@@ -259,7 +259,8 @@ const map<NodeProp, string> flag_names = {
 	{NodeProp::DetachGrad, "DetachGrad"}, {NodeProp::PassGrad, "PassGrad"},
 	{NodeProp::KeepDims, "KeepDims"}, {NodeProp::IsStatic, "IsStatic"},
 	{NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
-	{NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShape, "InputShape"},
+	{NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
+	{NodeProp::InputShapeDim, "InputShapeDim"},
 };
 
 string NodeFlagsToString(NodeProp flags) {

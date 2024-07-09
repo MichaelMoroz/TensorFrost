@@ -720,8 +720,8 @@ void IR::GetInputList() {
 			//if any of the inputs are "input_shape" then we need to add the input index to them
 			for (auto& [arg, from] : node->args.inputs_) {
 				if (arg.first == ArgType::Shape && from->name == "input_shape") {
-					if(from->flags.get(NodeProp::InputShape, 1, false) == -1) { //ONLY FIRST TIME
-						from->flags.set(NodeProp::InputShape, input_index, 1);
+					if(!from->flags.has(NodeProp::InputShapeMemory)) { //ONLY FIRST TIME
+						from->flags.set(NodeProp::InputShapeMemory, input_index);
 					}
 				}
 			}

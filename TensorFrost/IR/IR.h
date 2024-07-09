@@ -34,7 +34,8 @@ enum class NodeProp {
 	Modified,
 	IsStatic,
 	OutputMemory,
-	InputShape,
+	InputShapeDim,
+	InputShapeMemory,
 	InputMemory,
 	InputMemoryList,
 	KeepDims,
@@ -237,19 +238,14 @@ class Node {
 	float cost_ = -1.0f;
 	
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
-	//unordered_map<NodeFlags, map<int, int>> flags = {{NodeFlags::Placeholder, {}}};
-	NodeProps flags;
-
-	//only true after graph has been updated
-	Node *true_prev = nullptr, *true_next = nullptr;
-	
 	const Operation* op;
-	const Tensor* tensor_;
-
+	NodeProps flags;
 	ArgumentManager args;
-
+	const Tensor* tensor_;
 	TFType type = TFType::Float;
 	std::vector<uint> data;
+	TensorIndexingMode indexing_mode_; //clamp unless otherwise specified
+	vector<int> group_size; //kernel properties
 
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
 		flags.set(NodeProp::Placeholder);
@@ -258,12 +254,6 @@ class Node {
     bool valid() {
         return !flags.has(NodeProp::Placeholder);
     }
-
-	//clamp unless otherwise specified
-	TensorIndexingMode indexing_mode_;
-
-	//kernel properties
-	vector<int> group_size;
 
 	void UpdateEdges() {
 		if (!child) child = new Node(nullptr, this);
@@ -587,16 +577,6 @@ class NodeIterator {
 		return *this;
 	}
 
-	NodeIterator& true_next() {
-		currentNode = currentNode->true_next;
-		return *this;
-	}
-
-	NodeIterator& true_prev() {
-		currentNode = currentNode->true_prev;
-		return *this;
-	}
-
 	bool end() { return !currentNode->valid(); }
 
 	Node* operator->() { return currentNode; }
@@ -912,15 +892,9 @@ public:
 
 	void UpdateGraph() const {
 		// update edges
-		Node* prev = nullptr;
 		for (auto node = begin(); !node.end(); node.next()) {
 			node->UpdateEdges();
 			node->args.ClearOutputs();
-			if (prev) {
-				prev->true_next = *node;
-				node->true_prev = prev;
-			}
-			prev = *node;
 		}
 
 		int index = 0;

@@ -171,7 +171,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
-			mem.node_->flags.set(NodeProp::InputShape, dim);
+			mem.node_->flags.set(NodeProp::InputShapeDim, dim);
 			result.push_back(&mem);
 		}
 		else

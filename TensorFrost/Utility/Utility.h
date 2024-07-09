@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include <bitset>
 #include <array>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,21 +20,17 @@ inline int AsInt(uint i) { return *reinterpret_cast<int*>(&i); }
 
 int GetSize(const vector<int>& shape);
 
-template <typename T, int N, int MV = 8>
+template <typename T, int N>
 class FlagSet {
-	bitset<N> flags;
-	array<array<int, MV>, N> data;
+	array<int, N> data;
 
 public:
 	FlagSet() {
-		flags.reset();
-		for (int i = 0; i < N; i++) {
-			data[i].fill(-1);
-		}
+		data.fill(-1);
 	}
 
 	void set(T flag) {
-		flags.set((int)flag);
+		data[(int)flag] = 0;
 	}
 
 	template <typename... Args>
@@ -45,19 +40,18 @@ public:
 	}
 
 	void set(T flag, bool value) {
-		flags.set((int)flag, value);
+		data[(int)flag] = value ? 0 : -1;
 	}
 
-	void set(T flag, int value, int index = 0) {
-		flags.set((int)flag);
-		if (index >= MV) {
-			throw std::runtime_error("Index out of bounds");
+	void set(T flag, int value) {
+		if(value < 0) {
+			throw std::runtime_error("Flag data must be non-negative");
 		}
-		data[(int)flag][index] = value;
+		data[(int)flag] = value + 1;
 	}
 
 	void remove(T flag) {
-		flags.reset((int)flag);
+		data[(int)flag] = -1;
 	}
 
 	template <typename... Args>
@@ -67,7 +61,7 @@ public:
 	}
 
 	bool has(T flag) const {
-		return flags.test((int)flag);
+		return data[(int)flag] != -1;
 	}
 
 	template <typename... Args>
@@ -75,58 +69,56 @@ public:
 		return has(flag) && has(args...);
 	}
 
-	int get(T flag, int index = 0, bool throw_error = true) const {
-		int res = data[(int)flag][index];
-		if (throw_error && res == -1) {
-			throw std::runtime_error("Flag not found");
+	int get(T flag, bool throw_error = true) const {
+		int res = data[(int)flag] - 1;
+		if (throw_error && res < 0) {
+			throw std::runtime_error("Flag data is not set");
 		}
 		return res;
 	}
 
 	void copy_all_given(const FlagSet<T, N>& other, unordered_set<T> only) {
-		flags.reset();
-		for (T flag : only) {
-			if (other.has(flag)) {
-				flags.set((int)flag);
+		for (int i = 0; i < N; i++) {
+			data[i] = -1;
+			T flag = (T)i;
+			if (only.contains(flag)) {
 				data[(int)flag] = other.data[(int)flag];
 			}
 		}
 	}
 
 	void copy_all_except(const FlagSet<T, N>& other, unordered_set<T> except) {
-		flags.reset();
 		for (int i = 0; i < N; i++) {
+			data[i] = -1;
 			T flag = (T)i;
-			if (other.has(flag) && !except.contains(flag)) {
-				flags.set((int)flag);
+			if (!except.contains(flag)) {
 				data[(int)flag] = other.data[(int)flag];
 			}
 		}
 	}
 
 	void copy_all(const FlagSet<T, N>& other) {
-		flags = other.flags;
 		for (int i = 0; i < N; i++) {
 			data[i] = other.data[i];
 		}
 	}
 
 	size_t count() const {
-		return flags.count();
+		size_t res = 0;
+		for (int i = 0; i < N; i++) {
+			if (data[i] != -1) {
+				res++;
+			}
+		}
+		return res;
 	}
 
-	unordered_map<T, map<int, int>> get_data() {
-		unordered_map<T, map<int, int>> res;
+	unordered_map<T, int> get_data() {
+		unordered_map<T, int> res;
 		for (int i = 0; i < N; i++) {
 			T flag = (T)i;
 			if (has(flag)) {
-				map<int, int> flag_data;
-				for (int j = 0; j < MV; j++) {
-					if (data[i][j] != -1) {
-						flag_data[j] = data[i][j];
-					}
-				}
-				res[flag] = flag_data;
+				res[flag] = data[i] - 1;
 			}
 		}
 		return res;
