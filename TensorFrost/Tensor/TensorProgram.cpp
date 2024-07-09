@@ -63,7 +63,7 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Host writes: " + to_string(ir.writebacks) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
-	properties += "  Compiler time: " + to_string(external_compile_time) + " ms\n";
+	properties += "  Steps time: " + to_string(external_compile_time) + " ms\n";
 	return properties;
 }
 

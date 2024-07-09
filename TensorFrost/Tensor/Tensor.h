@@ -10,7 +10,7 @@
 
 #include <math.h>
 
-#include "IR/IR.h"
+#include "Compiler/Graph/IR.h"
 #include "Utility/Utility.h"
 
 namespace TensorFrost {

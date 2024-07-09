@@ -60,7 +60,7 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 	                   &si,             // Pointer to STARTUPINFO structure
 	                   &pi  // Pointer to PROCESS_INFORMATION structure
 	                   )) {
-		throw std::runtime_error(std::string("Compiler error: cannot create compiler process. Command line: ") + command.data() + "\n");
+		throw std::runtime_error(std::string("Steps error: cannot create compiler process. Command line: ") + command.data() + "\n");
 	}
 
 	// Wait until child process exits
@@ -71,7 +71,7 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 	GetExitCodeProcess(pi.hProcess, &exit_code);
 	if (exit_code != 0) {
 		throw std::runtime_error(
-		    "Compiler error: compiler exited with non-zero exit code (Error "
+		    "Steps error: compiler exited with non-zero exit code (Error "
 		    "code: " +
 		    to_string(exit_code) + ")");
 	}
@@ -90,7 +90,7 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 		waitpid(pid, &status, 0);
 		if (status != 0) {
 			throw std::runtime_error(
-			    "Compiler error: compiler exited with non-zero exit code (Error "
+			    "Steps error: compiler exited with non-zero exit code (Error "
 			    "code: " +
 			    to_string(status) + ")");
 		}
@@ -116,7 +116,7 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 	std::ofstream out_file(file_path);
 	if (!out_file) {
 		throw std::runtime_error(
-		    "Compiler error: cannot open file for writing generated source code");
+		    "Steps error: cannot open file for writing generated source code");
 	}
 	out_file << sourceCode;
 	out_file.close();
@@ -130,20 +130,20 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 	DWORD path_length = GetTempPath(MAX_PATH, temp_path);
 
 	if (path_length == 0) {
-		throw std::runtime_error("Compiler error: cannot get temp path");
+		throw std::runtime_error("Steps error: cannot get temp path");
 	}
 
 	// Create a temporary library name
 	char temp_file_name[MAX_PATH];
 	if (!GetTempFileName(temp_path, TEXT("lib"), 0, temp_file_name)) {
-		throw std::runtime_error("Compiler error: cannot create temp file");
+		throw std::runtime_error("Steps error: cannot create temp file");
 	}
 #else
 	char temp_path[] = "/tmp/";
 	char filename_template[] = "/tmp/tensorfrost_XXXXXX";
 	char* temp_file_name = mktemp(filename_template);
 	if (!temp_file_name) {
-		throw std::runtime_error("Compiler error: cannot create temp file");
+		throw std::runtime_error("Steps error: cannot create temp file");
 	}
 #endif
 
@@ -156,12 +156,12 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 	#if defined(_WIN32)
 	HMODULE lib_handle = LoadLibrary(temp_file_name);
 	if (!lib_handle) {
-		throw std::runtime_error("Compiler error: cannot load generated library");
+		throw std::runtime_error("Steps error: cannot load generated library");
 	}
 	#else
 	void* lib_handle = dlopen(temp_file_name, RTLD_LAZY);
 	if (!lib_handle) {
-		throw std::runtime_error("Compiler error: cannot load generated library");
+		throw std::runtime_error("Steps error: cannot load generated library");
 	}
 	#endif
 
@@ -188,7 +188,7 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 	#endif
 
 	if (!main_callback) {
-		throw std::runtime_error("Compiler error: cannot load main function");
+		throw std::runtime_error("Steps error: cannot load main function");
 	}
 
 	// Set the execute callback
@@ -207,7 +207,7 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 			#endif
 
 			if (!kernel_callback) {
-				throw std::runtime_error("Compiler error: cannot load kernel function");
+				throw std::runtime_error("Steps error: cannot load kernel function");
 			}
 
 			((CpuKernelManager*)global_kernel_manager)

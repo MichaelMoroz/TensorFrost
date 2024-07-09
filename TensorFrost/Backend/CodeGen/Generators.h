@@ -5,7 +5,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Backend/Backend.h"
 

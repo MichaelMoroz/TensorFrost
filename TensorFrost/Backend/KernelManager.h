@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 #include "TensorMemory.h"
 
 namespace TensorFrost {

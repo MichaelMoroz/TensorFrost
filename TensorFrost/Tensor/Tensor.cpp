@@ -252,4 +252,11 @@ void Tensor::SetDebugName(const string& name) const
 	}
 }
 
+const Tensor* Node::GetTensor() const {
+	if (tensor_->node_ != this) {
+		throw std::runtime_error("Fatal Error: Tensor node does not match");
+	}
+	return tensor_;
+}
+
 }  // namespace TensorFrost

@@ -8,7 +8,7 @@
 #include <chrono>
 
 #include "Backend/Backend.h"
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 #include "Tensor.h"
 
 namespace TensorFrost {
