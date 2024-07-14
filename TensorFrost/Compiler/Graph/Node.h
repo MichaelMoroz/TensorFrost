@@ -28,11 +28,19 @@ enum class MemoryType {
 	Constant,
 };
 
-enum class TensorIndexingMode {
+enum class IndexingMode {
 	Unsafe,
 	Clamp,
 	Repeat,
-	Zero,
+	Mirror,
+	Constant,
+};
+
+struct TFTypeDesc {
+	TFType type;
+	IndexingMode indexing_mode;
+	uint constant_value;
+
 };
 
 string NodeFlagsToString(NodeProp flag);
@@ -53,7 +61,7 @@ class Node {
 	const Tensor* tensor_;
 	TFType type = TFType::Float;
 	std::vector<uint> data;
-	TensorIndexingMode indexing_mode_; //clamp unless otherwise specified
+	IndexingMode indexing_mode_; //clamp unless otherwise specified
 	vector<int> group_size; //kernel properties
 
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
@@ -92,7 +100,7 @@ class Node {
 		name = std::move(new_name);
 		op = FindOperation(name);
 		CheckNode();
-		indexing_mode_ = TensorIndexingMode::Clamp;
+		indexing_mode_ = IndexingMode::Clamp;
     }
 
 	void CopyProperties(Node* other) {

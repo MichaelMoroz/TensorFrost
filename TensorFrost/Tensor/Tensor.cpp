@@ -186,7 +186,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices,
                      bool unsafe) {
 	Tensor& out = MemoryOp("load", &tensor, indices);
-	if (unsafe) out.node_->indexing_mode_ = TensorIndexingMode::Unsafe;
+	if (unsafe) out.node_->indexing_mode_ = IndexingMode::Unsafe;
 	out.SetDebugName(tensor.node_->debug_name);
 	return out;
 }
@@ -194,7 +194,7 @@ Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices,
 Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
                       const Tensors& indices, bool unsafe) {
 	Tensor& out = MemoryOp("store", &tensor, indices, &value);
-	if (unsafe) out.node_->indexing_mode_ = TensorIndexingMode::Unsafe;
+	if (unsafe) out.node_->indexing_mode_ = IndexingMode::Unsafe;
 	return out;
 }
 

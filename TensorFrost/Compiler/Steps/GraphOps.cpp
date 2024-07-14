@@ -780,7 +780,7 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 
 
 // compute the flat index (in C-order)
-Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, TensorIndexingMode mode = TensorIndexingMode::Clamp)
+Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, IndexingMode mode = IndexingMode::Clamp)
 {
 	if (memory_dim == 0)
 	{
@@ -805,11 +805,11 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 
 		switch (mode)
 		{
-			case TensorIndexingMode::Clamp:
+			case IndexingMode::Clamp:
 				return &Tensor::clamp(
 				    *out, TensorFrost::Tensor::Constant(0),
 				    *get_shape(dim) - TensorFrost::Tensor::Constant(1));
-			case TensorIndexingMode::Unsafe:
+			case IndexingMode::Unsafe:
 				return out;
 			default: //TODO (Moroz): add other modes
 				throw std::runtime_error("Finalize memory indexing: invalid tensor indexing mode");
@@ -992,7 +992,7 @@ void ComputeAddress(Node* node, vector<Tensor*> indices)
 
 	if (idx.empty())
 	{
-		node->indexing_mode_ = TensorIndexingMode::Unsafe; //we can guarantee that the index is in bounds
+		node->indexing_mode_ = IndexingMode::Unsafe; //we can guarantee that the index is in bounds
 	}
 
 	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
