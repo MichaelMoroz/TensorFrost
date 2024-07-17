@@ -1,9 +1,59 @@
 import TensorFrost as tf
 import numpy as np
 tf.initialize(tf.cpu)
+
+
+def n_body(X: tf.tensor_arg([-1, 3], tf.float32),
+           V: tf.tensor_arg([-1, 3], tf.float32),
+           params: tf.tensor_arg([-1], tf.float32)):
+    N = X.shape[0]
+    V.assert_shape([N, 3]) #make sure V has the right shape
+
+    sph_rad = params[0] # 0.015
+    rest_density = params[1] # 0.5
+    stiffness = params[2] # 20.0
+    viscosity = params[3] # 100.0
+    gravity = params[4] # 1.5
+    time_step = params[5] # 0.0001
+
+    i, j, k = tf.indices([N, N, 3])
+    dx = X[j,k] - X[i,k]
+    dv = V[j,k] - V[i,k]
+
+    def sph_kernel(dist, rad):
+        return tf.exp(-(dist / rad)**2.0)
+
+    def pressure(rho):
+        return (rho - rest_density)
+
+    # Compute the SPH density
+    dist = tf.norm(dx)
+    rho = tf.sum(sph_kernel(dist, sph_rad), axis=1)
+
+    # Compute the SPH forces
+    d2 = tf.unsqueeze(tf.sum(dx**2.0))
+    dist = tf.sqrt(d2 + 1e-4) # soft distance
+    Fg = - tf.grad(gravity / dist, dx)
+    weight = sph_kernel(dist, sph_rad)
+    weightgrad = tf.grad(weight, dx)
+    dvdotdx = tf.unsqueeze(tf.dot(dv, dx)) / (tf.sqrt(d2) + 1e-5)
+    Fvisc = - viscosity * dvdotdx * weightgrad
+    Fsph = stiffness * 0.5 * (pressure(rho[i]) + pressure(rho[j])) * weightgrad
+    dist2 = (tf.sqrt(d2) + 1e-8)
+    Fspike = - 250.0 * sph_kernel(dist, 1.0*sph_rad) * dx / (dist2*dist2)
+    Fij = tf.select(i == j, 0.0, Fg + Fsph + Fvisc + Fspike)
+    Fi = tf.sum(Fij, axis=1)
+
+    Vnew = V + Fi * time_step
+    Xnew = X + Vnew * time_step
+
+    return [Xnew, Vnew]
+
+nbody = tf.compile(n_body)
+
 # #
 #dynamic size QR decomposition
-def QRDecomposition():
+def QRDecomposition(somearg: float = 5.0):
     A = tf.input([-1, -1], tf.float32)
 
     m, n = A.shape

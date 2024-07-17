@@ -24,6 +24,10 @@ Tensors TensorsFromList(const py::list& list);
 PyTensors PyTensorsFromTensors(const Tensors& tensors);
 std::variant<PyTensor*, py::tuple> PyTensorsToTupleVariant(const PyTensors& tensors);
 
+using ArgInfo = std::tuple<std::string, std::string, std::string>; // (name, annotation, default)
+
+vector<ArgInfo> GetFunctionArguments(const py::function& func);
+
 // Tensor wrapper for python
 class PyTensor {
 	Tensor* tensor_;

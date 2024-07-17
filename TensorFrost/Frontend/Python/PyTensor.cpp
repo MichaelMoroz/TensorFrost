@@ -149,6 +149,79 @@ void UpdateTensorNames() {
 	}
 }
 
+std::vector<ArgInfo> GetFunctionArguments(const py::function& func) {
+    PyObject* fn = func.ptr();
+    PyObject* code_obj = PyFunction_GetCode(fn);
+    if (!code_obj) {
+        throw std::runtime_error("Could not retrieve code object");
+    }
+
+    PyObject* varnames = PyObject_GetAttrString(code_obj, "co_varnames");
+    if (!varnames || !PyTuple_Check(varnames)) {
+        Py_XDECREF(varnames);
+        throw std::runtime_error("Could not retrieve varnames or varnames is not a tuple");
+    }
+
+    PyObject* argcount_obj = PyObject_GetAttrString(code_obj, "co_argcount");
+    if (!argcount_obj) {
+        Py_XDECREF(varnames);
+        throw std::runtime_error("Could not retrieve argument count");
+    }
+    int arg_count = PyLong_AsLong(argcount_obj);
+    Py_XDECREF(argcount_obj);
+    if (PyErr_Occurred()) {
+        Py_XDECREF(varnames);
+        throw std::runtime_error("Could not retrieve argument count");
+    }
+
+    PyObject* annotations = PyObject_GetAttrString(fn, "__annotations__");
+    PyObject* defaults = PyObject_GetAttrString(fn, "__defaults__");
+
+    std::vector<ArgInfo> arg_info_list;
+    for (int i = 0; i < arg_count; ++i) {
+        PyObject* name = PyTuple_GetItem(varnames, i);
+        if (!name || !PyUnicode_Check(name)) {
+            Py_XDECREF(varnames);
+            Py_XDECREF(annotations);
+            Py_XDECREF(defaults);
+            throw std::runtime_error("Argument name is not a valid Unicode string");
+        }
+        std::string arg_name = PyUnicode_AsUTF8(name);
+
+        // Get annotation
+        PyObject* annotation = annotations ? PyDict_GetItemString(annotations, arg_name.c_str()) : nullptr;
+        std::string arg_annotation = "";
+        if (annotation) {
+            PyObject* annotation_str = PyObject_Str(annotation);
+            if (annotation_str) {
+                arg_annotation = PyUnicode_AsUTF8(annotation_str);
+                Py_XDECREF(annotation_str);
+            }
+        }
+
+        // Get default value
+        PyObject* default_val = (defaults && PyTuple_Check(defaults) && i >= (arg_count - PyTuple_Size(defaults)))
+                                ? PyTuple_GetItem(defaults, i - (arg_count - PyTuple_Size(defaults)))
+                                : nullptr;
+        std::string arg_default = "";
+        if (default_val) {
+            PyObject* default_str = PyObject_Str(default_val);
+            if (default_str) {
+                arg_default = PyUnicode_AsUTF8(default_str);
+                Py_XDECREF(default_str);
+            }
+        }
+
+        arg_info_list.emplace_back(arg_name, arg_annotation, arg_default);
+    }
+
+    Py_XDECREF(varnames);
+    Py_XDECREF(annotations);
+    Py_XDECREF(defaults);
+
+    return arg_info_list;
+}
+
 std::string r_op(const std::string& name) { return "__r" + name + "__"; }
 
 std::string l_op(const std::string& name) { return "__" + name + "__"; }

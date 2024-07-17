@@ -15,6 +15,8 @@ void TensorProgramDefinition(py::module& m,
 		    std::string func_name =
 		        py_evaluate.attr("__name__").cast<std::string>();
 
+	    	vector<ArgInfo> input_names = GetFunctionArguments(py_evaluate);
+
 		    TensorProgram& program = *new TensorProgram(
 		        [py_evaluate]() -> Tensors {
 			        py::gil_scoped_acquire acquire;
