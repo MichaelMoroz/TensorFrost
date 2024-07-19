@@ -318,8 +318,8 @@ void ImGuiEnd() {
 	ImGui::End();
 }
 
-void ImGuiText(std::string text) {
-	ImGui::Text(text.c_str());
+void ImGuiText(const std::string& text) {
+	ImGui::Text("%s", text.c_str());
 }
 
 void ImGuiSlider(std::string text, int* value, int min, int max) {
