@@ -58,7 +58,15 @@ jobs:
           libwayland-dev \
           libwayland-egl-backend-dev \
           libxkbcommon-dev \
-          libxrandr-dev
+          libxrandr-dev \
+          libxinerama-dev \
+          libx11-dev \
+          libxcursor-dev \
+          libxi-dev \
+          libxext-dev \
+          libxcomposite-dev \
+          libxdamage-dev \
+          libxfixes-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5.1.1
