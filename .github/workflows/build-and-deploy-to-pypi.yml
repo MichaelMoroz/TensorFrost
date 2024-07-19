@@ -90,7 +90,7 @@ jobs:
     - name: Repair Wheel with auditwheel
       run: |
         mkdir -p repaired_wheels
-        for whl in dist/*.whl; do
+        for whl in PythonBuild/dist/*.whl; do
           auditwheel repair "$whl" --plat manylinux2014_x86_64 -w repaired_wheels/
         done
 
