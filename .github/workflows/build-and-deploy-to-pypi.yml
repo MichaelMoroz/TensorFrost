@@ -66,7 +66,8 @@ jobs:
           libxext-dev \
           libxcomposite-dev \
           libxdamage-dev \
-          libxfixes-dev
+          libxfixes-dev \
+          mesa-common-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5.1.1
