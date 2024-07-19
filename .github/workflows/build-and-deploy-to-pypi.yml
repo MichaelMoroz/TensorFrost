@@ -51,7 +51,13 @@ jobs:
         submodules: recursive
 
     - name: Install system dependencies
-      run: sudo apt-get update && sudo apt-get install -y libwayland-bin
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwayland-bin \
+          libwayland-dev \
+          libwayland-egl-backend-dev \
+          libxkbcommon-dev
 
     - name: Set up Python
       uses: actions/setup-python@v5.1.1
