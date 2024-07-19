@@ -54,20 +54,17 @@ jobs:
       run: |
         docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
           yum install -y \
-            libwayland-bin \
-            libwayland-dev \
-            libwayland-egl-backend-dev \
-            libxkbcommon-dev \
-            libxrandr-dev \
-            libxinerama-dev \
-            libx11-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libxext-dev \
-            libxcomposite-dev \
-            libxdamage-dev \
-            libxfixes-dev \
-            mesa-common-dev && \
+            wayland-devel \
+            libxkbcommon-devel \
+            libXrandr-devel \
+            libXinerama-devel \
+            libX11-devel \
+            libXcursor-devel \
+            libXi-devel \
+            libXext-devel \
+            libXcomposite-devel \
+            libXdamage-devel \
+            mesa-libGL-devel && \
           cd /project && \
           /opt/python/cp311-cp311/bin/python -m pip install -r requirements.txt && \
           /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build && \
