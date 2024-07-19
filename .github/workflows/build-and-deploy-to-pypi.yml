@@ -46,35 +46,61 @@ jobs:
 
   build-manylinux:
     runs-on: ubuntu-latest
-    container:
-      image: quay.io/pypa/manylinux2014_x86_64
+
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    - name: Install dependencies
+    - name: Install Docker
       run: |
-        /opt/python/cp311-cp311/bin/pip install -r requirements.txt
-        /opt/python/cp311-cp311/bin/pip install cmake
-        /opt/python/cp311-cp311/bin/pip install auditwheel
-        /opt/python/cp311-cp311/bin/pip install build
+        sudo apt-get update
+        sudo apt-get install -y docker.io
 
-    - name: Build Wheel
+    - name: Build and repair wheel inside manylinux2014 Docker container
       run: |
-        cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-        cmake --build build --config ${{ env.BUILD_TYPE }}
-        /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild
-
-    - name: Repair Wheel with auditwheel
-      run: |
-        mkdir -p repaired_wheels
-        for whl in PythonBuild/dist/*.whl; do
-          auditwheel repair "$whl" --plat manylinux2014_x86_64 -w repaired_wheels/
-        done
+        docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+          yum install -y \
+            wayland-devel \
+            libxkbcommon-devel \
+            libXrandr-devel \
+            libXinerama-devel \
+            libX11-devel \
+            libXcursor-devel \
+            libXi-devel \
+            libXext-devel \
+            libXcomposite-devel \
+            libXdamage-devel \
+            libXfixes-devel \
+            mesa-libGL-devel \
+            wget \
+            make \
+            gcc \
+            openssl-devel \
+            bzip2-devel \
+            libffi-devel \
+            zlib-devel &&
+          cd /opt &&
+          wget https://www.python.org/ftp/python/${PYTHON_VERSION_SHORT}/Python-${PYTHON_VERSION_SHORT}.tgz &&
+          tar xzf Python-${PYTHON_VERSION_SHORT}.tgz &&
+          cd Python-${PYTHON_VERSION_SHORT} &&
+          ./configure --enable-optimizations &&
+          make altinstall &&
+          /usr/local/bin/python3.11 -m ensurepip &&
+          /usr/local/bin/python3.11 -m pip install cmake auditwheel build &&
+          cd /project &&
+          cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
+          cmake --build build --config ${BUILD_TYPE} &&
+          /usr/local/bin/python3.11 -m build -w ./PythonBuild &&
+          mkdir -p repaired_wheels &&
+          for whl in PythonBuild/dist/*.whl; do
+            auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
+          done
+        "
 
     - name: Install Twine
-      run: /opt/python/cp311-cp311/bin/pip install twine
+      run: pip install twine
 
     - name: Publish on PyPI
-      run: /opt/python/cp311-cp311/bin/python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: |
+        python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
