@@ -70,7 +70,7 @@ jobs:
           cd /project && \
           /opt/python/cp311-cp311/bin/python -m pip install -r requirements.txt && \
           /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build && \
-          cmake -DPYBIND11_PYTHON_VERSION=3.11 -S . -B build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=/opt/python/cp311-cp311/bin/python3.11 -DPython3_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 -DPython3_LIBRARY=/opt/python/cp311-cp311/lib && \
+          cmake -DPYBIND11_PYTHON_VERSION=3.11 -S . -B build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=/opt/python/cp311-cp311/bin/python3.11 -DPython3_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 -DPython3_LIBRARY=/opt/python/cp311-cp311/lib -DPYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 -DPYTHON_LIBRARY=/opt/python/cp311-cp311/lib && \
           cmake --build build --config Release && \
           /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild && \
           mkdir -p repaired_wheels && \
