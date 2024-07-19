@@ -48,7 +48,7 @@ jobs:
     container:
       image: quay.io/pypa/manylinux2014_x86_64
     env:
-      PYTHON_VERSION: "cp${{ env.PYTHON_VERSION | replace('.', '') }}-cp${{ env.PYTHON_VERSION | replace('.', '') }}"
+      PYTHON_VERSION_NO_DOT: ${{ env.PYTHON_VERSION | replace('.', '') }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -71,18 +71,18 @@ jobs:
           mesa-libEGL-devel
 
     - name: Set up Python
-      run: /opt/python/${{ env.PYTHON_VERSION }}/bin/python -m ensurepip
+      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m ensurepip
 
     - name: Install dependencies
       run: |
-        /opt/python/${{ env.PYTHON_VERSION }}/bin/pip install -r requirements.txt
-        /opt/python/${{ env.PYTHON_VERSION }}/bin/pip install cmake auditwheel build
+        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install -r requirements.txt
+        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install cmake auditwheel build
 
     - name: Build Wheel
       run: |
         cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
-        /opt/python/${{ env.PYTHON_VERSION }}/bin/python -m build -w ./PythonBuild
+        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m build -w ./PythonBuild
 
     - name: Repair Wheel with auditwheel
       run: |
@@ -92,7 +92,8 @@ jobs:
         done
 
     - name: Install Twine
-      run: /opt/python/${{ env.PYTHON_VERSION }}/bin/pip install twine
+      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install twine
 
     - name: Publish on PyPI
-      run: /opt/python/${{ env.PYTHON_VERSION }}/bin/python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+    
