@@ -25,12 +25,15 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Versions
+    - name: Versions Berfore
       run: cmd.exe /C where python
         
     - uses: actions/setup-python@v5.1.1
       with:
         python-version: ${{env.PYTHON_VERSION}}
+
+    - name: Versions Berfore
+      run: cmd.exe /C where python
 
     - name: Install Python packages
       run: pip install -r requirements.txt
