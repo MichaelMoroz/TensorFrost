@@ -61,4 +61,4 @@ jobs:
       run: py -${{env.PYTHON_VERSION}} -m pip install twine
 
     - name: Publish on PyPI
-      run: py -%PYTHON_VERSION% -m twine -r testpypi  ./PythonBuild/dist -u __token__ -p ${{secrets.PYPI_REPO_TOKEN}}
+      run: py -${{env.PYTHON_VERSION}} -m twine -r testpypi  ./PythonBuild/dist -u __token__ -p ${{secrets.PYPI_REPO_TOKEN}}
