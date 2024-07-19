@@ -47,12 +47,13 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: quay.io/pypa/manylinux2014_x86_64
-    env:
-      PYTHON_VERSION_NO_DOT: ${{ env.PYTHON_VERSION | replace('.', '') }}
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
+
+    - name: Set Python Version No Dot
+      run: echo "PYTHON_VERSION_NO_DOT=${{ env.PYTHON_VERSION//./ }}" >> $GITHUB_ENV
 
     - name: Install system dependencies
       run: |
@@ -96,4 +97,3 @@ jobs:
 
     - name: Publish on PyPI
       run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
-    
