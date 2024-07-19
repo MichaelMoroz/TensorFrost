@@ -7,6 +7,7 @@ env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
   PYTHON_VERSION: "3.11"
+  CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
 
 jobs:
   build-windows:
@@ -50,35 +51,43 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Build Wheel in manylinux2014 Docker container
+    - name: Set up Python
+      uses: actions/setup-python@v5.1.1
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install dependencies
       run: |
-        docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+        pip install -r requirements.txt
+        pip install cmake
+        pip install build
+        pip install cibuildwheel==2.19.2
+
+    - name: Build using cibuildwheel
+      run: python -m cibuildwheel --output-dir wheelhouse
+      env:
+        CIBW_MANYLINUX_X86_64_IMAGE: ${{ env.CIBW_MANYLINUX_X86_64_IMAGE }}
+        CIBW_BEFORE_BUILD: |
           yum install -y \
-            wayland-devel \
-            libxkbcommon-devel \
-            libXrandr-devel \
-            libXinerama-devel \
-            libX11-devel \
-            libXcursor-devel \
-            libXi-devel \
-            libXext-devel \
-            libXcomposite-devel \
-            libXdamage-devel \
-            mesa-libGL-devel && \
-          /opt/python/cp311-cp311/bin/python -m ensurepip && \
-          /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build && \
-          cd /project && \
-          /opt/python/cp311-cp311/bin/python -m pip install -r requirements.txt && \
-          /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build && \
-          cmake -DPYBIND11_PYTHON_VERSION=3.11 -S . -B build -DCMAKE_BUILD_TYPE=Release -DPython3_EXECUTABLE=/opt/python/cp311-cp311/bin/python3.11 -DPython3_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 -DPython3_LIBRARY=/opt/python/cp311-cp311/lib -DPYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 -DPYTHON_LIBRARY=/opt/python/cp311-cp311/lib && \
-          cmake --build build --config Release && \
-          /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild && \
-          mkdir -p repaired_wheels && \
-          for whl in PythonBuild/dist/*.whl; do auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/; done
-        "
+            libwayland-bin \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            libxkbcommon-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libxcomposite-dev \
+            libxdamage-dev \
+            libxfixes-dev \
+            mesa-common-dev
+        CIBW_BEFORE_BUILD_LINUX: |
+          mkdir -p build && cd build && cmake -DPYBIND11_PYTHON_VERSION=${{ env.PYTHON_VERSION }} -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} .. && make
 
     - name: Install Twine
       run: pip install twine
 
     - name: Publish on PyPI
-      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheelhouse/* --verbose --disable-progress-bar
