@@ -61,8 +61,8 @@ jobs:
               libXfixes-devel wayland-devel wayland-protocols-devel &&
             cd /io &&
             /opt/python/cp311-cp311/bin/pip install -r requirements.txt &&
-            cmake -DPYBIND11_PYTHON_VERSION=${{ env.PYTHON_VERSION }} -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} &&
-            cmake --build build --config ${ env.BUILD_TYPE } &&
+            cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
+            cmake --build build --config ${BUILD_TYPE} &&
             /opt/python/cp311-cp311/bin/python -m pip install build &&
             /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild &&
             auditwheel repair PythonBuild/dist/*.whl -w /io/repaired_wheels
