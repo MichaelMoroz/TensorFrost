@@ -52,14 +52,34 @@ jobs:
 
     - name: Set up Docker
       run: |
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+        sudo add-apt-repository \
+          "deb [arch=amd64] https://download.docker.com/linux/ubuntu \
+          $(lsb_release -cs) \
+          stable"
         sudo apt-get update
-        sudo apt-get install -y docker.io
+        sudo apt-get install -y docker-ce docker-ce-cli containerd.io
 
     - name: Build Wheel in Docker
       run: |
         docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
           cd /io &&
-          yum install -y libwayland-bin libwayland-dev libwayland-egl-backend-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libx11-dev libxcursor-dev libxi-dev libxext-dev libxcomposite-dev libxdamage-dev libxfixes-dev mesa-common-dev &&
+          yum install -y epel-release &&
+          yum install -y \
+            libwayland-bin \
+            libwayland-dev \
+            libwayland-egl-backend-dev \
+            libxkbcommon-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libx11-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libxcomposite-dev \
+            libxdamage-dev \
+            libxfixes-dev \
+            mesa-common-dev &&
           /opt/python/cp311-cp311/bin/pip install cmake auditwheel build &&
           cmake -DPYBIND11_PYTHON_VERSION='${PYTHON_VERSION}' -S . -B build -DCMAKE_BUILD_TYPE='${BUILD_TYPE}' &&
           cmake --build build --config '${BUILD_TYPE}' &&
