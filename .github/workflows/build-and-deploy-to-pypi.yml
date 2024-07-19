@@ -7,7 +7,7 @@ env:
   # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
   PYTHON_VERSION: "3.11"
-  CIBW_MANYLINUX_X86_64_IMAGE: "manylinux2014"
+  PYTHON_VERSION_SHORT: "3.11.9"
 
 jobs:
   build-windows:
@@ -52,14 +52,12 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Docker
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
-
     - name: Build and repair wheel inside manylinux2014 Docker container
-      run: |
-        docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+      uses: addnab/docker-run-action@v3
+      with:
+        image: quay.io/pypa/manylinux2014_x86_64
+        options: --rm -v ${{ github.workspace }}:/project
+        run: |
           yum install -y \
             wayland-devel \
             libxkbcommon-devel \
@@ -81,22 +79,21 @@ jobs:
             libffi-devel \
             zlib-devel &&
           cd /opt &&
-          wget https://www.python.org/ftp/python/${PYTHON_VERSION_SHORT}/Python-${PYTHON_VERSION_SHORT}.tgz &&
-          tar xzf Python-${PYTHON_VERSION_SHORT}.tgz &&
-          cd Python-${PYTHON_VERSION_SHORT} &&
+          wget https://www.python.org/ftp/python/${{ env.PYTHON_VERSION_SHORT }}/Python-${{ env.PYTHON_VERSION_SHORT }}.tgz &&
+          tar xzf Python-${{ env.PYTHON_VERSION_SHORT }}.tgz &&
+          cd Python-${{ env.PYTHON_VERSION_SHORT }} &&
           ./configure --enable-optimizations &&
           make altinstall &&
           /usr/local/bin/python3.11 -m ensurepip &&
           /usr/local/bin/python3.11 -m pip install cmake auditwheel build &&
           cd /project &&
-          cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
-          cmake --build build --config ${BUILD_TYPE} &&
+          cmake -DPYBIND11_PYTHON_VERSION=${{ env.PYTHON_VERSION }} -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} &&
+          cmake --build build --config ${{ env.BUILD_TYPE }} &&
           /usr/local/bin/python3.11 -m build -w ./PythonBuild &&
           mkdir -p repaired_wheels &&
           for whl in PythonBuild/dist/*.whl; do
             auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
           done
-        "
 
     - name: Install Twine
       run: pip install twine
