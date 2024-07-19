@@ -50,7 +50,10 @@ jobs:
     - name: Build Wheel
       run: py -${{env.PYTHON_VERSION}} -m build -w ./PythonBuild
   
-    - name: Publish
-      working-directory: ${{github.workspace}}/build
-      run: echo "Done"
+    - name: Publish package to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: ./PythonBuild/dist
+        user: __token__
+        password: ${{secrets.PYPI_REPO_TOKEN}}
 
