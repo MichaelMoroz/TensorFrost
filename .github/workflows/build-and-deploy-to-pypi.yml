@@ -59,12 +59,16 @@ jobs:
               mesa-libGL-devel libXrandr-devel libXinerama-devel libXcursor-devel \
               libXi-devel libX11-devel libXext-devel libXcomposite-devel libXdamage-devel \
               libXfixes-devel wayland-devel wayland-protocols-devel python3-devel &&
+            export PATH=/opt/python/cp311-cp311/bin:$PATH &&
+            export PYTHON_VERSION=${PYTHON_VERSION} &&
+            export PYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 &&
+            export PYTHON_LIBRARY=/opt/python/cp311-cp311/lib/libpython3.11.so &&
             cd /io &&
-            /opt/python/cp311-cp311/bin/pip install -r requirements.txt &&
-            cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
+            pip install -r requirements.txt &&
+            cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -DPython3_INCLUDE_DIR=${PYTHON_INCLUDE_DIR} -DPython3_LIBRARIES=${PYTHON_LIBRARY} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
             cmake --build build --config ${BUILD_TYPE} &&
-            /opt/python/cp311-cp311/bin/python -m pip install build &&
-            /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild &&
+            pip install build &&
+            python -m build -w ./PythonBuild &&
             auditwheel repair PythonBuild/dist/*.whl -w /io/repaired_wheels
           "
 
