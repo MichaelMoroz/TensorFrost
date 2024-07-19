@@ -45,55 +45,33 @@ jobs:
 
   build-manylinux:
     runs-on: ubuntu-latest
-    container:
-      image: quay.io/pypa/manylinux2014_x86_64
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
 
-    - name: Set Python Version No Dot
-      run: echo "PYTHON_VERSION_NO_DOT=${{ env.PYTHON_VERSION//./ }}" >> $GITHUB_ENV
-
-    - name: Install system dependencies
+    - name: Set up Docker
       run: |
-        yum install -y \
-          wayland-devel \
-          libX11-devel \
-          libXcursor-devel \
-          libXi-devel \
-          libXext-devel \
-          libXrandr-devel \
-          libXinerama-devel \
-          libXcomposite-devel \
-          libXdamage-devel \
-          libXfixes-devel \
-          mesa-libGL-devel \
-          mesa-libEGL-devel
+        sudo apt-get update
+        sudo apt-get install -y docker.io
 
-    - name: Set up Python
-      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m ensurepip
-
-    - name: Install dependencies
+    - name: Build Wheel in Docker
       run: |
-        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install -r requirements.txt
-        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install cmake auditwheel build
-
-    - name: Build Wheel
-      run: |
-        cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release
-        /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m build -w ./PythonBuild
-
-    - name: Repair Wheel with auditwheel
-      run: |
-        mkdir -p repaired_wheels
-        for whl in PythonBuild/dist/*.whl; do
-          auditwheel repair "$whl" --plat manylinux2014_x86_64 -w repaired_wheels/
-        done
+        docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+          cd /io &&
+          yum install -y libwayland-bin libwayland-dev libwayland-egl-backend-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libx11-dev libxcursor-dev libxi-dev libxext-dev libxcomposite-dev libxdamage-dev libxfixes-dev mesa-common-dev &&
+          /opt/python/cp311-cp311/bin/pip install cmake auditwheel build &&
+          cmake -DPYBIND11_PYTHON_VERSION='${PYTHON_VERSION}' -S . -B build -DCMAKE_BUILD_TYPE='${BUILD_TYPE}' &&
+          cmake --build build --config '${BUILD_TYPE}' &&
+          /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild &&
+          mkdir -p repaired_wheels &&
+          for whl in PythonBuild/dist/*.whl; do
+            auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
+          done
+        "
 
     - name: Install Twine
-      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/pip install twine
+      run: pip install twine
 
     - name: Publish on PyPI
-      run: /opt/python/cp${{ env.PYTHON_VERSION_NO_DOT }}-cp${{ env.PYTHON_VERSION_NO_DOT }}/bin/python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
