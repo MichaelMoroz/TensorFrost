@@ -58,7 +58,7 @@ jobs:
             yum install -y cmake3 make gcc gcc-c++ \
               mesa-libGL-devel libXrandr-devel libXinerama-devel libXcursor-devel \
               libXi-devel libX11-devel libXext-devel libXcomposite-devel libXdamage-devel \
-              libXfixes-devel wayland-devel wayland-protocols-devel &&
+              libXfixes-devel wayland-devel wayland-protocols-devel python3-devel &&
             cd /io &&
             /opt/python/cp311-cp311/bin/pip install -r requirements.txt &&
             cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
