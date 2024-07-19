@@ -2,12 +2,13 @@ import TensorFrost as tf
 import numpy as np
 tf.initialize(tf.cpu)
 
-
-def n_body(X: tf.tensor_arg([-1, 3], tf.float32),
-           V: tf.tensor_arg([-1, 3], tf.float32),
-           params: tf.tensor_arg([-1], tf.float32)):
+def n_body(X: tf.Tensor,
+           V: tf.Tensor,
+           params: tf.Tensor):
+    X.assert_tensor([-1, 3], tf.float32)
     N = X.shape[0]
-    V.assert_shape([N, 3]) #make sure V has the right shape
+    V.assert_tensor([N, 3], tf.float32)
+    params.assert_tensor([-1], tf.float32)
 
     sph_rad = params[0] # 0.015
     rest_density = params[1] # 0.5
