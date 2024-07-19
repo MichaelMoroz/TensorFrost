@@ -25,18 +25,18 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Versions Berfore
-      run: cmd.exe /C where python
-        
     - uses: actions/setup-python@v5.1.1
       with:
         python-version: ${{env.PYTHON_VERSION}}
+    - run: cmd.exe /C where python
+    - run: pip install -r requirements.txt
 
-    - name: Versions Berfore
-      run: cmd.exe /C where python
-
-    - name: Install Python packages
-      run: pip install -r requirements.txt
+    - uses: actions/setup-python@v5.1.1
+      with:
+        python-version: "3.12.4"
+    - run: cmd.exe /C where python
+    - run: pip install -r requirements.txt
+    
     
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
