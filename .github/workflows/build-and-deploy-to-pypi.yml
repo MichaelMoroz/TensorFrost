@@ -43,8 +43,27 @@ jobs:
       run: python -m build -w ./PythonBuild
   
     - name: Publish on PyPI
-      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar
-
+      run: |
+        $maxRetries = 3
+        $retryCount = 0
+        $success = $false
+  
+        while (-not $success -and $retryCount -lt $maxRetries) {
+          try {
+            python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar --timeout 60
+            $success = $true
+          }
+          catch {
+            $retryCount++
+            Write-Host "Upload failed. Retrying in 30 seconds... (Attempt $retryCount of $maxRetries)"
+            Start-Sleep -Seconds 30
+          }
+        }
+  
+        if (-not $success) {
+          throw "Failed to upload after $maxRetries attempts"
+        }
+        
   build-manylinux:
     runs-on: ubuntu-latest
     strategy:
