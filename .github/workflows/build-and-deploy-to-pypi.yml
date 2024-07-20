@@ -61,8 +61,33 @@ jobs:
       with:
         python-versions: ${{ env.PYTHON_VERSION }}
         build-requirements: 'cmake'
-        system-packages: 'libwayland-bin libwayland-dev libwayland-egl-backend-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libx11-dev libxcursor-dev libxi-dev libxext-dev libxcomposite-dev libxdamage-dev libxfixes-dev mesa-common-dev'
-        pre-build-command: 'cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} && cmake --build build --config ${{ env.BUILD_TYPE }}'
+        system-packages: 'libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel'
+        pre-build-command: |
+          # Install Wayland from source
+          curl -LO https://wayland.freedesktop.org/releases/wayland-1.18.0.tar.xz
+          tar xf wayland-1.18.0.tar.xz
+          cd wayland-1.18.0
+          ./configure
+          make
+          make install
+          cd ..
+          
+          # Install libxkbcommon from source
+          curl -LO https://github.com/xkbcommon/libxkbcommon/archive/xkbcommon-0.10.0.tar.gz
+          tar xzf xkbcommon-0.10.0.tar.gz
+          cd libxkbcommon-xkbcommon-0.10.0
+          ./autogen.sh
+          ./configure
+          make
+          make install
+          cd ..
+          
+          # Update library path
+          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
+          
+          # Now run CMake and build
+          cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+          cmake --build build --config ${{ env.BUILD_TYPE }}
   
     - name: Install Twine
       run: pip install twine
