@@ -51,18 +51,19 @@ jobs:
       with:
         submodules: recursive
   
-    - name: Set up Python
-      uses: actions/setup-python@v5.1.1
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-  
     - name: Build manylinux Python wheels
       uses: RalfG/python-wheels-manylinux-build@v0.7.1-manylinux2014_x86_64
       with:
-        python-versions: ${{ env.PYTHON_VERSION }}
+        python-versions: '3.11'
         build-requirements: 'cmake'
         system-packages: 'libX11-devel libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel mesa-libGL-devel'
         pre-build-command: |
+          echo "Debugging environment:"
+          ls /opt/python
+          which python
+          python --version
+          env | sort
+          
           # Install Wayland from source
           curl -LO https://wayland.freedesktop.org/releases/wayland-1.18.0.tar.xz
           tar xf wayland-1.18.0.tar.xz
@@ -86,8 +87,8 @@ jobs:
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib
           
           # Now run CMake and build
-          cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-          cmake --build build --config ${{ env.BUILD_TYPE }}
+          cmake -DPYBIND11_PYTHON_VERSION="3.11" -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release
   
     - name: Install Twine
       run: pip install twine
