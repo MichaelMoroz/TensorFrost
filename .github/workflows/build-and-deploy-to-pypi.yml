@@ -81,7 +81,10 @@ jobs:
           libXcomposite-devel \
           libwayland-client \
           libevdev-devel \
+          kernel-devel linux-headers \
           libXrandr-devel \
+          wayland-scanner \
+          wayland-utils \
           && yum clean all
         
         # Use Python 3.11 from /opt/python
