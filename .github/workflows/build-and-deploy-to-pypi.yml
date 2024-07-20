@@ -73,14 +73,25 @@ jobs:
           && yum clean all
         
         # Use Python 3.11 from /opt/python
-        PYTHON=/opt/python/cp311-cp311/bin/python
+        export PYTHON_ROOT=/opt/python/cp311-cp311
+        export PATH=\$PYTHON_ROOT/bin:\$PATH
+        export PYTHON_EXECUTABLE=\$PYTHON_ROOT/bin/python
+        export PYTHON_INCLUDE_DIR=\$PYTHON_ROOT/include/python3.11
+        export PYTHON_LIBRARY=\$PYTHON_ROOT/lib/libpython3.11.so
         
-        \$PYTHON -m pip install --upgrade pip
-        \$PYTHON -m pip install -r requirements.txt
-        \$PYTHON -m pip install cmake build auditwheel
-        \$PYTHON -m cmake -DPYBIND11_PYTHON_VERSION='3.11' -S . -B build -DCMAKE_BUILD_TYPE=Release
-        \$PYTHON -m cmake --build build --config Release
-        \$PYTHON -m build -w ./PythonBuild
+        \$PYTHON_EXECUTABLE -m pip install --upgrade pip
+        \$PYTHON_EXECUTABLE -m pip install -r requirements.txt
+        \$PYTHON_EXECUTABLE -m pip install cmake build auditwheel
+        
+        # CMake configuration with explicit Python paths
+        \$PYTHON_EXECUTABLE -m cmake -DPYTHON_EXECUTABLE=\$PYTHON_EXECUTABLE \
+                                      -DPYTHON_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
+                                      -DPYTHON_LIBRARY=\$PYTHON_LIBRARY \
+                                      -DPYBIND11_PYTHON_VERSION='3.11' \
+                                      -S . -B build -DCMAKE_BUILD_TYPE=Release
+        
+        \$PYTHON_EXECUTABLE -m cmake --build build --config Release
+        \$PYTHON_EXECUTABLE -m build -w ./PythonBuild
         for whl in PythonBuild/dist/*.whl; do
           auditwheel repair \"\$whl\" -w ./wheelhouse/
         done
