@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
 
 env:
-  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
   BUILD_TYPE: Release
-  PYTHON_VERSION: "3.11"
-  PYTHON_VERSION_SHORT: "3.11.9"
 
 jobs:
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
     steps:
     - uses: actions/checkout@v4
       with:
@@ -19,33 +19,33 @@ jobs:
 
     - uses: actions/setup-python@v5.1.1
       with:
-        python-version: ${{env.PYTHON_VERSION}}
+        python-version: ${{ matrix.python-version }}
 
-    - uses: actions/setup-python@v5.1.1
-      with:
-        python-version: "3.12.4"
     - run: pip install -r requirements.txt
     
     - name: Configure CMake
-      run: cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+      run: cmake -DPYBIND11_PYTHON_VERSION="${{ matrix.python-version }}" -S . -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }}
 
     - name: Install package 'build'
-      run: py -${{ env.PYTHON_VERSION }} -m pip install build
+      run: python -m pip install build
 
     - name: Build Wheel
-      run: py -${{ env.PYTHON_VERSION }} -m build -w ./PythonBuild
+      run: python -m build -w ./PythonBuild
 
     - name: Install Twine
-      run: py -${{ env.PYTHON_VERSION }} -m pip install twine
+      run: python -m pip install twine
 
     - name: Publish on PyPI
-      run: py -${{ env.PYTHON_VERSION }} -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar
 
   build-manylinux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['cp37-cp37m', 'cp38-cp38', 'cp39-cp39', 'cp310-cp310', 'cp311-cp311', 'cp312-cp312']
     steps:
     - uses: actions/checkout@v4
       with:
@@ -64,7 +64,7 @@ jobs:
           libXcomposite-devel libwayland-client libevdev-devel kernel-devel libXrandr-devel \
           && yum clean all
         
-        export PYTHON_ROOT=/opt/python/cp311-cp311
+        export PYTHON_ROOT=/opt/python/${{ matrix.python-version }}
         export PATH=\$PYTHON_ROOT/bin:\$PATH
         export PYTHON_EXECUTABLE=\$PYTHON_ROOT/bin/python
         
@@ -76,7 +76,7 @@ jobs:
           -DPython_FIND_STRATEGY=LOCATION \
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
-          -DPYBIND11_PYTHON_VERSION=3.11 \
+          -DPYBIND11_PYTHON_VERSION=${{ matrix.python-version }} \
           -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
           -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
