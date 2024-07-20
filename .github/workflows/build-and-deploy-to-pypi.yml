@@ -57,6 +57,28 @@ jobs:
         set -e
         cd /io
         
+        # Install necessary dependencies
+        yum install -y \
+          epel-release \
+          wayland-devel \
+          wayland-protocols-devel \
+          libxkbcommon-devel \
+          mesa-libGL-devel \
+          mesa-libEGL-devel \
+          libXrandr-devel \
+          libXinerama-devel \
+          libXcursor-devel \
+          libXi-devel \
+          libXext-devel \
+          libXfixes-devel \
+          libXt-devel \
+          libXtst-devel \
+          libX11-devel \
+          libXdamage-devel \
+          libXcomposite-devel \
+          libwayland-client \
+          && yum clean all
+        
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
         export PATH=\$PYTHON_ROOT/bin:\$PATH
