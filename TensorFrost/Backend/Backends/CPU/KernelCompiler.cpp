@@ -23,15 +23,15 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 	   << sourcePath << " /Fe:" << dllName
 	   << "\"\"\\\"\"";  // MSVC
 #else
-	if (kernel_compile_options.empty()) {
+    if (kernel_compile_options.empty()) {
 #ifdef NDEBUG
-		kernel_compile_options = "-O3 -ffast-math -fopenmp";
+        kernel_compile_options = "-O3 -ffast-math -fopenmp";
 #else
-		kernel_compile_options = "-g";
+        kernel_compile_options = "-g";
 #endif
-	}
-	ss << "g++ " << kernel_compile_options << " -shared -fPIC " << tempPath
-	   << "generated_lib.cpp -o " << dllName;  // GCC
+    }
+    ss << "g++ " << kernel_compile_options << " -shared -fPIC " << tempPath
+       << sourcePath << " -o " << dllName;  // GCC
 #endif
 
 	
