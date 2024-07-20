@@ -89,27 +89,13 @@ jobs:
         export PATH=\$PYTHON_ROOT/bin:\$PATH
         export PYTHON_EXECUTABLE=\$PYTHON_ROOT/bin/python
         
-        # Debug information
-        echo \"Python executable: \$PYTHON_EXECUTABLE\"
-        echo \"Python root: \$PYTHON_ROOT\"
-        \$PYTHON_EXECUTABLE --version
-        \$PYTHON_EXECUTABLE -c \"import sys; print(sys.prefix)\"
-        \$PYTHON_EXECUTABLE -c \"import sysconfig; print(sysconfig.get_paths())\"
-        
-        \$PYTHON_EXECUTABLE -m pip install --upgrade pip
-        \$PYTHON_EXECUTABLE -m pip install -r requirements.txt
-        \$PYTHON_EXECUTABLE -m pip install cmake build auditwheel
-        
         # CMake configuration for module development
         \$PYTHON_EXECUTABLE -m cmake \
           -DPython3_ROOT_DIR=\$PYTHON_ROOT \
           -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
-          -DPython_FIND_STRATEGY=LOCATION \
-          -DPython_FIND_REGISTRY=NEVER \
-          -DPython_FIND_FRAMEWORK=NEVER \
           -DPYBIND11_PYTHON_VERSION=3.11 \
-          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
-          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
+          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
+          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
