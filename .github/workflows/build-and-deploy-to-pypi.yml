@@ -52,14 +52,12 @@ jobs:
       with:
         submodules: recursive
 
-    - name: Install Docker
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y docker.io
-
     - name: Build and repair wheel inside manylinux2014 Docker container
-      run: |
-        docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+      uses: addnab/docker-run-action@v3
+      with:
+        image: quay.io/pypa/manylinux2014_x86_64
+        options: --rm -v ${{ github.workspace }}:/project
+        run: |
           yum install -y \
             wayland-devel \
             libxkbcommon-devel \
@@ -83,7 +81,6 @@ jobs:
           for whl in PythonBuild/dist/*.whl; do
             auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
           done
-        "
 
     - name: Install Twine
       run: pip install twine
