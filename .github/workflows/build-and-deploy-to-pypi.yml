@@ -47,36 +47,21 @@ jobs:
         $maxRetries = 3
         $retryCount = 0
         $success = $false
-        $timeout = 300  # 5 minutes timeout
-
+  
         while (-not $success -and $retryCount -lt $maxRetries) {
           try {
-            $result = Measure-Command {
-              $job = Start-Job -ScriptBlock {
-                python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p $using:{{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar
-              }
-              $job | Wait-Job -Timeout $using:timeout | Out-Null
-              if ($job.State -eq 'Running') {
-                throw "Job timed out after $using:timeout seconds"
-              }
-              Receive-Job -Job $job
-            }
-            if ($LASTEXITCODE -ne 0) {
-              throw "Twine upload failed with exit code $LASTEXITCODE"
-            }
+            python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p "${{ secrets.PYPI_REPO_TOKEN }}" PythonBuild/dist/* --verbose --disable-progress-bar
             $success = $true
-            Write-Host "Upload completed successfully in $($result.TotalSeconds) seconds."
           }
           catch {
             $retryCount++
-            Write-Host "Upload failed: $_"
-            Write-Host "Retrying in 30 seconds... (Attempt $retryCount of $maxRetries)"
+            Write-Host "Upload failed. Retrying in 30 seconds... (Attempt $retryCount of $maxRetries)"
             Start-Sleep -Seconds 30
           }
         }
-
+  
         if (-not $success) {
-          throw
+          throw "Failed to upload after $maxRetries attempts"
         }
 
   build-manylinux:
