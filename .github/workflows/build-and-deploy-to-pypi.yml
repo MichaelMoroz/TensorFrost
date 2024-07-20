@@ -56,21 +56,6 @@ jobs:
         docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
         set -e
         cd /io
-        yum install -y \
-          epel-release \
-          libwayland-client \
-          libxkbcommon \
-          libXrandr \
-          libXinerama \
-          libX11 \
-          libXcursor \
-          libXi \
-          libXext \
-          libXcomposite \
-          libXdamage \
-          libXfixes \
-          mesa-libGL \
-          && yum clean all
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
