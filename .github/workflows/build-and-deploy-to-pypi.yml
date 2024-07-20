@@ -79,16 +79,28 @@ jobs:
         export PYTHON_INCLUDE_DIR=\$PYTHON_ROOT/include/python3.11
         export PYTHON_LIBRARY=\$PYTHON_ROOT/lib/libpython3.11.so
         
+        # Debug information
+        echo \"Python executable: \$PYTHON_EXECUTABLE\"
+        echo \"Python include dir: \$PYTHON_INCLUDE_DIR\"
+        echo \"Python library: \$PYTHON_LIBRARY\"
+        \$PYTHON_EXECUTABLE --version
+        \$PYTHON_EXECUTABLE -c \"import sys; print(sys.prefix)\"
+        \$PYTHON_EXECUTABLE -c \"import sysconfig; print(sysconfig.get_config_var('LIBDIR'))\"
+        ls -l \$PYTHON_INCLUDE_DIR
+        ls -l \$PYTHON_LIBRARY
+        
         \$PYTHON_EXECUTABLE -m pip install --upgrade pip
         \$PYTHON_EXECUTABLE -m pip install -r requirements.txt
         \$PYTHON_EXECUTABLE -m pip install cmake build auditwheel
         
         # CMake configuration with explicit Python paths
-        \$PYTHON_EXECUTABLE -m cmake -DPYTHON_EXECUTABLE=\$PYTHON_EXECUTABLE \
-                                      -DPYTHON_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
-                                      -DPYTHON_LIBRARY=\$PYTHON_LIBRARY \
-                                      -DPYBIND11_PYTHON_VERSION='3.11' \
-                                      -S . -B build -DCMAKE_BUILD_TYPE=Release
+        \$PYTHON_EXECUTABLE -m cmake \
+          -DPython3_ROOT_DIR=\$PYTHON_ROOT \
+          -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
+          -DPython3_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
+          -DPython3_LIBRARY=\$PYTHON_LIBRARY \
+          -DPYBIND11_PYTHON_VERSION=3.11 \
+          -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
         \$PYTHON_EXECUTABLE -m build -w ./PythonBuild
