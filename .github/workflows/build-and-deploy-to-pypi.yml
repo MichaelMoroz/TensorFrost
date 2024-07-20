@@ -81,7 +81,7 @@ jobs:
           libXcomposite-devel \
           libwayland-client \
           libevdev-devel \
-          kernel-devel linux-headers \
+          kernel-devel \
           libXrandr-devel \
           wayland-scanner \
           wayland-utils \
