@@ -83,7 +83,6 @@ jobs:
           libevdev-devel \
           kernel-devel \
           libXrandr-devel \
-          wayland-utils \
           && yum clean all
         
         # Use Python 3.11 from /opt/python
