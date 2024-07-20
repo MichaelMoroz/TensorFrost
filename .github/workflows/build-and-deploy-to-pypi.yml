@@ -28,14 +28,15 @@ jobs:
         pip install -r requirements.txt
 
     - name: Configure CMake
+      shell: pwsh
       run: |
-        $env:PYTHON_EXECUTABLE = (Get-Command python).Path 
-        cmake -DPYBIND11_PYTHON_VERSION="${{ matrix.python-version }}" \
-        -DPython3_ROOT_DIR="$env:PYTHON_ROOT" \
-        -DPython3_EXECUTABLE="$env:PYTHON_EXECUTABLE" \
-        -DPython_FIND_STRATEGY=LOCATION \
-        -DPython_FIND_REGISTRY=NEVER \
-        -DPython_FIND_FRAMEWORK=NEVER \
+        $env:PYTHON_EXECUTABLE = (Get-Command python).Path
+        cmake -DPYBIND11_PYTHON_VERSION="${{ matrix.python-version }}" `
+        -DPython3_ROOT_DIR="$env:PYTHONLOCATION" `
+        -DPython3_EXECUTABLE="$env:PYTHON_EXECUTABLE" `
+        -DPython_FIND_STRATEGY=LOCATION `
+        -DPython_FIND_REGISTRY=NEVER `
+        -DPython_FIND_FRAMEWORK=NEVER `
         -S . -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
     - name: Build
@@ -66,6 +67,7 @@ jobs:
         set -e
         cd /io
         
+        # Install necessary dependencies
         yum install -y epel-release kernel-headers wayland-devel libxkbcommon-devel \
           wayland-protocols-devel mesa-libGL-devel mesa-libEGL-devel libXcursor-devel \
           libXi-devel libXinerama-devel libXrandr-devel libXrender-devel libXext-devel \
@@ -80,7 +82,10 @@ jobs:
         \$PYTHON_EXECUTABLE -m pip install --upgrade pip -r requirements.txt cmake build auditwheel
         
         # Extract Python version (e.g., 3.7, 3.8, etc.)
-        PYTHON_VERSION=\$(\$PYTHON_EXECUTABLE -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        PYTHON_VERSION=\$(\$PYTHON_EXECUTABLE -c 'import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")')
+        
+        echo \"Python version: \$PYTHON_VERSION\"
+        echo \"Python executable: \$PYTHON_EXECUTABLE\"
         
         \$PYTHON_EXECUTABLE -m cmake \
           -DPython3_ROOT_DIR=\$PYTHON_ROOT \
