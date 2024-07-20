@@ -17,14 +17,18 @@ endforeach()
 
 # If PYBIND11_PYTHON_VERSION is not set just use the default python version
 if(NOT DEFINED PYBIND11_PYTHON_VERSION)
-  find_package(Python3 COMPONENTS Interpreter Development)
+  message("Looking for LAST Python version ${PYBIND11_PYTHON_VERSION}")
+  find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 else()
-  find_package(Python3 ${PYBIND11_PYTHON_VERSION} EXACT COMPONENTS Interpreter Development)
+  message("Looking for EXACT Python version ${PYBIND11_PYTHON_VERSION}")
+  find_package(Python3 ${PYBIND11_PYTHON_VERSION} EXACT COMPONENTS Interpreter Development.Module REQUIRED)
 endif()
+message("TensorFrost found Python: ${Python3_VERSION}")
 
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(PYBIND11_FINDPYTHON ON)
 
 add_subdirectory(external/pybind11)
 add_subdirectory(external/glfw)

@@ -29,7 +29,7 @@ namespace TensorFrost {
         {
             std::cout << "librenderdoc.so successfully loaded" << std::endl;
             pRENDERDOC_GetAPI RENDERDOC_GetAPI = (pRENDERDOC_GetAPI)dlsym(mod, "RENDERDOC_GetAPI");
-            RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_4_2, (void**)&m_RDCAPI);
+            RENDERDOC_GetAPI(eRENDERDOC_API_Version_1_4_2, (void**)&RDCAPI);
         }
 #endif
     }
