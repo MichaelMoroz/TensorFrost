@@ -61,8 +61,10 @@ jobs:
         docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
         set -e
         cd /io
+        yum install -y epel-release
         yum install -y \
-          libwayland-devel \
+          python3-devel \
+          wayland-devel \
           libxkbcommon-devel \
           libXrandr-devel \
           libXinerama-devel \
@@ -77,9 +79,14 @@ jobs:
           && yum clean all
         /opt/python/cp311-cp311/bin/pip install -r requirements.txt
         /opt/python/cp311-cp311/bin/pip install cmake build
-        /opt/python/cp311-cp311/bin/cmake -DPYBIND11_PYTHON_VERSION='3.11' -S . -B build -DCMAKE_BUILD_TYPE=Release
-        /opt/python/cp311-cp311/bin/cmake --build build --config Release
-        /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild
+        export PATH=/opt/python/cp311-cp311/bin:$PATH
+        cmake -DPYTHON_EXECUTABLE=/opt/python/cp311-cp311/bin/python \
+              -DPYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 \
+              -DPYTHON_LIBRARY=/opt/python/cp311-cp311/lib/libpython3.11.so \
+              -DPYBIND11_PYTHON_VERSION='3.11' \
+              -S . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release
+        python -m build -w ./PythonBuild
         for whl in PythonBuild/dist/*.whl; do
           auditwheel repair \"\$whl\" -w ./wheelhouse/
         done
