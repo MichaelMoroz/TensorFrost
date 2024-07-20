@@ -83,7 +83,6 @@ jobs:
           libevdev-devel \
           kernel-devel \
           libXrandr-devel \
-          wayland-scanner \
           wayland-utils \
           && yum clean all
         
