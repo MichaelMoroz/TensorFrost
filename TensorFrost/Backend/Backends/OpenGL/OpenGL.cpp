@@ -318,7 +318,7 @@ void ImGuiEnd() {
 	ImGui::End();
 }
 
-void ImGuiText(std::string& text) {
+void ImGuiText(const std::string& text) {
 	ImGui::Text("%s", text.c_str());
 }
 

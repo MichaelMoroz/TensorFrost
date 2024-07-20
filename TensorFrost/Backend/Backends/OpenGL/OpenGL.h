@@ -34,7 +34,7 @@ bool IsKeyPressed(int key);
 void ImGuiBegin(std::string name);
 void ImGuiEnd();
 
-void ImGuiText(std::string text);
+void ImGuiText(const std::string& text);
 void ImGuiSlider(std::string text, int* value, int min, int max);
 void ImGuiSlider(std::string text, float* value, float min, float max);
 bool ImGuiCheckbox(std::string text, bool* value);
