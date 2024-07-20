@@ -46,45 +46,26 @@ jobs:
 
   build-manylinux:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Build and repair wheel inside manylinux2014 Docker container
-      uses: addnab/docker-run-action@v3
+  
+    - name: Set up Python
+      uses: actions/setup-python@v5.1.1
       with:
-        image: quay.io/pypa/manylinux2014_x86_64
-        options: --rm -v ${{ github.workspace }}:/project
-        run: |
-          yum install -y \
-            wayland-devel \
-            libxkbcommon-devel \
-            libXrandr-devel \
-            libXinerama-devel \
-            libX11-devel \
-            libXcursor-devel \
-            libXi-devel \
-            libXext-devel \
-            libXcomposite-devel \
-            libXdamage-devel \
-            libXfixes-devel \
-            mesa-libGL-devel &&
-          /opt/python/cp311-cp311/bin/python -m pip install --upgrade pip &&
-          /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build &&
-          cd /project &&
-          cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
-          cmake --build build --config ${BUILD_TYPE} &&
-          /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild &&
-          mkdir -p repaired_wheels &&
-          for whl in PythonBuild/dist/*.whl; do
-            auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
-          done
-
+        python-version: ${{ env.PYTHON_VERSION }}
+  
+    - name: Build manylinux Python wheels
+      uses: RalfG/python-wheels-manylinux-build@v0.7.1-manylinux2014_x86_64
+      with:
+        python-versions: ${{ env.PYTHON_VERSION }}
+        build-requirements: 'cmake'
+        system-packages: 'libwayland-bin libwayland-dev libwayland-egl-backend-dev libxkbcommon-dev libxrandr-dev libxinerama-dev libx11-dev libxcursor-dev libxi-dev libxext-dev libxcomposite-dev libxdamage-dev libxfixes-dev mesa-common-dev'
+        pre-build-command: 'cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} && cmake --build build --config ${{ env.BUILD_TYPE }}'
+  
     - name: Install Twine
       run: pip install twine
-
+  
     - name: Publish on PyPI
-      run: |
-        python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheelhouse/*.whl --verbose --disable-progress-bar
