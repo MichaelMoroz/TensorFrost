@@ -50,53 +50,43 @@ jobs:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libwayland-bin \
-          libwayland-dev \
-          libwayland-egl-backend-dev \
-          libxkbcommon-dev \
-          libxrandr-dev \
-          libxinerama-dev \
-          libx11-dev \
-          libxcursor-dev \
-          libxi-dev \
-          libxext-dev \
-          libxcomposite-dev \
-          libxdamage-dev \
-          libxfixes-dev \
-          mesa-common-dev
-
+  
     - name: Set up Python
       uses: actions/setup-python@v5.1.1
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-
-    - name: Install dependencies
+  
+    - name: Build manylinux wheel
       run: |
-        pip install -r requirements.txt
-        pip install cmake
-        pip install auditwheel
-        pip install build
-
-    - name: Build Wheel
-      run: |
-        cmake -DPYBIND11_PYTHON_VERSION="${{ env.PYTHON_VERSION }}" -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-        cmake --build build --config ${{ env.BUILD_TYPE }}
-        python -m build -w ./PythonBuild
-
-    - name: Repair Wheel with auditwheel
-      run: |
-        mkdir -p repaired_wheels
+        docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
+        set -e
+        cd /io
+        yum install -y \
+          libwayland-devel \
+          libxkbcommon-devel \
+          libXrandr-devel \
+          libXinerama-devel \
+          libX11-devel \
+          libXcursor-devel \
+          libXi-devel \
+          libXext-devel \
+          libXcomposite-devel \
+          libXdamage-devel \
+          libXfixes-devel \
+          mesa-libGL-devel \
+          && yum clean all
+        /opt/python/cp311-cp311/bin/pip install -r requirements.txt
+        /opt/python/cp311-cp311/bin/pip install cmake build
+        /opt/python/cp311-cp311/bin/cmake -DPYBIND11_PYTHON_VERSION='3.11' -S . -B build -DCMAKE_BUILD_TYPE=Release
+        /opt/python/cp311-cp311/bin/cmake --build build --config Release
+        /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild
         for whl in PythonBuild/dist/*.whl; do
-          auditwheel repair "$whl" --plat manylinux_2_28_x86_64 -w repaired_wheels/
+          auditwheel repair \"\$whl\" -w ./wheelhouse/
         done
-
+        "
+  
     - name: Install Twine
       run: pip install twine
-
+  
     - name: Publish on PyPI
-      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} repaired_wheels/* --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheelhouse/*.whl --verbose --disable-progress-bar
