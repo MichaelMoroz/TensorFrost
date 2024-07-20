@@ -85,10 +85,6 @@ jobs:
           libevdev-devel \
           && yum clean all
         
-        # Debug: Check for the missing header file
-        find /usr -name input-event-codes.h
-        ls -l /usr/include/linux/input-event-codes.h
-        
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
         export PATH=\$PYTHON_ROOT/bin:\$PATH
