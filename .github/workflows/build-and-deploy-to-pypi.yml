@@ -60,16 +60,18 @@ jobs:
         # Install necessary dependencies
         yum install -y \
           epel-release \
-          kernel-devel \
+          kernel-headers \
           wayland-devel \
-          wayland-protocols-devel \
           libxkbcommon-devel \
+          wayland-protocols-devel \
+          extra-cmake-modules \
           mesa-libGL-devel \
           mesa-libEGL-devel \
-          libXrandr-devel \
-          libXinerama-devel \
           libXcursor-devel \
           libXi-devel \
+          libXinerama-devel \
+          libXrandr-devel \
+          libXrender-devel \
           libXext-devel \
           libXfixes-devel \
           libXt-devel \
@@ -78,6 +80,7 @@ jobs:
           libXdamage-devel \
           libXcomposite-devel \
           libwayland-client \
+          libevdev-devel \
           && yum clean all
         
         # Use Python 3.11 from /opt/python
@@ -104,8 +107,8 @@ jobs:
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
           -DPYBIND11_PYTHON_VERSION=3.11 \
-          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=199309L -I/usr/src/kernels/$(uname -r)/include\" \
-          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=199309L -I/usr/src/kernels/$(uname -r)/include\" \
+          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE\" \
+          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
