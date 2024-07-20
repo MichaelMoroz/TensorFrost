@@ -82,12 +82,21 @@ jobs:
         export PATH=/opt/python/cp311-cp311/bin:/opt/rh/devtoolset-10/root/usr/bin:$PATH
         export CC=/opt/rh/devtoolset-10/root/usr/bin/gcc
         export CXX=/opt/rh/devtoolset-10/root/usr/bin/g++
-        cmake -DPYTHON_EXECUTABLE=/opt/python/cp311-cp311/bin/python \
-              -DPYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 \
-              -DPYTHON_LIBRARY=/opt/python/cp311-cp311/lib/libpython3.11.so \
+        export PYTHON_EXECUTABLE=/opt/python/cp311-cp311/bin/python
+        export PYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11
+        export PYTHON_LIBRARY=/opt/python/cp311-cp311/lib/libpython3.11.so
+        ls -l \$PYTHON_INCLUDE_DIR
+        ls -l \$PYTHON_LIBRARY
+        cmake -DPYTHON_EXECUTABLE=\$PYTHON_EXECUTABLE \
+              -DPYTHON_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
+              -DPYTHON_LIBRARY=\$PYTHON_LIBRARY \
+              -DPython3_ROOT_DIR=/opt/python/cp311-cp311 \
+              -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
+              -DPython3_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
+              -DPython3_LIBRARY=\$PYTHON_LIBRARY \
               -DPYBIND11_PYTHON_VERSION='3.11' \
-              -DCMAKE_C_COMPILER=/opt/rh/devtoolset-10/root/usr/bin/gcc \
-              -DCMAKE_CXX_COMPILER=/opt/rh/devtoolset-10/root/usr/bin/g++ \
+              -DCMAKE_C_COMPILER=\$CC \
+              -DCMAKE_CXX_COMPILER=\$CXX \
               -S . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
         python -m build -w ./PythonBuild
