@@ -81,7 +81,7 @@ jobs:
           libXcomposite-devel \
           libwayland-client \
           libevdev-devel \
-          kernel-devel linux-headers \
+          libXrandr-devel \
           && yum clean all
         
         # Use Python 3.11 from /opt/python
@@ -104,6 +104,9 @@ jobs:
         \$PYTHON_EXECUTABLE -m cmake \
           -DPython3_ROOT_DIR=\$PYTHON_ROOT \
           -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
+          -DPython_FIND_STRATEGY=LOCATION \
+          -DPython_FIND_REGISTRY=NEVER \
+          -DPython_FIND_FRAMEWORK=NEVER \
           -DGLFW_BUILD_WAYLAND=OFF \
           -DPYBIND11_PYTHON_VERSION=3.11 \
           -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
