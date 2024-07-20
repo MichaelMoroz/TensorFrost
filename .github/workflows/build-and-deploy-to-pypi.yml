@@ -51,52 +51,36 @@ jobs:
       with:
         submodules: recursive
   
-    - name: Set up Python
-      uses: actions/setup-python@v5.1.1
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
-  
     - name: Build manylinux wheel
       run: |
         docker run --rm -v $(pwd):/io quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
         set -e
         cd /io
-        yum install -y epel-release
         yum install -y \
-          python3-devel \
-          wayland-devel \
-          libxkbcommon-devel \
-          libXrandr-devel \
-          libXinerama-devel \
-          libX11-devel \
-          libXcursor-devel \
-          libXi-devel \
-          libXext-devel \
-          libXcomposite-devel \
-          libXdamage-devel \
-          libXfixes-devel \
-          mesa-libGL-devel \
+          epel-release \
+          libwayland-client \
+          libxkbcommon \
+          libXrandr \
+          libXinerama \
+          libX11 \
+          libXcursor \
+          libXi \
+          libXext \
+          libXcomposite \
+          libXdamage \
+          libXfixes \
+          mesa-libGL \
           && yum clean all
-        /opt/python/cp311-cp311/bin/pip install -r requirements.txt
-        /opt/python/cp311-cp311/bin/pip install cmake build
-        export PATH=/opt/python/cp311-cp311/bin:/opt/rh/devtoolset-10/root/usr/bin:$PATH
-        export CC=/opt/rh/devtoolset-10/root/usr/bin/gcc
-        export CXX=/opt/rh/devtoolset-10/root/usr/bin/g++
-        export PYTHON_EXECUTABLE=/opt/python/cp311-cp311/bin/python
-        export PYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11
-        ls -l \$PYTHON_INCLUDE_DIR
-        \$PYTHON_EXECUTABLE -c \"import sysconfig; print(sysconfig.get_config_var('LIBDIR'))\"
-        cmake -DPYTHON_EXECUTABLE=\$PYTHON_EXECUTABLE \
-              -DPYTHON_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
-              -DPython3_ROOT_DIR=/opt/python/cp311-cp311 \
-              -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
-              -DPython3_INCLUDE_DIR=\$PYTHON_INCLUDE_DIR \
-              -DPYBIND11_PYTHON_VERSION='3.11' \
-              -DCMAKE_C_COMPILER=\$CC \
-              -DCMAKE_CXX_COMPILER=\$CXX \
-              -S . -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build --config Release
-        python -m build -w ./PythonBuild
+        
+        # Use Python 3.11 from /opt/python
+        PYTHON=/opt/python/cp311-cp311/bin/python
+        
+        \$PYTHON -m pip install --upgrade pip
+        \$PYTHON -m pip install -r requirements.txt
+        \$PYTHON -m pip install cmake build auditwheel
+        \$PYTHON -m cmake -DPYBIND11_PYTHON_VERSION='3.11' -S . -B build -DCMAKE_BUILD_TYPE=Release
+        \$PYTHON -m cmake --build build --config Release
+        \$PYTHON -m build -w ./PythonBuild
         for whl in PythonBuild/dist/*.whl; do
           auditwheel repair \"\$whl\" -w ./wheelhouse/
         done
