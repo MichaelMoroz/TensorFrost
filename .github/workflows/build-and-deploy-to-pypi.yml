@@ -17,20 +17,29 @@ jobs:
       with:
         submodules: recursive
 
-    - uses: actions/setup-python@v5.1.1
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5.1.1
       with:
         python-version: ${{ matrix.python-version }}
 
-    - run: pip install -r requirements.txt
-    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
     - name: Configure CMake
-      run: cmake -DPYBIND11_PYTHON_VERSION="${{ matrix.python-version }}" -S . -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
+      run: |
+        $env:PYTHON_EXECUTABLE = (Get-Command python).Path 
+        cmake -DPYBIND11_PYTHON_VERSION="${{ matrix.python-version }}" \
+        -DPython3_ROOT_DIR="$env:PYTHON_ROOT" \
+        -DPython3_EXECUTABLE="$env:PYTHON_EXECUTABLE" \
+        -DPython_FIND_STRATEGY=LOCATION \
+        -DPython_FIND_REGISTRY=NEVER \
+        -DPython_FIND_FRAMEWORK=NEVER \
+        -S . -B ${{ github.workspace }}/build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
 
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --config ${{ env.BUILD_TYPE }}
-
-    - name: Install package 'build'
-      run: python -m pip install build
 
     - name: Build Wheel
       run: python -m build -w ./PythonBuild
@@ -40,7 +49,7 @@ jobs:
 
     - name: Publish on PyPI
       run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} PythonBuild/dist/* --verbose --disable-progress-bar
-
+  
   build-manylinux:
     runs-on: ubuntu-latest
     strategy:
@@ -70,13 +79,16 @@ jobs:
         
         \$PYTHON_EXECUTABLE -m pip install --upgrade pip -r requirements.txt cmake build auditwheel
         
+        # Extract Python version (e.g., 3.7, 3.8, etc.)
+        PYTHON_VERSION=\$(\$PYTHON_EXECUTABLE -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        
         \$PYTHON_EXECUTABLE -m cmake \
           -DPython3_ROOT_DIR=\$PYTHON_ROOT \
           -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
           -DPython_FIND_STRATEGY=LOCATION \
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
-          -DPYBIND11_PYTHON_VERSION=${{ matrix.python-version }} \
+          -DPYBIND11_PYTHON_VERSION=\$PYTHON_VERSION \
           -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
           -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
