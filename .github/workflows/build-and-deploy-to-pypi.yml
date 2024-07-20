@@ -79,11 +79,15 @@ jobs:
           && yum clean all
         /opt/python/cp311-cp311/bin/pip install -r requirements.txt
         /opt/python/cp311-cp311/bin/pip install cmake build
-        export PATH=/opt/python/cp311-cp311/bin:$PATH
+        export PATH=/opt/python/cp311-cp311/bin:/opt/rh/devtoolset-10/root/usr/bin:$PATH
+        export CC=/opt/rh/devtoolset-10/root/usr/bin/gcc
+        export CXX=/opt/rh/devtoolset-10/root/usr/bin/g++
         cmake -DPYTHON_EXECUTABLE=/opt/python/cp311-cp311/bin/python \
               -DPYTHON_INCLUDE_DIR=/opt/python/cp311-cp311/include/python3.11 \
               -DPYTHON_LIBRARY=/opt/python/cp311-cp311/lib/libpython3.11.so \
               -DPYBIND11_PYTHON_VERSION='3.11' \
+              -DCMAKE_C_COMPILER=/opt/rh/devtoolset-10/root/usr/bin/gcc \
+              -DCMAKE_CXX_COMPILER=/opt/rh/devtoolset-10/root/usr/bin/g++ \
               -S . -B build -DCMAKE_BUILD_TYPE=Release
         cmake --build build --config Release
         python -m build -w ./PythonBuild
