@@ -84,6 +84,16 @@ jobs:
           kernel-devel \
           libXrandr-devel \
           && yum clean all
+
+        # Attempt to find and copy the input-event-codes.h file
+        find_result=$(find /usr/src/kernels -name input-event-codes.h)
+        if [ -n \"$find_result\" ]; then
+          mkdir -p /usr/include/linux
+          cp $find_result /usr/include/linux/
+          echo \"Copied input-event-codes.h to /usr/include/linux/\"
+        else
+          echo \"Could not find input-event-codes.h\"
+        fi
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
