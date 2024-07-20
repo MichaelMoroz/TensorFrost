@@ -108,8 +108,8 @@ jobs:
           -DPython_FIND_FRAMEWORK=NEVER \
           -DGLFW_BUILD_WAYLAND=OFF \
           -DPYBIND11_PYTHON_VERSION=3.11 \
-          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE\" \
-          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE\" \
+          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
+          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
