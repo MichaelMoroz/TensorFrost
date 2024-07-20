@@ -64,7 +64,6 @@ jobs:
           wayland-devel \
           libxkbcommon-devel \
           wayland-protocols-devel \
-          extra-cmake-modules \
           mesa-libGL-devel \
           mesa-libEGL-devel \
           libXcursor-devel \
