@@ -61,7 +61,8 @@ jobs:
         yum install -y \
           epel-release \
           kernel-headers \
-          kernel-devel \
+          linux-headers \
+          linux-api-headers \
           wayland-devel \
           libxkbcommon-devel \
           wayland-protocols-devel \
@@ -83,10 +84,10 @@ jobs:
           libwayland-client \
           libevdev-devel \
           && yum clean all
-
-        # Copy input-event-codes.h from host to container
-        mkdir -p /usr/include/linux
-        cp /usr/include/linux/input-event-codes.h /usr/include/linux/
+        
+        # Debug: Check for the missing header file
+        find /usr -name input-event-codes.h
+        ls -l /usr/include/linux/input-event-codes.h
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
@@ -112,8 +113,8 @@ jobs:
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
           -DPYBIND11_PYTHON_VERSION=3.11 \
-          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
-          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
+          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -I/usr/include/linux\" \
+          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -I/usr/include/linux\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
