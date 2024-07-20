@@ -52,12 +52,14 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install Docker
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y docker.io
+
     - name: Build and repair wheel inside manylinux2014 Docker container
-      uses: addnab/docker-run-action@v3
-      with:
-        image: quay.io/pypa/manylinux2014_x86_64
-        options: --rm -v ${{ github.workspace }}:/project
-        run: |
+      run: |
+        docker run --rm -v $(pwd):/project quay.io/pypa/manylinux2014_x86_64 /bin/bash -c "
           yum install -y \
             wayland-devel \
             libxkbcommon-devel \
@@ -70,30 +72,18 @@ jobs:
             libXcomposite-devel \
             libXdamage-devel \
             libXfixes-devel \
-            mesa-libGL-devel \
-            wget \
-            make \
-            gcc \
-            openssl-devel \
-            bzip2-devel \
-            libffi-devel \
-            zlib-devel &&
-          cd /opt &&
-          wget https://www.python.org/ftp/python/${{ env.PYTHON_VERSION_SHORT }}/Python-${{ env.PYTHON_VERSION_SHORT }}.tgz &&
-          tar xzf Python-${{ env.PYTHON_VERSION_SHORT }}.tgz &&
-          cd Python-${{ env.PYTHON_VERSION_SHORT }} &&
-          ./configure --enable-optimizations &&
-          make altinstall &&
-          /usr/local/bin/python3.11 -m ensurepip &&
-          /usr/local/bin/python3.11 -m pip install cmake auditwheel build &&
+            mesa-libGL-devel &&
+          /opt/python/cp311-cp311/bin/python -m pip install --upgrade pip &&
+          /opt/python/cp311-cp311/bin/python -m pip install cmake auditwheel build &&
           cd /project &&
-          cmake -DPYBIND11_PYTHON_VERSION=${{ env.PYTHON_VERSION }} -S . -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} &&
-          cmake --build build --config ${{ env.BUILD_TYPE }} &&
-          /usr/local/bin/python3.11 -m build -w ./PythonBuild &&
+          cmake -DPYBIND11_PYTHON_VERSION=${PYTHON_VERSION} -S . -B build -DCMAKE_BUILD_TYPE=${BUILD_TYPE} &&
+          cmake --build build --config ${BUILD_TYPE} &&
+          /opt/python/cp311-cp311/bin/python -m build -w ./PythonBuild &&
           mkdir -p repaired_wheels &&
           for whl in PythonBuild/dist/*.whl; do
             auditwheel repair \"$whl\" --plat manylinux2014_x86_64 -w repaired_wheels/
           done
+        "
 
     - name: Install Twine
       run: pip install twine
