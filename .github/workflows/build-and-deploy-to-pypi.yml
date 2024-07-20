@@ -85,15 +85,24 @@ jobs:
           libXrandr-devel \
           && yum clean all
 
-        # Attempt to find and copy the input-event-codes.h file
-        find_result=$(find /usr/src/kernels -name input-event-codes.h)
-        if [ -n \"$find_result\" ]; then
-          mkdir -p /usr/include/linux
-          cp $find_result /usr/include/linux/
-          echo \"Copied input-event-codes.h to /usr/include/linux/\"
-        else
-          echo \"Could not find input-event-codes.h\"
-        fi
+        # Create a minimal input-event-codes.h file
+        cat << EOF > /usr/include/linux/input-event-codes.h
+        #ifndef _LINUX_INPUT_EVENT_CODES_H
+        #define _LINUX_INPUT_EVENT_CODES_H
+  
+        #define BTN_LEFT		0x110
+        #define BTN_RIGHT		0x111
+        #define BTN_MIDDLE		0x112
+        #define BTN_SIDE		0x113
+        #define BTN_EXTRA		0x114
+        #define BTN_FORWARD		0x115
+        #define BTN_BACK		0x116
+        #define BTN_TASK		0x117
+  
+        #endif
+        EOF
+        
+        echo \"Created minimal input-event-codes.h file\"
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
