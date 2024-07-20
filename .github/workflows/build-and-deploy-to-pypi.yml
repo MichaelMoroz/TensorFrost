@@ -83,6 +83,10 @@ jobs:
           libwayland-client \
           libevdev-devel \
           && yum clean all
+
+        # Copy input-event-codes.h from host to container
+        mkdir -p /usr/include/linux
+        cp /usr/include/linux/input-event-codes.h /usr/include/linux/
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
