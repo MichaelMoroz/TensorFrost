@@ -81,6 +81,7 @@ jobs:
           libXcomposite-devel \
           libwayland-client \
           libevdev-devel \
+          kernel-devel linux-headers \
           libXrandr-devel \
           && yum clean all
         
@@ -107,7 +108,6 @@ jobs:
           -DPython_FIND_STRATEGY=LOCATION \
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
-          -DGLFW_BUILD_WAYLAND=OFF \
           -DPYBIND11_PYTHON_VERSION=3.11 \
           -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
           -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=200809L\" \
