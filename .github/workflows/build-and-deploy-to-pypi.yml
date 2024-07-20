@@ -57,43 +57,19 @@ jobs:
         set -e
         cd /io
         
-        # Install necessary dependencies
-        yum install -y \
-          epel-release \
-          kernel-headers \
-          wayland-devel \
-          libxkbcommon-devel \
-          wayland-protocols-devel \
-          mesa-libGL-devel \
-          mesa-libEGL-devel \
-          libXcursor-devel \
-          libXi-devel \
-          libXinerama-devel \
-          libXrandr-devel \
-          libXrender-devel \
-          libXext-devel \
-          libXfixes-devel \
-          libXt-devel \
-          libXtst-devel \
-          libX11-devel \
-          libXdamage-devel \
-          libXcomposite-devel \
-          libwayland-client \
-          libevdev-devel \
-          kernel-devel \
-          libXrandr-devel \
+        yum install -y epel-release kernel-headers wayland-devel libxkbcommon-devel \
+          wayland-protocols-devel mesa-libGL-devel mesa-libEGL-devel libXcursor-devel \
+          libXi-devel libXinerama-devel libXrandr-devel libXrender-devel libXext-devel \
+          libXfixes-devel libXt-devel libXtst-devel libX11-devel libXdamage-devel \
+          libXcomposite-devel libwayland-client libevdev-devel kernel-devel libXrandr-devel \
           && yum clean all
         
-        # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
         export PATH=\$PYTHON_ROOT/bin:\$PATH
         export PYTHON_EXECUTABLE=\$PYTHON_ROOT/bin/python
         
-        \$PYTHON_EXECUTABLE -m pip install --upgrade pip
-        \$PYTHON_EXECUTABLE -m pip install -r requirements.txt
-        \$PYTHON_EXECUTABLE -m pip install cmake build auditwheel
+        \$PYTHON_EXECUTABLE -m pip install --upgrade pip -r requirements.txt cmake build auditwheel
         
-        # CMake configuration for module development
         \$PYTHON_EXECUTABLE -m cmake \
           -DPython3_ROOT_DIR=\$PYTHON_ROOT \
           -DPython3_EXECUTABLE=\$PYTHON_EXECUTABLE \
@@ -116,4 +92,4 @@ jobs:
       run: pip install twine
   
     - name: Publish on PyPI
-      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheelhouse/*.whl --verbose --disable-progress-bar
+      run: python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheelhouse/*.whl
