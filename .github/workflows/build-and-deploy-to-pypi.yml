@@ -60,6 +60,7 @@ jobs:
         # Install necessary dependencies
         yum install -y \
           epel-release \
+          kernel-devel \
           wayland-devel \
           wayland-protocols-devel \
           libxkbcommon-devel \
@@ -103,8 +104,8 @@ jobs:
           -DPython_FIND_REGISTRY=NEVER \
           -DPython_FIND_FRAMEWORK=NEVER \
           -DPYBIND11_PYTHON_VERSION=3.11 \
-          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=199309L\" \
-          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=199309L\" \
+          -DCMAKE_C_FLAGS=\"-D_POSIX_C_SOURCE=199309L -I/usr/src/kernels/$(uname -r)/include\" \
+          -DCMAKE_CXX_FLAGS=\"-D_POSIX_C_SOURCE=199309L -I/usr/src/kernels/$(uname -r)/include\" \
           -S . -B build -DCMAKE_BUILD_TYPE=Release
         
         \$PYTHON_EXECUTABLE -m cmake --build build --config Release
