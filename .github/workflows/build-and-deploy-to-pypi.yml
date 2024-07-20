@@ -82,7 +82,11 @@ jobs:
           libwayland-client \
           libevdev-devel \
           linux-headers \
+          wayland-scanner \
           && yum clean all
+        
+        # Ensure wayland-scanner is in PATH
+        export PATH=/usr/bin:\$PATH
         
         # Use Python 3.11 from /opt/python
         export PYTHON_ROOT=/opt/python/cp311-cp311
