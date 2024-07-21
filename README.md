@@ -58,7 +58,7 @@ In some sense, you could say that TensorFrost goes with a bottom up approach of 
 
 ## From PyPI
 
-Current version is [0.1.3](https://pypi.org/project/tensorfrost/0.1.3/)
+Current version is [0.5.3](https://pypi.org/project/tensorfrost/0.5.3/)
 
 ```bash
 pip install tensorfrost
