@@ -1,4 +1,7 @@
 # 🔢🥶 TensorFrost (v0.5.3 beta)
+[![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
+
+
 A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
 
 Currently working platforms:
@@ -55,7 +58,7 @@ In some sense, you could say that TensorFrost goes with a bottom up approach of 
 
 ## From PyPI
 
-Current version is [0.1.3](https://pypi.org/project/tensorfrost/0.1.3/)
+Current version is [0.5.3](https://pypi.org/project/tensorfrost/0.5.3/)
 
 ```bash
 pip install tensorfrost
