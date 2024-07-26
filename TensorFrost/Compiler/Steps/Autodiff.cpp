@@ -230,6 +230,9 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	{"reshape", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Reshape(grad, in[0].GetShape()));
 	}},
+	{"assert", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		grads.Add(Tensor::Assert(grad, in[0].GetShape(), in[0].GetType()));
+	}},
 	//memory operations
 	{"load", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		//derivative of load is scatter gradient to the load memory addresses

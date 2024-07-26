@@ -30,7 +30,8 @@ const vector<Operation> operations = {
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
-    Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
+	Operation("assert", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
+	Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("deallocate", {""}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
     //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 

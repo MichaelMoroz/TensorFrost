@@ -66,10 +66,6 @@ class Program {
 
 Program* GenerateProgram(IR* ir);
 
-string GetOperationListing(const IR&, bool compact = false,
-                           map<Node*, string> invalid = {});
-
-
 bool isConstantAndEqualTo(const Tensor* tensor, float value);
 bool isConstant(const Tensor* tensor);
 Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32);

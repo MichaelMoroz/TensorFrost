@@ -2,6 +2,8 @@
 
 namespace TensorFrost {
 
+int Node::global_index = 0;
+
 void ArgumentManager::UpdateOutputs() {
     for (auto& [id, node] : inputs_) {
         node->args.AddOutput(id, node_);

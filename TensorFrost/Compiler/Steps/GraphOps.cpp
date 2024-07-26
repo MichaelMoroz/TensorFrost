@@ -1,4 +1,5 @@
 #include "Compiler/KernelGen.h"
+#include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
 

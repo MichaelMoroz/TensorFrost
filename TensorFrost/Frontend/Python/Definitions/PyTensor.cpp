@@ -166,6 +166,10 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def_property_readonly("T", [](const PyTensor& t) {
 		return PT(Tensor::Transpose(T(t)));
 	});
+
+	py_tensor.def("__str__", [](const PyTensor& t) {
+		return GetNodeString(t.Get().node_);
+	});
 }
 
 }  // namespace TensorFrost

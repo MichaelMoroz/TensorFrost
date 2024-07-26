@@ -113,7 +113,7 @@ public:
 		return res;
 	}
 
-	unordered_map<T, int> get_data() {
+	unordered_map<T, int> get_data() const {
 		unordered_map<T, int> res;
 		for (int i = 0; i < N; i++) {
 			T flag = (T)i;

@@ -244,6 +244,13 @@ Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
 	return out;
 }
 
+Tensor & Tensor::Assert(const Tensor &tensor, const Tensors &shape, TFType type) {
+	Tensor& out = MemoryOpShape("assert", shape, &tensor);
+	out.SetDebugName(tensor.node_->debug_name);
+	out.node_->type = type;
+	return out;
+}
+
 void Tensor::SetDebugName(const string& name) const
 {
 	if (name != "")

@@ -47,8 +47,10 @@ string NodeFlagsToString(NodeProp flag);
 using NodeProps = FlagSet<NodeProp, (int)NodeProp::Count>;
 
 class Node {
+	static int global_index;
  public:
 	int index_ = -1;
+	int debug_index = -1;
 	string var_name = "";
 	string debug_name;
 	string name;
@@ -64,8 +66,10 @@ class Node {
 	IndexingMode indexing_mode_; //clamp unless otherwise specified
 	vector<int> group_size; //kernel properties
 
+
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
 		flags.set(NodeProp::Placeholder);
+		debug_index = global_index++;
 	}
 
     bool valid() {

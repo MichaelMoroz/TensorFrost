@@ -27,6 +27,10 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
+string GetNodeString(const Node* node);
+string GetOperationListing(const IR&, bool compact = false,
+						   map<Node*, string> invalid = {});
+
 bool IsForbiddenName(const string& name);
 
 using ArgumentNames = map<ArgID, string>;
@@ -187,17 +191,13 @@ protected:
 			} else if (op->name_ == "deallocate") {
 				left = "tf.deallocate(" + args.Name(ArgType::Memory) + ")";
 				right = ";";
-			}
-			else if (op->name_ == "input_shape")
-			{
+			} else if (op->name_ == "input_shape") {
 				left = "int " + node->var_name + " = ";
 				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShapeDim)) + "]";
 				right = ";";
-			}
-			else if (op->name_ == "reshape")
-			{
+			} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
 				left = "TFTensor " + node->var_name + " = ";
-				expression = "tf.reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				expression = "tf." + op->name_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpProp::MemoryOp)) {

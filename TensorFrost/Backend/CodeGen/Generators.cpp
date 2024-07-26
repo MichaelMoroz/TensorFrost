@@ -103,17 +103,21 @@ string ReadVariable(Node* node) {
 }
 
 string GetNodeName(const Node* node,  bool compact) {
+	string name;
 	if (compact) {
 		if (node->name == "const" && !node->flags.has(NodeProp::Modified)) {
-			return node->GetTensor()->GetConstantString();
+			name = node->GetTensor()->GetConstantString();
 		}
 	}
 	else {
 		if (node->name == "const") {
-			return node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
+			name = node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
 		}
 	}
-	return node->var_name;
+	if (name.empty()) {
+		name = node->debug_name + "_" + to_string(node->debug_index);
+	}
+	return name;
 }
 
 //std::string format_float(float x) {

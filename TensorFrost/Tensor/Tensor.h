@@ -625,6 +625,7 @@ class Tensor {
 	}
 
 	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
+	static Tensor& Assert(const Tensor& tensor, const Tensors& shape, TFType type = TFType::Float);
 
 	Tensors enter_tensors = Tensors();
 	bool already_entered = false;

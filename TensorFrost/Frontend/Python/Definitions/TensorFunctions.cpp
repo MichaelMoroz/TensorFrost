@@ -204,6 +204,9 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("reshape", [](const PyTensor& t, py::list shape) {
 		return PT(Tensor::Reshape(T(t), TensorsFromList(shape)));
 	});
+	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
+		return PT(Tensor::Assert(T(t), TensorsFromList(target_shape), target_type));
+	});
 
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
