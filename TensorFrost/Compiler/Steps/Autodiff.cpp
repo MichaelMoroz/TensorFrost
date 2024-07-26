@@ -208,10 +208,14 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(unsq * in[0]);
 	}},
 	{"dim_max", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.node_->data[0]));
+		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
+		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
+		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
 	{"dim_min", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Unsqueeze(Tensor::select(in[0] == out, grad, Tensor::Constant(0.0f)), out.node_->data[0]));
+		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
+		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
+		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
 	{"dim_prefix_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		//b_i = a_0 + ... + a_i

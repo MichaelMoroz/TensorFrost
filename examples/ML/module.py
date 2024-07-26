@@ -2,8 +2,7 @@ import TensorFrost as tf
 import math
 import numpy as np
 
-tf.initialize(tf.opengl)
-
+tf.initialize(tf.opengl)    
 
 class Parameter:
     def __init__(self, shape, dtype, random_init=True):
@@ -82,7 +81,7 @@ class Module:
 
     def initialize_parameter(self, param):
         if param.random_init:
-            return tf.tensor(np.random.randn(*param.shape).astype(np.float32) * math.sqrt(2.0 / param.shape[0]))
+            return tf.tensor(np.random.randn(*param.shape).astype(np.float32) / math.sqrt(param.shape[0]))
         else:
             return tf.tensor(np.zeros(param.shape, np.float32))
 
@@ -105,11 +104,10 @@ class Module:
         for array in self._parameter_arrays.values():
             params += list(array._parameters.values())
         return params
-    
-    def create_input(self, X, Y):
+
+    def create_input(self, *args):
         inputs = self.get_all_parameters()
-        inputs.append(X)
-        inputs.append(Y)
+        inputs += args
         return inputs
 
     def update_parameters(self, parameter_values):
@@ -131,9 +129,20 @@ class Module:
         
         update_params(self)
 
+    def loss(self, X, Y):
+        raise NotImplementedError
+    
+    def forward(self, X):
+        raise NotImplementedError
+
 def softmax(X):
     exp = tf.exp(X)
     return exp / tf.unsqueeze(tf.sum(exp))
+
+def log_softmax(X):
+    Xmax = tf.max(X, axis=-1)
+    X = X - tf.unsqueeze(Xmax)
+    return X - tf.log(tf.unsqueeze(tf.sum(tf.exp(X))))
 
 def leaky_relu(X):
     return tf.select(X > 0.0, X, 0.01 * X)
@@ -157,14 +166,18 @@ class MNIST_net(Module):
     def forward(self, X):
         L1 = leaky_relu(mul_bias(X, self.W1))
         L2 = leaky_relu(mul_bias(L1, self.W2))
-        return softmax(mul_bias(L2, self.W3))
+        return mul_bias(L2, self.W3)
+    
+    def smax(self, X):
+        return softmax(self.forward(X))
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
-        return tf.mean(tf.mean( - Y * tf.log(Yhat + 1e-3) - (1.0 - Y) * tf.log(1.0 - Yhat + 1e-3)))
+        #return tf.sum(tf.sum( - Y * tf.log(Yhat + 1e-3) - (1.0 - Y) * tf.log(1.0 - Yhat + 1e-3))) / tf.float(math.prod(Y.shape))
+        return tf.sum(tf.sum(-Y * log_softmax(Yhat))) / tf.float(math.prod(Y.shape))
     
-class MNIST_Momentum_opt(Module):
-    def __init__(self, net: MNIST_net, learning_rate: float, momentum: float):
+class MomentumOpt(Module):
+    def __init__(self, net: Module, learning_rate: float, momentum: float):
         super().__init__()
         self.register_module('net', net)
         self.learning_rate = learning_rate
@@ -188,9 +201,39 @@ class MNIST_Momentum_opt(Module):
             self.net._parameters[name] = param
         return L
 
+class RMSPropOpt(Module):
+    def __init__(self, net: Module, learning_rate: float, decay: float, epsilon: float = 1e-6):
+        super().__init__()
+        self.register_module('net', net)
+        self.learning_rate = learning_rate
+        self.decay = decay
+        self.epsilon = epsilon
+        self.v = self.register_parameter_array('v')
+        for i, (name, param) in enumerate(net._parameters.items()):
+            self.v[i] = Parameter(param.shape, param.dtype, False)
+
+    def assert_parameters(self):
+        for i, (name, param) in enumerate(self.net._parameters.items()):
+            self.v[i] = tf.assert_tensor(self.v[i], param.shape, tf.float32)
+
+    def step(self, X, Y):
+        L = self.net.loss(X, Y)
+        for i, (name, param) in enumerate(self.net._parameters.items()):
+            v = self.v[i]
+            grad = tf.grad(L, param)
+            grad = tf.clamp(grad, -0.1, 0.1)
+            v = self.decay * v + (1.0 - self.decay) * (grad * grad)
+            param -= self.learning_rate * grad / (tf.sqrt(v) + self.epsilon)
+            self.v[i] = v
+            self.net._parameters[name] = param
+        return L
+
+lr = 0.01
+decay = 0.99
+
 def OptimizerStep():
     model = MNIST_net(-1, -1, -1)
-    opt = MNIST_Momentum_opt(model, 0.02, 0.99)
+    opt = RMSPropOpt(model, lr, decay)
 
     opt.initialize_input()
 
@@ -201,46 +244,96 @@ def OptimizerStep():
     params = opt.get_all_parameters()
     for param in params:
         print(param)
+
+    params.append(L)
     return params
 
 train_step = tf.compile(OptimizerStep)
 
-def ComputeLoss():
+def ComputeForward():
     model = MNIST_net(-1, -1, -1)
 
     model.initialize_input()
 
     X = tf.input([-1, -1], tf.float32)
-    Y = tf.input([X.shape[0], 10], tf.float32)
 
-    L = model.loss(X, Y)
-    return L
+    Y = model.smax(X)
+    return Y
 
-compute_loss = tf.compile(ComputeLoss)
+compute_forward = tf.compile(ComputeForward)
 
 # Usage example:
 model = MNIST_net(784, 64, 64)
-opt = MNIST_Momentum_opt(model, 0.02, 0.99)
+opt = RMSPropOpt(model, lr, decay)
 
 opt.initialize_parameters()
 
-X = tf.tensor(np.random.randn(100, 784).astype(np.float32))
-Y = tf.tensor(np.random.randn(100, 10).astype(np.float32))
+# Load MNIST data
+data = np.load('mnist.npz')
 
-loss_history = []
-for i in range(1000):
-    #optimization step
-    new_params = train_step(*opt.create_input(X, Y))
-    opt.update_parameters(new_params)
-    #compute loss
-    loss = compute_loss(*model.create_input(X, Y))
-    print(loss.numpy)
-    loss_history.append(loss.numpy)
+def image_to_vector(X):
+    X = np.reshape(X, (len(X), -1))         # Flatten: (N x 28 x 28) -> (N x 784)
+    return X
+
+data = np.load('mnist.npz')
+Xtrain = image_to_vector(data['train_x'])   # (60000 x 784)
+Ytrain = data['train_y']                    # (60000)
+Xtest = image_to_vector(data['test_x'])     # (10000 x 784)
+Ytest = data['test_y']        
+
+Xsamples = Xtrain
+Ysamples = np.zeros((Xsamples.shape[0], 10))
+Ysamples[np.arange(Xsamples.shape[0]), Ytrain] = 1.0
+Xtf = tf.tensor(Xsamples)
+Ytf = tf.tensor(Ysamples)
+
+def test_accuracy(model, X, Y):
+    Yhat = compute_forward(*model.create_input(tf.tensor(X)))
+    Yhatnp = Yhat.numpy
+    Predict = np.argmax(Yhatnp, axis = 1)
+    correct_tf = np.sum(Predict == Y)
+    return correct_tf * 100.0 / len(Y)
+
+batch_size = 1024
+epochs = 100
+iterations = Xsamples.shape[0] // batch_size
+
+loss_curve = []
+
+for i in range(epochs):
+    avg_loss_tf = 0.0
+
+    #shuffle offsets
+    offsets = np.random.permutation(Xsamples.shape[0] // batch_size) * batch_size 
+
+    for j in range(iterations):
+        offset = offsets[j]
+        Xbatch = Xsamples[offset:offset + batch_size]
+        Ybatch = Ysamples[offset:offset + batch_size]
+        Xbatch_tf = tf.tensor(Xbatch)
+        Ybatch_tf = tf.tensor(Ybatch)
+
+        res = train_step(*opt.create_input(Xbatch_tf, Ybatch_tf))
+        new_params = res[:-1]
+        opt.update_parameters(new_params)
+        loss = res[-1]
+        avg_loss_tf += loss.numpy
+        loss_curve.append(loss.numpy)    
+
+    print("Epoch: ", i, " Tf Loss: ", avg_loss_tf / iterations)
+
+test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
+print("Final Tf test accuracy: ", test_accuracy_tf, "%")
 
 # Plot loss history
 import matplotlib.pyplot as plt
-
-plt.plot(loss_history)
+plt.plot(loss_curve)
 plt.xlabel('Iteration')
 plt.ylabel('Loss')
 plt.show()
+
+#fashion mnist
+class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
+#digits mnist
+#class_names = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
+
