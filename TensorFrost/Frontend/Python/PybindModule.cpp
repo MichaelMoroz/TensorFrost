@@ -16,6 +16,7 @@ void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 void ModuleDefinitions(py::module& m);
 
 PYBIND11_MODULE(TensorFrost, m) {
+	m.doc() = "TensorFrost library";
 	auto data_type = py::enum_<TFType>(m, "TFType");
 	auto backend_type = py::enum_<BackendType>(m, "BackendType");
 	auto code_gen_lang = py::enum_<CodeGenLang>(m, "CodeGenLang");

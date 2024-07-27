@@ -20,106 +20,91 @@ public:
 
 class ParameterArray {
 public:
-    std::string _prefix;
-    py::dict _parameters;
+    map<size_t, py::object> _parameters; //must be sorted
 
-    ParameterArray(std::string prefix) : _prefix(prefix) {
-        _parameters = py::dict();
-    }
-
-    py::object __getitem__(int index) {
-        std::string key = _prefix + "_" + std::to_string(index);
-        if (_parameters.contains(key)) {
-            return _parameters.attr("__getitem__")(key);
+    py::object getitem(size_t index) {
+        if (_parameters.contains(index)) {
+            return _parameters[index];
         }
-        throw py::index_error("Parameter '" + key + "' not found");
+        throw py::index_error("Index " + std::to_string(index) + " is not in the ParameterArray");
     }
 
-    void __setitem__(int index, py::object value) {
-        std::string key = _prefix + "_" + std::to_string(index);
-        _parameters.attr("__setitem__")(key, value);
+    void setitem(size_t index, py::object value) {
+        _parameters[index] = value;
     }
 };
 
 class Module {
 public:
-    py::dict _parameters;
-    py::dict _modules;
-    py::dict _parameter_arrays;
+    enum class AttributeType {
+        None,
+        Parameter,
+        ParameterArray,
+        Module
+    };
 
-    py::dict __dict__;
+    unordered_map<string, py::object> _attributes;
+    unordered_map<string, AttributeType> _attribute_types;
 
     py::object tf;
 
     Module() {
         tf = py::module::import("TensorFrost");
-        _parameters = py::dict();
-        _modules = py::dict();
-        _parameter_arrays = py::dict();
-        __dict__ = py::dict();
     }
 
-    void register_parameter(const std::string& name, py::object param) {
-        _parameters.attr("__setitem__")(name, param);
-    }
-
-    void register_module(const std::string& name, py::object module) {
-        _modules.attr("__setitem__")(name, module);
-    }
-
-    void register_parameter_array(const std::string& name) {
-        py::object array = py::cast(ParameterArray(name));
-        _parameter_arrays.attr("__setitem__")(name, array);
-    }
-
-    static const char* class_name() {
-        return "Module";
-    }
-
-    py::object __getattr__(const std::string& name) {
-        if (_parameter_arrays.contains(name)) {
-            return _parameter_arrays.attr("__getitem__")(name);
-        } else if (_modules.contains(name)) {
-            return _modules.attr("__getitem__")(name);
-        } else if (__dict__.contains(name)) {
-            return __dict__[name.c_str()];
-        } else if (_parameters.contains(name)) {
-            return _parameters.attr("__getitem__")(name);
+    py::object getattr(const std::string& name) {
+        if (_attributes.contains(name)) {
+            return _attributes[name];
         }
-
-        throw py::attribute_error("'" + std::string(class_name()) + "' object has no attribute '" + name + "'");
+        throw py::attribute_error("TensorFrost Module object has no attribute with name '" + name + "'");
     }
 
-    void __setattr__(const std::string& name, py::object value) {
+    void setattr(const std::string& name, py::object value) {
+        AttributeType type = AttributeType::None;
         if (py::isinstance<Parameter>(value)) {
-            _parameters.attr("__setitem__")(name, value);
-        } else if (py::isinstance<Module>(value)) {
-            _modules.attr("__setitem__")(name, value);
+            type = AttributeType::Parameter;
         } else if (py::isinstance<ParameterArray>(value)) {
-            _parameter_arrays.attr("__setitem__")(name, value);
-        } else {
-            // Set as a regular Python attribute
-            __dict__[name.c_str()] = value;
+            type = AttributeType::ParameterArray;
+        } else if (py::isinstance<Module>(value)) {
+            type = AttributeType::Module;
         }
+        if(type == AttributeType::None && _attribute_types.contains(name)) {
+            type = _attribute_types[name];
+        }
+
+        _attributes[name] = value;
+        _attribute_types[name] = type;
+    }
+
+    vector<pair<string, py::object>> get_attributes_of_type(AttributeType type) {
+        vector<pair<string, py::object>> params;
+        for (auto& attr : _attributes) {
+            if (_attribute_types[attr.first] == type) {
+                params.push_back(attr);
+            }
+        }
+        return params;
     }
 
     virtual void assert_parameters() {}
 
     void initialize_input() {
-        for (auto& module : _modules) {
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
             module.second.attr("initialize_input")();
         }
 
-        for (auto& param : _parameters) {
-            py::object tensor = tf.attr("input")(param.second.attr("shape"), param.second.attr("dtype"));
-            _parameters.attr("__setitem__")(param.first, tensor);
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            Parameter& p = py::cast<Parameter&>(param.second);
+            py::object tensor = tf.attr("input")(p.shape, p.dtype);
+            setattr(param.first, tensor);
         }
 
-        for (auto& array : _parameter_arrays) {
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
-                py::object tensor = tf.attr("input")(param.second.attr("shape"), param.second.attr("dtype"));
-                param_array._parameters.attr("__setitem__")(param.first, tensor);
+                Parameter& p = py::cast<Parameter&>(param.second);
+                py::object tensor = tf.attr("input")(p.shape, p.dtype);
+                param_array.setitem(param.first, tensor);
             }
         }
 
@@ -150,35 +135,37 @@ public:
     }
 
     void initialize_parameters() {
-        for (auto& module : _modules) {
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
             module.second.attr("initialize_parameters")();
         }
 
-        for (auto& param : _parameters) {
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
             Parameter& p = py::cast<Parameter&>(param.second);
             py::object tensor = initialize_parameter(p);
-            _parameters.attr("__setitem__")(param.first, tensor);
+            setattr(param.first, tensor);
         }
 
-        for (auto& array : _parameter_arrays) {
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 Parameter& p = py::cast<Parameter&>(param.second);
                 py::object tensor = initialize_parameter(p);
-                param_array._parameters.attr("__setitem__")(param.first, tensor);
+                param_array.setitem(param.first, tensor);
             }
         }
     }
 
-    py::list get_all_parameters() {
+    py::list parameters() {
         py::list params;
-        for (auto& module : _modules) {
-            params += module.second.attr("get_all_parameters")();
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
+            params += module.second.attr("parameters")();
         }
-        for (auto& param : _parameters) {
+
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
             params.append(param.second);
         }
-        for (auto& array : _parameter_arrays) {
+
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 params.append(param.second);
@@ -188,7 +175,7 @@ public:
     }
 
     py::list create_input(py::args args) {
-        py::list inputs = get_all_parameters();
+        py::list inputs = parameters();
         inputs += args;
         return inputs;
     }
@@ -208,25 +195,25 @@ public:
         std::function<void(Module&)> update_params;
 
         update_params = [&](Module& module) {
-            for (auto& module_item : module._modules) {
+            for (auto& module_item : module.get_attributes_of_type(AttributeType::Module)) {
                 update_params(py::cast<Module&>(module_item.second));
             }
 
-            for (auto& param : module._parameters) {
+            for (auto& param : module.get_attributes_of_type(AttributeType::Parameter)) {
                 if (index >= py::len(params)) {
                     throw py::index_error("Not enough values provided to update all parameters");
                 }
-                module._parameters[param.first] = params[index];
+                module.setattr(param.first, params[index]);
                 index++;
             }
 
-            for (auto& array : module._parameter_arrays) {
+            for (auto& array : module.get_attributes_of_type(AttributeType::ParameterArray)) {
                 ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
                 for (auto& param : param_array._parameters) {
                     if (index >= py::len(params)) {
                         throw py::index_error("Not enough values provided to update all parameters");
                     }
-                    param_array._parameters[param.first] = params[index];
+                    param_array.setitem(param.first, params[index]);
                     index++;
                 }
             }
