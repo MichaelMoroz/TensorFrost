@@ -22,55 +22,78 @@ public:
     }
 };
 
-class ADAMOpt : public PyModule {
+class ModuleOptimizer : public PyModule {
 public:
-    ADAMOpt(py::object net, float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f, float epsilon = 1e-8f)
-        : PyModule() {
-        setattr("net", net);
-        setattr("learning_rate", py::cast(learning_rate));
-        setattr("beta1", py::cast(beta1));
-        setattr("beta2", py::cast(beta2));
-        setattr("epsilon", py::cast(epsilon));
+    enum class OptimizerType {
+        ADAM,
+        SGD,
+        RMSProp
+    };
 
-        ParameterArray m, v;
-        setattr("m", py::cast(m));
-        setattr("v", py::cast(v));
+    OptimizerType optimizer_type;
+    const float epsilon = 1e-8f;
+
+    ModuleOptimizer(OptimizerType type, Module* net, map<string, py::object> params)
+        : PyModule(), optimizer_type(type) {
+        setattr("net", py::cast(net));
+
+        for (auto& [name, value] : params) {
+            setattr(name, value);
+        }
 
         Parameter t({1}, TFType::Float, false);
         setattr("t", py::cast(t));
 
-        py::list net_params = net.attr("parameters")();
+        initializeOptimizer(net);
+    }
+
+    void initializeOptimizer(Module* net) {
+        py::list net_params = net->parameters();
+
+        switch (optimizer_type) {
+            case OptimizerType::ADAM:
+                initializeParameterArray("m", net_params);
+                initializeParameterArray("v", net_params);
+                break;
+            case OptimizerType::SGD:
+                // No additional parameters needed
+                break;
+            case OptimizerType::RMSProp:
+                initializeParameterArray("v", net_params);
+                break;
+        }
+    }
+
+    void initializeParameterArray(const string& name, py::list& net_params) {
+        setattr(name, py::cast(ParameterArray()));
         for (size_t i = 0; i < py::len(net_params); ++i) {
             py::object param = net_params[i];
-            Parameter m_param = Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
-            Parameter v_param = Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
-            py::cast<ParameterArray&>(getattr("m")).setitem(i, py::cast(m_param));
-            py::cast<ParameterArray&>(getattr("v")).setitem(i, py::cast(v_param));
+            Parameter new_param = Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
+            py::cast<ParameterArray&>(getattr(name)).setitem(i, py::cast(new_param));
         }
     }
 
     void assert_parameters() override {
-        py::print("ADAMOpt::assert_parameters");
         py::list net_params = getattr("net").attr("parameters")();
-        for (size_t i = 0; i < py::len(net_params); ++i) {
-            py::object param = net_params[i];
-            py::object m = py::cast<ParameterArray&>(getattr("m")).getitem(i);
-            py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
+        assertParameterArray("m", net_params);
+        assertParameterArray("v", net_params);
+    }
 
-            // Get the shape of the parameter tensor
-            py::object shape = param.attr("shape");
+    void assertParameterArray(const string& name, py::list& net_params) {
+        if (hasattr(name)) {
+            for (size_t i = 0; i < py::len(net_params); ++i) {
+                py::object param = net_params[i];
+                py::object arr = py::cast<ParameterArray&>(getattr(name)).getitem(i);
 
-            // Assert tensors
-            m = tf.attr("assert_tensor")(m, shape, param.attr("type"));
-            v = tf.attr("assert_tensor")(v, shape, param.attr("type"));
+                py::object shape = param.attr("shape");
+                arr = tf.attr("assert_tensor")(arr, shape, param.attr("type"));
 
-            py::cast<ParameterArray&>(getattr("m")).setitem(i, m);
-            py::cast<ParameterArray&>(getattr("v")).setitem(i, v);
+                py::cast<ParameterArray&>(getattr(name)).setitem(i, arr);
+            }
         }
     }
 
     py::object step(py::object X, py::object Y) {
-        py::print("ADAMOpt::step");
         py::object t = getattr("t");
         t = t + py::float_(1.0);
         setattr("t", t);
@@ -80,35 +103,68 @@ public:
         py::list net_params = net.attr("parameters")();
 
         float learning_rate = py::cast<float>(getattr("learning_rate"));
-        float beta1 = py::cast<float>(getattr("beta1"));
-        float beta2 = py::cast<float>(getattr("beta2"));
-        float epsilon = py::cast<float>(getattr("epsilon"));
+        float grad_clip = py::cast<float>(getattr("grad_clip"));
 
         for (size_t i = 0; i < py::len(net_params); ++i) {
             py::object param = net_params[i];
-            py::object m = py::cast<ParameterArray&>(getattr("m")).getitem(i);
-            py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
-
             py::object grad = tf.attr("grad")(L, param);
-            grad = tf.attr("clamp")(grad, -0.1f, 0.1f);
+            if(grad_clip > 0.0f) {
+                grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
+            }
 
-            m = tf.attr("lerp")(m, grad, beta1);
-            v = tf.attr("lerp")(v, grad.attr("__mul__")(grad), beta2);
+            py::object update;
+            switch (optimizer_type) {
+                case OptimizerType::ADAM:
+                    update = adam_update(i, param, grad, t, learning_rate);
+                    break;
+                case OptimizerType::SGD:
+                    update = sgd_update(param, grad, learning_rate);
+                    break;
+                case OptimizerType::RMSProp:
+                    update = rmsprop_update(i, param, grad, learning_rate);
+                    break;
+            }
 
-            py::object mhat = m.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta1, t.attr("__getitem__")(0)));
-            py::object vhat = v.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta2, t.attr("__getitem__")(0)));
-
-            py::object update = mhat.attr("__truediv__")(tf.attr("sqrt")(vhat).attr("__add__")(epsilon));
-            update = update.attr("__mul__")(learning_rate);
             param = param - update;
-
-            py::cast<ParameterArray&>(getattr("v")).setitem(i, v);
-            py::cast<ParameterArray&>(getattr("m")).setitem(i, m);
             net_params[i] = param;
         }
 
         net.attr("update_parameters")(net_params);
         return L;
+    }
+
+private:
+    py::object adam_update(size_t i, py::object& param, py::object& grad, py::object& t, float learning_rate) {
+        float beta1 = py::cast<float>(getattr("beta1"));
+        float beta2 = py::cast<float>(getattr("beta2"));
+
+        py::object m = py::cast<ParameterArray&>(getattr("m")).getitem(i);
+        py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
+
+        m = tf.attr("lerp")(m, grad, beta1);
+        v = tf.attr("lerp")(v, grad.attr("__mul__")(grad), beta2);
+
+        py::object mhat = m.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta1, t.attr("__getitem__")(0)));
+        py::object vhat = v.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta2, t.attr("__getitem__")(0)));
+
+        py::cast<ParameterArray&>(getattr("m")).setitem(i, m);
+        py::cast<ParameterArray&>(getattr("v")).setitem(i, v);
+
+        return mhat.attr("__truediv__")(tf.attr("sqrt")(vhat).attr("__add__")(epsilon)).attr("__mul__")(learning_rate);
+    }
+
+    py::object sgd_update(py::object& param, py::object& grad, float learning_rate) {
+        return grad.attr("__mul__")(learning_rate);
+    }
+
+    py::object rmsprop_update(size_t i, py::object& param, py::object& grad, float learning_rate) {
+        float decay = py::cast<float>(getattr("decay"));
+
+        py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
+        v = tf.attr("lerp")(v, grad.attr("__mul__")(grad), decay);
+        py::cast<ParameterArray&>(getattr("v")).setitem(i, v);
+
+        return grad.attr("__mul__")(learning_rate).attr("__truediv__")(tf.attr("sqrt")(v).attr("__add__")(epsilon));
     }
 };
 
@@ -140,15 +196,53 @@ void ModuleDefinitions(py::module& m) {
         .def("loss", &Module::loss)
         .def("forward", &Module::forward);
 
-    // Create a nested module for optimizers
+    auto optimizer_type = py::enum_<ModuleOptimizer::OptimizerType>(m, "OptimizerType")
+        .value("ADAM", ModuleOptimizer::OptimizerType::ADAM)
+        .value("SGD", ModuleOptimizer::OptimizerType::SGD)
+        .value("RMSProp", ModuleOptimizer::OptimizerType::RMSProp);
+
+    py::class_<ModuleOptimizer, Module>(m, "ModuleOptimizer")
+        .def(py::init<ModuleOptimizer::OptimizerType, Module*, map<string, py::object>>(), py::arg("type"), py::arg("net"), py::arg("params"))
+        .def("assert_parameters", &ModuleOptimizer::assert_parameters)
+        .def("step", &ModuleOptimizer::step);
+
     py::module optimizers = m.def_submodule("optimizers", "Optimizers submodule");
 
-    // Define ADAMOpt in the optimizers submodule
-    py::class_<ADAMOpt, Module>(optimizers, "adam")
-        .def(py::init<py::object, float, float, float, float>(),
-             py::arg("net"), py::arg("learning_rate"), py::arg("beta1") = 0.9f, py::arg("beta2") = 0.999f, py::arg("epsilon") = 1e-8f)
-        .def("assert_parameters", &ADAMOpt::assert_parameters)
-        .def("step", &ADAMOpt::step);
+    optimizers.def("adam",
+        [](Module* net, float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f, float clip = 0.0f) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::ADAM, net, {
+                {"learning_rate", py::float_(learning_rate)},
+                {"beta1", py::float_(beta1)},
+                {"beta2", py::float_(beta2)},
+                {"grad_clip", py::float_(clip)}
+            });
+        },
+        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("beta1") = 0.9f, py::arg("beta2") = 0.999f, py::arg("clip") = 0.0f,
+        py::return_value_policy::take_ownership
+    );
+
+    optimizers.def("sgd",
+        [](Module* net, float learning_rate, float clip = 0.0f) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::SGD, net, {
+                {"learning_rate", py::float_(learning_rate)},
+                {"grad_clip", py::float_(clip)}
+            });
+        },
+        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("clip") = 0.0f,
+        py::return_value_policy::take_ownership
+    );
+
+    optimizers.def("rmsprop",
+        [](Module* net, float learning_rate, float decay = 0.9f, float clip = 0.0f) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::RMSProp, net, {
+                {"learning_rate", py::float_(learning_rate)},
+                {"decay", py::float_(decay)},
+                {"grad_clip", py::float_(clip)}
+            });
+        },
+        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("decay") = 0.9f, py::arg("clip") = 0.0f,
+        py::return_value_policy::take_ownership
+    );
 }
 
 }  // namespace TensorFrost

@@ -76,6 +76,10 @@ public:
         _attribute_types[name] = type;
     }
 
+    bool hasattr(const std::string& name) {
+        return _attributes.contains(name);
+    }
+
     vector<pair<string, py::object>> get_attributes_of_type(AttributeType type) {
         vector<pair<string, py::object>> params;
         for (auto& attr : _attributes) {

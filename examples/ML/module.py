@@ -44,7 +44,9 @@ decay = 0.99
 
 def OptimizerStep():
     model = MNIST_net(-1, -1, -1)
-    opt = tf.optimizers.adam(model, lr)
+    opt = tf.optimizers.sgd(model, lr)
+    #opt = tf.optimizers.adam(model, lr)
+    #opt = tf.optimizers.rmsprop(model, lr, decay)
     opt.initialize_input()
 
     X = tf.input([-1, -1], tf.float32)
@@ -68,7 +70,7 @@ compute_forward = tf.compile(ComputeForward)
 
 # Usage example:
 model = MNIST_net(784, 64, 64)
-opt = tf.optimizers.adam(model, lr)
+opt = tf.optimizers.sgd(model, lr)
 
 opt.initialize_parameters()
 
