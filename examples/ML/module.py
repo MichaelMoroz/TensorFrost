@@ -39,14 +39,12 @@ class MNIST_net(tf.Module):
         return tf.sum(tf.sum(-Y * log_softmax(Yhat))) / tf.float(math.prod(Y.shape))
 
 
-lr = 0.004
+lr = 0.002
 decay = 0.99
 
 def OptimizerStep():
     model = MNIST_net(-1, -1, -1)
-    opt = tf.optimizers.sgd(model, lr)
-    #opt = tf.optimizers.adam(model, lr)
-    #opt = tf.optimizers.rmsprop(model, lr, decay)
+    opt = tf.optimizers.adam(model, lr)
     opt.initialize_input()
 
     X = tf.input([-1, -1], tf.float32)
@@ -68,58 +66,40 @@ def ComputeForward():
 
 compute_forward = tf.compile(ComputeForward)
 
-# Usage example:
-model = MNIST_net(784, 64, 64)
-opt = tf.optimizers.sgd(model, lr)
-
-opt.initialize_parameters()
-
 # Load MNIST data
 data = np.load('mnist.npz')
 
 def image_to_vector(X):
-    X = np.reshape(X, (len(X), -1))         # Flatten: (N x 28 x 28) -> (N x 784)
-    return X
+    return np.reshape(X, (len(X), -1))         # Flatten: (N x 28 x 28) -> (N x 784)
 
-data = np.load('mnist.npz')
-Xtrain = image_to_vector(data['train_x'])   # (60000 x 784)
-Ytrain = data['train_y']                    # (60000)
-Xtest = image_to_vector(data['test_x'])     # (10000 x 784)
+Xtrain = image_to_vector(data['train_x'])  
+Ytrain = np.zeros((Xtrain.shape[0], 10))
+Ytrain[np.arange(Xtrain.shape[0]), data['train_y']] = 1.0
+
+Xtest = image_to_vector(data['test_x'])     
 Ytest = data['test_y']
 
-Xsamples = Xtrain
-Ysamples = np.zeros((Xsamples.shape[0], 10))
-Ysamples[np.arange(Xsamples.shape[0]), Ytrain] = 1.0
-Xtf = tf.tensor(Xsamples)
-Ytf = tf.tensor(Ysamples)
-
-def test_accuracy(model, X, Y):
-    Yhat = compute_forward(*model.create_input(tf.tensor(X)))
-    Yhatnp = Yhat.numpy
-    Predict = np.argmax(Yhatnp, axis = 1)
-    correct_tf = np.sum(Predict == Y)
-    return correct_tf * 100.0 / len(Y)
-
 batch_size = 1024
-epochs = 30
-iterations = Xsamples.shape[0] // batch_size
+epochs = 100
+iterations = Xtrain.shape[0] // batch_size
 
 loss_curve = []
+
+model = MNIST_net(784, 64, 64)
+opt = tf.optimizers.adam(model, lr)
+opt.initialize_parameters()
 
 for i in range(epochs):
     avg_loss_tf = 0.0
 
     #shuffle offsets
-    offsets = np.random.permutation(Xsamples.shape[0] // batch_size) * batch_size
+    offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size
 
     for j in range(iterations):
         offset = offsets[j]
-        Xbatch = Xsamples[offset:offset + batch_size]
-        Ybatch = Ysamples[offset:offset + batch_size]
-        Xbatch_tf = tf.tensor(Xbatch)
-        Ybatch_tf = tf.tensor(Ybatch)
-
-        res = train_step(*opt.create_input(Xbatch_tf, Ybatch_tf))
+        Xbatch = Xtrain[offset:offset + batch_size]
+        Ybatch = Ytrain[offset:offset + batch_size]
+        res = train_step(opt, Xbatch, Ybatch)
         new_params = res[:-1]
         opt.update_parameters(new_params)
         loss = res[-1]
@@ -128,6 +108,13 @@ for i in range(epochs):
         #print("Epoch: ", i, " Iteration: ", j, " Tf Loss: ", loss.numpy)
 
     print("Epoch: ", i, " Tf Loss: ", avg_loss_tf / iterations)
+
+def test_accuracy(model, X, Y):
+    Yhat = compute_forward(model, X)
+    Yhatnp = Yhat.numpy
+    Predict = np.argmax(Yhatnp, axis = 1)
+    correct_tf = np.sum(Predict == Y)
+    return correct_tf * 100.0 / len(Y)
 
 test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
 print("Final Tf test accuracy: ", test_accuracy_tf, "%")
@@ -138,9 +125,3 @@ plt.plot(loss_curve)
 plt.xlabel('Iteration')
 plt.ylabel('Loss')
 plt.show()
-
-#fashion mnist
-class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
-#digits mnist
-#class_names = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
-

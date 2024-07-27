@@ -3,6 +3,7 @@
 
 #include <Frontend/Python/PyTensor.h>
 #include <Frontend/Python/PyTensorMemory.h>
+#include <Frontend/Python/PyModule.h>
 
 namespace TensorFrost {
 
@@ -43,12 +44,36 @@ void TensorProgramDefinition(py::module& m,
 	tensor_program.def(
 	    "__call__",
 	    [](TensorProgram& program, py::args py_inputs) -> std::variant<PyTensorMemory*, py::tuple> {
-		    vector<PyTensorMemory*> inputs = TensorMemoryFromTuple(py_inputs);
 	    	vector<TFTensor*> inputs_props;
-	    	for (auto input : inputs) {
-	    		inputs_props.push_back(input->tensor_);
-	    	}
+	    	vector<TFTensor*> temp_numpy_tensors;
+			for (auto arg : py_inputs) {
+				if (py::isinstance<PyTensorMemory>(arg)) { //if just tensor memory
+					PyTensorMemory* mem = &arg.cast<PyTensorMemory&>();
+					inputs_props.push_back(mem->tensor_);
+				} else if (py::isinstance<Module>(arg)) { //if module then add its parameters
+					Module* module = &arg.cast<Module&>();
+					py::list params = module->parameters();
+					for (auto param : params) {
+						PyTensorMemory* mem = &param.cast<PyTensorMemory&>();
+						inputs_props.push_back(mem->tensor_);
+					}
+				} else if (py::isinstance<py::array>(arg)) { //if numpy array then create pytensormemory from it and add it
+					py::array arr = arg.cast<py::array>();
+					PyTensorMemory* temp_tensor = new PyTensorMemory(arr);
+					inputs_props.push_back(temp_tensor->tensor_);
+					temp_numpy_tensors.push_back(temp_tensor->tensor_);
+				} else {
+					throw std::runtime_error("Unsupported input type");
+				}
+			}
 		    vector<TFTensor*> outputs = program.Evaluate(inputs_props);
+
+	    	//remove temporary tensors if they are not in the outputs
+	    	for (TFTensor* temp_tensor : temp_numpy_tensors) {
+	    		if (std::find(outputs.begin(), outputs.end(), temp_tensor) == outputs.end()) {
+	    			global_memory_manager->DeallocateTensor(*temp_tensor);
+	    		}
+	    	}
 
 	    	//if there is only one output, return the tensor memory
 	    	if (outputs.size() == 1) {
