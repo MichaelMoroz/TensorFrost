@@ -156,17 +156,14 @@ protected:
 			int dims = args.Count(ArgType::Shape);
 
 			string shape_arg = "{";
-			if (dims == 0) {
-				shape_arg += "1";
-			} else {
-				for (int j = 0; j < dims; j++) {
-					if (j != 0) {
-						shape_arg += ", ";
-					}
-					Node* shape_node = args.Get(ArgType::Shape, j);
 
-					shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
+			for (int j = 0; j < dims; j++) {
+				if (j != 0) {
+					shape_arg += ", ";
 				}
+				Node* shape_node = args.Get(ArgType::Shape, j);
+
+				shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
 			}
 
 			shape_arg += "}";

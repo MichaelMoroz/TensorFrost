@@ -13,6 +13,7 @@ void TensorMemoryDefinition(py::module& m,
                             py::class_<PyTensorMemory>& py_tensor_mem);
 void WindowDefinitions(py::module& m);
 void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
+void ModuleDefinitions(py::module& m);
 
 PYBIND11_MODULE(TensorFrost, m) {
 	auto data_type = py::enum_<TFType>(m, "TFType");
@@ -60,6 +61,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	TensorMemoryDefinition(m, py_tensor_mem);
 	WindowDefinitions(m);
 	ScopeDefinitions(m, py_tensor);
+	ModuleDefinitions(m);
 
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options, CodeGenLang kernel_lang) {
