@@ -103,7 +103,7 @@ string ReadVariable(Node* node) {
 }
 
 string GetNodeName(const Node* node,  bool compact) {
-	string name;
+	string name = node->var_name;
 	if (compact) {
 		if (node->name == "const" && !node->flags.has(NodeProp::Modified)) {
 			name = node->GetTensor()->GetConstantString();
@@ -115,7 +115,7 @@ string GetNodeName(const Node* node,  bool compact) {
 		}
 	}
 	if (name.empty()) {
-		name = node->debug_name + "_" + to_string(node->debug_index);
+		name = node->name + "_" + to_string(node->debug_index);
 	}
 	return name;
 }

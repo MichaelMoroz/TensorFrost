@@ -70,7 +70,7 @@ class ShapeInfo {
 
 	vector<int> GetShape(int default_value = 256) const;
 
-	static float GetSizeRatio(ShapeInfo& a, ShapeInfo& b);
+	static float GetSizeEstimate(ShapeInfo &shape);
 
 	void InsertDim(int index, Node* node) {
 		if (index >= shape.size()+1) {

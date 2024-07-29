@@ -28,6 +28,8 @@ using ArgInfo = std::tuple<std::string, std::string, std::string>; // (name, ann
 
 vector<ArgInfo> GetFunctionArguments(const py::function& func);
 
+py::array ListToArray(py::list input_list);
+
 // Tensor wrapper for python
 class PyTensor {
 	Tensor* tensor_;

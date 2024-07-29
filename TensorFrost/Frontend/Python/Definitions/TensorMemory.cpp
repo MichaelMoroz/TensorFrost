@@ -9,20 +9,8 @@ namespace TensorFrost {
 void TensorMemoryDefinition(py::module& m,
                             py::class_<PyTensorMemory>& py_tensor_mem) {
 	//define constructors from numpy arrays
-	py_tensor_mem.def(py::init([](py::array_t<float> arr) {
-		return PyTensorMemory(arr, TFType::Float);
-	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
-
-	py_tensor_mem.def(py::init([](py::array_t<int> arr) {
-		return PyTensorMemory(arr, TFType::Int);
-	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
-
-	py_tensor_mem.def(py::init([](py::array_t<uint> arr) {
-		return PyTensorMemory(arr, TFType::Uint);
-	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
-
-	py_tensor_mem.def(py::init([](py::array_t<bool> arr) {
-		return PyTensorMemory(arr, TFType::Bool);
+	py_tensor_mem.def(py::init([](py::array arr) {
+		return PyTensorMemory(arr);
 	}), "Create a TensorMemory from a numpy array", py::return_value_policy::take_ownership);
 
 	// "constructor"

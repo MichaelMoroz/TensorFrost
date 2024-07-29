@@ -148,6 +148,13 @@ void IR::OptimizeOperations()
 					result = ApplyUnaryOP(inputs[0], [](float a) { return -a; }, [](int a) { return -a; }, [](uint a) { return a; });
 				}
 			}
+			else if(op == "dim_id") { //if the shape of the dimension is 1 then replace with 0
+				int dim = node->data[0];
+				const Tensor* shape = node->args.Get(ArgType::Shape, dim)->GetTensor();
+				if(isConstantAndEqualTo(shape, 1.0F)) {
+					result = &Tensor::Constant(0u, TFType::Int);
+				}
+			}
 			//TODO (Moroz): add more optimizations
 
 			// if computed optimized result, replace all node references with it
@@ -374,6 +381,10 @@ void IR::OptimizeKernelLoadOperations() {
 			//get memory input
 			Node* memory_input = node->args.Get(ArgType::Memory);
 
+			//if(memory_input->debug_index == 423) {
+			//	__debugbreak();
+			//}
+
 			ShapeInfo memory_shape = ShapeInfo(memory_input);
 
 			bool inside_kernel = memory_input->HasParent("kernel");
@@ -382,14 +393,17 @@ void IR::OptimizeKernelLoadOperations() {
 			bool is_not_modified = !memory_input->flags.has(NodeProp::Modified);
 			if (!is_not_modified) continue;
 
-			float size_ratio = ShapeInfo::GetSizeRatio(kernel_shape, memory_shape);
+			float kernel_size = ShapeInfo::GetSizeEstimate(kernel_shape);
+			float memory_size = ShapeInfo::GetSizeEstimate(memory_shape);
+			float size_ratio = kernel_size / memory_size;
 
 			int output_count = (int)memory_input->args.outputs_.size();
 			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
 			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
-			                          (size_ratio <= MAX_LOAD_SIZE_RATIO);
+			                          (size_ratio <= MAX_LOAD_SIZE_RATIO) || memory_size == 1.0f;
 			bool cheap_enough = memory_input->cost_ >= 0.0f &&
 			                    memory_input->cost_ < (MAX_LOAD_COPY / output_count);
+
 
 			//if the memory input is used only once and is not a memory node
 			if (cheap_enough && fusion_makes_sense) {

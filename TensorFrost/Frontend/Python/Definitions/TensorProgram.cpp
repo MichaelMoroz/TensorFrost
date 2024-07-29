@@ -62,8 +62,13 @@ void TensorProgramDefinition(py::module& m,
 					PyTensorMemory* temp_tensor = new PyTensorMemory(arr);
 					inputs_props.push_back(temp_tensor->tensor_);
 					temp_numpy_tensors.push_back(temp_tensor->tensor_);
+				} else if (py::isinstance<py::list>(arg)) { //if list then convert to py::array then create pytensormemory from it and add it
+					py::array arr = ListToArray(arg.cast<py::list>());
+					PyTensorMemory* temp_tensor = new PyTensorMemory(arr);
+					inputs_props.push_back(temp_tensor->tensor_);
+					temp_numpy_tensors.push_back(temp_tensor->tensor_);
 				} else {
-					throw std::runtime_error("Unsupported input type");
+					throw std::runtime_error("Unsupported input type " + std::string(py::str(arg)));
 				}
 			}
 		    vector<TFTensor*> outputs = program.Evaluate(inputs_props);

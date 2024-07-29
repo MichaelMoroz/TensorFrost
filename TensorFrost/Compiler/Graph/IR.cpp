@@ -45,6 +45,7 @@ void IR::CompileIR()
 	CheckIR("Insert Algorithmic Primitives", false, false);
 	UnrollLoops();
 	TryReplaceModificationsWithVersions();
+	OptimizeOperations();
 	RemoveUnusedOperations();
 	CheckIR("Remove Unused Operations 1", false, false);
 	SeparateOperationsIntoKernels();
@@ -57,7 +58,7 @@ void IR::CompileIR()
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
 	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 10; i++) { //fusing kernels by loads (tensor product)
+	for (int i = 0; i < 12; i++) { //fusing kernels by loads (tensor product)
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
@@ -65,6 +66,7 @@ void IR::CompileIR()
 		OptimizeKernelLoadOperations();
 		//CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
 	}
+	CheckIR("Optimize kernel loads", true, false);
 	AddKernelGlobalStoreOperations();
 	RemoveUnusedKernels();
 	CheckIR("Add Kernel Global Memory Operations", true, true);
@@ -72,7 +74,7 @@ void IR::CompileIR()
 	ReorderOperations();
 	OptimizeOperations();
 	AddMemoryOpIndices();
-	//CheckIR("Final optimization", true, true);
+	CheckIR("Final optimization", true, true);
 	FinalizeMemoryIndexing();
 	RemoveUnusedOperations();
 	//CheckIR("Finalize Memory Indexing", false, false);

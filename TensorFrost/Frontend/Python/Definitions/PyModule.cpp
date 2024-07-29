@@ -102,13 +102,15 @@ public:
         py::object L = net.attr("loss")(X, Y);
         py::list net_params = net.attr("parameters")();
 
-        float learning_rate = py::cast<float>(getattr("learning_rate"));
-        float grad_clip = py::cast<float>(getattr("grad_clip"));
+        py::object learning_rate = getattr("learning_rate");
+        py::object grad_clip = getattr("grad_clip");
+
+        bool has_clip = py::isinstance<py::float_>(grad_clip) && py::cast<float>(grad_clip) > 0.0f;
 
         for (size_t i = 0; i < py::len(net_params); ++i) {
             py::object param = net_params[i];
             py::object grad = tf.attr("grad")(L, param);
-            if(grad_clip > 0.0f) {
+            if(has_clip) {
                 grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
             }
 
@@ -134,7 +136,7 @@ public:
     }
 
 private:
-    py::object adam_update(size_t i, py::object& param, py::object& grad, py::object& t, float learning_rate) {
+    py::object adam_update(size_t i, py::object& param, py::object& grad, py::object& t, py::object& learning_rate) {
         float beta1 = py::cast<float>(getattr("beta1"));
         float beta2 = py::cast<float>(getattr("beta2"));
 
@@ -153,11 +155,11 @@ private:
         return mhat.attr("__truediv__")(tf.attr("sqrt")(vhat).attr("__add__")(epsilon)).attr("__mul__")(learning_rate);
     }
 
-    py::object sgd_update(py::object& param, py::object& grad, float learning_rate) {
+    py::object sgd_update(py::object& param, py::object& grad, py::object& learning_rate) {
         return grad.attr("__mul__")(learning_rate);
     }
 
-    py::object rmsprop_update(size_t i, py::object& param, py::object& grad, float learning_rate) {
+    py::object rmsprop_update(size_t i, py::object& param, py::object& grad, py::object& learning_rate) {
         float decay = py::cast<float>(getattr("decay"));
 
         py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
@@ -209,12 +211,12 @@ void ModuleDefinitions(py::module& m) {
     py::module optimizers = m.def_submodule("optimizers", "Optimizers submodule");
 
     optimizers.def("adam",
-        [](Module* net, float learning_rate, float beta1 = 0.9f, float beta2 = 0.999f, float clip = 0.0f) {
+        [](Module* net, py::object learning_rate, py::object beta1, py::object beta2, py::object clip) {
             return new ModuleOptimizer(ModuleOptimizer::OptimizerType::ADAM, net, {
-                {"learning_rate", py::float_(learning_rate)},
-                {"beta1", py::float_(beta1)},
-                {"beta2", py::float_(beta2)},
-                {"grad_clip", py::float_(clip)}
+                {"learning_rate", learning_rate},
+                {"beta1", beta1},
+                {"beta2", beta2},
+                {"grad_clip", clip}
             });
         },
         py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("beta1") = 0.9f, py::arg("beta2") = 0.999f, py::arg("clip") = 0.0f,
@@ -222,10 +224,10 @@ void ModuleDefinitions(py::module& m) {
     );
 
     optimizers.def("sgd",
-        [](Module* net, float learning_rate, float clip = 0.0f) {
+        [](Module* net, py::object learning_rate, py::object clip) {
             return new ModuleOptimizer(ModuleOptimizer::OptimizerType::SGD, net, {
-                {"learning_rate", py::float_(learning_rate)},
-                {"grad_clip", py::float_(clip)}
+                {"learning_rate", learning_rate},
+                {"grad_clip", clip}
             });
         },
         py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("clip") = 0.0f,
@@ -233,11 +235,11 @@ void ModuleDefinitions(py::module& m) {
     );
 
     optimizers.def("rmsprop",
-        [](Module* net, float learning_rate, float decay = 0.9f, float clip = 0.0f) {
+        [](Module* net, py::object learning_rate, py::object decay, py::object clip) {
             return new ModuleOptimizer(ModuleOptimizer::OptimizerType::RMSProp, net, {
-                {"learning_rate", py::float_(learning_rate)},
-                {"decay", py::float_(decay)},
-                {"grad_clip", py::float_(clip)}
+                {"learning_rate", learning_rate},
+                {"decay", decay},
+                {"grad_clip", clip}
             });
         },
         py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("decay") = 0.9f, py::arg("clip") = 0.0f,

@@ -29,18 +29,13 @@ void ShapeInfo::ExpandDimensions(int new_dim)
 	}
 }
 
-float ShapeInfo::GetSizeRatio(ShapeInfo& a, ShapeInfo& b) {
-	vector<int> shape_a = a.GetShape();
-	vector<int> shape_b = b.GetShape();
+float ShapeInfo::GetSizeEstimate(ShapeInfo& shape) {
+	vector<int> shape_a = shape.GetShape();
 	float size_a = 1.0f;
-	float size_b = 1.0f;
 	for (int i = 0; i < shape_a.size(); i++) {
 		size_a *= (float)shape_a[i];
 	}
-	for (int i = 0; i < shape_b.size(); i++) {
-		size_b *= (float)shape_b[i];
-	}
-	return size_a / size_b;
+	return size_a;
 }
 
 void ArgumentManager::AddArgument(ArgID id, Node* node) {

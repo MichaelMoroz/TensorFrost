@@ -222,6 +222,16 @@ std::vector<ArgInfo> GetFunctionArguments(const py::function& func) {
     return arg_info_list;
 }
 
+py::array ListToArray(py::list input_list) {
+	// Get the numpy module
+	py::module np = py::module::import("numpy");
+
+	// Convert the list to a numpy array
+	py::array np_array = np.attr("array")(input_list);
+
+	return np_array;
+}
+
 std::string r_op(const std::string& name) { return "__r" + name + "__"; }
 
 std::string l_op(const std::string& name) { return "__" + name + "__"; }

@@ -7,7 +7,7 @@ tf.initialize(tf.cpu)
 def QRDecomposition(somearg: float = 5.0):
     A = tf.input([-1, -1], tf.float32)
 
-    A = tf.assert_tensor(A, [5, 5], tf.float32)
+    #A = tf.assert_tensor(A, [5, 5], tf.float32)
 
     m, n = A.shape
     Q = tf.zeros([m, n])

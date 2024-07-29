@@ -98,7 +98,7 @@ public:
 		if (Arg != inputs_.end()) {
 			return Arg->second;
 		} else {
-			throw std::runtime_error("Argument not found");
+			throw std::runtime_error("Argument of type " + TypeToString(type) + " at index " + std::to_string(index) + " not found");
 		}
 	}
 

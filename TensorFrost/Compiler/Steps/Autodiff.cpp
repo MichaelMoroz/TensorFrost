@@ -199,9 +199,8 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	{"dim_mean", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		int axis = (int)out.node_->data[0];
 		Tensors shape = in[0].GetShape();
-		axis = GetAxis((int)shape.size(), axis);
 		Tensor& dim_size = Tensor::tofloat(*shape[axis]);
-		grads.Add(Tensor::Unsqueeze(grad / dim_size, axis));
+		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
 	}},
 	{"dim_norm", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.node_->data[0]);
@@ -235,7 +234,9 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(Tensor::Reshape(grad, in[0].GetShape()));
 	}},
 	{"assert", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Assert(grad, in[0].GetShape(), in[0].GetType()));
+		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
+		//grads.Add(Tensor::Assert(grad, in[0].GetShape(), in[0].GetType()));
+		grads.Add(ArgType::Memory, 0, Tensor::Assert(grad, memory_input->GetShape(), memory_input->GetType()));
 	}},
 	//memory operations
 	{"load", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
