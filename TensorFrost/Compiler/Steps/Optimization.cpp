@@ -380,11 +380,7 @@ void IR::OptimizeKernelLoadOperations() {
 
 			//get memory input
 			Node* memory_input = node->args.Get(ArgType::Memory);
-
-			//if(memory_input->debug_index == 423) {
-			//	__debugbreak();
-			//}
-
+			
 			ShapeInfo memory_shape = ShapeInfo(memory_input);
 
 			bool inside_kernel = memory_input->HasParent("kernel");

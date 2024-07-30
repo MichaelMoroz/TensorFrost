@@ -1,6 +1,6 @@
 import TensorFrost as tf
-import math
 import numpy as np
+import time
 
 tf.initialize(tf.opengl)
 
@@ -16,7 +16,7 @@ def mul_bias(X, W):
     return tf.select(ids[-1] == X.shape[-1], 1.0, X[ids]) @ W
 
 class MNIST_net(tf.Module):
-    def __init__(self, input_size = 784, output_size = 10, hidden_size = 128, hidden_layers = 2, is_compiler = False):
+    def __init__(self, input_size = 784, output_size = 10, hidden_size = 64, hidden_layers = 3, is_compiler = False):
         super().__init__()
         self.W = tf.ParameterArray()
         self.layers = hidden_layers + 1
@@ -38,22 +38,23 @@ class MNIST_net(tf.Module):
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
-        return tf.mean(tf.mean(-Y * log_softmax(Yhat)))
+        return tf.mean(tf.sum(-Y * log_softmax(Yhat)))
 
-lr = 0.0001
+lr = 0.001
 decay = 0.99
 
 def OptimizerStep():
-    model = MNIST_net(is_compiler = True)
-    opt = tf.optimizers.adam(model, lr)
-    opt.initialize_input()
-
     X = tf.input([-1, -1], tf.float32)
     Y = tf.input([-1, 10], tf.float32)
     
-    info = tf.input([-1], tf.int32)
-    offset = info[0]
-    batch_size = info[1]
+    info = tf.input([-1], tf.float32)
+    offset = tf.int(info[0])
+    batch_size = tf.int(info[1])
+    learning_rate = info[2]
+
+    model = MNIST_net(is_compiler = True)
+    opt = tf.optimizers.adam(model, learning_rate)
+    opt.initialize_input()
 
     #TODO: implement slicing instead of this crap
     i, j = tf.indices([batch_size, X.shape[1]])
@@ -91,8 +92,9 @@ Xtest = image_to_vector(data['test_x'])
 Ytest = data['test_y']
 
 batch_size = 1024
-epochs = 360
+epochs = 100
 iterations = Xtrain.shape[0] // batch_size
+print("Iterations per epoch: ", iterations)
 
 model = MNIST_net()
 opt = tf.optimizers.adam(model, lr)
@@ -100,6 +102,9 @@ opt.initialize_parameters()
 
 Xtf = tf.tensor(Xtrain)
 Ytf = tf.tensor(Ytrain)
+Xtest = tf.tensor(Xtest)
+
+init_time = time.time()
 
 def test_accuracy(model, X, Y):
     Yhat = compute_forward(model, X)
@@ -113,18 +118,18 @@ for i in range(epochs):
     avg_loss_tf = 0.0
 
     #shuffle offsets
-    offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size
+    offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size + np.random.randint(batch_size)
 
     for j in range(iterations):
-        res = train_step(opt, Xtf, Ytf, [offsets[j], batch_size])
+        res = train_step(Xtf, Ytf, [offsets[j], batch_size, lr], opt)
         opt.update_parameters(res[:-1])
         loss = res[-1].numpy
         avg_loss_tf += loss
         loss_curve.append(loss)
 
-    #accuracy = test_accuracy(model, Xtest, Ytest)
-    #accuracy_curve.append(accuracy)
-    print("Epoch: ", i, " Tf Loss: ", avg_loss_tf / iterations)
+    accuracy = test_accuracy(model, Xtest, Ytest)
+    accuracy_curve.append(accuracy)
+    print("Epoch: ", i, " Loss: ", avg_loss_tf / iterations, " Test accuracy: ", accuracy, "%")
 
 test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
 print("Final Tf test accuracy: ", test_accuracy_tf, "%")
@@ -132,15 +137,20 @@ print("Final Tf test accuracy: ", test_accuracy_tf, "%")
 accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
 print("Final Tf train accuracy: ", accuracy_on_train, "%")
 
+print("Iterations per second: ", iterations * epochs / (time.time() - init_time))
+
 # Plot loss history
 import matplotlib.pyplot as plt
 plt.plot(loss_curve)
 plt.xlabel('Iteration')
 plt.ylabel('Loss')
+plt.grid()
 plt.show()
 
-# Plot accuracy history
-#plt.plot(accuracy_curve)
-#plt.xlabel('Epoch')
-#plt.ylabel('Accuracy')
-#plt.show()
+#Plot accuracy history
+plt.plot(accuracy_curve)
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.grid()
+plt.ylim(70, 95)
+plt.show()

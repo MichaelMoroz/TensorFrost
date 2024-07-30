@@ -235,7 +235,6 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 	}},
 	{"assert", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
-		//grads.Add(Tensor::Assert(grad, in[0].GetShape(), in[0].GetType()));
 		grads.Add(ArgType::Memory, 0, Tensor::Assert(grad, memory_input->GetShape(), memory_input->GetType()));
 	}},
 	//memory operations
