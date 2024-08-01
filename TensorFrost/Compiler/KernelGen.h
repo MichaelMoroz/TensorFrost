@@ -10,6 +10,9 @@
 
 namespace TensorFrost {
 
+uint GetInitialMax(TFType type);
+uint GetInitialMin(TFType type);
+
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
                 ArgType arg_type);
 

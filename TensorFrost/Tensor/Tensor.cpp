@@ -47,6 +47,15 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 	argument_counts_[id.first]++;
 }
 
+void ArgumentManager::Remove(ArgID id) {
+	if(inputs_.find(id) == inputs_.end()) {
+		throw std::runtime_error("Cannot remove argument that does not exist");
+	}
+	inputs_.erase(id);
+	argument_types_.erase(id);
+	argument_counts_[id.first]--;
+}
+
 void ArgumentManager::RemoveArguments(ArgType arg) {
 	unordered_set<ArgID, HashArgID> to_remove;
 	for (auto& [id, node] : inputs_) {
@@ -55,10 +64,18 @@ void ArgumentManager::RemoveArguments(ArgType arg) {
 		}
 	}
 	for (auto& id : to_remove) {
-		inputs_.erase(id);
-		argument_types_.erase(id);
-		argument_counts_[id.first]--;
+		Remove(id);
 	}
+}
+
+vector<const Tensor *> ArgumentManager::GetTensorVector(ArgType type) const  {
+	vector<const Tensor*> tensors;
+	for (auto& [id, node] : inputs_) {
+		if (id.first == type) {
+			tensors.push_back(node->GetTensor());
+		}
+	}
+	return tensors;
 }
 
 tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &name, const Tensors &tensors,

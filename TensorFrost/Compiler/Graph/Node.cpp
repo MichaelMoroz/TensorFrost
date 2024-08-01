@@ -69,6 +69,15 @@ void ArgumentManager::UpdateArgument(ArgID id, Node *node) {
     argument_types_[id] = node->type;
 }
 
+Node * Node::GetChild(string name) {
+    for(NodeIterator it = NodeIterator(this); !it.end(); it.next()) {
+        if(it->name == name) {
+            return it.get();
+        }
+    }
+    return nullptr;
+}
+
 Node* Node::GetLastChild() {
     NodeIterator it = NodeIterator(this);
     for (; !it.end(); it.go_to_next()) {}

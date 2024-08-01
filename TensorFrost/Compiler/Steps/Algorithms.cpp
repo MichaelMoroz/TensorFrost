@@ -139,6 +139,30 @@ Tensor* ComputeMean(const Tensor* array, int axis) {
 	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
 }
 
+uint GetInitialMax(TFType type) {
+	if (type == TFType::Float) {
+		float init = -FLT_MAX;
+		return *(uint*)&init;
+	}
+	else if (type == TFType::Int) {
+		int init = INT_MIN;
+		return *(uint*)&init;
+	}
+	return 0;
+}
+
+uint GetInitialMin(TFType type) {
+	if (type == TFType::Float) {
+		float init = FLT_MAX;
+		return *(uint*)&init;
+	}
+	else if (type == TFType::Int) {
+		int init = INT_MAX;
+		return *(uint*)&init;
+	}
+	return 0;
+}
+
 Tensor* ComputeMax(const Tensor* array, int axis) {
 	uint initial = 0;
 	if (array->node_->type == TFType::Float) {

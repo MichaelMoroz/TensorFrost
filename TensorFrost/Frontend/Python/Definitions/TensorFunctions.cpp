@@ -236,7 +236,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("unsqueeze", [](const PyTensor& t, int dim) {
 		return PT(Tensor::Unsqueeze(T(t), dim));
-	}, py::arg("t"), py::kw_only(), py::arg("dim") = -1, "Unsqueeze the tensor");
+	}, py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Unsqueeze the tensor");
 
 	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
 		return PT(Tensor::Dot(T(t), T(t2), axis));

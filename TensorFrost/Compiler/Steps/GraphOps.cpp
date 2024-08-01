@@ -15,7 +15,7 @@ void IR::SeparateOperationsIntoKernels() {
 			 Node* kernel_node = tensor.node_;
 			 // make the scope nodes children of the kernel node
 			 kernel_node->child = scope->begin;
-			kernel_node->next = scope->end->next;
+			 kernel_node->next = scope->end->next;
 			 scope->begin->parent = kernel_node;
 			 scope->begin->prev = nullptr;
 			 scope->end->next->prev = kernel_node;
@@ -419,12 +419,14 @@ map<Node*, Node*> IR::CopyNodes(
 		return {};
 	}
 
-	if (nodes_to_copy.size() > 1024) {
-		throw std::runtime_error(
-		    "Copy Nodes: Copying too many nodes, something is probably "
-		    "wrong. Number of nodes to copy: " +
-		    to_string(nodes_to_copy.size()));
-	}
+	//TODO: figure out a better heuristic for this, or add as a warning
+	//(need to implement a logging system)
+	// if (nodes_to_copy.size() > 1024) {
+	// 	throw std::runtime_error(
+	// 	    "Copy Nodes: Copying too many nodes, something is probably "
+	// 	    "wrong. Number of nodes to copy: " +
+	// 	    to_string(nodes_to_copy.size()));
+	// }
 
 	// copy the nodes
 	map<Node*, Node*> copied_node_map;

@@ -231,7 +231,8 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(Tensor::Reverse(grad, out.node_->data[0]));
 	}},
 	{"reshape", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Reshape(grad, in[0].GetShape()));
+		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
+		grads.Add(ArgType::Memory, 0, Tensor::Reshape(grad, memory_input->GetShape()));
 	}},
 	{"assert", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);

@@ -162,6 +162,7 @@ public:
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
 	void UnrollLoops();
+	void UnrollKernelDimensions();
 	void TryReplaceModificationsWithVersions();
 	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();

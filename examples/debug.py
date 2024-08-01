@@ -1,175 +1,175 @@
 import TensorFrost as tf
 import numpy as np
+import time
+
 tf.initialize(tf.cpu)
 
-# #
-#dynamic size QR decomposition
-def QRDecomposition(somearg: float = 5.0):
-    A = tf.input([-1, -1], tf.float32)
+def log_softmax(X):
+    X = X - tf.unsqueeze(tf.max(X))
+    return X - tf.log(tf.unsqueeze(tf.sum(tf.exp(X))) + 1e-6)
 
-    #A = tf.assert_tensor(A, [5, 5], tf.float32)
-
-    m, n = A.shape
-    Q = tf.zeros([m, n])
-    R = tf.zeros([n, n])
-    j = tf.index(0, [m])
-
-    with tf.loop(n-1) as i:
-        R[i, i] = tf.norm(A[j, i])
-        Q[j, i] = A[j, i] / R[i, i]
-
-        p, k = tf.index_grid([0, i + 1], [m, n])
-        t, = tf.index_grid([i+1], [n])
-        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
-        A[p, k] -= Q[p, i] * R[i, k]
-
-    R[n-1, n-1] = tf.norm(A[j, n-1])
-    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
-
-    return [Q, R]
-
-qr = tf.compile(QRDecomposition)
-
-#generate random matrix
-A = np.random.rand(5, 5)
-
-#compute QR decomposition using TensorFrost
-Atf = tf.tensor(A)
-Qtf, Rtf = qr(Atf)
-Qnp = Qtf.numpy
-Rnp = Rtf.numpy
-
-#check if QR decomposition is correct
-print("QR decomposition using TensorFrost is correct:", np.allclose(A, np.dot(Qnp, Rnp)))
-
-#check error
-print("Error using TensorFrost:", np.linalg.norm(A - np.dot(Qnp, Rnp)))
-
-#print Q and R
-print("Q:\n", Qnp)
-print("R:\n", Rnp)
-
-# def test():
-#     a = tf.input([2, 2], tf.float32)
-#     b = tf.input([2, 2], tf.float32)
-#
-#     c = a + b
-#     d = a - b
-#     e = a * b
-#
-#     return [c, d, e]
-#
-# f = tf.compile(test)
-#
-# a = np.array([[1, 2], [3, 4]]).astype(np.float32)
-# b = np.array([[5, 6], [7, 8]]).astype(np.float32)
-#
-# atf = tf.tensor(a)
-# btf = tf.tensor(b)
-#
-# c, d, e = f(atf, btf)
-#
-# print(c.numpy)
-# print(d.numpy)
-# print(e.numpy)
-
-# def Trilinear(tex, x, y, z):
-#     xi, yi, zi = tf.floor(x), tf.floor(y), tf.floor(z)
-#     xf, yf, zf = x-xi, y-yi, z-zi
-#     xi, yi, zi = tf.int(xi), tf.int(yi), tf.int(zi)
-#     oxf, oyf, ozf = 1.0-xf, 1.0-yf, 1.0-zf
-#     return tex[xi, yi, zi]*oxf*oyf*ozf + tex[xi+1, yi, zi]*xf*oyf*ozf + tex[xi, yi+1, zi]*oxf*yf*ozf + tex[xi+1, yi+1, zi]*xf*yf*ozf + tex[xi, yi, zi+1]*oxf*oyf*zf + tex[xi+1, yi, zi+1]*xf*oyf*zf + tex[xi, yi+1, zi+1]*oxf*yf*zf + tex[xi+1, yi+1, zi+1]*xf*yf*zf
-#
-# def InterpGrad():
-#     tex = tf.input([16, 16, 16], tf.float32)
-#     pos = tf.input([-1, 3], tf.float32)
-#     N = pos.shape[0]
-#     vals = tf.input([N], tf.float32)
-#
-#     i, = vals.indices
-#     x, y, z = pos[i, tf.int(0)], pos[i, tf.int(1)], pos[i, tf.int(2)]
-#
-#     samp = Trilinear(tex, x, y, z)
-#     diff = samp-vals
-#     loss = tf.sum(diff*diff)
-#
-#     g = tf.grad(loss, tex)
-#
-#     return g
-#
-# test = tf.compile(InterpGrad)
-
-EN = 16 #embedding size
-CH = 3 #number of channels
-
-ImageW = 1000
-ImageH = 1000
-
-def Sample(tex, i, j, k):
-    #return tex[i, j, k]
-    res = tf.clamp(tf.round(127.0*tex[i, j, k]).pass_grad(), -127.0, 127.0)
-    return res / 127.0
-
-def Bilinear(tex, x, y, ch):
-    #offset each channel to avoid discontinuities
-    chidx = ch/4
-    offset_x = tf.float(chidx%2) / 2.0
-    offset_y = tf.float(chidx/2) / 2.0
-    x, y = x+offset_x, y+offset_y
-    xi, yi = tf.floor(x), tf.floor(y)
-    xf, yf = x-xi, y-yi
-    xi, yi = tf.int(xi), tf.int(yi)
-
-    #fake cubic interpolation
-    xf = tf.smoothstep(0.0, 1.0, xf)
-    yf = tf.smoothstep(0.0, 1.0, yf)
-
-    oxf, oyf = 1.0-xf, 1.0-yf
-    #return tex[xi, yi, ch]*oxf*oyf + tex[xi+1, yi, ch]*xf*oyf + tex[xi, yi+1, ch]*oxf*yf + tex[xi+1, yi+1, ch]*xf*yf
-    return Sample(tex, xi, yi, ch)*oxf*oyf + Sample(tex, xi+1, yi, ch)*xf*oyf + Sample(tex, xi, yi+1, ch)*oxf*yf + Sample(tex, xi+1, yi+1, ch)*xf*yf
+def leaky_relu(X):
+    return tf.select(X > 0.0, X, 0.01 * X)
 
 def mul_bias(X, W):
     ids = tf.indices(list(X.shape[:-1]) + [W.shape[-2]])
-    return tf.select(ids[-1] == X.shape[-1], 0.01, X[ids]) @ W
+    return tf.select(ids[-1] == X.shape[-1], 1.0, X[ids]) @ W
 
-def GELU(x):
-    return 0.5*x*(1.0+tf.tanh(0.7978845608*(x+0.044715*x*x*x)))
+class MNIST_net(tf.Module):
+    def __init__(self, input_resolution = 28, output_size = 10, hidden_size = 64, is_compiler = False):
+        super().__init__()
+        self.resolution = input_resolution
+        self.kernel_size = 5
+        self.kernel_rad = self.kernel_size // 2
+        self.kernels1 = 2
+        self.conv1 = tf.Parameter([self.kernel_size, self.kernel_size, 1, self.kernels1], tf.float32)
+        self.conv1_bias = tf.Parameter([self.kernels1], tf.float32)
+        self.kernels2 = 8
+        self.conv2 = tf.Parameter([self.kernel_size, self.kernel_size, self.kernels1, self.kernels2], tf.float32)
+        self.conv2_bias = tf.Parameter([self.kernels2], tf.float32)
+        self.layer1 = 128
+        self.fc1 = tf.Parameter([self.kernels2 * (self.resolution // 4) ** 2 + 1, self.layer1], tf.float32)
+        self.fc2 = tf.Parameter([self.layer1 + 1, output_size], tf.float32)
 
-def Decode(tex, W1, W2, x, y):
-    embed = Bilinear(tex, x, y, x.indices[-1])
-    #small neural network
-    embed = tf.sin(mul_bias(embed, W1))
-    return (mul_bias(embed, W2))
+    def conv2d(self, X, W, b, in_count):
+        bi, wi, hi, cout, cin, i, j = tf.indices([X.shape[0], X.shape[1], X.shape[2], W.shape[3], in_count, self.kernel_size, self.kernel_size])
+        prod = X[bi, wi + i - self.kernel_rad, hi + j - self.kernel_rad, cin] * W[i, j, cin, cout]
+        conv = tf.sum(tf.sum(tf.sum(prod))) #sum over the last 3 dimensions
+        return conv + b
 
-def NeuralEmbed():
-    tex = tf.input([-1, -1, EN], tf.float32)
-    RN = tex.shape[0]
-    pos = tf.input([-1, 2], tf.float32)
-    N = pos.shape[0]
-    vals = tf.input([N, CH], tf.float32)
-    W1 = tf.input([EN+1, -1], tf.float32)
-    HiddenSize = W1.shape[1]
-    W2 = tf.input([HiddenSize+1, CH], tf.float32)
+    def max_pool2d(self, X):
+        bi, wi, hi, ci, i, j = tf.indices([X.shape[0], X.shape[1] / 2, X.shape[2] / 2, X.shape[3], 2, 2])
+        return tf.max(tf.max(X[bi, 2 * wi + i, 2 * hi + j, ci]))
 
-    params = tf.input([-1], tf.float32)
-    tex_lr = params[0]
-    weight_lr = params[1]
-    normalize = tf.int(params[2])
+    def forward(self, X):
+        X = tf.reshape(X, [X.shape[0], self.resolution, self.resolution, 1])
+        X = leaky_relu(self.conv2d(X, self.conv1, self.conv1_bias, 1))
+        X = self.max_pool2d(X)
+        X = leaky_relu(self.conv2d(X, self.conv2, self.conv2_bias, self.kernels1))
+        X = self.max_pool2d(X)
+        X = tf.reshape(X, [X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]])
+        X = leaky_relu(mul_bias(X, self.fc1))
+        X = mul_bias(X, self.fc2)
+        return X
 
-    i, j = tf.indices([N, EN])
+    def loss(self, X, Y):
+        Yhat = self.forward(X)
+        return tf.mean(tf.sum(-Y * log_softmax(Yhat)))
 
-    with tf.if_cond(normalize == 1):
-        tex[tex.indices] = tex / (tf.mean(tf.mean(tf.abs(tex), axis=0), axis=0) + 1e-6)
+lr = 0.0001
+decay = 0.99
 
-    samp = Decode(tex, W1, W2, pos[i, 0], pos[i, 1])
+def OptimizerStep():
+    X = tf.input([-1, -1], tf.float32)
+    Y = tf.input([-1, 10], tf.float32)
 
-    diff = samp-vals
-    loss = tf.sum(tf.sum(diff*diff)) / tf.float(N)
+    info = tf.input([-1], tf.float32)
+    offset = tf.int(info[0])
+    batch_size = tf.int(info[1])
+    learning_rate = info[2]
 
-    W1 -= weight_lr*tf.grad(loss, W1)
-    W2 -= weight_lr*tf.grad(loss, W2)
-    tex -= tex_lr*tf.grad(loss, tex)
+    model = MNIST_net(is_compiler = True)
+    opt = tf.optimizers.adam(model, learning_rate)
+    opt.initialize_input()
 
-    return tex, W1, W2, loss
+    #TODO: implement slicing instead of this crap
+    i, j = tf.indices([batch_size, X.shape[1]])
+    Xbatch = X[i + offset, j]
+    i, j = tf.indices([batch_size, Y.shape[1]])
+    Ybatch = Y[i + offset, j]
 
-reconstruct = tf.compile(NeuralEmbed)
+    L = opt.step(Xbatch, Ybatch)
+
+    params = opt.parameters()
+    params.append(L)
+    return params
+
+train_step = tf.compile(OptimizerStep)
+
+def ComputeForward():
+    model = MNIST_net(is_compiler = True)
+    model.initialize_input()
+    X = tf.input([-1, -1], tf.float32)
+    return model.forward(X)
+
+compute_forward = tf.compile(ComputeForward)
+
+# Load MNIST data
+data = np.load('mnist.npz')
+
+def image_to_vector(X):
+    return np.reshape(X, (len(X), -1))         # Flatten: (N x 28 x 28) -> (N x 784)
+
+Xtrain = image_to_vector(data['train_x'])
+Ytrain = np.zeros((Xtrain.shape[0], 10))
+Ytrain[np.arange(Xtrain.shape[0]), data['train_y']] = 1.0
+
+Xtest = image_to_vector(data['test_x'])[0:500]
+Ytest = data['test_y'][0:500]
+
+batch_size = 128
+epochs = 10
+iterations = Xtrain.shape[0] // batch_size
+print("Iterations per epoch: ", iterations)
+
+model = MNIST_net()
+opt = tf.optimizers.adam(model, lr)
+opt.initialize_parameters()
+
+Xtf = tf.tensor(Xtrain)
+Ytf = tf.tensor(Ytrain)
+Xtest = tf.tensor(Xtest)
+
+init_time = time.time()
+
+def test_accuracy(model, X, Y):
+    Yhat = compute_forward(model, X)
+    Predict = np.argmax(Yhat.numpy, axis = 1)
+    correct_tf = np.sum(Predict == Y)
+    return correct_tf * 100.0 / len(Y)
+
+loss_curve = []
+accuracy_curve = []
+for i in range(epochs):
+    avg_loss_tf = 0.0
+
+    #shuffle offsets
+    offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size + np.random.randint(batch_size)
+
+    for j in range(iterations):
+        if(j == 0): tf.renderdoc_start_capture()
+        res = train_step(Xtf, Ytf, [offsets[j], batch_size, lr], opt)
+        opt.update_parameters(res[:-1])
+        loss = res[-1].numpy
+        avg_loss_tf += loss
+        loss_curve.append(loss)
+        print("Epoch: ", i, " Iteration: ", j, " Loss: ", loss)
+        if(j == 0): tf.renderdoc_end_capture()
+
+    accuracy = test_accuracy(model, Xtest, Ytest)
+    accuracy_curve.append(accuracy)
+    print("Epoch: ", i, " Loss: ", avg_loss_tf / iterations, " Test accuracy: ", accuracy, "%")
+
+test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
+print("Final Tf test accuracy: ", test_accuracy_tf, "%")
+
+#accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
+#print("Final Tf train accuracy: ", accuracy_on_train, "%")
+
+print("Iterations per second: ", iterations * epochs / (time.time() - init_time))
+
+# Plot loss history
+import matplotlib.pyplot as plt
+plt.plot(loss_curve)
+plt.xlabel('Iteration')
+plt.ylabel('Loss')
+plt.grid()
+plt.show()
+
+#Plot accuracy history
+plt.plot(accuracy_curve)
+plt.xlabel('Epoch')
+plt.ylabel('Accuracy')
+plt.grid()
+plt.ylim(70, 95)
+plt.show()

@@ -37,13 +37,13 @@ void IR::CompileIR()
 	//CheckIR("Optimize operations", false, false);
 	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
+	UnrollLoops();
 	//CheckIR("Remove Unused Operations 0", false, false);
 	ComputeAutodiff();
 	RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
 	InsertAlgorithmicPrimitives();
 	CheckIR("Insert Algorithmic Primitives", false, false);
-	UnrollLoops();
 	TryReplaceModificationsWithVersions();
 	OptimizeOperations();
 	RemoveUnusedOperations();
@@ -57,8 +57,10 @@ void IR::CompileIR()
 	MoveShapeOutsideKernels();
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
+	UnrollKernelDimensions();
 	CheckIR("Optimize kernels and host", true, false);
-	for (int i = 0; i < 12; i++) { //fusing kernels by loads (tensor product)
+	RemoveUnusedOperations();
+	for (int i = 0; i < 20; i++) { //fusing kernels by loads (tensor product)
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();

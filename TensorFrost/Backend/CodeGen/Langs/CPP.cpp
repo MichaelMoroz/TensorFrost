@@ -65,6 +65,16 @@ inline int asint(uint x)
 	return *(int*)&x;
 }
 
+inline uint asuint(bool x)
+{
+	return *(uint*)&x;
+}
+
+inline bool asbool(uint x)
+{
+	return *(bool*)&x;
+}
+
 inline int clamp(int x, int a, int b)
 {
 	return min(max(x, a), b);

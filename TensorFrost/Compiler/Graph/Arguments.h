@@ -102,6 +102,11 @@ public:
 		}
 	}
 
+	void Remove(ArgID id);
+	void Remove(ArgType type, int index = 0) {
+		Remove(ArgID(type, index));
+	}
+
 	const Tensor *GetTensor(ArgType type, int index = 0) const;
 
 	const Tensor& operator[](int index) const;
@@ -171,6 +176,8 @@ public:
 	}
 
 	map<int, const Tensor *> GetTensors(ArgType type) const;
+
+	vector<const Tensor*> GetTensorVector(ArgType type) const;
 
 	~ArgumentManager();
 

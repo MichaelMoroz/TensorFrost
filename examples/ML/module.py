@@ -16,31 +16,47 @@ def mul_bias(X, W):
     return tf.select(ids[-1] == X.shape[-1], 1.0, X[ids]) @ W
 
 class MNIST_net(tf.Module):
-    def __init__(self, input_size = 784, output_size = 10, hidden_size = 64, hidden_layers = 3, is_compiler = False):
+    def __init__(self, input_resolution = 28, output_size = 10, hidden_size = 64, is_compiler = False):
         super().__init__()
-        self.W = tf.ParameterArray()
-        self.layers = hidden_layers + 1
-        if is_compiler:
-            self.W[0] = tf.Parameter([input_size + 1, -1], tf.float32)
-            for i in range(hidden_layers - 1):
-                self.W[i + 1] = tf.Parameter([-1, -1], tf.float32)
-            self.W[hidden_layers] = tf.Parameter([-1, output_size], tf.float32)
-        else:
-            self.W[0] = tf.Parameter([input_size + 1, hidden_size], tf.float32)
-            for i in range(hidden_layers - 1):
-                self.W[i + 1] = tf.Parameter([hidden_size + 1, hidden_size], tf.float32)
-            self.W[hidden_layers] = tf.Parameter([hidden_size + 1, output_size], tf.float32)
+        self.resolution = input_resolution
+        self.kernel_size = 5
+        self.kernel_rad = self.kernel_size // 2
+        self.kernels1 = 8
+        self.conv1 = tf.Parameter([self.kernel_size, self.kernel_size, 1, self.kernels1], tf.float32)
+        self.conv1_bias = tf.Parameter([self.kernels1], tf.float32)
+        self.kernels2 = 16
+        self.conv2 = tf.Parameter([self.kernel_size, self.kernel_size, self.kernels1, self.kernels2], tf.float32)
+        self.conv2_bias = tf.Parameter([self.kernels2], tf.float32)
+        self.layer1 = 128  
+        self.fc1 = tf.Parameter([self.kernels2 * (self.resolution // 4) ** 2 + 1, self.layer1], tf.float32)
+        self.fc2 = tf.Parameter([self.layer1 + 1, output_size], tf.float32)
 
+    def conv2d(self, X, W, b, in_count):
+        bi, wi, hi, cout, cin, i, j = tf.indices([X.shape[0], X.shape[1], X.shape[2], W.shape[3], in_count, self.kernel_size, self.kernel_size])
+        prod = X[bi, wi + i - self.kernel_rad, hi + j - self.kernel_rad, cin] * W[i, j, cin, cout]
+        conv = tf.sum(tf.sum(tf.sum(prod))) #sum over the last 3 dimensions
+        return conv + b
+    
+    def max_pool2d(self, X):
+        bi, wi, hi, ci, i, j = tf.indices([X.shape[0], X.shape[1] / 2, X.shape[2] / 2, X.shape[3], 2, 2])
+        return tf.max(tf.max(X[bi, 2 * wi + i, 2 * hi + j, ci]))
+    
     def forward(self, X):
-        for i in range(self.layers - 1):
-            X = leaky_relu(mul_bias(X, self.W[i]))
-        return mul_bias(X, self.W[self.layers - 1])
+        X = tf.reshape(X, [X.shape[0], self.resolution, self.resolution, 1])
+        X = leaky_relu(self.conv2d(X, self.conv1, self.conv1_bias, 1))
+        X = self.max_pool2d(X)
+        X = leaky_relu(self.conv2d(X, self.conv2, self.conv2_bias, self.kernels1))
+        X = self.max_pool2d(X)
+        X = tf.reshape(X, [X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]])
+        X = leaky_relu(mul_bias(X, self.fc1))
+        X = mul_bias(X, self.fc2)
+        return X
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
         return tf.mean(tf.sum(-Y * log_softmax(Yhat)))
 
-lr = 0.001
+lr = 0.0001
 decay = 0.99
 
 def OptimizerStep():
@@ -88,11 +104,11 @@ Xtrain = image_to_vector(data['train_x'])
 Ytrain = np.zeros((Xtrain.shape[0], 10))
 Ytrain[np.arange(Xtrain.shape[0]), data['train_y']] = 1.0
 
-Xtest = image_to_vector(data['test_x'])     
+Xtest = image_to_vector(data['test_x'])
 Ytest = data['test_y']
 
-batch_size = 1024
-epochs = 100
+batch_size = 64
+epochs = 10
 iterations = Xtrain.shape[0] // batch_size
 print("Iterations per epoch: ", iterations)
 
@@ -121,21 +137,24 @@ for i in range(epochs):
     offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size + np.random.randint(batch_size)
 
     for j in range(iterations):
+        if(j == 0): tf.renderdoc_start_capture()
         res = train_step(Xtf, Ytf, [offsets[j], batch_size, lr], opt)
         opt.update_parameters(res[:-1])
         loss = res[-1].numpy
         avg_loss_tf += loss
         loss_curve.append(loss)
+        #print("Epoch: ", i, " Iteration: ", j, " Loss: ", loss)
+        if(j == 0): tf.renderdoc_end_capture()
 
-    accuracy = test_accuracy(model, Xtest, Ytest)
-    accuracy_curve.append(accuracy)
-    print("Epoch: ", i, " Loss: ", avg_loss_tf / iterations, " Test accuracy: ", accuracy, "%")
+    #accuracy = test_accuracy(model, Xtest, Ytest)
+    #accuracy_curve.append(accuracy)
+    print("Epoch: ", i, " Loss: ", avg_loss_tf / iterations)#, " Test accuracy: ", accuracy, "%")
 
 test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
 print("Final Tf test accuracy: ", test_accuracy_tf, "%")
 
-accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
-print("Final Tf train accuracy: ", accuracy_on_train, "%")
+#accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
+#print("Final Tf train accuracy: ", accuracy_on_train, "%")
 
 print("Iterations per second: ", iterations * epochs / (time.time() - init_time))
 

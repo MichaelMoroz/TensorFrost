@@ -16,21 +16,21 @@ std::unordered_map<TFType, string> DataTypeNames = {
 
 const vector<Operation> operations = {
     //Scope operations
-    Operation("host", {""}, 0, "", {OpProp::Static, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
-    Operation("kernel", {""}, 0, "", {OpProp::Static, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
+    Operation("host", {""}, 0, "", {OpProp::Static, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff, OpProp::HasChildren}),
+    Operation("kernel", {""}, 0, "", {OpProp::Static, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff, OpProp::HasChildren}),
 
     //Control operations
-    Operation("loop", {"iii_i"}, 100, "", {OpProp::Static, OpProp::Special, OpProp::Nondiff}),
-    Operation("if", {"b_"}, 100, "", {OpProp::Static, OpProp::Special, OpProp::Nondiff}),
+    Operation("loop", {"iii_i"}, 100, "", {OpProp::Static, OpProp::Special, OpProp::Nondiff, OpProp::HasChildren}),
+    Operation("if", {"b_"}, 100, "", {OpProp::Static, OpProp::Special, OpProp::Nondiff, OpProp::HasChildren}),
     Operation("break", {""}, 0, "break", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("continue", {""}, 0, "continue", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("discard", {""}, 0, "discard", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword), //discard current thread
     //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
 
     //Allocation operations
-    Operation("memory", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
-    Operation("reshape", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
-	Operation("assert", {"_f", "_i", "_u"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
+    Operation("memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
+    Operation("reshape", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
+	Operation("assert", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
 	Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("deallocate", {""}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
     //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
@@ -86,11 +86,11 @@ const vector<Operation> operations = {
     // Memory operations
     //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
     //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
-    Operation("load", {"_f", "_u", "_i"}, 128, "",
+    Operation("load", {"_f", "_u", "_i", "_b"}, 128, "",
               {OpProp::Load, OpProp::MemoryOp}),
-    Operation("store", {"f_", "u_", "i_"}, 128, "",
+    Operation("store", {"f_", "u_", "i_", "b_"}, 128, "",
               {OpProp::Store, OpProp::MemoryOp, OpProp::Modifier}),
-    Operation("set", {"f_", "u_", "i_"}, 1, "",
+    Operation("set", {"f_", "u_", "i_", "b_"}, 1, "",
               {OpProp::Set, OpProp::Modifier}),
     Operation("InterlockedAdd", {"u_", "i_", "f_"}, 256, "",
               {OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier}),
@@ -136,12 +136,14 @@ const vector<Operation> operations = {
     Operation("int", {"f_i", "u_i", "i_i", "b_i"}, 1, "int", {OpProp::Nondiff}, OpClass::TypeCast),
     Operation("float", {"f_f", "u_f", "i_f", "b_f"}, 1, "float", {OpProp::Nondiff}, OpClass::TypeCast),
     Operation("bool", {"f_b", "u_b", "i_b", "b_b"}, 1, "bool", {OpProp::Nondiff}, OpClass::TypeCast),
-    Operation("asuint", {"f_u", "u_u", "i_u"}, 0, "asuint",
+    Operation("asuint", {"f_u", "u_u", "i_u", "b_u"}, 0, "asuint",
               {OpProp::Nondiff}, OpClass::TypeReinterpret),
-    Operation("asint", {"f_i", "u_i", "i_i"}, 0, "asint",
+    Operation("asint", {"f_i", "u_i", "i_i", "b_i"}, 0, "asint",
               {OpProp::Nondiff}, OpClass::TypeReinterpret),
-    Operation("asfloat", {"f_f", "u_f", "i_f"}, 0, "asfloat",
+    Operation("asfloat", {"f_f", "u_f", "i_f", "b_f"}, 0, "asfloat",
               {OpProp::Nondiff}, OpClass::TypeReinterpret),
+	Operation("asbool", {"f_b", "u_b", "i_b", "b_b"}, 0, "asbool",
+			  {OpProp::Nondiff}, OpClass::TypeReinterpret),
     Operation("min", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("max", {"ff_f", "uu_u", "ii_i"}, 1),
     Operation("abs", {"f_f", "u_u", "i_i"}, 1),

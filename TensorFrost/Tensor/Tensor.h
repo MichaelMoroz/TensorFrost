@@ -83,6 +83,7 @@ class Tensor {
 		return CreateNode(output_type, arguments, op);
 	}
 
+public:
 	template <typename... Args>
 	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
 		op = RemoveSpaces(op);
@@ -215,7 +216,6 @@ class Tensor {
 		return Static(op, NodeArguments(), type);
 	}
 
- public:
 	static void SetEvaluationContext(IR* ir) {
 		if (evaluation_context_ir_ != nullptr && ir != nullptr) {
 			throw std::runtime_error("Evaluation context change is forbidden.");
@@ -554,6 +554,7 @@ class Tensor {
 		if(axis < 0) {
 			axis = dims + axis + 1;
 		}
+		axis = std::max(0, std::min(dims, axis));
 		shape.insert(shape.begin() + axis, &Constant(1));
 		Tensor& output = OpShape("unsqueeze", shape, &tensor);
 		output.SetData(axis);
@@ -632,6 +633,10 @@ class Tensor {
 
 	std::variant<Tensor*, Tensors> Enter()
 	{
+		if(!node_->op->HasAllTypes(OpProp::HasChildren)) {
+			throw std::runtime_error("The node of type " + node_->name + " cannot have children");
+		}
+
 		if(already_entered) {
 			throw std::runtime_error("Already entered node scope");
 		}

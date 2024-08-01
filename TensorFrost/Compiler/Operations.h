@@ -63,6 +63,7 @@ enum class OpProp {
 	MemoryReuse,
 	Gradient,
 	Nondiff,
+	HasChildren,
 	Count,
 };
 

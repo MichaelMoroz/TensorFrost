@@ -172,6 +172,8 @@ class Node {
 		return this;
 	}
 
+	Node* GetChild(string name);
+
 	//get the parent that has a common parent with another node
 	Node* GetCommonParent(Node* other) {
 		for (Node* cur_parent = this; cur_parent != nullptr; cur_parent = cur_parent->parent) {
@@ -210,6 +212,10 @@ class Node {
 
 	bool HasParent(string name) {
 		return GetParent(name) != this;
+	}
+
+	bool HasChild(string name) {
+		return GetChild(name) != nullptr;
 	}
 
 	void SetMemoryType(NodeProp memory_type, int index = 0) {
@@ -292,27 +298,52 @@ class Node {
 class NodeIterator {
  public:
 	Node* currentNode;
+	Node* currentParent;
 	Node* root;
 
-	NodeIterator() : currentNode(nullptr), root(nullptr) {}
-	NodeIterator(Node* node, Node* root) : currentNode(node), root(root) {}
+#ifndef NDEBUG
+	int iteration_count = 0;
+	int parent_inconsistency_count = 0;
+	unordered_set<Node*> visited;
+	vector<Node*> path;
+#endif
+
+	NodeIterator() : currentNode(nullptr), root(nullptr), currentParent(nullptr) {}
+	NodeIterator(Node* node, Node* root) : currentNode(node), root(root), currentParent(node->parent) {}
 	NodeIterator(const Node* node, const Node* root)
-	    : currentNode(const_cast<Node*>(node)), root(const_cast<Node*>(root)) {}
+	    : currentNode(const_cast<Node*>(node)), root(const_cast<Node*>(root)), currentParent(const_cast<Node*>(node->parent)) {}
 	NodeIterator(Node* node_root)
-	    : currentNode(node_root->child), root(node_root) {}
+	    : currentNode(node_root->child), root(node_root), currentParent(node_root) {}
 	NodeIterator(const Node* node_root)
 	    : currentNode(const_cast<Node*>(node_root->child)),
-	      root(const_cast<Node*>(node_root)) {}
+	      root(const_cast<Node*>(node_root)),
+		  currentParent(const_cast<Node*>(node_root)) {}
 
 	Node* operator*() const { return currentNode; }
 
+	void update_current_node(Node* new_node) {
+		currentNode = new_node;
+#ifndef NDEBUG
+		if (visited.contains(currentNode)) {
+			throw std::runtime_error("Node already visited, potential cycle in operation graph");
+		}
+		visited.insert(currentNode);
+		path.push_back(currentNode);
+		iteration_count++;
+#endif
+	}
 
 	NodeIterator& go_to_next() {
 		if (!currentNode) {
 			throw std::runtime_error("Invalid node");
 		}
 
-		currentNode = currentNode->next;
+		update_current_node(currentNode->next);
+#ifndef NDEBUG
+		if (currentNode->parent != currentParent) {
+			parent_inconsistency_count++;
+		}
+#endif
 
 		return *this;
 	}
@@ -322,7 +353,10 @@ class NodeIterator {
 			throw std::runtime_error("Invalid node");
 		}
 
-		currentNode = currentNode->parent;
+		update_current_node(currentNode->parent);
+#ifndef NDEBUG
+		currentParent = currentNode->parent;
+#endif
 
 		return *this;
 	}
@@ -332,7 +366,10 @@ class NodeIterator {
 			throw std::runtime_error("Invalid node");
 		}
 
-		currentNode = currentNode->child;
+#ifndef NDEBUG
+		currentParent = currentNode->parent;
+#endif
+		update_current_node(currentNode->child);
 
 		return *this;
 	}
