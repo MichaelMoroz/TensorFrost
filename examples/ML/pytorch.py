@@ -28,11 +28,11 @@ Y_test = torch.LongTensor(Ytest).to(device)
 
 # Create dataset and dataloader
 train_dataset = TensorDataset(X_train, Y_train)
-train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
 # Define the model
 class DenseMNIST(nn.Module):
-    def __init__(self, input_size=28, in_channels=1, conv1_out=4, conv2_out=12, fc1_out=128, num_classes=10):
+    def __init__(self, input_size=28, in_channels=1, conv1_out=8, conv2_out=16, fc1_out=128, num_classes=10):
         super(DenseMNIST, self).__init__()
         
         self.input_size = input_size
@@ -66,7 +66,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 3
+num_epochs = 10
 total_iterations = 0
 start_time = time.time()
 

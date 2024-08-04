@@ -12,10 +12,11 @@ class Parameter {
 public:
     std::vector<int> shape;
     TFType dtype;
-    bool random_init;
+    float random_scale;
+    float random_offset;
 
-    Parameter(const std::vector<int>& shape, TFType dtype, bool random_init = true)
-        : shape(shape), dtype(dtype), random_init(random_init) {}
+    Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f)
+        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset) {}
 };
 
 class ParameterArray {
@@ -116,26 +117,20 @@ public:
     }
 
     py::object initialize_parameter(Parameter& param) {
-        if (param.random_init) {
-            py::object np = py::module::import("numpy");
-            py::object random = np.attr("random");
+        py::object np = py::module::import("numpy");
+        py::object random = np.attr("random");
 
-            // Convert the shape vector to a tuple
-            py::tuple shape_tuple = py::cast(param.shape);
+        // Convert the shape vector to a tuple
+        py::tuple shape_tuple = py::cast(param.shape);
 
-            py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
-            float scale = (float)sqrt(param.shape[0]);
-            arr = arr.attr("__truediv__")(scale).cast<py::array_t<float>>();
-            return tf.attr("tensor")(arr);
-        } else {
-            py::object np = py::module::import("numpy");
-
-            // Convert the shape vector to a tuple
-            py::tuple shape_tuple = py::cast(param.shape);
-
-            py::array_t<float> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<float>>();
-            return tf.attr("tensor")(arr);
+        py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
+        float scale = sqrt(2.0f / ((float)param.shape[0] + (float)param.shape[1]));
+        if(param.random_scale >= 0.0f) {
+            scale = param.random_scale;
         }
+        arr = arr.attr("__mul__")(py::float_(scale));
+        arr = arr.attr("__add__")(py::float_(param.random_offset));
+        return tf.attr("tensor")(arr);
     }
 
     void initialize_parameters() {

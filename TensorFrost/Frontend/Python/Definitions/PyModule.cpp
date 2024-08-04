@@ -172,12 +172,13 @@ private:
 
 void ModuleDefinitions(py::module& m) {
     py::class_<Parameter>(m, "Parameter")
-        .def(py::init<const std::vector<int>&, TFType, bool>(), py::arg("shape"), py::arg("dtype"), py::arg("random_init") = true)
+        .def(py::init<const std::vector<int>&, TFType, float, float>(), py::arg("shape"), py::arg("dtype") = TFType::Float, py::arg("random_scale") = -1.0f, py::arg("random_offset") = 0.0f)
         .def_readwrite("shape", &Parameter::shape)
         .def_readwrite("dtype", &Parameter::dtype)
-        .def_readwrite("random_init", &Parameter::random_init)
+        .def_readwrite("random_scale", &Parameter::random_scale)
+        .def_readwrite("random_offset", &Parameter::random_offset)
         .def("__repr__", [](const Parameter& p) {
-            return "Parameter(shape=" + std::to_string(p.shape.size()) + ", dtype=" + std::to_string(p.dtype) + ", random_init=" + std::to_string(p.random_init) + ")";
+            return "Parameter(shape=" + std::to_string(p.shape.size()) + ", dtype=" + std::to_string(p.dtype) + ", random_scale=" + std::to_string(p.random_scale) + ", random_offset=" + std::to_string(p.random_offset) + ")";
         });
 
     py::class_<ParameterArray>(m, "ParameterArray")

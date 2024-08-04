@@ -170,6 +170,9 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def("__str__", [](const PyTensor& t) {
 		return GetNodeString(t.Get().node_);
 	});
+	py_tensor.def("__repr__", [](const PyTensor& t) {
+		return GetNodeString(t.Get().node_);
+	});
 }
 
 }  // namespace TensorFrost
