@@ -355,187 +355,208 @@ void IR::UnrollKernelDimensions() {
 
 		////modify the kernel to remove the unused dimensions
 
-		//get smallest unused dimension
-#define MAX_UNROLL_DIMENSIONS 2
-		if(unused_count > MAX_UNROLL_DIMENSIONS) {
-			unused_dimensions.erase(*unused_dimensions.begin());
-		}
+		struct KernelData {
+			set<int> unused_dims;
+			Tensors shape;
+			Tensor* kernel;
+			Tensor* loop;
+			unordered_map<int, Node*> old_dim_to_node;
+			unordered_map<Node*, Tensor*> scatter_to_accumulator;
+			unordered_map<Node*, Tensor*> scatter_to_value;
+			unordered_map<int, int> old_to_new;
+		};
 
-
-		//create new shape arguments
 		auto old_shape = kernel->args.GetTensors(ArgType::Shape);
-		Tensors new_shape;
-		map<int, int> old_to_new;
-		for (int i = 0; i < dim; i++) {
-			if (!unused_dimensions.contains(i)) {
-				new_shape.push_back(old_shape[i]);
-				old_to_new[i] = (int)new_shape.size() - 1;
-			}
-		}
 
-		//create new kernel
-		Tensor* new_kernel = nullptr;
-		ExecuteExpressionAfter(kernel, [&]() {
-			new_kernel = &Tensor::Kernel(new_shape);
-		});
-
-		//create new dim_id nodes for the new kernel
-		unordered_map<int, Node*> old_dim_to_node;
-
-		ExecuteExpressionLastChild(new_kernel->node_, [&]() {
+		auto create_new_shape = [&](KernelData& data) {
 			for (int i = 0; i < dim; i++) {
-				if (!unused_dimensions.contains(i)) {
-					old_dim_to_node[i] = Tensor::Index(new_shape, old_to_new[i]).node_;
+				if (!data.unused_dims.contains(i)) {
+					data.shape.push_back(old_shape[i]);
+					data.old_to_new[i] = (int)data.shape.size() - 1;
 				}
 			}
-		});
+		};
 
-		//add a loop for each unused dimension
-		Tensor* last_loop = nullptr;
-		Tensor* first_loop = nullptr;
-		for (int dim : unused_dimensions) {
-			const Tensor* shape = kernel->args.Get(ArgType::Shape, dim)->GetTensor();
-			Node* parent = new_kernel->node_;
-			if(last_loop != nullptr) {
-				parent = last_loop->node_;
-			}
-			ExecuteExpressionLastChild(parent, [&]() {
-				last_loop = &Tensor::Loop(Tensor::Constant(0), *shape, Tensor::Constant(1));
-				last_loop->SetDebugName("dim_" + to_string(dim));
-				old_dim_to_node[dim] = last_loop->node_;
-				if(first_loop == nullptr) {
-					first_loop = last_loop;
-				}
-			});
-		}
-
-		//move all old children to the last loop
-		vector<Node*> old_kernel_nodes = GetChildren(kernel);
+		vector<int> unused_dims_vec(unused_dimensions.begin(), unused_dimensions.end());
+		std::reverse(unused_dims_vec.begin(), unused_dims_vec.end());
+		KernelData* kernels = new KernelData[unused_count];
 		vector<Node*> atomics_to_replace;
-		last_loop->node_->child = kernel->child;
-		for (auto node : old_kernel_nodes) {
-			node->parent = last_loop->node_;
-			//update shape arguments
-			node->args.RemoveArguments(ArgType::Shape);
-			for(int i = 0; i < new_shape.size(); i++) {
-				node->args.AddArgument(ArgType::Shape, i, new_shape[i]->node_);
-			}
-			if (node->op->HasAllTypes(OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier)) {
-				atomics_to_replace.push_back(node);
-			}
-		}
-
-		kernel->child = nullptr;
-		nodes_to_remove.push_back(kernel);
-
-		UpdateGraph();
-
-		//replace all old dim_id nodes with the loop index / new dim_id nodes
-		for (auto node = NodeIterator(last_loop->node_); !node.end(); node.next()) {
-			if (node->name == "dim_id") {
-				int dim = node->data[0];
-				if(old_dim_to_node.contains(dim)) {
-					node->MakeOutputsUseGivenNode(old_dim_to_node[dim]);
-				} else {
-					throw std::runtime_error("Could not find new dim_id node for dimension " + to_string(dim) + " when optimizing kernel by unrolling dimensions");
+		ExecuteExpressionAfter(kernel, [&]() {
+			for(int k = 0; k < unused_count; k++) {
+				int cur_dim = unused_dims_vec[k];
+				set<int> cur_unused_dimensions;
+				for(int i = 0; i <= k; i++) {
+					cur_unused_dimensions.insert(unused_dims_vec[i]);
 				}
-				nodes_to_remove.push_back(node.get());
-			}
-		}
+				kernels[k] = KernelData();
+				kernels[k].unused_dims = cur_unused_dimensions;
 
-		//create temporary accumulator nodes for the scatter operations
-		unordered_map<Node*, Tensor*> scatter_to_accumulator;
-		ExecuteExpressionFirstChild(new_kernel->node_, [&]() {
-			for (auto node : atomics_to_replace) {
-				Node* scatter_memory = node->args.Get(ArgType::Memory);
-				if(node->name == "InterlockedAdd") {
-					scatter_to_accumulator[node] = &Tensor::Constant(0, scatter_memory->type);
-				} else if (node->name == "InterlockedMin") {
-					scatter_to_accumulator[node] = &Tensor::Constant(GetInitialMin(node->type), scatter_memory->type);
-				} else if (node->name == "InterlockedMax") {
-					scatter_to_accumulator[node] = &Tensor::Constant(GetInitialMax(node->type), scatter_memory->type);
-				} else if (node->name == "InterlockedAnd") {
-					scatter_to_accumulator[node] = &Tensor::Constant(0xFFFFFFFF, scatter_memory->type);
-				} else if (node->name == "InterlockedOr") {
-					scatter_to_accumulator[node] = &Tensor::Constant(0, scatter_memory->type);
-				} else if (node->name == "InterlockedXor") {
-					scatter_to_accumulator[node] = &Tensor::Constant(0, scatter_memory->type);
-				} else {
-					scatter_to_accumulator[node] = &Tensor::Constant(0, scatter_memory->type);
+				create_new_shape(kernels[k]);
+
+				kernels[k].kernel = &Tensor::Kernel(kernels[k].shape);
+
+				ExecuteExpressionLastChild(kernels[0].kernel->node_, [&]() {
+					for (int i = 0; i < dim; i++) {
+						if (!cur_unused_dimensions.contains(i)) {
+							kernels[k].old_dim_to_node[i] = Tensor::Index(kernels[k].shape, kernels[k].old_to_new[i]).node_;
+						}
+					}
+				});
+
+				ExecuteExpressionLastChild(kernels[k].kernel->node_, [&]() {
+					const Tensor* loop_shape = kernel->args.Get(ArgType::Shape, cur_dim)->GetTensor();
+					kernels[k].loop = &Tensor::Loop(Tensor::Constant(0), *loop_shape, Tensor::Constant(1));
+					kernels[k].loop->SetDebugName("dim_" + to_string(cur_dim));
+					kernels[k].old_dim_to_node[cur_dim] = kernels[k].loop->node_;
+				});
+
+				if(k == 0) {
+					vector<Node*> old_kernel_nodes = GetChildren(kernel);
+					kernels[k].loop->node_->child = kernel->child;
+					for (auto node : old_kernel_nodes) {
+						node->parent = kernels[k].loop->node_;
+						//update shape arguments
+						node->args.RemoveArguments(ArgType::Shape);
+						for(int i = 0; i < kernels[0].shape.size(); i++) {
+							node->args.AddArgument(ArgType::Shape, i, kernels[0].shape[i]->node_);
+						}
+						if (node->op->HasAllTypes(OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier)) {
+							atomics_to_replace.push_back(node);
+							nodes_to_remove.push_back(node);
+						}
+					}
+
+					kernel->child = nullptr;
+					nodes_to_remove.push_back(kernel);
+
+					UpdateGraph();
+
+					//replace all old dim_id nodes with the loop index / new dim_id nodes
+					for (auto node = NodeIterator(kernels[k].loop->node_); !node.end(); node.next()) {
+						if (node->name == "dim_id") {
+							int dim = node->data[0];
+							if(kernels[k].old_dim_to_node.contains(dim)) {
+								node->MakeOutputsUseGivenNode(kernels[k].old_dim_to_node[dim]);
+							} else {
+								throw std::runtime_error("Could not find new dim_id node for dimension " + to_string(dim) + " when optimizing kernel by unrolling dimensions");
+							}
+							nodes_to_remove.push_back(node.get());
+						}
+					}
+				}
+
+				//create temporary accumulator nodes for the scatter operations
+				ExecuteExpressionFirstChild(kernels[k].kernel->node_, [&]() {
+					for (auto node : atomics_to_replace) {
+						Node* scatter_memory = node->args.Get(ArgType::Memory);
+						Tensor* new_accumulator = nullptr;
+						if(node->name == "InterlockedAdd") {
+							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
+						} else if (node->name == "InterlockedMin") {
+							new_accumulator = &Tensor::Constant(GetInitialMin(node->type), scatter_memory->type);
+						} else if (node->name == "InterlockedMax") {
+							new_accumulator = &Tensor::Constant(GetInitialMax(node->type), scatter_memory->type);
+						} else if (node->name == "InterlockedAnd") {
+							new_accumulator = &Tensor::Constant(0xFFFFFFFF, scatter_memory->type);
+						} else if (node->name == "InterlockedOr") {
+							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
+						} else if (node->name == "InterlockedXor") {
+							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
+						} else {
+							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
+						}
+						new_accumulator->node_->debug_name = scatter_memory->debug_name;
+						kernels[k].scatter_to_accumulator[node] = new_accumulator;
+						Tensor* value;
+						if(k == 0) {
+							const Tensor* old_value = node->args.Get(ArgType::Input, 0)->GetTensor();
+							value = const_cast<Tensor*>(old_value);
+						} else {
+							value = kernels[k-1].scatter_to_accumulator[node];
+						}
+						kernels[k].scatter_to_value[node] = value;
+					}
+				});
+
+				//make temporary accumulators for the scatter operations
+				ExecuteExpressionLastChild(kernels[k].loop->node_, [&]() {
+					for (auto& [scatter, accumulator] : kernels[k].scatter_to_accumulator) {
+						Tensor* value = kernels[k].scatter_to_value[scatter];
+
+						if(k > 0) { //load the value from the memory if not first reduction kernel
+							value = &Tensor::Load(*value, {});
+							//add loop index to the indices
+							for(auto [old_, index_] : kernels[k].old_dim_to_node) {
+								value->node_->args.AddArgument(ArgType::Index, kernels[k-1].old_to_new[old_], index_);
+							}
+						}
+
+						if(scatter->name == "InterlockedAdd") {
+							accumulator->Set(*accumulator + *value);
+						} else if (scatter->name == "InterlockedMin") {
+							accumulator->Set(Tensor::min(*accumulator, *value));
+						} else if (scatter->name == "InterlockedMax") {
+							accumulator->Set(Tensor::max(*accumulator, *value));
+						} else if (scatter->name == "InterlockedAnd") {
+							accumulator->Set(*accumulator & *value);
+						} else if (scatter->name == "InterlockedOr") {
+							accumulator->Set(*accumulator | *value);
+						} else if (scatter->name == "InterlockedXor") {
+							accumulator->Set(*accumulator ^ *value);
+						} else {
+							throw std::runtime_error("Unknown scatter operation " + scatter->name);
+						}
+					}
+				});
+
+
+				if(k == unused_count - 1) {
+					//accumulate the temporary accumulators into the actual memory
+					ArgEdges args_to_copy;
+					ExecuteExpressionLastChild(kernels[k].kernel->node_, [&]() {
+						for (auto& [scatter, accumulator] : kernels[k].scatter_to_accumulator) {
+							//get the memory to scatter to
+							const Tensor* memory = scatter->args.Get(ArgType::Memory)->GetTensor();
+							Tensors indices = scatter->args.GetTensorVector(ArgType::Index);
+							Tensor* store_op = nullptr;
+							Tensor* old_value = nullptr;
+							if(true) { //TODO (Moroz): check if indexes are one-to-one, otherwise must use atomic operations
+								old_value = &Tensor::Load(*memory, indices);
+								Tensor* new_value = nullptr;
+								if(scatter->name == "InterlockedAdd") {
+									new_value = &(*old_value + *accumulator);
+								} else if (scatter->name == "InterlockedMin") {
+									new_value = &Tensor::min(*old_value, *accumulator);
+								} else if (scatter->name == "InterlockedMax") {
+									new_value = &Tensor::max(*old_value, *accumulator);
+								} else if (scatter->name == "InterlockedAnd") {
+									new_value = &(*old_value & *accumulator);
+								} else if (scatter->name == "InterlockedOr") {
+									new_value = &(*old_value | *accumulator);
+								} else if (scatter->name == "InterlockedXor") {
+									new_value = &(*old_value ^ *accumulator);
+								} else {
+									throw std::runtime_error("Unknown scatter operation " + scatter->name);
+								}
+								store_op = &Tensor::Store(*memory, *new_value, indices);
+							} else { //still use atomic operations
+								store_op = &Tensor::MemoryOp(scatter->name, memory, indices, accumulator);
+							}
+							NodeArguments store_indices = store_op->node_->args.GetArguments(ArgType::Index);
+							for (auto& [id, from] : store_indices) {
+								if (true) {
+									args_to_copy.push_back(ArgEdge(Arg(id, from), old_value->node_));
+									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
+								} else {
+									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
+								}
+							}
+						}
+					});
+					nodes_to_copy.push_back({args_to_copy, kernels[k].loop->node_->next});
 				}
 			}
 		});
-
-		//replace all scatter operations with the temporary accumulators
-		for (auto& [scatter, accumulator] : scatter_to_accumulator) {
-			//get the value to scatter
-			const Tensor* value = scatter->args.Get(ArgType::Input, 0)->GetTensor();
-			Tensor* accumulator_value = scatter_to_accumulator[scatter];
-			ExecuteExpressionAfter(scatter, [&]() {
-				if(scatter->name == "InterlockedAdd") {
-					accumulator_value->Set(*accumulator + *value);
-				} else if (scatter->name == "InterlockedMin") {
-					accumulator_value->Set(Tensor::min(*accumulator, *value));
-				} else if (scatter->name == "InterlockedMax") {
-					accumulator_value->Set(Tensor::max(*accumulator, *value));
-				} else if (scatter->name == "InterlockedAnd") {
-					accumulator_value->Set(*accumulator & *value);
-				} else if (scatter->name == "InterlockedOr") {
-					accumulator_value->Set(*accumulator | *value);
-				} else if (scatter->name == "InterlockedXor") {
-					accumulator_value->Set(*accumulator ^ *value);
-				} else {
-					throw std::runtime_error("Unknown scatter operation " + scatter->name);
-				}
-			});
-			nodes_to_remove.push_back(scatter);
-		}
-
-
-		//accumulate the temporary accumulators into the actual memory
-		ArgEdges args_to_copy;
-		ExecuteExpressionLastChild(new_kernel->node_, [&]() {
-			for (auto& [scatter, accumulator] : scatter_to_accumulator) {
-				//get the memory to scatter to
-				const Tensor* memory = scatter->args.Get(ArgType::Memory)->GetTensor();
-				Tensors indices = scatter->args.GetTensorVector(ArgType::Index);
-				Tensor* accumulator_value = scatter_to_accumulator[scatter];
-				Tensor* store_op = nullptr;
-				Tensor* old_value = nullptr;
-				if(unused_count <= MAX_UNROLL_DIMENSIONS) { //replace with a normal load and store operation
-					old_value = &Tensor::Load(*memory, indices);
-					Tensor* new_value = nullptr;
-					if(scatter->name == "InterlockedAdd") {
-						new_value = &(*old_value + *accumulator_value);
-					} else if (scatter->name == "InterlockedMin") {
-						new_value = &Tensor::min(*old_value, *accumulator_value);
-					} else if (scatter->name == "InterlockedMax") {
-						new_value = &Tensor::max(*old_value, *accumulator_value);
-					} else if (scatter->name == "InterlockedAnd") {
-						new_value = &(*old_value & *accumulator_value);
-					} else if (scatter->name == "InterlockedOr") {
-						new_value = &(*old_value | *accumulator_value);
-					} else if (scatter->name == "InterlockedXor") {
-						new_value = &(*old_value ^ *accumulator_value);
-					} else {
-						throw std::runtime_error("Unknown scatter operation " + scatter->name);
-					}
-					store_op = &Tensor::Store(*memory, *new_value, indices);
-				} else { //still use atomic operations
-					store_op = &Tensor::MemoryOp(scatter->name, memory, indices, accumulator_value);
-				}
-				NodeArguments store_indices = store_op->node_->args.GetArguments(ArgType::Index);
-				for (auto& [id, from] : store_indices) {
-					if (unused_count <= MAX_UNROLL_DIMENSIONS) {
-						args_to_copy.push_back(ArgEdge(Arg(id, from), old_value->node_));
-						args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
-					} else {
-						args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
-					}
-				}
-			}
-		});
-		nodes_to_copy.push_back({args_to_copy, first_loop->node_->next});
 	}
 
 	for (auto node : nodes_to_remove) {

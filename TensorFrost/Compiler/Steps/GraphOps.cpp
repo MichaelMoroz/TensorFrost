@@ -834,14 +834,7 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-		if (node->name == "dim_id") {
-			int dim = node->data[0];
-			if (dim >= dims) {
-				throw runtime_error("Invalid dimension index " + to_string(dim) +
-													" for kernel of size " + to_string(dims));
-			}
-
-			// remove the dim node
+		if (node->name == "dim_id") { // remove the dim node
 			nodes_to_remove.insert(node.get());
 		}
 		else
@@ -850,13 +843,17 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 			for (auto& [id, from] : node->args.inputs_) {
 				if (from->name == "dim_id") {
 					int dim = from->data[0];
-					if (dim >= dims) {
-						throw runtime_error("Invalid dimension index " + to_string(dim) +
-																							" for kernel of size " + to_string(dims));
+					Node* index_node = nullptr;
+					if (dim >= dims) { //if dim node of dimension greater than the number of dimensions its 0
+						ExecuteExpressionBefore(node.get(), [&]() {
+							index_node = Tensor::Constant(0).node_;
+						});
+					} else {
+						index_node = indices[dim]->node_;
 					}
 
 					// replace the dim node with the index node
-					node->args.UpdateArgument(id, indices[dim]->node_);
+					node->args.UpdateArgument(id, index_node);
 				}
 			}
 		}

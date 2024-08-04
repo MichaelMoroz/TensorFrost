@@ -64,7 +64,7 @@ void IR::CompileIR()
 		RemoveUnusedOperations();
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
-		//CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
+		CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
 		OptimizeKernelLoadOperations();
 		//CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
 	}

@@ -28,25 +28,35 @@ Y_test = torch.LongTensor(Ytest).to(device)
 
 # Create dataset and dataloader
 train_dataset = TensorDataset(X_train, Y_train)
-train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
+train_loader = DataLoader(train_dataset, batch_size=512, shuffle=True)
 
 # Define the model
 class DenseMNIST(nn.Module):
-    def __init__(self):
+    def __init__(self, input_size=28, in_channels=1, conv1_out=4, conv2_out=12, fc1_out=128, num_classes=10):
         super(DenseMNIST, self).__init__()
-        self.conv1 = nn.Conv2d(1, 10, kernel_size=5)
-        self.conv2 = nn.Conv2d(10, 20, kernel_size=5)
-        self.conv2_drop = nn.Dropout2d()
-        self.fc1 = nn.Linear(320, 50)
-        self.fc2 = nn.Linear(50, 10)
+        
+        self.input_size = input_size
+        self.conv1_size = input_size - 4  # 28 - 4 = 24
+        self.pool1_size = self.conv1_size // 2  # 24 // 2 = 12
+        self.conv2_size = self.pool1_size - 4  # 12 - 4 = 8
+        self.pool2_size = self.conv2_size // 2  # 8 // 2 = 4
+        
+        self.conv1 = nn.Conv2d(in_channels, conv1_out, kernel_size=5)
+        self.conv2 = nn.Conv2d(conv1_out, conv2_out, kernel_size=5)
+        #self.conv2_drop = nn.Dropout2d()
+        
+        self.conv_output_size = conv2_out * self.pool2_size * self.pool2_size  # 12 * 4 * 4 = 192
+        
+        self.fc1 = nn.Linear(self.conv_output_size, fc1_out)
+        self.fc2 = nn.Linear(fc1_out, num_classes)
 
     def forward(self, x):
-        x = x.reshape([-1, 1, 28, 28])
+        x = x.reshape([-1, 1, self.input_size, self.input_size])
         x = F.relu(F.max_pool2d(self.conv1(x), 2))
-        x = F.relu(F.max_pool2d(self.conv2_drop(self.conv2(x)), 2))
-        x = x.view(-1, 320)
+        x = F.relu(F.max_pool2d(self.conv2(x), 2))
+        x = x.view(-1, self.conv_output_size)
         x = F.relu(self.fc1(x))
-        x = F.dropout(x, training=self.training)
+        #x = F.dropout(x, training=self.training)
         x = self.fc2(x)
         return x
 
@@ -56,7 +66,7 @@ criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # Training loop
-num_epochs = 40
+num_epochs = 3
 total_iterations = 0
 start_time = time.time()
 
