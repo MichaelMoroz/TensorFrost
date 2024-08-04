@@ -152,10 +152,13 @@ map<Node*, Node*> IR::CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
                                          Node* cursor) {
 	// copy all the nodes at the beginning of the kernel
 	map<Node*, Node*> copied_node_map;
-	ExecuteExpressionBefore(cursor, [&]() {
+	if(cursor == nullptr) {
 		copied_node_map = CopyComputation(nodes_to_copy, indices);
-	});
-
+	} else {
+		ExecuteExpressionBefore(cursor, [&]() {
+			copied_node_map = CopyComputation(nodes_to_copy, indices);
+		});
+	}
 	return copied_node_map;
 }
 
@@ -443,7 +446,11 @@ map<Node*, Node*> IR::CopyNodes(
 		if (is_dim) {
 			int dim = node->data[0];
 			if (indices.contains(dim)) {
-				new_node = indices.at(dim);
+				Node* new_index = indices.at(dim);
+				if(new_index == nullptr) {
+					throw std::runtime_error("Copy Nodes: New index is null for node " + node->name);
+				}
+				new_node = new_index;
 				no_index = false;
 			}
 		}

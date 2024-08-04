@@ -5,7 +5,7 @@ import torch.optim as optim
 from torch.utils.data import TensorDataset, DataLoader
 import torch.nn.functional as F
 import time
-
+from tqdm import tqdm
 # Load and prepare data
 data = np.load('mnist.npz')
 
@@ -32,7 +32,7 @@ train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
 # Define the model
 class DenseMNIST(nn.Module):
-    def __init__(self, input_size=28, in_channels=1, conv1_out=8, conv2_out=16, fc1_out=128, num_classes=10):
+    def __init__(self, input_size=28, in_channels=1, conv1_out=4, conv2_out=8, fc1_out=64, num_classes=10):
         super(DenseMNIST, self).__init__()
         
         self.input_size = input_size
@@ -63,7 +63,7 @@ class DenseMNIST(nn.Module):
 # Initialize the model, loss function, and optimizer
 model = DenseMNIST().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=0.0004)
 
 # Training loop
 num_epochs = 10
@@ -72,7 +72,9 @@ start_time = time.time()
 
 for epoch in range(num_epochs):
     model.train()
-    for batch_X, batch_Y in train_loader:
+    # Wrap your train_loader with tqdm
+    progress_bar = tqdm(train_loader, desc=f"Epoch [{epoch+1}/{num_epochs}]")
+    for batch_X, batch_Y in progress_bar:
         optimizer.zero_grad()
         outputs = model(batch_X)
         loss = criterion(outputs, torch.max(batch_Y, 1)[1])
@@ -80,6 +82,9 @@ for epoch in range(num_epochs):
         optimizer.step()
         
         total_iterations += 1
+        
+        # Update progress bar description with current loss
+        progress_bar.set_postfix(loss=f"{loss.item():.4f}")
     
     # Evaluate on test set
     model.eval()

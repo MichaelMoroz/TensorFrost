@@ -305,6 +305,126 @@ void IR::UnrollLoops()
 	UpdateGraph();
 }
 
+void IR::UnrollAtomicOperations() {
+	vector<Node*> atomics = GetNodesOfType(OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier);
+
+	vector<Node*> nodes_to_remove;
+	for (auto node: atomics) {
+		std::set<int> unused_dimensions;
+		Node* next_node = node->next;
+		int dim = node->args.Count(ArgType::Shape);
+		for (int i = 0; i < dim; i++) {
+			unused_dimensions.insert(i);
+		}
+
+		//get the indices of the scatter operation
+		NodeArguments indices = node->args.GetArguments(ArgType::Index);
+		//get dependencies of all indices
+		unordered_set<Node*> index_nodes;
+		for (auto& [id, index] : indices) {
+			index_nodes.insert(index);
+		}
+		unordered_set<Node*> dependencies = GetDependencies(index_nodes);
+		//if any of the dependencies are a dim_id node, then its dimension(data[0]) is used
+		for (auto dep : dependencies) {
+			if (dep->name == "dim_id") {
+				unused_dimensions.erase(dep->data[0]);
+			}
+		}
+
+		int unused_count = (int)unused_dimensions.size();
+
+		if (unused_count == 0) {
+			continue;
+		}
+
+		auto old_shape = node->args.GetTensors(ArgType::Shape);
+
+
+		//reduce the dimensions of the scatter operation
+		const Tensor* current_reduce = node->args.Get(ArgType::Input, 0)->GetTensor();
+		vector<int> unused_dims_vec(unused_dimensions.begin(), unused_dimensions.end());
+	    //sort the dimensions in descending order
+		std::reverse(unused_dims_vec.begin(), unused_dims_vec.end());
+		bool supported_operation = true;
+
+		BeginScope(next_node);
+
+		for(int udim : unused_dims_vec) {
+			if(node->name == "InterlockedAdd") {
+				current_reduce = &Tensor::Sum(*current_reduce, udim);
+			} else if (node->name == "InterlockedMin") {
+				current_reduce = &Tensor::Min(*current_reduce, udim);
+			} else if (node->name == "InterlockedMax") {
+				current_reduce = &Tensor::Max(*current_reduce, udim);
+			} else if (node->name == "InterlockedAnd") {
+				current_reduce = &Tensor::All(*current_reduce, udim);
+			} else if (node->name == "InterlockedOr") {
+				current_reduce = &Tensor::Any(*current_reduce, udim);
+			} else {
+				supported_operation = false;
+				break;
+			}
+		}
+
+		if (!supported_operation) {
+			EndScope();
+			continue;
+		}
+
+		unordered_map<int, Node*> old_to_new_dim;
+		int new_idx = 0;
+
+		for (int i = 0; i < dim; i++) {
+			if (!unused_dimensions.contains(i)) {
+				old_to_new_dim[i] = current_reduce->Index(new_idx++).node_;
+			} else {
+				old_to_new_dim[i] = Tensor::Constant(current_reduce->GetShape(), 0, current_reduce->GetType()).node_;
+			}
+		}
+
+		map<Node*, Node*> copied_node_map = CopyNodesWithIndex(index_nodes, old_to_new_dim);
+		Tensors new_indices = Tensors();
+		new_indices.resize(indices.size());
+		for (auto& [id, index] : indices) {
+			new_indices[id.second] = copied_node_map[index]->GetTensor();
+		}
+
+		//get the memory to scatter to
+		const Tensor* memory = node->args.Get(ArgType::Memory)->GetTensor();
+		Tensor* store_op = nullptr;
+		Tensor* old_value = nullptr;
+		if(true) { //TODO (Moroz): check if indexes are one-to-one, otherwise must use atomic operations
+			old_value = &Tensor::Load(*memory, new_indices);
+			Tensor* new_value = nullptr;
+			if(node->name == "InterlockedAdd") {
+				new_value = &(*old_value + *current_reduce);
+			} else if (node->name == "InterlockedMin") {
+				new_value = &Tensor::min(*old_value, *current_reduce);
+			} else if (node->name == "InterlockedMax") {
+				new_value = &Tensor::max(*old_value, *current_reduce);
+			} else if (node->name == "InterlockedAnd") {
+				new_value = &(*old_value & *current_reduce);
+			} else if (node->name == "InterlockedOr") {
+				new_value = &(*old_value | *current_reduce);
+			}
+			store_op = &Tensor::Store(*memory, *new_value, new_indices);
+		} else { //still use atomic operations
+			store_op = &Tensor::MemoryOp(node->name, memory, new_indices, current_reduce);
+		}
+
+		nodes_to_remove.push_back(node);
+
+		EndScope();
+	}
+
+	for (auto node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+
+	UpdateGraph();
+}
+
 
 void IR::UnrollKernelDimensions() {
 	vector<Node*> kernels = GetNodesOfType("kernel");

@@ -11,10 +11,6 @@ def log_softmax(X):
 def leaky_relu(X):
     return tf.select(X > 0.0, X, 0.01 * X)
 
-def mul_bias(X, W):
-    ids = tf.indices(list(X.shape[:-1]) + [W.shape[-2]])
-    return tf.select(ids[-1] == X.shape[-1], 1.0, X[ids]) @ W
-
 class MNIST_net(tf.Module):
     def __init__(self, input_resolution = 28, output_size = 10, is_compiler = False):
         super().__init__()
@@ -26,8 +22,8 @@ class MNIST_net(tf.Module):
         self.res2 = (self.res1p - self.kernel_size + 1)
         self.res2p = self.res2 // 2
         self.kernels1 = 4
-        self.kernels2 = 32
-        self.layer1 = 128  
+        self.kernels2 = 8
+        self.layer1 = 64  
         self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(2.0 / (self.kernel_size ** 2 * 1)))
         self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
         self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(2.0 / (self.kernel_size ** 2 * self.kernels1)))
@@ -37,18 +33,13 @@ class MNIST_net(tf.Module):
         self.fc2 = tf.Parameter([self.layer1, output_size], tf.float32)
         self.fc2_bias = tf.Parameter([output_size], tf.float32, random_scale = 0.0)
 
-        #print shapes
-        print("Conv1 shape: ", self.conv1.shape)
-        print("Conv2 shape: ", self.conv2.shape)
-        print("FC1 shape: ", self.fc1.shape)
-        print("FC2 shape: ", self.fc2.shape)
-
     def assert_parameters(self):
         self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
 
     def conv2d(self, X, W, b):
-        bi, wi, hi, cout, cin, i, j = tf.indices([X.shape[0], X.shape[1] - W.shape[2] + 1, X.shape[2] - W.shape[3] + 1, W.shape[0], W.shape[1], W.shape[2], W.shape[3]])
-        conv = tf.sum(tf.sum(tf.sum(X[bi, wi + i, hi + j, cin] * W[cout, cin, i, j]))) #sum over the last 3 dimensions
+        bi, wi, hi, cout, cin, it = tf.indices([X.shape[0], X.shape[1] - W.shape[2] + 1, X.shape[2] - W.shape[3] + 1, W.shape[0], W.shape[1], W.shape[2] * W.shape[3]])
+        i, j = it%W.shape[2], it/W.shape[2]
+        conv = tf.sum(tf.sum(X[bi, wi + i, hi + j, cin] * W[cout, cin, i, j]))
         return conv + b
     
     def max_pool2d(self, X):
@@ -57,10 +48,10 @@ class MNIST_net(tf.Module):
     
     def forward(self, X):
         X = tf.reshape(X, [X.shape[0], self.resolution, self.resolution, 1])
-        X = leaky_relu(self.conv2d(X, self.conv1, self.conv1_bias))
-        X = self.max_pool2d(X)
-        X = leaky_relu(self.conv2d(X, self.conv2, self.conv2_bias))
-        X = self.max_pool2d(X)
+        X = self.max_pool2d(self.conv2d(X, self.conv1, self.conv1_bias))
+        X = leaky_relu(X)
+        X = self.max_pool2d(self.conv2d(X, self.conv2, self.conv2_bias))
+        X = leaky_relu(X)
         X = tf.reshape(X, [X.shape[0], self.fc1.shape[0]])
         X = leaky_relu(X @ self.fc1 + self.fc1_bias)
         X = X @ self.fc2 + self.fc2_bias
@@ -70,7 +61,7 @@ class MNIST_net(tf.Module):
         Yhat = self.forward(X)
         return tf.mean(tf.sum(-Y * log_softmax(Yhat)))
 
-lr = 0.0001
+lr = 0.0005
 
 def OptimizerStep():
     X = tf.input([-1, -1], tf.float32)
@@ -117,11 +108,11 @@ Xtrain = image_to_vector(data['train_x'])
 Ytrain = np.zeros((Xtrain.shape[0], 10))
 Ytrain[np.arange(Xtrain.shape[0]), data['train_y']] = 1.0
 
-Xtest = image_to_vector(data['test_x'])
-Ytest = data['test_y']
+Xtest = image_to_vector(data['test_x'])#[0:3000]
+Ytest = data['test_y']#[0:3000]
 
-batch_size = 64
-epochs = 15
+batch_size = 128
+epochs = 50
 iterations = Xtrain.shape[0] // batch_size
 print("Iterations per epoch: ", iterations)
 
@@ -140,6 +131,8 @@ def test_accuracy(model, X, Y):
     Predict = np.argmax(Yhat.numpy, axis = 1)
     correct_tf = np.sum(Predict == Y)
     return correct_tf * 100.0 / len(Y)
+
+from tqdm import tqdm
 
 loss_curve = []
 accuracy_curve = []

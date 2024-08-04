@@ -224,6 +224,12 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 
+	m.def("any", [](const PyTensor& t, const int axis) { return PT(Tensor::Any(T(t), axis)); },
+	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an OR operation along the axis");
+
+	m.def("all", [](const PyTensor& t, const int axis) { return PT(Tensor::All(T(t), axis)); },
+	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an AND operation along the axis");
+
 	m.def("prefix_sum", [](const PyTensor& t, const int axis) { return PT(Tensor::PrefixSum(T(t), axis)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the prefix sum of the tensor along the axis");
 

@@ -42,6 +42,7 @@ void IR::CompileIR()
 	ComputeAutodiff();
 	RemoveUnusedOperations();
 	CheckIR("Compute Autodiff", false, false);
+	UnrollAtomicOperations();
 	InsertAlgorithmicPrimitives();
 	CheckIR("Insert Algorithmic Primitives", false, false);
 	TryReplaceModificationsWithVersions();
@@ -57,7 +58,7 @@ void IR::CompileIR()
 	MoveShapeOutsideKernels();
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
-	UnrollKernelDimensions();
+	//UnrollKernelDimensions();
 	CheckIR("Optimize kernels and host", true, false);
 	RemoveUnusedOperations();
 	for (int i = 0; i < 20; i++) { //fusing kernels by loads (tensor product)

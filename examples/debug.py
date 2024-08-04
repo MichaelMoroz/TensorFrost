@@ -4,172 +4,30 @@ import time
 
 tf.initialize(tf.cpu)
 
-def log_softmax(X):
-    X = X - tf.unsqueeze(tf.max(X))
-    return X - tf.log(tf.unsqueeze(tf.sum(tf.exp(X))) + 1e-6)
+N = 3
+def QRDecomposition():
+    A = tf.input([N, N], tf.float32)
 
-def leaky_relu(X):
-    return tf.select(X > 0.0, X, 0.01 * X)
+    m, n = A.shape
+    Q = tf.zeros([m, n])
+    R = tf.zeros([n, n])
+    j = tf.index(0, [m])
 
-def mul_bias(X, W):
-    ids = tf.indices(list(X.shape[:-1]) + [W.shape[-2]])
-    return tf.select(ids[-1] == X.shape[-1], 1.0, X[ids]) @ W
+    for i in range(N-1):
+        R[i, i] = tf.norm(A[j, i])
+        Q[j, i] = A[j, i] / R[i, i]
 
-class MNIST_net(tf.Module):
-    def __init__(self, input_resolution = 28, output_size = 10, hidden_size = 64, is_compiler = False):
-        super().__init__()
-        self.resolution = input_resolution
-        self.kernel_size = 5
-        self.kernel_rad = self.kernel_size // 2
-        self.kernels1 = 2
-        self.conv1 = tf.Parameter([self.kernel_size, self.kernel_size, 1, self.kernels1], tf.float32)
-        self.conv1_bias = tf.Parameter([self.kernels1], tf.float32)
-        self.kernels2 = 8
-        self.conv2 = tf.Parameter([self.kernel_size, self.kernel_size, self.kernels1, self.kernels2], tf.float32)
-        self.conv2_bias = tf.Parameter([self.kernels2], tf.float32)
-        self.layer1 = 128
-        self.fc1 = tf.Parameter([self.kernels2 * (self.resolution // 4) ** 2 + 1, self.layer1], tf.float32)
-        self.fc2 = tf.Parameter([self.layer1 + 1, output_size], tf.float32)
+        p, k = tf.index_grid([0, i + 1], [m, n])
+        t, = tf.index_grid([i+1], [n])
+        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
+        A[p, k] -= Q[p, i] * R[i, k]
 
-    def conv2d(self, X, W, b, in_count):
-        bi, wi, hi, cout, cin, i, j = tf.indices([X.shape[0], X.shape[1], X.shape[2], W.shape[3], in_count, self.kernel_size, self.kernel_size])
-        prod = X[bi, wi + i - self.kernel_rad, hi + j - self.kernel_rad, cin] * W[i, j, cin, cout]
-        conv = tf.sum(tf.sum(tf.sum(prod))) #sum over the last 3 dimensions
-        return conv + b
+    R[n-1, n-1] = tf.norm(A[j, n-1])
+    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
 
-    def max_pool2d(self, X):
-        bi, wi, hi, ci, i, j = tf.indices([X.shape[0], X.shape[1] / 2, X.shape[2] / 2, X.shape[3], 2, 2])
-        return tf.max(tf.max(X[bi, 2 * wi + i, 2 * hi + j, ci]))
+    dQ_dA = tf.grad(Q, A)
+    dR_dA = tf.grad(R, A)
 
-    def forward(self, X):
-        X = tf.reshape(X, [X.shape[0], self.resolution, self.resolution, 1])
-        X = leaky_relu(self.conv2d(X, self.conv1, self.conv1_bias, 1))
-        X = self.max_pool2d(X)
-        X = leaky_relu(self.conv2d(X, self.conv2, self.conv2_bias, self.kernels1))
-        X = self.max_pool2d(X)
-        X = tf.reshape(X, [X.shape[0], X.shape[1] * X.shape[2] * X.shape[3]])
-        X = leaky_relu(mul_bias(X, self.fc1))
-        X = mul_bias(X, self.fc2)
-        return X
+    return [Q, R, dQ_dA, dR_dA]
 
-    def loss(self, X, Y):
-        Yhat = self.forward(X)
-        return tf.mean(tf.sum(-Y * log_softmax(Yhat)))
-
-lr = 0.0001
-decay = 0.99
-
-def OptimizerStep():
-    X = tf.input([-1, -1], tf.float32)
-    Y = tf.input([-1, 10], tf.float32)
-
-    info = tf.input([-1], tf.float32)
-    offset = tf.int(info[0])
-    batch_size = tf.int(info[1])
-    learning_rate = info[2]
-
-    model = MNIST_net(is_compiler = True)
-    opt = tf.optimizers.adam(model, learning_rate)
-    opt.initialize_input()
-
-    #TODO: implement slicing instead of this crap
-    i, j = tf.indices([batch_size, X.shape[1]])
-    Xbatch = X[i + offset, j]
-    i, j = tf.indices([batch_size, Y.shape[1]])
-    Ybatch = Y[i + offset, j]
-
-    L = opt.step(Xbatch, Ybatch)
-
-    params = opt.parameters()
-    params.append(L)
-    return params
-
-train_step = tf.compile(OptimizerStep)
-
-def ComputeForward():
-    model = MNIST_net(is_compiler = True)
-    model.initialize_input()
-    X = tf.input([-1, -1], tf.float32)
-    return model.forward(X)
-
-compute_forward = tf.compile(ComputeForward)
-
-# Load MNIST data
-data = np.load('mnist.npz')
-
-def image_to_vector(X):
-    return np.reshape(X, (len(X), -1))         # Flatten: (N x 28 x 28) -> (N x 784)
-
-Xtrain = image_to_vector(data['train_x'])
-Ytrain = np.zeros((Xtrain.shape[0], 10))
-Ytrain[np.arange(Xtrain.shape[0]), data['train_y']] = 1.0
-
-Xtest = image_to_vector(data['test_x'])[0:500]
-Ytest = data['test_y'][0:500]
-
-batch_size = 128
-epochs = 10
-iterations = Xtrain.shape[0] // batch_size
-print("Iterations per epoch: ", iterations)
-
-model = MNIST_net()
-opt = tf.optimizers.adam(model, lr)
-opt.initialize_parameters()
-
-Xtf = tf.tensor(Xtrain)
-Ytf = tf.tensor(Ytrain)
-Xtest = tf.tensor(Xtest)
-
-init_time = time.time()
-
-def test_accuracy(model, X, Y):
-    Yhat = compute_forward(model, X)
-    Predict = np.argmax(Yhat.numpy, axis = 1)
-    correct_tf = np.sum(Predict == Y)
-    return correct_tf * 100.0 / len(Y)
-
-loss_curve = []
-accuracy_curve = []
-for i in range(epochs):
-    avg_loss_tf = 0.0
-
-    #shuffle offsets
-    offsets = np.random.permutation(Xtrain.shape[0] // batch_size) * batch_size + np.random.randint(batch_size)
-
-    for j in range(iterations):
-        if(j == 0): tf.renderdoc_start_capture()
-        res = train_step(Xtf, Ytf, [offsets[j], batch_size, lr], opt)
-        opt.update_parameters(res[:-1])
-        loss = res[-1].numpy
-        avg_loss_tf += loss
-        loss_curve.append(loss)
-        print("Epoch: ", i, " Iteration: ", j, " Loss: ", loss)
-        if(j == 0): tf.renderdoc_end_capture()
-
-    accuracy = test_accuracy(model, Xtest, Ytest)
-    accuracy_curve.append(accuracy)
-    print("Epoch: ", i, " Loss: ", avg_loss_tf / iterations, " Test accuracy: ", accuracy, "%")
-
-test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
-print("Final Tf test accuracy: ", test_accuracy_tf, "%")
-
-#accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
-#print("Final Tf train accuracy: ", accuracy_on_train, "%")
-
-print("Iterations per second: ", iterations * epochs / (time.time() - init_time))
-
-# Plot loss history
-import matplotlib.pyplot as plt
-plt.plot(loss_curve)
-plt.xlabel('Iteration')
-plt.ylabel('Loss')
-plt.grid()
-plt.show()
-
-#Plot accuracy history
-plt.plot(accuracy_curve)
-plt.xlabel('Epoch')
-plt.ylabel('Accuracy')
-plt.grid()
-plt.ylim(70, 95)
-plt.show()
+qr = tf.compile(QRDecomposition)

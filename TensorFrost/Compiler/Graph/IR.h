@@ -92,7 +92,11 @@ public:
     void RemoveNode(Node* node);
 
     void SetCursor(Node* node) {
-        cursor = NodeIterator(node, root);
+    	if(node != nullptr) {
+    		cursor = NodeIterator(node, root);
+    	} else {
+    		throw std::runtime_error("Cursor cannot be set to null");
+		}
     }
 
 	stack<Node*> scope_stack;
@@ -149,7 +153,7 @@ public:
 	void ComputeStatistics();
 	void CopyArguments(ArgEdges args_to_copy, Node *cursor);
 	map<Node*, Node*> CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
-	                          unordered_map<int, Node*> indices, Node* cursor);
+	                          unordered_map<int, Node*> indices, Node* cursor = nullptr);
 	void ReorderOperations();
 	void MoveShapeOutsideKernels();
 	void OptimizeKernels();
@@ -163,6 +167,7 @@ public:
 	void InsertAlgorithmicPrimitives();
 	void UnrollLoops();
 	void UnrollKernelDimensions();
+	void UnrollAtomicOperations();
 	void TryReplaceModificationsWithVersions();
 	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
@@ -249,10 +254,11 @@ public:
 		return result;
 	}
 
-	vector<Node*> GetNodesOfType(OpProp type) const {
+	template <typename... Args>
+	vector<Node*> GetNodesOfType(OpProp type, Args... args) const {
 		vector<Node*> result;
 		for (auto node = begin(); !node.end(); node.next()) {
-			if (node->op->HasAllTypes(type)) {
+			if (node->op->HasAllTypes(type, args...)) {
 				result.push_back(*node);
 			}
 		}

@@ -504,6 +504,14 @@ public:
 		return ReductionOP("dim_max", tensor, axis);
 	}
 
+	static Tensor& Any(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_any", tensor, axis);
+	}
+
+	static Tensor& All(const Tensor& tensor, int axis = -1) {
+		return ReductionOP("dim_all", tensor, axis);
+	}
+
 	static Tensor& Min(const Tensor& tensor, int axis = -1) {
 		return ReductionOP("dim_min", tensor, axis);
 	}
@@ -894,7 +902,7 @@ public:
 	}
 
 	static Tensor& grad(const Tensor& x, const Tensor& wrt) {
-		if(x.node_->op->HasAllTypes(OpProp::Nondiff)) {
+		if(x.node_->op->HasAllTypes(OpProp::Nondiff) && !x.node_->flags.has(NodeProp::Modified)) {
 			throw std::runtime_error("Cannot compute gradient of a non-differentiable operation");
 		}
 		return OpShape("backwards_grad", wrt.GetShape(), &x, &wrt);

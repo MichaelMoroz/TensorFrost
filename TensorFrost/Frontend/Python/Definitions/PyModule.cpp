@@ -143,8 +143,8 @@ private:
         py::object m = py::cast<ParameterArray&>(getattr("m")).getitem(i);
         py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
 
-        m = tf.attr("lerp")(m, grad, beta1);
-        v = tf.attr("lerp")(v, grad.attr("__mul__")(grad), beta2);
+        m = tf.attr("lerp")(grad, m, beta1);
+        v = tf.attr("lerp")(grad.attr("__mul__")(grad), v, beta2);
 
         py::object mhat = m.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta1, t.attr("__getitem__")(0)));
         py::object vhat = v.attr("__truediv__")(py::float_(1.0) - tf.attr("pow")(beta2, t.attr("__getitem__")(0)));
@@ -163,7 +163,7 @@ private:
         float decay = py::cast<float>(getattr("decay"));
 
         py::object v = py::cast<ParameterArray&>(getattr("v")).getitem(i);
-        v = tf.attr("lerp")(v, grad.attr("__mul__")(grad), decay);
+        v = tf.attr("lerp")(grad.attr("__mul__")(grad), v, decay);
         py::cast<ParameterArray&>(getattr("v")).setitem(i, v);
 
         return grad.attr("__mul__")(learning_rate).attr("__truediv__")(tf.attr("sqrt")(v).attr("__add__")(epsilon));
