@@ -64,6 +64,7 @@ enum class OpProp {
 	Gradient,
 	Nondiff,
 	HasChildren,
+	Debug,
 	Count,
 };
 

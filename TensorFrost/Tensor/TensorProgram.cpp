@@ -12,7 +12,9 @@ void TensorProgram::CreateProgram(string name) {
 
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
+	Tensor::BeginRegion(name);
 	Tensors outputs = evaluate_callback();
+	Tensor::EndRegion(name);
 	// set outputs
 	for (int i = 0; i < outputs.size(); i++) {
 		outputs[i]->SetMemoryType(NodeProp::OutputMemory, i);

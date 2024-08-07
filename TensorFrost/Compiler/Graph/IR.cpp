@@ -35,9 +35,9 @@ void IR::CompileIR()
 	GetInputList();
 	OptimizeOperations();
 	//CheckIR("Optimize operations", false, false);
+	UnrollLoops();
 	TryReplaceModificationsWithVersions();
 	RemoveUnusedOperations();
-	UnrollLoops();
 	//CheckIR("Remove Unused Operations 0", false, false);
 	ComputeAutodiff();
 	RemoveUnusedOperations();
@@ -58,6 +58,8 @@ void IR::CompileIR()
 	MoveShapeOutsideKernels();
 	OptimizeKernels(); //fuse kernels by copying inputs
 	OptimizeHost();
+	UnrollLoops(1);
+	TryReplaceModificationsWithVersions();
 	//UnrollKernelDimensions();
 	CheckIR("Optimize kernels and host", true, false);
 	RemoveUnusedOperations();

@@ -953,6 +953,9 @@ public:
 	}
 
 	void SetDebugName(const string& name) const;
+
+	static void BeginRegion(const string& name);
+	static void EndRegion(const string& name);
 };
 
 }  // namespace TensorFrost

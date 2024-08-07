@@ -4,8 +4,8 @@ import time
 
 tf.initialize(tf.cpu)
 
-N = 3
-def QRDecomposition():
+N = 8
+def logDet():
     A = tf.input([N, N], tf.float32)
 
     m, n = A.shape
@@ -25,9 +25,56 @@ def QRDecomposition():
     R[n-1, n-1] = tf.norm(A[j, n-1])
     Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
 
-    dQ_dA = tf.grad(Q, A)
-    dR_dA = tf.grad(R, A)
+    i, = tf.indices([N])
+    logDetR = tf.sum(tf.log(R[i, i]))
+    dlogDetR_dA = tf.grad(logDetR, A)
 
-    return [Q, R, dQ_dA, dR_dA]
+    return [logDetR, dlogDetR_dA]
 
-qr = tf.compile(QRDecomposition)
+logDet = tf.compile(logDet)
+
+A = np.random.randn(N, N).astype(np.float32)
+
+logDetR, dlogDetR_dA = logDet(A)
+
+print("logDetR: ", logDetR.numpy)
+print("dlogDetR_dA: ", dlogDetR_dA.numpy)
+
+#compare to pytorch
+import torch
+import torch.distributions as dist
+
+A_torch = torch.tensor(A, requires_grad=True)
+L = torch.linalg.qr(A_torch)
+R_torch = L.R
+logDetR_torch = torch.linalg.det(R_torch).abs().log()
+logDetR_torch.backward()
+dlogDetR_dA_torch = A_torch.grad
+
+print("logDetR_torch: ", logDetR_torch.item())
+print("dlogDetR_dA_torch: ", dlogDetR_dA_torch.numpy())
+
+
+# compare results
+diff_logDetR = np.abs(logDetR.numpy - logDetR_torch.item())
+diff_dlogDetR_dA = np.abs(dlogDetR_dA.numpy - dlogDetR_dA_torch.numpy())
+
+print("diff_logDetR: ", diff_logDetR)
+print("diff_dlogDetR_dA: ", diff_dlogDetR_dA)
+
+
+def InplaceTest():
+    A = tf.input([N, N], tf.float32)
+
+    i,j = A.indices()
+    A[i, j] = 2.0 * A[i, j] + 1.0
+    A[i, j] = 2.0 * A[i, j] + 1.0
+    A[i, j] = 2.0 * A[i, j] + 1.0
+
+    dA_dA = tf.grad(A, A) #?????
+
+
+
+
+
+

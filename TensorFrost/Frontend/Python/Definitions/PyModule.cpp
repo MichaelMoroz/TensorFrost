@@ -94,6 +94,7 @@ public:
     }
 
     py::object step(py::object X, py::object Y) {
+        Tensor::BeginRegion("OptimizerStep");
         py::object t = getattr("t");
         t = t + py::float_(1.0);
         setattr("t", t);
@@ -106,7 +107,7 @@ public:
         py::object grad_clip = getattr("grad_clip");
 
         bool has_clip = py::isinstance<py::float_>(grad_clip) && py::cast<float>(grad_clip) > 0.0f;
-
+        Tensor::BeginRegion("UpdateWeights");
         for (size_t i = 0; i < py::len(net_params); ++i) {
             py::object param = net_params[i];
             py::object grad = tf.attr("grad")(L, param);
@@ -130,8 +131,9 @@ public:
             param = param - update;
             net_params[i] = param;
         }
-
+        Tensor::EndRegion("UpdateWeights");
         net.attr("update_parameters")(net_params);
+        Tensor::EndRegion("OptimizerStep");
         return L;
     }
 

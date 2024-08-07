@@ -229,9 +229,8 @@ void IR::RemoveUnusedKernels()
 	UpdateGraph();
 }
 
-#define MAX_UNROLL_SIZE 8
 #define MAX_UNROLL_NODES 128
-void IR::UnrollLoops()
+void IR::UnrollLoops(int max_iterations)
 {
 	vector<Node*> loops = GetNodesOfType("loop");
 
@@ -256,7 +255,7 @@ void IR::UnrollLoops()
 
 		//how many iterations to unroll
 		int iters = (end - begin) / step;
-		if (iters > MAX_UNROLL_SIZE) {
+		if (iters > max_iterations) {
 			continue;
 		}
 

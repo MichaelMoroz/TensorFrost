@@ -251,6 +251,14 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("matmul", [](const PyTensor& t, const PyTensor& t2) {
 		return PT(Tensor::Matmul(T(t), T(t2)));
 	}, py::arg("t"), py::arg("t2"), "Matrix multiplication of two tensors");
+
+	m.def("region_begin", [](const std::string& name) {
+		Tensor::BeginRegion(name);
+	}, py::arg("name"), "Begin a debug region");
+
+	m.def("region_end", [](const std::string& name) {
+		Tensor::EndRegion(name);
+	}, py::arg("name"), "End a debug region");
 }
 
 }  // namespace TensorFrost

@@ -53,6 +53,7 @@ extern "C" {
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
+	typedef void region_func(const char*, bool, void*);
 
 	struct TFRuntime {
 		alloc_func* alloc;
@@ -60,6 +61,7 @@ extern "C" {
 		readback_func* readback;
 		writeback_func* writeback;
 		dispatch_func* dispatch;
+		region_func* region;
 		void* custom_data;
 	};
 

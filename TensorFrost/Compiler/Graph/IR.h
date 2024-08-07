@@ -165,13 +165,16 @@ public:
 
 	void RemoveUnusedOperations();
 	void InsertAlgorithmicPrimitives();
-	void UnrollLoops();
+	void UnrollLoops(int max_iterations = 8);
 	void UnrollKernelDimensions();
 	void UnrollAtomicOperations();
 	void TryReplaceModificationsWithVersions();
 	void ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
+
+	//TODO: Implement
+	//uint64_t ComputeHash();
 
 	map<Node *, ArgEdges> GetKernelOutputs(Node *kernel);
 	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);

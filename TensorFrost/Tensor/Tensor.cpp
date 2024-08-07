@@ -271,6 +271,16 @@ void Tensor::SetDebugName(const string& name) const
 	}
 }
 
+void Tensor::BeginRegion(const string& name) {
+	Tensor& t = Static("region_begin", TFType::None);
+	t.SetDebugName(name);
+}
+
+void Tensor::EndRegion(const string& name) {
+	Tensor& t = Static("region_end", TFType::None);
+	t.SetDebugName(name);
+}
+
 const Tensor* Node::GetTensor() const {
 	if (tensor_->node_ != this) {
 		throw std::runtime_error("Fatal Error: Tensor node does not match");

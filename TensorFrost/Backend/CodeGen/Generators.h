@@ -194,7 +194,10 @@ protected:
 				right = ";";
 			} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
 				left = "TFTensor " + node->var_name + " = ";
-				expression = "tf." + op->name_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				right = ";";
+			} else if(op->HasAllTypes(OpProp::Debug)) {
+				left = "tf." + op->code_ + "(\"" + node->debug_name + "\")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpProp::MemoryOp)) {

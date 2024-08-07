@@ -89,6 +89,16 @@ void Dispatch(TFDispatchInfo info, void* data) {
 	global_kernel_manager->DispatchKernel(info);
 }
 
+void Region(const char* name, bool begin, void* data) {
+	if (current_backend == BackendType::OpenGL) {
+		if (begin) {
+			StartDebugRegion(name);
+		} else {
+			EndDebugRegion();
+		}
+	}
+}
+
 vector<TFTensor*> ExecuteProgram(
     Program* program, vector<TFTensor*> inputs) {
 
@@ -106,7 +116,6 @@ vector<TFTensor*> ExecuteProgram(
 
 	vector<TFTensor> input_tensors;
 	for (int i = 0; i < memory_input_count; i++) {
-		// add input memory offset
 		input_tensors.push_back(*inputs[i]);
 	}
 
@@ -116,16 +125,7 @@ vector<TFTensor*> ExecuteProgram(
 	TFTensor* in = input_tensors.data();
 	TFTensor* out = new TFTensor[output_count];
 
-	if (current_backend == BackendType::OpenGL) {
-		StartDebugRegion(program->program_name);
-	}
-
-	program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, nullptr});
-
-	if (current_backend == BackendType::OpenGL) {
-		EndDebugRegion();
-		//Finish();
-	}
+	program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, Region, nullptr});
 
 	vector<TFTensor*> outputs = vector<TFTensor*>(output_count);
 	for (int i = 0; i < output_count; i++) {
