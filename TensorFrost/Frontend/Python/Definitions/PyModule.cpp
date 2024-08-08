@@ -102,6 +102,7 @@ public:
         py::object net = getattr("net");
         py::object L = net.attr("loss")(X, Y);
         py::list net_params = net.attr("parameters")();
+        py::list requires_grads = net.attr("requires_grads_list")();
 
         py::object learning_rate = getattr("learning_rate");
         py::object grad_clip = getattr("grad_clip");
@@ -109,6 +110,10 @@ public:
         bool has_clip = py::isinstance<py::float_>(grad_clip) && py::cast<float>(grad_clip) > 0.0f;
         Tensor::BeginRegion("UpdateWeights");
         for (size_t i = 0; i < py::len(net_params); ++i) {
+            bool requires_grad = py::cast<bool>(requires_grads[i]);
+            if (!requires_grad) {
+                continue;
+            }
             py::object param = net_params[i];
             py::object grad = tf.attr("grad")(L, param);
             if(has_clip) {
@@ -174,13 +179,13 @@ private:
 
 void ModuleDefinitions(py::module& m) {
     py::class_<Parameter>(m, "Parameter")
-        .def(py::init<const std::vector<int>&, TFType, float, float>(), py::arg("shape"), py::arg("dtype") = TFType::Float, py::arg("random_scale") = -1.0f, py::arg("random_offset") = 0.0f)
+        .def(py::init<const std::vector<int>&, TFType, float, float, bool>(), py::arg("shape"), py::arg("dtype") = TFType::Float, py::arg("random_scale") = -1.0f, py::arg("random_offset") = 0.0f, py::arg("requires_grad") = true)
         .def_readwrite("shape", &Parameter::shape)
         .def_readwrite("dtype", &Parameter::dtype)
         .def_readwrite("random_scale", &Parameter::random_scale)
         .def_readwrite("random_offset", &Parameter::random_offset)
         .def("__repr__", [](const Parameter& p) {
-            return "Parameter(shape=" + std::to_string(p.shape.size()) + ", dtype=" + std::to_string(p.dtype) + ", random_scale=" + std::to_string(p.random_scale) + ", random_offset=" + std::to_string(p.random_offset) + ")";
+            return "Parameter(shape=" + std::to_string(p.shape.size()) + ", dtype=" + std::to_string(p.dtype) + ", random_scale=" + std::to_string(p.random_scale) + ", random_offset=" + std::to_string(p.random_offset) + ", requires_grad=" + std::to_string(p.requires_grad) + ")";
         });
 
     py::class_<ParameterArray>(m, "ParameterArray")
@@ -189,12 +194,15 @@ void ModuleDefinitions(py::module& m) {
         .def("__setitem__", &ParameterArray::setitem);
 
     py::class_<Module, PyModule>(m, "Module")
-        .def(py::init<>())
+        .def(py::init<bool>(), py::arg("requires_grad") = true)
         .def("__getattr__", &Module::getattr)
         .def("__setattr__", &Module::setattr)
+        .def("hasattr", &Module::hasattr)
+        .def("param_requires_grad", &Module::param_requires_grad)
         .def("initialize_input", &Module::initialize_input)
         .def("initialize_parameters", &Module::initialize_parameters)
         .def("parameters", &Module::parameters)
+        .def("requires_grads_list", &Module::requires_grads_list)
         .def("create_input", &Module::create_input)
         .def("update_parameters", &Module::update_parameters)
         .def("assert_parameters", &Module::assert_parameters)

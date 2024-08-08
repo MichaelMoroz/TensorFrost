@@ -14,14 +14,16 @@ public:
     TFType dtype;
     float random_scale;
     float random_offset;
+    bool requires_grad;
 
-    Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f)
-        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset) {}
+    Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
+        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), requires_grad(requires_grad) {}
 };
 
 class ParameterArray {
 public:
     map<size_t, py::object> _parameters; //must be sorted
+    map<size_t, bool> _requires_grad;
 
     py::object getitem(size_t index) {
         if (_parameters.contains(index)) {
@@ -32,6 +34,9 @@ public:
 
     void setitem(size_t index, py::object value) {
         _parameters[index] = value;
+        if (py::isinstance<Parameter>(value)) {
+            _requires_grad[index] = py::cast<Parameter&>(value).requires_grad;
+        }
     }
 };
 
@@ -46,10 +51,12 @@ public:
 
     unordered_map<string, py::object> _attributes;
     unordered_map<string, AttributeType> _attribute_types;
+    unordered_map<string, bool> _requires_grad;
+    bool requires_grad = true;
 
     py::object tf;
 
-    Module() {
+    Module(bool requires_grad = true) : requires_grad(requires_grad) {
         tf = py::module::import("TensorFrost");
     }
 
@@ -62,23 +69,35 @@ public:
 
     void setattr(const std::string& name, py::object value) {
         AttributeType type = AttributeType::None;
+        bool requires_grad = true;
         if (py::isinstance<Parameter>(value)) {
             type = AttributeType::Parameter;
+            requires_grad = py::cast<Parameter&>(value).requires_grad;
         } else if (py::isinstance<ParameterArray>(value)) {
             type = AttributeType::ParameterArray;
         } else if (py::isinstance<Module>(value)) {
             type = AttributeType::Module;
+            requires_grad = py::cast<Module&>(value).requires_grad;
         }
         if(type == AttributeType::None && _attribute_types.contains(name)) {
             type = _attribute_types[name];
+            requires_grad = _requires_grad[name];
         }
 
         _attributes[name] = value;
         _attribute_types[name] = type;
+        _requires_grad[name] = requires_grad && this->requires_grad;
     }
 
     bool hasattr(const std::string& name) {
         return _attributes.contains(name);
+    }
+
+    bool param_requires_grad(const std::string& name) {
+        if (_requires_grad.contains(name)) {
+            return _requires_grad[name];
+        }
+        return requires_grad;
     }
 
     vector<pair<string, py::object>> get_attributes_of_type(AttributeType type) {
@@ -171,6 +190,26 @@ public:
             }
         }
         return params;
+    }
+
+    py::list requires_grads_list() {
+        py::list requires_grads;
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
+            requires_grads.append( param_requires_grad(module.first) );
+        }
+
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            requires_grads.append( param_requires_grad(param.first) );
+        }
+
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
+            ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
+            bool requires_grad = param_requires_grad(array.first);
+            for (auto& param : param_array._parameters) {
+                requires_grads.append( param_array._requires_grad[param.first] && requires_grad );
+            }
+        }
+        return requires_grads;
     }
 
     py::list create_input(py::args args) {
