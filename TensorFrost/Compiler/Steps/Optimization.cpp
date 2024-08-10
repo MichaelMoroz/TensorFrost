@@ -339,7 +339,6 @@ void IR::UnrollAtomicOperations() {
 
 		auto old_shape = node->args.GetTensors(ArgType::Shape);
 
-
 		//reduce the dimensions of the scatter operation
 		const Tensor* current_reduce = node->args.Get(ArgType::Input, 0)->GetTensor();
 		vector<int> unused_dims_vec(unused_dimensions.begin(), unused_dimensions.end());
@@ -393,7 +392,7 @@ void IR::UnrollAtomicOperations() {
 		const Tensor* memory = node->args.Get(ArgType::Memory)->GetTensor();
 		Tensor* store_op = nullptr;
 		Tensor* old_value = nullptr;
-		if(true) { //TODO (Moroz): check if indexes are one-to-one, otherwise must use atomic operations
+		if(false) { //TODO (Moroz): check if indexes are one-to-one, otherwise must use atomic operations
 			old_value = &Tensor::Load(*memory, new_indices);
 			Tensor* new_value = nullptr;
 			if(node->name == "InterlockedAdd") {
@@ -747,7 +746,7 @@ void IR::OptimizeKernels() {
 	}
 }
 
-#define MAX_LOAD_COPY 500000.0f
+#define MAX_LOAD_COPY 3000.0f
 #define MAX_LOAD_COPY_COUNT 2
 #define MAX_LOAD_SIZE_RATIO 0.5f
 void IR::OptimizeKernelLoadOperations() {

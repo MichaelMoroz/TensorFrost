@@ -89,11 +89,14 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 
 	// check if input is valid
 	if (!operation->IsInputValid(input_types)) {
-		string error = "Input types ";
-		for (const auto& type : input_types) {
-			error += DataTypeToString(type) + ", ";
+		string error = "Input types (";
+		for (int i = 0; i < input_types.size(); i++) {
+			error += DataTypeToString(input_types[i]);
+			if (i < input_types.size() - 1) {
+				error += ", ";
+			}
 		}
-		error += "are not valid for operation " + name;
+		error += ") are not valid for operation \"" + name + "\"";
 		throw std::runtime_error(error);
 	}
 

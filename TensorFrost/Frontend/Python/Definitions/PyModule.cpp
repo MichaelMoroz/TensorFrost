@@ -49,25 +49,28 @@ public:
 
     void initializeOptimizer(Module* net) {
         py::list net_params = net->parameters();
-
+        py::list requires_grads = net->requires_grads_list();
         switch (optimizer_type) {
             case OptimizerType::ADAM:
-                initializeParameterArray("m", net_params);
-                initializeParameterArray("v", net_params);
+                initializeParameterArray("m", net_params, requires_grads);
+                initializeParameterArray("v", net_params, requires_grads);
                 break;
             case OptimizerType::SGD:
                 // No additional parameters needed
                 break;
             case OptimizerType::RMSProp:
-                initializeParameterArray("v", net_params);
+                initializeParameterArray("v", net_params, requires_grads);
                 break;
         }
     }
 
-    void initializeParameterArray(const string& name, py::list& net_params) {
+    void initializeParameterArray(const string& name, py::list& net_params, py::list& requires_grads) {
         setattr(name, py::cast(ParameterArray()));
         for (size_t i = 0; i < py::len(net_params); ++i) {
             py::object param = net_params[i];
+            if (!py::cast<bool>(requires_grads[i])) {
+                continue;
+            }
             Parameter new_param = Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
             py::cast<ParameterArray&>(getattr(name)).setitem(i, py::cast(new_param));
         }
@@ -75,13 +78,17 @@ public:
 
     void assert_parameters() override {
         py::list net_params = getattr("net").attr("parameters")();
-        assertParameterArray("m", net_params);
-        assertParameterArray("v", net_params);
+        py::list requires_grads = getattr("net").attr("requires_grads_list")();
+        assertParameterArray("m", net_params, requires_grads);
+        assertParameterArray("v", net_params, requires_grads);
     }
 
-    void assertParameterArray(const string& name, py::list& net_params) {
+    void assertParameterArray(const string& name, py::list& net_params, py::list& requires_grads) {
         if (hasattr(name)) {
             for (size_t i = 0; i < py::len(net_params); ++i) {
+                if (!py::cast<bool>(requires_grads[i])) {
+                    continue;
+                }
                 py::object param = net_params[i];
                 py::object arr = py::cast<ParameterArray&>(getattr(name)).getitem(i);
 

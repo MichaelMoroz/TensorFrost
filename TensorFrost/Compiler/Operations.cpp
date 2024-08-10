@@ -52,7 +52,7 @@ const vector<Operation> operations = {
 	//Scan
 	Operation("dim_prefix_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
     //Matrix
-    Operation("transpose", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
+    Operation("transpose", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpProp::Algorithm}), // dot product of the last dimensions
     Operation("matmul", {"ff_f"}, 0, "", {OpProp::Algorithm}), // matrix multiplication of the last dimensions
  	//Texture
@@ -68,8 +68,8 @@ const vector<Operation> operations = {
 	// Operation("dim_pad", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("split_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("merge_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
-	Operation("unsqueeze", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
-	Operation("squeeze", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
+	Operation("unsqueeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
+	Operation("squeeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 
 	//Native operations (built-in shader operations, only for size <= 4)
     //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),

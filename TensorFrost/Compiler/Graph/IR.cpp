@@ -27,75 +27,93 @@ void IR::RemoveNode(Node* node) {
     }
 }
 
+#define PROFILE_COMPILATION
+
+void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
+#ifdef PROFILE_COMPILATION
+	auto start = std::chrono::high_resolution_clock::now();
+#endif
+
+	expression();
+
+#ifdef PROFILE_COMPILATION
+	auto end = std::chrono::high_resolution_clock::now();
+	float duration = (float) std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0f;
+
+	PassStats stats;
+	stats.pass_name = pass_name;
+	stats.duration = duration;
+	stats.node_count = 0;
+	for (auto node = begin(); !node.end(); node.next()) {
+		stats.node_count++;
+	}
+	pass_stats.push_back(stats);
+#endif
+
+	if (update_graph) {
+		UpdateGraph();
+	}
+
+	if (print) {
+		CheckIR(pass_name, false, false);
+	}
+}
+
 void IR::CompileIR()
 {
 	// TODO (Moroz): Add auto tests into build system
 
 	CheckIR("Input", false, false);
-	GetInputList();
-	OptimizeOperations();
-	//CheckIR("Optimize operations", false, false);
-	UnrollLoops();
-	TryReplaceModificationsWithVersions();
-	RemoveUnusedOperations();
-	//CheckIR("Remove Unused Operations 0", false, false);
-	ComputeAutodiff();
-	RemoveUnusedOperations();
-	CheckIR("Compute Autodiff", false, false);
-	UnrollAtomicOperations();
-	InsertAlgorithmicPrimitives();
-	CheckIR("Insert Algorithmic Primitives", false, false);
-	TryReplaceModificationsWithVersions();
-	OptimizeOperations();
-	RemoveUnusedOperations();
-	CheckIR("Remove Unused Operations 1", false, false);
-	SeparateOperationsIntoKernels();
-	CheckKernelShapes();
-	//UnrollDimensions();
-	CheckIR("Separate Operations Into Kernels", false, false);
-	ReorderOperations();
-	CheckIR("Reorder Operations", true, false);
-	MoveShapeOutsideKernels();
-	OptimizeKernels(); //fuse kernels by copying inputs
-	OptimizeHost();
-	UnrollLoops(1);
-	TryReplaceModificationsWithVersions();
-	//UnrollKernelDimensions();
-	CheckIR("Optimize kernels and host", true, false);
-	RemoveUnusedOperations();
-	for (int i = 0; i < 20; i++) { //fusing kernels by loads (tensor product)
-		RemoveUnusedOperations();
-		AddKernelGlobalLoadOperations();
-		AddMemoryOpIndices();
-		CheckIR("Load optimization 1 iteration " + to_string(i), true, false);
-		OptimizeKernelLoadOperations();
-		//CheckIR("Load optimization 2 iteration " + to_string(i), true, false);
+	RunCompilationPass("GetInputList", [&]() { GetInputList(); });
+	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); });
+	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+	RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
+	RunCompilationPass("InsertAlgorithmicPrimitives", [&]() { InsertAlgorithmicPrimitives(); }, true);
+	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
+	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+	RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); });
+	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); }, true);
+	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
+	RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
+	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(1); });
+	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("Load fusion", [&]() {
+		for (int i = 0; i < 20; i++) {
+			RunCompilationPass("AddKernelGlobalLoadOperations", [&]() { AddKernelGlobalLoadOperations(); });
+			RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
+			RunCompilationPass("OptimizeKernelLoadOperations", [&]() { OptimizeKernelLoadOperations(); });
+			RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+		}
+	});
+	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
+	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
+	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
+	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
+	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
+	RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
+	RunCompilationPass("GetOutputList", [&]() { GetOutputList(); });
+	RunCompilationPass("ComputeStatistics", [&]() { ComputeStatistics(); });
+
+#ifdef PROFILE_COMPILATION
+	cout << "Profiled compilation passes:" << endl;
+	for (const PassStats& stats : pass_stats) {
+		cout << "Pass: " << stats.pass_name << " took " << stats.duration << "ms and processed " << stats.node_count << " nodes" << endl;
 	}
-	CheckIR("Optimize kernel loads", true, false);
-	AddKernelGlobalStoreOperations();
-	RemoveUnusedKernels();
-	CheckIR("Add Kernel Global Memory Operations", true, true);
-	AddMemoryOpIndices();
-	ReorderOperations();
-	OptimizeOperations();
-	AddMemoryOpIndices();
-	CheckIR("Final optimization", true, true);
-	FinalizeMemoryIndexing();
-	RemoveUnusedOperations();
-	//CheckIR("Finalize Memory Indexing", false, false);
-	OptimizeKernels();
-	OptimizeHost();
-	//OptimizeLoops();
-	RemoveUnusedOperations();
-	//CheckIR("Finalize Memory Indexing 2", true, true);
-	RemoveUnusedKernels();
-	OptimizeOperations();
-	RemoveUnusedOperations();
-	//CheckIR("Remove Unused Operations 2", true, true);
-	AddMemoryDeallocation();
-	CheckIR("Add deallocation", true, true);
-	GetOutputList();
-	ComputeStatistics();
+#endif
 }
 
 int GetAxis(int dims, int axis)

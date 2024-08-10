@@ -32,15 +32,15 @@ class PSI(tf.Module):
         beta = tf.abs(self.weights[1])
         gamma = self.weights[2]
         return (tf.exp(-alpha*r1-beta*r2)+tf.exp(-alpha*r2-beta*r1))*(1.0 + gamma*r12)
-
+    
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
         psi = self.chandrasekhar_helium_psi(electrons)
         return tf.log(tf.max(tf.abs(psi),self.eps))
-
+    
     #get the finite difference gradient and laplacian
     def kinetic_energy(self, e_pos):
-
+        
         #fd sampling (TODO: use forward mode autodiff)
         # n_samples = self.electron_n * 3 * 2 + 1
         # b, s, i, c = tf.indices([e_pos.shape[0], n_samples, self.electron_n, 3])
@@ -93,7 +93,7 @@ class PSI(tf.Module):
                 V += 1.0 / tf.max(r, self.eps)
 
         return V
-
+    
     def nuclei_potential(self):
         V = 0.0
 
@@ -104,13 +104,13 @@ class PSI(tf.Module):
                 V += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
 
         return V
-
+    
     def local_energy(self, e_pos):
         return self.kinetic_energy(e_pos) + self.electron_potential(e_pos) + self.nuclei_potential()
 
     def forward(self, e_pos):
         return self.local_energy(e_pos)
-
+    
     def energy(self, e_pos):
         return self.batched_mean(self.forward(e_pos))
 
@@ -120,7 +120,7 @@ class PSI(tf.Module):
 
     def prob_density(self, e_pos):
         return tf.exp(2.0 * self.log_psi(e_pos))
-
+    
     def inc_step(self):
         self.step += 1
 
@@ -132,11 +132,11 @@ class PSI(tf.Module):
         for i in range(len(shape)):
             element_index = element_index * shape[i] + indices[i]
         return tf.pcgf(tf.uint(element_index) + self.seed)
-
+    
     def randn(self, shape):
         x, y = self.rand(shape), self.rand(shape)
         return tf.sqrt(-2.0 * tf.log(x)) * tf.cos(2.0 * np.pi * y)
-
+    
     def split_dim(self, x, M):
         N = x.shape[0]
         i, j = tf.indices([N/M, M])
@@ -144,9 +144,9 @@ class PSI(tf.Module):
 
     def batched_mean(self, x):
         batch_size = 128
-        x_reshaped = tf.reshape(x, [x.shape[0] / batch_size, batch_size]) #self.split_dim(x, batch_size)
+        x_reshaped = tf.reshape(x, [x.shape[0] / batch_size, batch_size]) #self.split_dim(x, batch_size) 
         return tf.mean(tf.mean(x_reshaped))
-
+    
     def variance(self, x):
         x_mean = tf.mean(x)
         return tf.mean((x - x_mean) * (x - x_mean)) + x_mean
@@ -207,7 +207,7 @@ def OptimizeEnergy():
     loss = optimizer.step(walkers, None)
     params = optimizer.parameters()
     params.append(loss)
-    return params
+    return params 
 
 optimize_energy = tf.compile(OptimizeEnergy)
 

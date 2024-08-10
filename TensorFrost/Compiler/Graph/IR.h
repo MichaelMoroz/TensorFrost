@@ -12,6 +12,7 @@
 #include <set>
 #include <bitset>
 #include <array>
+#include <chrono>
 
 #include "Compiler/Operations.h"
 #include "Utility/Utility.h"
@@ -183,6 +184,7 @@ public:
 	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
+	void RunCompilationPass(string pass_name, const function<void()>& expression, bool print = false, bool update_graph = false);
 	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
 	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
@@ -286,6 +288,13 @@ public:
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> input_memory_map;
 	unordered_map<int, Node*> output_memory_map;
+
+	struct PassStats {
+		string pass_name;
+		float duration;
+		int node_count;
+	};
+	vector<PassStats> pass_stats;
 };
 
 int GetAxis(int dims, int axis);

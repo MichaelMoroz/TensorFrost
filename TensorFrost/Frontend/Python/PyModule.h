@@ -49,9 +49,10 @@ public:
         Module
     };
 
-    unordered_map<string, py::object> _attributes;
-    unordered_map<string, AttributeType> _attribute_types;
-    unordered_map<string, bool> _requires_grad;
+    map<string, py::object> _attributes;
+    map<string, AttributeType> _attribute_types;
+    map<string, bool> _requires_grad;
+    vector<string> _attribute_order;
     bool requires_grad = true;
 
     py::object tf;
@@ -79,7 +80,9 @@ public:
             type = AttributeType::Module;
             requires_grad = py::cast<Module&>(value).requires_grad;
         }
-        if(type == AttributeType::None && _attribute_types.contains(name)) {
+
+        bool already_exists = _attributes.contains(name);
+        if(type == AttributeType::None && already_exists) {
             type = _attribute_types[name];
             requires_grad = _requires_grad[name];
         }
@@ -87,6 +90,7 @@ public:
         _attributes[name] = value;
         _attribute_types[name] = type;
         _requires_grad[name] = requires_grad && this->requires_grad;
+        if (!already_exists) _attribute_order.push_back(name);
     }
 
     bool hasattr(const std::string& name) {
@@ -102,9 +106,9 @@ public:
 
     vector<pair<string, py::object>> get_attributes_of_type(AttributeType type) {
         vector<pair<string, py::object>> params;
-        for (auto& attr : _attributes) {
-            if (_attribute_types[attr.first] == type) {
-                params.push_back(attr);
+        for (auto& attr : _attribute_order) {
+            if (_attribute_types[attr] == type) {
+                params.push_back({attr, _attributes[attr]});
             }
         }
         return params;
@@ -143,7 +147,11 @@ public:
         py::tuple shape_tuple = py::cast(param.shape);
 
         py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
-        float scale = sqrt(2.0f / ((float)param.shape[0] + (float)param.shape[1]));
+        float shape_sum = 0.0f;
+        for (int i = 0; i < param.shape.size(); i++) {
+            shape_sum += (float)param.shape[i];
+        }
+        float scale = sqrt(2.0f / shape_sum);
         if(param.random_scale >= 0.0f) {
             scale = param.random_scale;
         }

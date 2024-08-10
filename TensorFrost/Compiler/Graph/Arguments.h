@@ -35,6 +35,9 @@ struct HashArgID {
 	}
 };
 
+#define MAX_ARGS_PER_TYPE 8
+#define MAX_ARGS ((int)ArgType::Count * MAX_ARGS_PER_TYPE)
+
 class ArgumentManager {
 private:
 	Node* node_;
@@ -78,8 +81,8 @@ public:
 		}
 	}
 
-	void SetName(ArgID id, string name, bool requires_parenthesis = false) {																																																		
-		argument_names_[id] = name; 
+	void SetName(ArgID id, string name, bool requires_parenthesis = false) {
+		argument_names_[id] = name;
 	    argument_requires_parenthesis_[id] = requires_parenthesis;
 	}
 

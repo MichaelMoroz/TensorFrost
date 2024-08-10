@@ -203,7 +203,13 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
 	}},
 	{"dim_norm", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.node_->data[0]);
+		int axis = (int)out.node_->data[0];
+		int dim1 = out.GetDimension();
+		int dim2 = grad.GetDimension();
+		axis = out.GetDimension() - axis - 1;
+		axis = std::max(dim1, dim2) - axis - 1;
+		//TODO: store axis from the right instead of the left
+		Tensor& unsq = Tensor::Unsqueeze(grad/out, axis);
 		grads.Add(unsq * in[0]);
 	}},
 	{"dim_max", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {

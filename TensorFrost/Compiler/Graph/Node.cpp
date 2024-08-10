@@ -48,9 +48,11 @@ bool ArgumentManager::CannotCopyArgument(ArgID id) {
     bool shape = id.first == ArgType::Shape;
     bool to_memory = to->op->HasAllTypes(OpProp::Memory);
     bool shape_not_memory = shape && !to_memory;
+    bool is_output = from->flags.has(NodeProp::OutputMemory);
+    bool is_input = from->flags.has(NodeProp::InputMemory);
     return id.first == ArgType::Memory || shape_not_memory ||
-           from->op->HasAllTypes(OpProp::Static) ||
-           from->op->HasAllTypes(OpProp::Memory) || from->flags.has(NodeProp::Modified);
+           from->op->HasAllTypes(OpProp::Static) || from->op->HasAllTypes(OpProp::Memory) ||
+           from->flags.has(NodeProp::Modified) || is_output || is_input;
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {

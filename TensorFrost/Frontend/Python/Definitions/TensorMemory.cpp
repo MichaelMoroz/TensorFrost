@@ -61,7 +61,7 @@ void TensorMemoryDefinition(py::module& m,
 		    } else if (t.GetType() == TFType::Bool) {
 			    return t.ToPyArray<bool>();
 		    } else {
-			    throw std::runtime_error("Unsupported data type");
+			    throw std::runtime_error("Unsupported data type for numpy conversion");
 		    }
 	    },
 	    "Readback data from tensor memory to a numpy array", py::return_value_policy::take_ownership);

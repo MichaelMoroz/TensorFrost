@@ -258,7 +258,7 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 		if(!res.compatible) {
 			result.compatible = false;
 			if (throw_error) {
-				if(res.a_dim != -1 || res.b_dim != -1) {
+				if(res.a_dim != -1 && res.b_dim != -1) {
 					throw std::runtime_error("Shapes are not compatible for nodes: " + a.name + " and " + b.name + " with constant values " + to_string(res.a_dim) + " and " + to_string(res.b_dim) + " at index " + to_string(i));
 				}
 				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a.name + " and " + b.name + " at index " + to_string(i));

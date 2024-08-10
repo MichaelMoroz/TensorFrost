@@ -27,6 +27,7 @@ PyTensorMemory::PyTensorMemory(py::array arr) {
             convert = [](char* ptr) { return static_cast<uint32_t>(*reinterpret_cast<int32_t*>(ptr)); };
             type = TFType::Int;
             break;
+        case 'L': // uint32
         case 'I': // uint32
             convert = [](char* ptr) { return *reinterpret_cast<uint32_t*>(ptr); };
             type = TFType::Uint;
@@ -44,7 +45,7 @@ PyTensorMemory::PyTensorMemory(py::array arr) {
             type = TFType::Int;
             break;
         default:
-            throw std::runtime_error("Unsupported data type");
+            throw std::runtime_error("Unsupported data type to create TensorMemory from numpy array, format: " + std::string(info.format));
     }
 
     // Define a recursive lambda function for multi-dimensional iteration

@@ -44,50 +44,82 @@ void TensorProgramDefinition(py::module& m,
 	tensor_program.def(
 	    "__call__",
 	    [](TensorProgram& program, py::args py_inputs) -> std::variant<PyTensorMemory*, py::tuple> {
-	    	vector<TFTensor*> inputs_props;
+	    	vector<py::object> inputs_props;
 	    	vector<TFTensor*> temp_numpy_tensors;
 			for (auto arg : py_inputs) {
 				if (py::isinstance<PyTensorMemory>(arg)) { //if just tensor memory
 					PyTensorMemory* mem = &arg.cast<PyTensorMemory&>();
-					inputs_props.push_back(mem->tensor_);
+					inputs_props.push_back(arg.cast<py::object>());
 				} else if (py::isinstance<Module>(arg)) { //if module then add its parameters
 					Module* module = &arg.cast<Module&>();
 					py::list params = module->parameters();
 					for (auto param : params) {
-						PyTensorMemory* mem = &param.cast<PyTensorMemory&>();
-						inputs_props.push_back(mem->tensor_);
+						inputs_props.push_back(param.cast<py::object>());
 					}
 				} else if (py::isinstance<py::array>(arg)) { //if numpy array then create pytensormemory from it and add it
 					py::array arr = arg.cast<py::array>();
 					PyTensorMemory* temp_tensor = new PyTensorMemory(arr);
-					inputs_props.push_back(temp_tensor->tensor_);
+					inputs_props.push_back(py::cast(temp_tensor, py::return_value_policy::take_ownership));
 					temp_numpy_tensors.push_back(temp_tensor->tensor_);
 				} else if (py::isinstance<py::list>(arg)) { //if list then convert to py::array then create pytensormemory from it and add it
 					py::array arr = ListToArray(arg.cast<py::list>());
 					PyTensorMemory* temp_tensor = new PyTensorMemory(arr);
-					inputs_props.push_back(temp_tensor->tensor_);
+					inputs_props.push_back(py::cast(temp_tensor, py::return_value_policy::take_ownership));
 					temp_numpy_tensors.push_back(temp_tensor->tensor_);
 				} else {
 					throw std::runtime_error("Unsupported input type " + std::string(py::str(arg)));
 				}
 			}
-		    vector<TFTensor*> outputs = program.Evaluate(inputs_props);
+
+	    	vector<TFTensor*> inputs;
+	    	for (auto input : inputs_props) {
+	    		PyTensorMemory* mem = input.cast<PyTensorMemory*>();
+	    		inputs.push_back(mem->tensor_);
+	    	}
+		    vector<TFTensor*> outputs = program.Evaluate(inputs);
 
 	    	//remove temporary tensors if they are not in the outputs
 	    	for (TFTensor* temp_tensor : temp_numpy_tensors) {
-	    		if (std::find(outputs.begin(), outputs.end(), temp_tensor) == outputs.end()) {
+	    		bool found = false;
+	    		for (TFTensor* output : outputs) {
+	    			if (temp_tensor->buffer == output->buffer) {
+	    				found = true;
+	    				break;
+	    			}
+	    		}
+	    		if (!found) {
 	    			global_memory_manager->DeallocateTensor(*temp_tensor);
 	    		}
 	    	}
 
+	    	vector<py::object> output_tensors;
+	    	for (size_t i = 0; i < outputs.size(); i++) {
+	    		//if any of the outputs are also inputs, then replace them with the input tensors
+	    		TFTensor* out = outputs[i];
+	    		bool is_input = false;
+	    		for (size_t j = 0; j < inputs_props.size(); j++) {
+					PyTensorMemory* in = inputs_props[j].cast<PyTensorMemory*>();
+					if (out->buffer == in->tensor_->buffer) {
+						output_tensors.push_back(inputs_props[j]);
+						is_input = true;
+						break;
+					}
+				}
+	    		if (is_input) {
+	    			continue;
+	    		}
+	    		//otherwise create a new tensor memory
+	    		output_tensors.push_back(py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership));
+	    	}
+
 	    	//if there is only one output, return the tensor memory
 	    	if (outputs.size() == 1) {
-	    		return new PyTensorMemory(outputs[0]);
+	    		return output_tensors[0];
 	    	} else {
 	    		//convert to py::tuple of PyTensorMemory*
 	    		py::tuple py_outputs = py::tuple(outputs.size());
 	    		for (size_t i = 0; i < outputs.size(); i++) {
-	    			py_outputs[i] = py::cast(new PyTensorMemory(outputs[i]), py::return_value_policy::take_ownership);
+	    			py_outputs[i] = output_tensors[i];
 	    		}
 	    		return py_outputs;
 	    	}
