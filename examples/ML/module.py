@@ -71,7 +71,6 @@ class MNIST_net(tf.Module):
         loss = tf.mean(tf.sum(-Y * log_softmax(Yhat)))
         return loss
         
-
 lr = 0.0005
 
 def OptimizerStep():

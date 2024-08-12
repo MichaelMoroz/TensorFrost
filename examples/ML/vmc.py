@@ -39,6 +39,62 @@ def Sort(keys, values, element_count):
 def sqr(x):
     return x * x
 
+class LogNumber():
+    def __init__(self, value = 0.0, sign = 1.0):
+        self.value = value
+        self.sign = sign
+    
+    def float2logv(self, x):
+        return LogNumber(tf.select(x == 0.0, -1000.0, tf.log2(tf.abs(x))), tf.sign(x))
+    
+    def logv2float(self, l):
+        return l.sign * tf.exp2(l.value)
+    
+    def logminmax(self, a, b):
+        minv = LogNumber()
+        maxv = LogNumber()
+        minv.value = tf.select(a.value < b.value, a.value, b.value)
+        maxv.value = tf.select(a.value < b.value, b.value, a.value)
+        minv.sign = tf.select(a.value < b.value, a.sign, b.sign)
+        maxv.sign = tf.select(a.value < b.value, b.sign, a.sign)
+        return minv, maxv
+    
+    def __add__(self, other):
+        minv, maxv = self.logminmax(self, other)
+        diff = maxv.value - minv.value
+        maxv.value += tf.select(diff > 24.0, 0.0, tf.log2(1.0 + minv.sign * maxv.sign * tf.exp2(-diff)))
+        return maxv
+    
+    def __neg__(self):
+        return LogNumber(self.value, -self.sign)
+    
+    def __sub__(self, other):
+        return self + (-other)
+    
+    def __mul__(self, other):
+        l = LogNumber()
+        l.sign = self.sign * other.sign
+        l.value = self.value + other.value
+        return l
+    
+    def __sub__(self, other):
+        l = LogNumber()
+        l.sign = self.sign * other.sign
+        l.value = self.value - other.value
+        return l
+    
+    def __mul__(self, other):
+        l = LogNumber()
+        l.sign = self.sign * other.sign
+        l.value = self.value + other.value
+        return l
+    
+    def __pow__(self, other):
+        l = LogNumber()
+        l.sign = 1.0
+        l.value = self.value * other
+        return l
+
 class PSI(tf.Module):
     def __init__(self, atom_n = 1, electron_n = 2):
         super().__init__()
@@ -49,7 +105,7 @@ class PSI(tf.Module):
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
         self.weights = tf.Parameter([3], tf.float32)
-        self.dx = 2e-3
+        self.dx = 5e-3
         self.eps = 1e-6
 
     def metropolis_dx(self):
@@ -66,12 +122,12 @@ class PSI(tf.Module):
         alpha = tf.abs(self.weights[0])
         beta = tf.abs(self.weights[1])
         gamma = self.weights[2]
-        return (tf.exp(-alpha*r1-beta*r2)+tf.exp(-alpha*r2-beta*r1))*(1.0 + gamma*r12)
+        return (LogNumber(-alpha*r1-beta*r2) + LogNumber(-alpha*r2-beta*r1)) * LogNumber(gamma*r12)
 
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
         psi = self.chandrasekhar_helium_psi(electrons)
-        return tf.log(tf.max(tf.abs(psi),self.eps))
+        return psi.value
 
     #get the finite difference gradient and laplacian
     def kinetic_energy(self, e_pos):
@@ -157,7 +213,7 @@ class PSI(tf.Module):
 
     def loss(self, e_pos, _):
         local_energy = self.forward(e_pos)
-        x_median = self.median_part(local_energy, 0.15)
+        x_median = self.median_part(local_energy, 0.05)
         x_mean = tf.mean(x_median)
         x_var = tf.mean(sqr(x_median - x_mean))
         return x_mean
@@ -209,9 +265,9 @@ class PSI(tf.Module):
         return e_pos, acceptance_rate
 
 
-lr = 0.0025
-n_walkers = 512
-n_steps = 8192
+lr = 0.01
+n_walkers = 16384
+n_steps = 4096
 n_steps_per_optimization = 8
 target_acceptance_rate = 0.5
 
@@ -236,7 +292,7 @@ def ComputeEnergy():
 
     walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
 
-    return wavefunction.energy(walkers)
+    return wavefunction.forward(walkers)
 
 compute_energy = tf.compile(ComputeEnergy)
 
@@ -311,24 +367,70 @@ for i in range(n_steps):
     if(i == 0): tf.renderdoc_end_capture()
 
 #compute the final energy
-energy, variance = compute_energy(wavefunction, walkers_tf)
-print("Final Energy: ", energy.numpy, " Variance: ", variance.numpy)
+local_energy = compute_energy(wavefunction, walkers_tf)
+local_energy = local_energy.numpy
+print("Final Energy: ", np.mean(local_energy), " +/- ", np.std(local_energy))
 #print weights
 print("Weights: ", wavefunction.weights.numpy)
+# Create a figure with more vertical space
+fig = plt.figure(figsize=(22, 32))
 
-# #plot acceptance rate
-# plt.plot(acceptance_rate_history)
-# plt.xlabel('Step')
-# plt.ylabel('Acceptance Rate')
-# plt.grid()
-# plt.show()
+# Create subplot grid with more vertical space between plots
+gs = fig.add_gridspec(3, 2, height_ratios=[1, 1, 1], hspace=0.4)
 
-#plot energy history
-plt.plot(energy_history)
-plt.xlabel('Step')
-plt.ylabel('Energy, Hartree')
-plt.grid()
+# Plot 1: Energy history (1x2 slot)
+ax1 = fig.add_subplot(gs[0, :])
+ax1.plot(energy_history)
+ax1.set_xlabel('Step')
+ax1.set_ylabel('Energy, Hartree')
+ax1.grid(True)
+ax1.set_title('Energy History', pad=20)
+
+# Plot 2: Energy histogram (1x2 slot)
+ax2 = fig.add_subplot(gs[1, :])
+ax2.hist(local_energy, bins=1000)
+ax2.set_xlabel('Energy, Hartree')
+ax2.set_ylabel('Frequency')
+ax2.set_yscale('log')
+ax2.grid(True)
+ax2.set_title('Energy Histogram', pad=20)
+
+# Prepare data for plots 3 and 4
+walkers = walkers_tf.numpy
+sorted_args = np.argsort(local_energy)
+sorted_walkers = walkers[sorted_args]
+
+n_outliers = int(n_walkers * 0.005)
+outliers_bottom = sorted_walkers[:n_outliers]
+outliers_top = sorted_walkers[-n_outliers:]
+
+# Plot 3: Walkers in x-y plane (1x1 slot)
+ax3 = fig.add_subplot(gs[2, 0])
+all_walkers = walkers.reshape(-1, 3)
+ax3.scatter(all_walkers[:, 0], all_walkers[:, 1], s=1)
+outliers = np.concatenate((outliers_bottom, outliers_top))
+outliers = outliers.reshape(-1, 3)
+ax3.scatter(outliers[:, 0], outliers[:, 1], s=1.5, c='red')
+ax3.set_xlabel('x, a.u.')
+ax3.set_ylabel('y, a.u.')
+ax3.grid(True)
+ax3.set_title('Walkers in x-y Plane', pad=20)
+
+# Plot 4: Difference of electron positions (1x1 slot)
+ax4 = fig.add_subplot(gs[2, 1])
+diff = walkers[:, 0] - walkers[:, 1]
+diff = diff.reshape(-1, 3)
+ax4.scatter(diff[:, 0], diff[:, 1], s=1)
+diff_outlier = np.concatenate((outliers_bottom[:, 0] - outliers_bottom[:, 1], outliers_top[:, 0] - outliers_top[:, 1]))
+diff_outlier = diff_outlier.reshape(-1, 3)
+ax4.scatter(diff_outlier[:, 0], diff_outlier[:, 1], s=1.5, c='red')
+ax4.set_xlabel('x, a.u.')
+ax4.set_ylabel('y, a.u.')
+ax4.grid(True)
+ax4.set_title('Difference of Electron Positions', pad=20)
+
+# Adjust layout
+plt.tight_layout()
+fig.subplots_adjust(top=0.95, bottom=0.05, left=0.08, right=0.92, hspace=0.4)
+
 plt.show()
-
-
-
