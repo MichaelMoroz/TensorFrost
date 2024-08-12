@@ -198,10 +198,10 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 }
 
 //Get values from a tensor at the given indices
-Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices,
-                     bool unsafe) {
+Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices, IndexingMode mode) {
 	Tensor& out = MemoryOp("load", &tensor, indices);
-	if (unsafe) out.node_->indexing_mode_ = IndexingMode::Unsafe;
+	out.node_->indexing_mode_ = mode;
+	out.SetData({0});
 	out.SetDebugName(tensor.node_->debug_name);
 	return out;
 }
@@ -290,5 +290,6 @@ const Tensor* Node::GetTensor() const {
 	}
 	return tensor_;
 }
+
 
 }  // namespace TensorFrost

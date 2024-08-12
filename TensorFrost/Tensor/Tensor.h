@@ -422,7 +422,7 @@ public:
 	}
 
 	static Tensor& Load(const Tensor& tensor, const Tensors& indices = Tensors(),
-	                    bool unsafe = false);
+	                    IndexingMode mode = IndexingMode::Clamp);
 
 	static Tensor& Deallocate(const Tensor& tensor) {
 		return MemoryOp("deallocate", &tensor, {});
@@ -526,6 +526,25 @@ public:
 		axis = GetAxis(dims, axis);
 		Tensor& output = OpShape("dim_reverse", shape, &tensor);
 		output.SetData(axis);
+		return output;
+	}
+
+	static Tensor& SplitDim(const Tensor& tensor, int split_size = 128, int axis = -1) {
+		ShapeInfo shapeinfo = tensor.GetShapeInfo();
+		int dims = shapeinfo.dim;
+		Tensors shape = shapeinfo.GetTensors();
+		axis = GetAxis(dims, axis);
+		Tensors new_shape = Tensors();
+		for (int i = 0; i < dims; i++) {
+			if (i == axis) {
+				new_shape.push_back(&Tensor::Constant(split_size));
+				new_shape.push_back(&((*shape[i] + Tensor::Constant(split_size - 1)) / Tensor::Constant(split_size)));
+			} else {
+				new_shape.push_back(shape[i]);
+			}
+		}
+		Tensor& output = OpShape("dim_split", new_shape, &tensor);
+		output.SetData({(uint)axis, (uint)split_size});
 		return output;
 	}
 
@@ -821,11 +840,6 @@ public:
 	}
 
 	void operator=(const Tensor& other) = delete;
-	
-	static Tensor& ifcond(const Tensor& condition, const Tensor& ifTrue,
-	                      const Tensor& ifFalse) {
-		return Op("cond", &condition, &ifTrue, &ifFalse);
-	}
 
 	static Tensor& copy(const Tensor& tensor) {
 		return Op("copy", &tensor);

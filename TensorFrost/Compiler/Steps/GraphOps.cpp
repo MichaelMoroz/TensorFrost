@@ -44,7 +44,7 @@ void IR::CheckKernelShapes() {
 }
 
 
-void IR::CheckIR(string name, bool check_clustering, bool check_kernels) const {
+void IR::CheckIR(string name, bool check_clustering, bool check_kernels) {
 #ifdef NDEBUG
 	return;
 #endif
@@ -526,7 +526,7 @@ void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
 		if (is_memory || (is_in_a_kernel && is_outside)) {
 			// load the memory node before this node
 			ExecuteExpressionBefore(node, [&]() {
-				Tensor& loaded = Tensor::Load(*input_node->GetTensor(), indices, true);
+				Tensor& loaded = Tensor::Load(*input_node->GetTensor(), indices, IndexingMode::Unsafe);
 				node->args.UpdateArgument(arg, loaded.node_);
 			});
 		}
@@ -560,16 +560,16 @@ void IR::AddKernelGlobalLoadOperations() {
 		for (auto node : nodes_to_load) {
 			// load the memory node at the beginning of the kernel
 			ExecuteExpressionFirstChild(kernel, [&]() {
-				Tensor& loaded = Tensor::Load(*node->GetTensor(), {}, true);
+				Tensor& loaded = Tensor::Load(*node->GetTensor(), {}, IndexingMode::Unsafe);
 				for (auto [in, out] : load_arguments[node]) {
 					auto& [arg, from] = in;
 					out->args.UpdateArgument(arg, loaded.node_);
 				}
 			});
 		}
-
-		UpdateGraph();
 	}
+
+	UpdateGraph();
 }
 
 
@@ -661,7 +661,7 @@ void IR::AddKernelGlobalStoreOperations() {
 					// if not a memory or shape argument, then the memory needs to be
 					// loaded before the node
 					ExecuteExpressionBefore(to, [&]() {
-						Tensor& loaded = Tensor::Load(*mem->GetTensor(), {}, true);
+						Tensor& loaded = Tensor::Load(*mem->GetTensor(), {}, IndexingMode::Unsafe);
 						// the node must now use the loaded value
 						to->args.UpdateArgument(id, loaded.node_);
 					});
@@ -696,7 +696,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			if (from->op->HasAllTypes(OpProp::Memory)) {
 				// load the memory node before this node
 				ExecuteExpressionBefore(node.get(), [&]() {
-					Tensor& loaded = Tensor::Load(*from->GetTensor(), {}, true);
+					Tensor& loaded = Tensor::Load(*from->GetTensor(), {}, IndexingMode::Unsafe);
 					node->args.UpdateArgument(id, loaded.node_);
 				});
 			}
@@ -866,14 +866,14 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 		}
 	}
 
-	UpdateGraph();
+	UpdateGraph(kernel);
 
 	// remove all dim nodes
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
 
-	UpdateGraph();
+	UpdateGraph(kernel);
 }
 
 void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
@@ -985,7 +985,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 	return if_tensor;
 }
 
-void ComputeAddress(Node* node, vector<Tensor*> indices)
+void IR::ComputeAddress(Node* node, vector<Tensor*> indices)
 {
 	// get the input memory node
 	const Tensor* memory = node->args.GetTensor(ArgType::Memory);
@@ -1002,10 +1002,9 @@ void ComputeAddress(Node* node, vector<Tensor*> indices)
 		node->indexing_mode_ = IndexingMode::Unsafe; //we can guarantee that the index is in bounds
 	}
 
-	Tensor* flat_index = ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
+	auto flat_index= ComputeFlatIndex(memory_shape, indices, idx, memory_dim, node->indexing_mode_);
 
-	// TODO(Moroz): add different modes for clamping (e.g. clamp, wrap,
-	// mirror, zero)
+	// TODO(Moroz): add wrap mode
 
 	// remove the index node edges
 	node->args.RemoveArguments(ArgType::Index);
@@ -1092,16 +1091,13 @@ void IR::TryReplaceModificationsWithVersions()
 			ExecuteExpressionBefore(set_node, [&]() {
 				Tensor& copied = Tensor::copy(*input_value->GetTensor());
 				Node* copynode = copied.node_;
-				memory_node->MakeOutputsUseGivenNode(copynode, set_node->index_, true);
-				copynode->flags.copy_all_given(memory_node->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
-				copynode->debug_name = memory_node->debug_name;
-				memory_node->flags.remove(NodeProp::InputMemory, NodeProp::OutputMemory);
+				memory_node->ReplaceThisWithGivenNode(copynode, set_node->index_, true);
 				nodes_to_remove.insert(set_node);
 			});
 		}
-
-		UpdateGraph();
 	}
+
+	UpdateGraph();
 
 	// remove all nodes that are not used
 	for (auto* node : nodes_to_remove) {

@@ -60,6 +60,10 @@ public:
 		remove(args...);
 	}
 
+	void clear() {
+		data.fill(-1);
+	}
+
 	bool has(T flag) const {
 		return data[(int)flag] != -1;
 	}

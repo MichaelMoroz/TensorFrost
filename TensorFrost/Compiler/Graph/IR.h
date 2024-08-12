@@ -28,6 +28,8 @@ public:
 
 	IR() {
         root = new Node();
+		root->index_ = 0;
+		root->name = "root";
         root->initialize(nullptr, {}, "host", TFType::None, true);
         cursor = NodeIterator(root);
     }
@@ -99,7 +101,6 @@ public:
     		throw std::runtime_error("Cursor cannot be set to null");
 		}
     }
-
 	stack<Node*> scope_stack;
 
 	void EndScope() {
@@ -141,7 +142,7 @@ public:
 		EndScope();
 	}
 
-	void CheckIR(string name, bool check_clustering, bool check_kernels) const;
+	void CheckIR(string name, bool check_clustering, bool check_kernels);
 	string PrintListing(map<Node*, string> node_debug) const;
 	map<Node*, Node*> CopyNodes(set<Node*> nodes_to_copy,
 	                            unordered_map<Node*, Node*> argument_replacements,
@@ -161,6 +162,7 @@ public:
 	void OptimizeHost();
 	void OptimizeOperations();
 	void OptimizeKernelLoadOperations();
+	void OptimizeReductions();
 
 	unordered_set<Node *> GetDependencies(unordered_set<Node *> nodes);
 
@@ -190,25 +192,28 @@ public:
 	                                 int dims, Tensors kernel_shape);
 	Tensor* LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims,
 	                            Tensors kernel_shape);
+
+	void ComputeAddress(Node *node, vector<Tensor *> indices);
+
 	void FinalizeMemoryIndexing();
 	void RemoveUnusedKernels();
 	void CompileIR();
 
-	void UpdateGraph() const {
+	void UpdateGraph(const Node* uroot = nullptr) {
+		if (uroot == nullptr) {
+			uroot = root;
+		}
 		// update edges
-		for (auto node = begin(); !node.end(); node.next()) {
+		int index = uroot->index_;
+		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			node->UpdateEdges();
 			node->args.ClearOutputs();
-		}
-
-		int index = 0;
-		for (auto node = begin(); !node.end(); node.next()) {
 			node->index_ = index++;
 		}
 
 		map<Node*, string> invalid_nodes;
 		// check if graph is valid
-		for (auto node = begin(); !node.end(); node.next()) {
+		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			// if there are null inputs throw an error
 			for (auto& [id, n] : (*node)->args.inputs_) {
 				if (n == nullptr) {
@@ -225,12 +230,15 @@ public:
 		}
 
 		// update outputs
-		for (auto node = begin(); !node.end(); node.next()) {
-			node->args.UpdateOutputs();
+		vector<Node*> outputs;
+		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
+			for (auto& [id, from] : node->args.inputs_) {
+				from->args.AddOutput(id, node.get());
+			}
 		}
 
 		//update modified flags
-		for (auto node = begin(); !node.end(); node.next()) {
+		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			node->flags.remove(NodeProp::Modified);
 			//go over all outputs and check if they are modifiers
 			for (auto [edge, to] : node->args.outputs_) {

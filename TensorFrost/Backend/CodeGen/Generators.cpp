@@ -189,8 +189,10 @@ inline string Tensor::GetConstantString() const {
 				return to_string(AsInt(node_->data[0]));
 			case TFType::Uint:
 				return to_string(node_->data[0]) + "u";
+			case TFType::Bool:
+				return node_->data[0] == 0 ? "false" : "true";
 			default:
-				return "";
+				throw std::runtime_error("Unsupported constant type");
 		}
 	} else {
 		return "";

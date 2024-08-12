@@ -41,14 +41,14 @@ const vector<Operation> operations = {
 
     //Algorithms
     //Reduction
-    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // sum of the last dimension
-    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // length(norm) of the last dimension
-    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // max of the last dimension
-    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // min of the last dimension
-    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // mean of the last dimension
-    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // product of the last dimension
-    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff}), // any of the last dimension
-    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff}), // all of the last dimension
+    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // sum of the last dimension
+    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // length(norm) of the last dimension (cant just split dimensions so, didnt add reduction prop)
+    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // max of the last dimension
+    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // min of the last dimension
+    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // mean of the last dimension
+    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // product of the last dimension
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}), // any of the last dimension
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}), // all of the last dimension
 	//Scan
 	Operation("dim_prefix_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
     //Matrix
@@ -64,7 +64,7 @@ const vector<Operation> operations = {
 	// Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("tile_reduce", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("dim_concat", {"ff_f", "uu_u", "ii_i", "bb_b"}, 0, "", {OpProperty::Algorithm}),
-	// Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
+	Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	// Operation("dim_pad", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("split_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("merge_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),

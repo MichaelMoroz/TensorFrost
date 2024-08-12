@@ -160,7 +160,7 @@ void IR::OptimizeOperations()
 			// if computed optimized result, replace all node references with it
 			if (result != nullptr)
 			{
-				node->MakeOutputsUseGivenNode(result->node_);
+				node->ReplaceThisWithGivenNode(result->node_, -1, false, false);
 			}
 		});
 	}
@@ -423,6 +423,45 @@ void IR::UnrollAtomicOperations() {
 	UpdateGraph();
 }
 
+#define MIN_SPLIT_SIZE 1024
+#define SPLIT_DIM_SIZE 128
+
+void IR::OptimizeReductions() {
+	vector<Node*> reductions = GetNodesOfType(OpProp::Algorithm, OpProp::Reduction);
+
+	vector<Node*> nodes_to_remove;
+	for (auto node : reductions) {
+		int axis = (int)node->data[0];
+		//get the input tensor
+		const Tensor* input = node->args.Get(ArgType::Input, 0)->GetTensor();
+		//get the shape of the tensor at the reduction axis
+		const Tensor* tensor = input->node_->args.Get(ArgType::Shape, axis)->GetTensor();
+		//try to get the constant value
+		int axis_value = tensor->TryGetConstant();
+		if (axis_value < 0) {
+			continue;
+		}
+		//if size of the axis is less than the minimum split size, then do not split
+		if (axis_value < MIN_SPLIT_SIZE) {
+			continue;
+		}
+
+		ExecuteExpressionAfter(node, [&]() {
+			//split dimension into smaller chunks and reduce them sequentially
+			const Tensor* split = &Tensor::SplitDim(*input, SPLIT_DIM_SIZE, axis);
+			Tensor* result = &Tensor::ReductionOP(node->name, *split, axis, false);
+			result = &Tensor::ReductionOP(node->name, *result, axis, false);
+			node->ReplaceThisWithGivenNode(result->node_);
+			nodes_to_remove.push_back(node);
+		});
+	}
+
+	for (auto node : nodes_to_remove) {
+		RemoveNode(node);
+	}
+
+	UpdateGraph();
+}
 
 void IR::UnrollKernelDimensions() {
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -472,7 +511,6 @@ void IR::UnrollKernelDimensions() {
 		}
 
 		////modify the kernel to remove the unused dimensions
-
 		struct KernelData {
 			set<int> unused_dims;
 			Tensors shape;
@@ -554,7 +592,7 @@ void IR::UnrollKernelDimensions() {
 						if (node->name == "dim_id") {
 							int dim = node->data[0];
 							if(kernels[k].old_dim_to_node.contains(dim)) {
-								node->MakeOutputsUseGivenNode(kernels[k].old_dim_to_node[dim]);
+								node->ReplaceThisWithGivenNode(kernels[k].old_dim_to_node[dim]);
 							} else {
 								throw std::runtime_error("Could not find new dim_id node for dimension " + to_string(dim) + " when optimizing kernel by unrolling dimensions");
 							}

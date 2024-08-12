@@ -2,7 +2,40 @@ import TensorFrost as tf
 import numpy as np
 import matplotlib.pyplot as plt
 
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
+
+def Sort(keys, element_count):
+    tf.region_begin('Sort')
+    log2N = tf.ceil(tf.log2(tf.float(element_count)))
+    Nround = tf.int(tf.exp2(log2N))
+    sort_id = tf.indices([Nround/2])[0]
+    steps = tf.int(log2N*(log2N + 1.0)/2.0)
+
+    with tf.loop(steps) as step:
+        def getBitonicElementPair(id, step):
+            j = tf.floor(tf.sqrt(tf.float(2*step) + 1.0) - 0.5)
+            n = tf.round(tf.float(step) - 0.5*j*(j+1.0))
+            B = tf.int(tf.round(tf.exp2(j-n)))
+            mask = tf.select(n < 0.5, 2*B - 1, B)
+            e1 = id%B + 2*B*(id/B)
+            e2 = e1 ^ mask
+            return e1, e2
+        e1, e2 = getBitonicElementPair(sort_id, step)
+
+        with tf.if_cond((e1 < element_count) & (e2 < element_count)):
+            key1, key2 = keys[e1], keys[e2]
+
+            #sort by descending order
+            with tf.if_cond(key1 < key2):
+                keys[e1] = key2
+                keys[e2] = key1
+
+    tf.region_end('Sort')
+
+    return keys
+
+def sqr(x):
+    return x * x
 
 class PSI(tf.Module):
     def __init__(self, atom_n = 1, electron_n = 2):
@@ -14,7 +47,7 @@ class PSI(tf.Module):
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
         self.weights = tf.Parameter([3], tf.float32)
-        self.dx = 1e-2
+        self.dx = 5e-3
         self.eps = 1e-6
 
     def metropolis_dx(self):
@@ -42,39 +75,42 @@ class PSI(tf.Module):
     def kinetic_energy(self, e_pos):
 
         #fd sampling (TODO: use forward mode autodiff)
-        # n_samples = self.electron_n * 3 * 2 + 1
-        # b, s, i, c = tf.indices([e_pos.shape[0], n_samples, self.electron_n, 3])
-        # eid = (s - 1) / 6 #electron index
-        # did = ((s - 1) / 2) % 3 #dimension index
-        # sid = (s - 1)  % 2 #forward or backward
-        # deltaD = tf.select(sid == 0, self.dx, -self.dx)
-        # pos = tf.unsqueeze(e_pos, axis=1) + tf.select((did == c) & (s > 0) & (eid == i), deltaD, 0.0)
-        # pos = tf.reshape(pos, [e_pos.shape[0] * n_samples, self.electron_n, 3])
+        n_samples = self.electron_n * 3 * 2 + 1
+        b, s, i, c = tf.indices([e_pos.shape[0], n_samples, self.electron_n, 3])
+        eid = (s - 1) / 6 #electron index
+        did = ((s - 1) / 2) % 3 #dimension index
+        sid = (s - 1)  % 2 #forward or backward
+        deltaD = tf.select(sid == 0, self.dx, -self.dx)
+        pos = tf.unsqueeze(e_pos, axis=1) + tf.select((did == c) & (s > 0) & (eid == i), deltaD, 0.0)
+        pos = tf.reshape(pos, [e_pos.shape[0] * n_samples, self.electron_n, 3])
 
-        # logpsi = self.log_psi(pos)
+        logpsi = self.log_psi(pos)
 
-        # logpsi = tf.reshape(logpsi, [e_pos.shape[0], n_samples])
+        logpsi = tf.reshape(logpsi, [e_pos.shape[0], n_samples])
 
-        # #laplacian
-        # b, = tf.indices([e_pos.shape[0]])
-        # kinetic = 0.0
-        # psi_center = logpsi[b, 0]
-        # for electron in range(self.electron_n):
-        #     for d in range(3):
-        #         psi0 = logpsi[b, 2 * electron * 3 + 2 * d + 1]
-        #         psi1 = logpsi[b, 2 * electron * 3 + 2 * d + 2]
-        #         kinetic += - 0.5 * (psi0 + psi1 - 2.0 * psi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (self.dx * self.dx)
-
-        psi_center = self.log_psi(e_pos)
-        b, i, j = e_pos.indices
+        #laplacian
+        b, = tf.indices([e_pos.shape[0]])
         kinetic = 0.0
+        psi_center = logpsi[b, 0]
         for electron in range(self.electron_n):
             for d in range(3):
-                psi0 = self.log_psi(e_pos + tf.select((i == electron) & (j == d), self.dx, 0.0))
-                psi1 = self.log_psi(e_pos - tf.select((i == electron) & (j == d), self.dx, 0.0))
-                kinetic += - 0.5 * (psi0 + psi1 - 2.0 * psi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (self.dx * self.dx)
+                psi0 = logpsi[b, 2 * electron * 3 + 2 * d + 1]
+                psi1 = logpsi[b, 2 * electron * 3 + 2 * d + 2]
+                kinetic += (psi0 + psi1 - 2.0 * psi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (self.dx * self.dx)
 
-        return kinetic
+        return - 0.5 * kinetic
+
+        # b, c = tf.indices([e_pos.shape[0], self.electron_n * 3])
+        # electron = c / 3
+        # d = c % 3
+        # psi0 = logpsi[b, 6 * electron + 2 * d + 1]
+        # psi1 = logpsi[b, 6 * electron + 2 * d + 2]
+        # component_sum = tf.sum((psi0 + psi1 + 0.25 * (psi0 - psi1) * (psi0 - psi1)))
+
+        # b, = tf.indices([e_pos.shape[0]])
+        # psi_center = logpsi[b, 0]
+
+        # return (float(3 *self.electron_n) * psi_center - 0.5 * component_sum) / (self.dx * self.dx)
 
     def electron_potential(self, e_pos):
         b, = tf.indices([e_pos.shape[0]])
@@ -83,13 +119,15 @@ class PSI(tf.Module):
         #compute the nuclei potential sum for each electron*nuclei
         for electron in range(self.electron_n):
             for n in range(self.atom_n):
-                r = tf.sqrt((e_pos[b, electron, 0] - self.atoms[n, 0])**2.0 + (e_pos[b, electron, 1] - self.atoms[n, 1])**2.0 + (e_pos[b, electron, 2] - self.atoms[n, 2])**2.0)
+                #r = tf.sqrt((e_pos[b, electron, 0] - self.atoms[n, 0])**2.0 + (e_pos[b, electron, 1] - self.atoms[n, 1])**2.0 + (e_pos[b, electron, 2] - self.atoms[n, 2])**2.0)
+                r = tf.sqrt(sqr(e_pos[b, electron, 0] - self.atoms[n, 0]) + sqr(e_pos[b, electron, 1] - self.atoms[n, 1]) + sqr(e_pos[b, electron, 2] - self.atoms[n, 2]))
                 V -= self.atoms[n, 3] / tf.max(r, self.eps)
 
         #compute the electron-electron potential sum
         for electron in range(self.electron_n):
             for f in range(electron + 1, self.electron_n):
-                r = tf.sqrt((e_pos[b, electron, 0] - e_pos[b, f, 0])**2.0 + (e_pos[b, electron, 1] - e_pos[b, f, 1])**2.0 + (e_pos[b, electron, 2] - e_pos[b, f, 2])**2.0)
+                #r = tf.sqrt((e_pos[b, electron, 0] - e_pos[b, f, 0])**2.0 + (e_pos[b, electron, 1] - e_pos[b, f, 1])**2.0 + (e_pos[b, electron, 2] - e_pos[b, f, 2])**2.0)
+                r = tf.sqrt(sqr(e_pos[b, electron, 0] - e_pos[b, f, 0]) + sqr(e_pos[b, electron, 1] - e_pos[b, f, 1]) + sqr(e_pos[b, electron, 2] - e_pos[b, f, 2]))
                 V += 1.0 / tf.max(r, self.eps)
 
         return V
@@ -100,7 +138,8 @@ class PSI(tf.Module):
         #compute the potential between nuclei
         for n in range(self.atom_n):
             for m in range(n + 1, self.atom_n):
-                r = tf.sqrt((self.atoms[n, 0] - self.atoms[m, 0])**2 + (self.atoms[n, 1] - self.atoms[m, 1])**2 + (self.atoms[n, 2] - self.atoms[m, 2])**2)
+                #r = tf.sqrt((self.atoms[n, 0] - self.atoms[m, 0])**2 + (self.atoms[n, 1] - self.atoms[m, 1])**2 + (self.atoms[n, 2] - self.atoms[m, 2])**2)
+                r = tf.sqrt(sqr(self.atoms[n, 0] - self.atoms[m, 0]) + sqr(self.atoms[n, 1] - self.atoms[m, 1]) + sqr(self.atoms[n, 2] - self.atoms[m, 2]))
                 V += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
 
         return V
@@ -112,11 +151,15 @@ class PSI(tf.Module):
         return self.local_energy(e_pos)
 
     def energy(self, e_pos):
-        return self.batched_mean(self.forward(e_pos))
+        return tf.mean(self.forward(e_pos))
 
     def loss(self, e_pos, _):
         local_energy = self.forward(e_pos)
-        return self.variance(local_energy)
+        x_median = self.median(local_energy)
+        x_clip = tf.clamp(local_energy, x_median - 5.0, x_median + 5.0)
+        x_mean = tf.mean(x_clip)
+        x_var = tf.mean(sqr(x_clip - x_mean))
+        return x_var + x_mean
 
     def prob_density(self, e_pos):
         return tf.exp(2.0 * self.log_psi(e_pos))
@@ -137,19 +180,9 @@ class PSI(tf.Module):
         x, y = self.rand(shape), self.rand(shape)
         return tf.sqrt(-2.0 * tf.log(x)) * tf.cos(2.0 * np.pi * y)
 
-    def split_dim(self, x, M):
-        N = x.shape[0]
-        i, j = tf.indices([N/M, M])
-        return x[i * M + j]
-
-    def batched_mean(self, x):
-        batch_size = 128
-        x_reshaped = tf.reshape(x, [x.shape[0] / batch_size, batch_size]) #self.split_dim(x, batch_size)
-        return tf.mean(tf.mean(x_reshaped))
-
-    def variance(self, x):
-        x_mean = tf.mean(x)
-        return tf.mean((x - x_mean) * (x - x_mean)) + x_mean
+    def median(self, x):
+        x_sorted = Sort(tf.copy(x), x.shape[0])
+        return x_sorted[x.shape[0] / 2].detach_grad()
 
     def metropolis_step(self, e_pos):
         old_prob = self.prob_density(e_pos)
@@ -160,19 +193,25 @@ class PSI(tf.Module):
         ratio = new_prob / old_prob
 
         accept = self.rand(ratio.shape) < ratio
-        acceptance_rate = self.batched_mean(tf.float(accept))
+        acceptance_rate = tf.mean(tf.float(accept))
         accept = tf.unsqueeze(tf.unsqueeze(accept))
         e_pos = tf.select(accept, e_pos_new, e_pos)
 
         self.inc_step()
         return e_pos, acceptance_rate
 
+
+lr = 0.01
+n_walkers = 8192
+n_steps = 128
+n_steps_per_optimization = 16
+target_acceptance_rate = 0.5
+
 def MetropolisStep():
     wavefunction = PSI()
     wavefunction.initialize_input()
 
-    walkers = tf.input([-1, wavefunction.electron_n, 3], tf.float32)
-    n_walkers = walkers.shape[0]
+    walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
 
     new_walkers, acceptance_rate = wavefunction.metropolis_step(walkers)
 
@@ -187,23 +226,22 @@ def ComputeEnergy():
     wavefunction = PSI()
     wavefunction.initialize_input()
 
-    walkers = tf.input([-1, wavefunction.electron_n, 3], tf.float32)
-    n_walkers = walkers.shape[0]
+    walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
 
     return wavefunction.energy(walkers)
 
-metropolis_step = tf.compile(MetropolisStep)
+compute_energy = tf.compile(ComputeEnergy)
 
-lr = 0.001
+def GetModelOptimizer():
+    wavefunction = PSI()
+    optimizer = tf.optimizers.adam(wavefunction, lr, beta1 = 0.0)
+    return optimizer, wavefunction
 
 def OptimizeEnergy():
-    wavefunction = PSI()
-    optimizer = tf.optimizers.sgd(wavefunction, lr)
+    optimizer, wavefunction = GetModelOptimizer()
     optimizer.initialize_input()
 
-    walkers = tf.input([-1, wavefunction.electron_n, 3], tf.float32)
-    n_walkers = walkers.shape[0]
-
+    walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
     loss = optimizer.step(walkers, None)
     params = optimizer.parameters()
     params.append(loss)
@@ -211,8 +249,7 @@ def OptimizeEnergy():
 
 optimize_energy = tf.compile(OptimizeEnergy)
 
-wavefunction = PSI()
-optimizer = tf.optimizers.sgd(wavefunction, lr)
+optimizer, wavefunction = GetModelOptimizer()
 optimizer.initialize_parameters()
 optimizer.net.params = tf.tensor(np.array([0.5]).astype(np.float32))
 optimizer.net.atoms = tf.tensor(np.array([[0.0, 0.0, 0.0, 2.0]]).astype(np.float32))
@@ -220,16 +257,12 @@ optimizer.net.weights = tf.tensor(np.array([1.0, 1.2, 0.3]))  #tf.tensor(np.arra
 optimizer.net.step = tf.tensor(np.array([0], np.int32))
 optimizer.net.seed = tf.tensor(np.array([0], np.uint32))
 
-n_walkers = 16384
-n_steps = 2048
-n_steps_per_optimization = 16
-target_acceptance_rate = 0.4
-
 params = wavefunction.parameters()
 for param in params:
     print(param.numpy)
 
-walkers = 0.25*np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
+np.random.seed(0)
+walkers = np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
 walkers_tf = tf.tensor(walkers)
 
 acceptance_rate_history = []
@@ -242,10 +275,12 @@ def list_parameters(optimizer):
 for i in range(n_steps):
     if(i == 0): tf.renderdoc_start_capture()
 
-    out = metropolis_step(optimizer.net, walkers_tf)
+    out = metropolis_step(wavefunction, walkers_tf)
     walkers_tf = out[-2]
     acceptance_rate = out[-1]
-    optimizer.net.update_parameters(out[:-2])
+    wavefunction.update_parameters(out[:-2])
+
+    #list_parameters(optimizer)
 
     acceptance_rate = acceptance_rate.numpy
     acceptance_rate_history.append(acceptance_rate[0])
@@ -263,24 +298,30 @@ for i in range(n_steps):
         energy_history.append(loss)
         print("Step: ", i, " Energy: ", loss)
 
-    if(i == 1): tf.renderdoc_end_capture()
+    #list_parameters(optimizer)
+
+    if(i == 0): tf.renderdoc_end_capture()
+
+#compute the final energy
+energy = compute_energy(wavefunction, walkers_tf)
+print("Final Energy: ", energy.numpy)
 
 list_parameters(optimizer)
 
 #print average acceptance rate
 print("Average Acceptance Rate: ", np.mean(acceptance_rate_history))
 
-#plot acceptance rate
-plt.plot(acceptance_rate_history)
-plt.xlabel('Step')
-plt.ylabel('Acceptance Rate')
-plt.grid()
-plt.show()
+# #plot acceptance rate
+# plt.plot(acceptance_rate_history)
+# plt.xlabel('Step')
+# plt.ylabel('Acceptance Rate')
+# plt.grid()
+# plt.show()
 
 #plot energy history
 plt.plot(energy_history)
 plt.xlabel('Step')
-plt.ylabel('Energy')
+plt.ylabel('Energy, Hartree')
 plt.grid()
 plt.show()
 

@@ -27,7 +27,7 @@ void IR::RemoveNode(Node* node) {
     }
 }
 
-#define PROFILE_COMPILATION
+//#define PROFILE_COMPILATION
 
 void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
 #ifdef PROFILE_COMPILATION
@@ -69,19 +69,24 @@ void IR::CompileIR()
 	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); });
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+
 	RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
+
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 	RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
+	RunCompilationPass("OptimizeReductions", [&]() { OptimizeReductions(); }, true);
 	RunCompilationPass("InsertAlgorithmicPrimitives", [&]() { InsertAlgorithmicPrimitives(); }, true);
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+
 	RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); });
 	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); }, true);
 	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
 	RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
 	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
 	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+
 	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(1); });
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });

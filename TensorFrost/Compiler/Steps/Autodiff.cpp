@@ -108,6 +108,16 @@ public:
 	}
 };
 
+int GetGradAxis(const Tensor& out, const Tensor& grad) {
+	int axis = (int)out.node_->data[0];
+	int dim1 = out.GetDimension();
+	int dim2 = grad.GetDimension();
+	axis = out.GetDimension() - axis - 1;
+	axis = std::max(dim1, dim2) - axis - 1;
+	return axis;
+}
+
+
 map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> gradient_functions =
 {
 	//elementwise operations
@@ -194,7 +204,7 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(Tensor::Sqeeze(grad, out.node_->data[0]));
 	}},
 	{"dim_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Unsqueeze(grad, out.node_->data[0]));
+		grads.Add(Tensor::Unsqueeze(grad, GetGradAxis(out, grad)));
 	}},
 	{"dim_mean", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		int axis = (int)out.node_->data[0];
@@ -203,13 +213,8 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
 	}},
 	{"dim_norm", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		int axis = (int)out.node_->data[0];
-		int dim1 = out.GetDimension();
-		int dim2 = grad.GetDimension();
-		axis = out.GetDimension() - axis - 1;
-		axis = std::max(dim1, dim2) - axis - 1;
 		//TODO: store axis from the right instead of the left
-		Tensor& unsq = Tensor::Unsqueeze(grad/out, axis);
+		Tensor& unsq = Tensor::Unsqueeze(grad/out, GetGradAxis(out, grad));
 		grads.Add(unsq * in[0]);
 	}},
 	{"dim_max", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
@@ -413,20 +418,11 @@ void IR::ComputeAutodiff()
 	//replace all gradients with computed gradients
 	for (auto gradient : gradients) {
 		Node* computed_grad = grad_to_computed_grad[gradient];
-
 		//replace the node with the sum
-		gradient->MakeOutputsUseGivenNode(computed_grad);
-
-		//copy over all memory flags to the new node
-		computed_grad->flags.copy_all_given(gradient->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
-
-		if (gradient->debug_name != "") {
-			computed_grad->debug_name = gradient->debug_name;
-		}
+		gradient->ReplaceThisWithGivenNode(computed_grad);
 
 		//mark the node for removal
 		nodes_to_remove.insert(gradient);
-
 		UpdateGraph();
 	}
 

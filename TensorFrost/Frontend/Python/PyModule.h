@@ -247,7 +247,7 @@ public:
 
             for (auto& param : module.get_attributes_of_type(AttributeType::Parameter)) {
                 if (index >= py::len(params)) {
-                    throw py::index_error("Not enough values provided to update all parameters");
+                    throw py::index_error("Provided more than " + std::to_string(index) + " values, but expected " + std::to_string(py::len(params)));
                 }
                 module.setattr(param.first, params[index]);
                 index++;
@@ -257,7 +257,7 @@ public:
                 ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
                 for (auto& param : param_array._parameters) {
                     if (index >= py::len(params)) {
-                        throw py::index_error("Not enough values provided to update all parameters");
+                        throw py::index_error("Provided more than " + std::to_string(index) + " values, but expected " + std::to_string(py::len(params)));
                     }
                     param_array.setitem(param.first, params[index]);
                     index++;

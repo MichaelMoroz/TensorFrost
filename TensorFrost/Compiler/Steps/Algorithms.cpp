@@ -53,7 +53,7 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 		load_index[axis] = &i;
 
 		// load the value
-		Tensor* value = &Tensor::Load(*array, load_index, true);
+		Tensor* value = &Tensor::Load(*array, load_index, IndexingMode::Unsafe);
 
 		if (element_op != nullptr) {
 			value = element_op(value);
@@ -113,7 +113,7 @@ Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*
 	[&](const Tensor& i) {
 		load_index[axis] = &i;
 		// load the value
-		Tensor* value = &Tensor::Load(*array, load_index, true);
+		Tensor* value = &Tensor::Load(*array, load_index, IndexingMode::Unsafe);
 		reduced->Set(*scan_op(reduced, value));
 		Tensor::Store(*scan_result, *reduced, load_index, true);
 	});
@@ -249,7 +249,7 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 		}
 	}
 
-	Tensor& loaded = Tensor::Load(*array, perm_indices, true);
+	Tensor& loaded = Tensor::Load(*array, perm_indices, IndexingMode::Unsafe);
 	loaded.SetDebugName("transposed");
 	return &loaded;
 }
@@ -266,9 +266,46 @@ Tensor* ReverseDim(const Tensor* array, int axis) {
 			indices.push_back(&Tensor::Index(shape, i));
 		}
 	}
-	Tensor& loaded = Tensor::Load(*array, indices, true);
+	Tensor& loaded = Tensor::Load(*array, indices, IndexingMode::Unsafe);
 	loaded.SetDebugName("reversed");
 	return &loaded;
+}
+
+Tensor* ConstantOutOfBounds(const Tensor* array, Tensors indices, uint constant) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	Tensors shape = shapeinfo.GetTensors();
+	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
+	for (int i = 0; i < dims; i++) {
+		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
+		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
+	}
+	is_out_of_bounds->SetDebugName("out_of_bounds");
+	Tensor* value = &Tensor::Constant(constant, array->node_->type);
+	Tensor* loaded = &Tensor::Load(*array, indices);
+	return &Tensor::select(*is_out_of_bounds, *value, *loaded);
+}
+
+Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int split_size) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	axis = GetAxis(dims, axis);
+	Tensors new_shape = splitted->GetShape();
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims; i++) {
+		if (i == axis) {
+			Tensor* index1 = &Tensor::Index(new_shape, i);
+			Tensor* index2 = &Tensor::Index(new_shape, i + 1);
+			indices.push_back(&(*index1 * (*new_shape[i + 1]) + *index2));
+		} else if(i < axis) {
+			indices.push_back(&Tensor::Index(new_shape, i));
+		} else {
+			indices.push_back(&Tensor::Index(new_shape, i + 1));
+		}
+	}
+	Tensor* loaded = ConstantOutOfBounds(array, indices, 0);
+	loaded->SetDebugName("split");
+	return loaded;
 }
 
 Tensor* ComputeDot(const Tensor* a, const Tensor* b, int axis) {
@@ -357,8 +394,8 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 		indices_b.push_back(indices_c[max_dim - 1]);
 
 		// load the value
-		Tensor* value = &(Tensor::Load(*a, indices_a, true) *
-		                  Tensor::Load(*b, indices_b, true));
+		Tensor* value = &(Tensor::Load(*a, indices_a, IndexingMode::Unsafe) *
+		                  Tensor::Load(*b, indices_b, IndexingMode::Unsafe));
 
 		c->Set(*c + *value);
 	});
@@ -452,23 +489,18 @@ void IR::InsertAlgorithmicPrimitives() {
 				result->SetDebugName("squeezed");
 			} else if (node->name == "dim_reverse") {
 				result = ReverseDim(inputs[0], axes[0]);
+			} else if (node->name == "dim_split") {
+				result = SplitDim(inputs[0], node->GetTensor(), axes[0], axes[1]);
 			} else {
 				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
 			}
 
 			//replace the node with the sum
-			node->MakeOutputsUseGivenNode(result->node_);
+			node->ReplaceThisWithGivenNode(result->node_);
 
 			ShapeCompareResult shape_result = CompareShape(node, result->node_, true);
 			if (!shape_result.compatible) {
 				throw std::runtime_error("Algorithmic primitive " + node->name + " at " + node->debug_name + " has incompatible shapes");
-			}
-
-			//copy over all memory flags to the new node
-			result->node_->flags.copy_all_given(node->flags, {NodeProp::InputMemory, NodeProp::OutputMemory});
-
-			if (node->debug_name != "") {
-				result->node_->debug_name = node->debug_name;
 			}
 		});
 

@@ -32,8 +32,7 @@ enum class IndexingMode {
 	Unsafe,
 	Clamp,
 	Repeat,
-	Mirror,
-	Constant,
+	Mirror
 };
 
 struct TFTypeDesc {
@@ -44,6 +43,7 @@ struct TFTypeDesc {
 };
 
 string NodeFlagsToString(NodeProp flag);
+string IndexingModeToString(IndexingMode mode);
 using NodeProps = FlagSet<NodeProp, (int)NodeProp::Count>;
 
 class Node {
@@ -66,230 +66,53 @@ class Node {
 	IndexingMode indexing_mode_; //clamp unless otherwise specified
 	vector<int> group_size; //kernel properties
 
-
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
 		flags.set(NodeProp::Placeholder);
 		debug_index = global_index++;
+		indexing_mode_ = IndexingMode::Clamp;
 	}
 
     bool valid() {
         return !flags.has(NodeProp::Placeholder);
     }
 
-	void UpdateEdges() {
-		if (!child) child = new Node(nullptr, this);
-		if (!next) next = new Node(this, parent);
-		if (child->valid()) {
-			child->parent = this;
-		}
-		if (next->valid()) {
-			next->prev = this;
-			next->parent = parent;
-		}
-	}
+	void UpdateEdges();
 
-    //initialize and create next/child placeholders
-    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type, bool set_static = false) {
-        if(valid()) {
-            throw runtime_error("Node already initialized");
-        }
-		UpdateEdges();
-        flags.remove(NodeProp::Placeholder);
+	//initialize and create next/child placeholders
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type, bool set_static = false);
 
-		tensor_ = tensor;
-		type = new_type;
-		args.AddArguments(std::move(new_args));
-		args.UpdateOutputs();
-		flags.set(NodeProp::IsStatic, set_static);
-		name = std::move(new_name);
-		op = FindOperation(name);
-		CheckNode();
-		indexing_mode_ = IndexingMode::Clamp;
-    }
-
-	void CopyProperties(Node* other) {
-		name = other->name;
-		debug_name = other->debug_name;
-		indexing_mode_ = other->indexing_mode_;
-		group_size = other->group_size;
-		type = other->type;
-
-		flags.copy_all(other->flags);
-	}
-
-	void CopyMetadata(Node* other) {
-		debug_name = other->debug_name;
-		indexing_mode_ = other->indexing_mode_;
-		group_size = other->group_size;
-
-		flags.copy_all_except(other->flags, {NodeProp::Modified});
-	}
+	void CopyProperties(Node* other);
+	void CopyMetadata(Node* other);
 
 	const Tensor* GetTensor() const;
-
-	int ComputeDepth(Node* root = nullptr) const {
-		int depth = 0;
-		for (const Node* node = this; node != root; node = node->parent) {
-			depth++;
-		}
-		return depth;
-	}
-
-	bool HasParent(Node* node)
-	{
-		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
-			if (cur_parent == node) {
-				return true;
-			}
-		}
-		return false;
-	}
+	int ComputeDepth(Node* root = nullptr) const;
+	bool HasParent(Node* node) const;
 
 	/// <summary>
 	/// Make all outputs of this node use the given node as input, assuming that the output is further than min_index
 	/// </summary>
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
-	void MakeOutputsUseGivenNode(Node* replacement, int min_index = -1, bool make_modified = false) {
-		for (auto [edge, to] : args.outputs_) {
-			auto& [id, from] = edge;
-			if (to->index_ >= min_index) {
-				if(make_modified) {
-					replacement->flags.set(NodeProp::Modified);
-				}
-				to->args.UpdateArgument(id, replacement);
-			}
-		}
-	}
+	void ReplaceThisWithGivenNode(Node* replacement, int min_index = -1, bool make_modified = false, bool copy_metadata = true);
 
-	Node* GetParent(string name)
-	{
-		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
-			if (cur_parent->name == name) {
-				return cur_parent;
-			}
-		}
-		return this;
-	}
-
+	Node* GetParent(string name);
 	Node* GetChild(string name);
 
 	//get the parent that has a common parent with another node
-	Node* GetCommonParent(Node* other) {
-		for (Node* cur_parent = this; cur_parent != nullptr; cur_parent = cur_parent->parent) {
-			if (cur_parent->parent == other->parent) {
-				return cur_parent;
-			}
-		}
-		for (Node* cur_parent = other; cur_parent != nullptr; cur_parent = cur_parent->parent) {
-			if (cur_parent->parent == this->parent) {
-				return cur_parent;
-			}
-		}
-		for (Node* cur_parent1 = this; cur_parent1 != nullptr;
-		     cur_parent1 = cur_parent1->parent) {
-			for (Node* cur_parent2 = other; cur_parent2 != nullptr;
-			     cur_parent2 = cur_parent2->parent) {
-				if (cur_parent1->parent == cur_parent2->parent) {
-					return cur_parent1;
-				}
-			}
-		}
-		throw std::runtime_error("No common parent found");
-	}
+	Node* GetCommonParent(Node* other);
 
 	Node* GetLastChild();
 
 	//checks if the other node has all parents as this node
-	bool HasCommonParents(Node* other) {
-		for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
-			if (!other->HasParent(cur_parent)) {
-				return false;
-			}
-		}
-		return true;
-	}
+	bool HasCommonParents(Node* other) const;
 
-	bool HasParent(string name) {
-		return GetParent(name) != this;
-	}
+	bool HasParent(string name);
+	bool HasChild(string name);
 
-	bool HasChild(string name) {
-		return GetChild(name) != nullptr;
-	}
-
-	void SetMemoryType(NodeProp memory_type, int index = 0) {
-		flags.set(memory_type, index);
-	}
-
-	void CheckNode() const {
-		// must have operation
-		if (op == nullptr) {
-			throw std::runtime_error("Operation object not found");
-		}
-
-		// must have tensor
-		if (tensor_ == nullptr && !flags.has(NodeProp::IsStatic)) {
-			throw std::runtime_error("Tensor not found");
-		}
-	}
-
-	Node* GetLastVersion(Node* latest_node) {
-		//find last store/scatter operation
-		Node* last_modifier = this;
-		int last_index = -1;
-		Node* loop_node = latest_node->GetParent("loop");
-		bool has_loop = loop_node != latest_node;
-		for (auto [edge, to] : args.outputs_) {
-			auto& [id, from] = edge;
-			bool is_memory = false;
-			if (id.first != ArgType::Memory) {
-				is_memory = true;
-			}
-			if (is_memory) {
-				continue;
-			}
-			if (to->op->HasAllTypes(OpProp::Modifier)) {
-				if (to->index_>last_index) {
-					// either find the last modifier or the last memory node
-					// or if there is a loop, find the last modifier inside the loop (i.e.
-					// the previous iteration's modifier)
-					// if the loop is scalar, then it doesn't matter
-					bool before_latest = to->index_ < latest_node->index_;
-					bool inside_loop = has_loop && to->HasParent(loop_node);
-					bool not_same = to != latest_node;
-					if ((before_latest || inside_loop) && not_same)
-					{
-						last_index = to->index_;
-						last_modifier = to;
-					}
-				}
-			}
-		}
-		return last_modifier;
-	}
-
-	Node* GetFinalVersion() {
-		Node* final_version = this;
-		int last_index = -1;
-		for (auto [edge, to] : args.outputs_) {
-			auto& [id, from] = edge;
-			bool is_memory = false;
-			if (id.first != ArgType::Memory) {
-				is_memory = true;
-			}
-			if (is_memory) {
-				continue;
-			}
-			if (to->op->HasAllTypes(OpProp::Modifier) && !to->op->HasAllTypes(OpProp::MemoryOp)) {
-				if (to->index_ > last_index) {
-					last_index = to->index_;
-					final_version = to;
-				}
-			}
-		}
-		return final_version;
-	}
+	void SetMemoryType(NodeProp memory_type, int index = 0);
+	void CheckNode() const;
+	Node* GetLastVersion(Node* latest_node);
+	Node* GetFinalVersion();
 
 	~Node();
 };

@@ -318,7 +318,7 @@ protected:
 					line += GenerateTypeReinterpret(&args, op->code_);
 					break;
 				case OpClass::Constant:
-					line += node->GetTensor()->GetConstantString();
+					line += "(" + node->GetTensor()->GetConstantString() + ")";
 					break;
 				case OpClass::TernaryOperator:
 					args.AddParenthesis(true);

@@ -59,6 +59,7 @@ enum class OpProp {
 	HostOnly,
 	KernelOnly,
 	Algorithm,
+	Reduction,
 	Modifier,
 	MemoryReuse,
 	Gradient,

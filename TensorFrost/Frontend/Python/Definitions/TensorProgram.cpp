@@ -43,7 +43,7 @@ void TensorProgramDefinition(py::module& m,
 
 	tensor_program.def(
 	    "__call__",
-	    [](TensorProgram& program, py::args py_inputs) -> std::variant<PyTensorMemory*, py::tuple> {
+	    [](TensorProgram& program, py::args py_inputs) -> std::variant<py::object, py::tuple> {
 	    	vector<py::object> inputs_props;
 	    	vector<TFTensor*> temp_numpy_tensors;
 			for (auto arg : py_inputs) {

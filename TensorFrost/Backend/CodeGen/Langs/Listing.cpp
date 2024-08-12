@@ -64,6 +64,10 @@ string GetNodeString(const Node* node) {
 		listing += "cost=" + to_string(node->cost_) + ", ";
 	}
 
+	if(node->indexing_mode_ != IndexingMode::Clamp) {
+		listing += "indexing_mode=" + IndexingModeToString(node->indexing_mode_) + ", ";
+	}
+
 	listing += ArgTypePrint("shape", ArgType::Shape);
 
 	listing += ")";
