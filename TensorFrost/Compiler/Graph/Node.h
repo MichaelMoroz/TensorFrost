@@ -66,6 +66,10 @@ class Node {
 	IndexingMode indexing_mode_; //clamp unless otherwise specified
 	vector<int> group_size; //kernel properties
 
+#ifndef NDEBUG
+	string created_in;
+#endif
+
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
 		flags.set(NodeProp::Placeholder);
 		debug_index = global_index++;

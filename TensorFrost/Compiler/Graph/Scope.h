@@ -10,7 +10,7 @@ using Tensors = vector<const Tensor*>;
 
 class ShapeInfo {
  public:
-	vector<Node*> shape;
+	vector<pair<Node*, bool>> shape;
 	int dim = 0;
 	string name;
 
@@ -30,17 +30,21 @@ class ShapeInfo {
 		this->name = node->var_name != "" ? node->var_name : node->name;
 	}
 
+	Node* operator[](int index) const {
+		return shape[index].first;
+	}
+
 	void AddShape(int index, Node* node) {
 		if(shape.size() <= index) {
 			shape.resize(index + 1);
 		}
-		shape[index] = node;
+		shape[index] = {node, false};
 		dim = max(dim, index + 1);
 	}
 
 	bool CheckValidity(bool throw_error = false) const {
 		for (auto node : shape) {
-			if(node == nullptr) {
+			if(node.first == nullptr) {
 				if (throw_error) {
 					throw std::runtime_error("Shape not fully defined");
 				}
@@ -50,11 +54,20 @@ class ShapeInfo {
 		return true;
 	}
 
+	const Tensor* GetTensor(int index) const {
+		CheckValidity(true);
+		return shape[index].first->GetTensor();
+	}
+
+	bool IsExpanded(int index) const {
+		return shape[index].second;
+	}
+
 	Tensors GetTensors() const {
 		CheckValidity(true);
 		Tensors tensors = Tensors();
 		for (auto node : shape) {
-			tensors.push_back(node->GetTensor());
+			tensors.push_back(node.first->GetTensor());
 		}
 		return tensors;
 	}
@@ -63,7 +76,7 @@ class ShapeInfo {
 		CheckValidity(true);
 		NodeArguments arguments;
 		for (int i = 0; i < shape.size(); i++) {
-			arguments[ArgID(ArgType::Shape, i)] = shape[i];
+			arguments[ArgID(ArgType::Shape, i)] = shape[i].first;
 		}
 		return arguments;
 	}
@@ -72,11 +85,11 @@ class ShapeInfo {
 
 	static float GetSizeEstimate(ShapeInfo &shape);
 
-	void InsertDim(int index, Node* node) {
+	void InsertDim(int index, Node* node, bool expanded = false) {
 		if (index >= shape.size()+1) {
 			shape.resize(index + 1);
 		}
-		shape.insert(shape.begin() + index, node);
+		shape.insert(shape.begin() + index, {node, expanded});
 		dim++;
 	}
 

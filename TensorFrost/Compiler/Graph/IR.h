@@ -50,8 +50,9 @@ public:
     }
 
     Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name, TFType type) {
+		Node* newNode = nullptr;
         if (cursor->valid()) { //already initialized, add new node before cursor
-            Node* newNode = new Node(cursor->prev, cursor->parent);
+            newNode = new Node(cursor->prev, cursor->parent);
 			if (cursor->prev) 
 				cursor->prev->next = newNode;
 			else if (cursor->parent) 
@@ -59,12 +60,17 @@ public:
             cursor->prev = newNode;
 			newNode->next = *cursor;
             newNode->initialize(tensor, std::move(args), std::move(name), type);
-			return newNode;
         } else {
+        	newNode = cursor.get();
             cursor->initialize(tensor, std::move(args), std::move(name), type);
 			cursor.go_to_next();
-			return cursor->prev;
         }
+
+#ifndef NDEBUG
+		newNode->created_in = current_pass;
+#endif
+
+		return newNode;
     }
 
 	void MoveNodeTo(Node* target_place, Node* note_to_move) {
@@ -296,6 +302,8 @@ public:
 	unordered_map<Node*, unordered_map<int, Node*>> shape_memory_map;
 	unordered_map<int, Node*> input_memory_map;
 	unordered_map<int, Node*> output_memory_map;
+
+	string current_pass;
 
 	struct PassStats {
 		string pass_name;

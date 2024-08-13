@@ -8,7 +8,7 @@ Node::~Node() { delete tensor_; }
 
 vector<int> ShapeInfo::GetShape(int default_value) const {
 	vector<int> shape;
-	for (auto node: this->shape) {
+	for (auto [node, _]: this->shape) {
 		if(node->op->class_ == OpClass::Constant) {
 			shape.push_back(node->tensor_->TryGetConstant());
 		} else {
@@ -25,7 +25,7 @@ void ShapeInfo::ExpandDimensions(int new_dim)
 	}
 	Tensor& one = Tensor::Constant(1);
 	for(int i = dim; i < new_dim; i++) {
-	   InsertDim(0, one.node_);
+	   InsertDim(0, one.node_, true);
 	}
 }
 

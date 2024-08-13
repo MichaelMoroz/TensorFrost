@@ -590,7 +590,7 @@ public:
 
 	static bool AreTensorsEqual(const Tensor& a, const Tensor& b);
 
-	static Tensor& Sqeeze(const Tensor& tensor, int axis = -1) {
+	static Tensor& Squeeze(const Tensor& tensor, int axis = -1) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);

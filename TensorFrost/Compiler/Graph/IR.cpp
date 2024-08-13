@@ -30,6 +30,7 @@ void IR::RemoveNode(Node* node) {
 //#define PROFILE_COMPILATION
 
 void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
+	current_pass = pass_name;
 #ifdef PROFILE_COMPILATION
 	auto start = std::chrono::high_resolution_clock::now();
 #endif
@@ -57,6 +58,7 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 	if (print) {
 		CheckIR(pass_name, false, false);
 	}
+	current_pass = "";
 }
 
 void IR::CompileIR()

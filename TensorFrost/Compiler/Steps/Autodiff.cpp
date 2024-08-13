@@ -19,15 +19,13 @@ const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target
 	gradinfo.ExpandDimensions(dim);
 	targetinfo.ExpandDimensions(dim);
 
-	Tensors grad_shape = gradinfo.GetTensors();
-	Tensors target_shape = targetinfo.GetTensors();
-
 	vector<int> axes_to_reduce;
 	vector<bool> unsqueeze;
 	for(int i = 0; i < dim; i++) {
-		int val_a = grad_shape[i]->TryGetConstant();
-		int val_b = target_shape[i]->TryGetConstant();
-		if(val_a != val_b && val_b == 1) { //if the target has a dimension of 1, and the gradient has a different dimension, then reduce
+		int val_a = gradinfo.GetTensor(i)->TryGetConstant();
+		int val_b = targetinfo.GetTensor(i)->TryGetConstant();
+		bool b_expanded = targetinfo.IsExpanded(i);
+		if(b_expanded || (val_a != val_b && val_b == 1)) {
 			axes_to_reduce.push_back(i);
 			bool should_unsqueeze = i >= (dim - target.GetDimension());
 			unsqueeze.push_back(should_unsqueeze);
@@ -201,7 +199,10 @@ map<string, function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)>> grad
 		grads.Add(unsq_grad * in[1], unsq_grad * in[0]);
 	}},
 	{"unsqueeze", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Sqeeze(grad, out.node_->data[0]));
+		grads.Add(Tensor::Squeeze(grad, out.node_->data[0]));
+	}},
+	{"squeeze", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		grads.Add(Tensor::Unsqueeze(grad, out.node_->data[0]));
 	}},
 	{"dim_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(grad, GetGradAxis(out, grad)));

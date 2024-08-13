@@ -249,8 +249,8 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 	}
 
 	for (int i = 0; i < min_dim; i++) {
-		Node* a_node = a.shape[a.dim - i - 1];
-		Node* b_node = b.shape[b.dim - i - 1];
+		Node* a_node = a[a.dim - i - 1];
+		Node* b_node = b[b.dim - i - 1];
 		int broadcast_index = max(a.dim, b.dim) - i - 1;
 
 		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
@@ -278,9 +278,9 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 		result.broadcast = true;
 		int broadcast_index = max(a.dim, b.dim) - i - 1;
 		if (a.dim > b.dim) {
-			result.broadcast_shape.AddShape(broadcast_index, a.shape[a.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, a[a.dim - i - 1]);
 		} else {
-			result.broadcast_shape.AddShape(broadcast_index, b.shape[b.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, b[b.dim - i - 1]);
 		}
 	}
 
