@@ -101,13 +101,19 @@ public:
     }
 
     py::object step(py::object X, py::object Y) {
+        py::object net = getattr("net");
+        py::object loss = net.attr("loss")(X, Y);
+        step(loss);
+        return loss;
+    }
+
+    void step(py::object loss) {
         Tensor::BeginRegion("OptimizerStep");
         py::object t = getattr("t");
         t = t + py::float_(1.0);
         setattr("t", t);
 
         py::object net = getattr("net");
-        py::object L = net.attr("loss")(X, Y);
         py::list net_params = net.attr("parameters")();
         py::list requires_grads = net.attr("requires_grads_list")();
 
@@ -122,7 +128,7 @@ public:
                 continue;
             }
             py::object param = net_params[i];
-            py::object grad = tf.attr("grad")(L, param);
+            py::object grad = tf.attr("grad")(loss, param);
             if(has_clip) {
                 grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
             }
@@ -146,7 +152,6 @@ public:
         Tensor::EndRegion("UpdateWeights");
         net.attr("update_parameters")(net_params);
         Tensor::EndRegion("OptimizerStep");
-        return L;
     }
 
 private:
@@ -224,7 +229,8 @@ void ModuleDefinitions(py::module& m) {
     py::class_<ModuleOptimizer, Module>(m, "ModuleOptimizer")
         .def(py::init<ModuleOptimizer::OptimizerType, Module*, map<string, py::object>>(), py::arg("type"), py::arg("net"), py::arg("params"))
         .def("assert_parameters", &ModuleOptimizer::assert_parameters)
-        .def("step", &ModuleOptimizer::step);
+        .def("step", py::overload_cast<py::object, py::object>(&ModuleOptimizer::step))
+        .def("step", py::overload_cast<py::object>(&ModuleOptimizer::step));
 
     py::module optimizers = m.def_submodule("optimizers", "Optimizers submodule");
 

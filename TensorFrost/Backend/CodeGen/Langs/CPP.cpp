@@ -459,11 +459,17 @@ void TFContext::dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_
 
 void TFContext::region_begin(std::string name)
 {
+	if(runtime.region == nullptr) {
+		return;
+	}
 	runtime.region(name.c_str(), true, runtime.custom_data);
 }
 
 void TFContext::region_end(std::string name)
 {
+	if(runtime.region == nullptr) {
+		return;
+	}
 	runtime.region(name.c_str(), false, runtime.custom_data);
 }
 
