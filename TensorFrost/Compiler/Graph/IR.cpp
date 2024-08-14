@@ -64,13 +64,12 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 void IR::CompileIR()
 {
 	// TODO (Moroz): Add auto tests into build system
-
 	CheckIR("Input", false, false);
 	RunCompilationPass("GetInputList", [&]() { GetInputList(); });
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
-	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); });
-	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); }, true);
+	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
+	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 
 	RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
 

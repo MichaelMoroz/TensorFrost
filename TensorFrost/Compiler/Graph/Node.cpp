@@ -262,7 +262,7 @@ void Node::CopyProperties(Node *other) {
 
 void Node::CopyMetadata(Node *other) {
     if (other->debug_name != "") {
-        debug_name = other->debug_name + "_copy";
+        debug_name = other->debug_name;
     }
     if(other->indexing_mode_ != IndexingMode::Clamp) {
         indexing_mode_ = other->indexing_mode_;
@@ -290,6 +290,7 @@ bool Node::HasParent(Node *node) const {
 }
 
 void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_modified, bool copy_metadata) {
+    ArgEdges remaining_outputs;
     for (auto [edge, to] : args.outputs_) {
         auto& [id, from] = edge;
         if (to->index_ >= min_index) {
@@ -297,8 +298,14 @@ void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_
                 replacement->flags.set(NodeProp::Modified);
             }
             to->args.UpdateArgument(id, replacement);
+            replacement->args.AddOutput(id, to);
+        } else {
+            remaining_outputs.push_back({edge, to});
         }
     }
+
+    this->args.outputs_ = remaining_outputs;
+
     if(copy_metadata) {
         replacement->CopyMetadata(this);
         this->flags.clear();

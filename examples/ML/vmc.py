@@ -5,12 +5,12 @@ from tqdm import tqdm
 
 tf.initialize(tf.opengl)
 
-lr = 0.001
-n_walkers = 128*128
-opt_steps = 1000
+lr = 0.01
+n_walkers = 2048
+opt_steps = 500
 metropolis_per_step = 8
 target_acceptance_rate = 0.3
-outlier_fraction = 0.5
+outlier_fraction = 0.15
 
 def Sort(keys, values, element_count):
     tf.region_begin('Sort')
@@ -77,6 +77,9 @@ class lognum():
     def __pow__(self, other):
         return lognum(self.value * other, self.sign)
     
+    def log(self):
+        return self.value * 0.69314718056
+    
 def aslog(x):
     return lognum(tf.log2(tf.abs(x)), tf.sign(x))
 
@@ -96,12 +99,14 @@ class PSI(tf.Module):
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
         #self.weights = tf.Parameter([3], tf.float32)
-        self.orbi_layer0 = tf.Parameter([4, 4], tf.float32)
-        self.orbi_layer0_bias = tf.Parameter([4], tf.float32)
-        self.orbi_layer1 = tf.Parameter([4, 4], tf.float32)
-        self.orbi_layer1_bias = tf.Parameter([4], tf.float32)
-        self.envelope_layer = tf.Parameter([4], tf.float32)
-        self.orbi_layer2 = tf.Parameter([4*self.atom_n, 1], tf.float32)
+        self.orb_per_atom = 8
+        self.determinants = 2
+        self.orbi_layer0 = tf.Parameter([4, self.orb_per_atom], tf.float32)
+        self.orbi_layer0_bias = tf.Parameter([self.orb_per_atom], tf.float32)
+        self.orbi_layer1 = tf.Parameter([4, self.orb_per_atom], tf.float32)
+        self.orbi_layer1_bias = tf.Parameter([self.orb_per_atom], tf.float32)
+        self.envelope_layer = tf.Parameter([self.orb_per_atom], tf.float32)
+        self.orbi_layer2 = tf.Parameter([self.orb_per_atom*self.atom_n, self.determinants], tf.float32)
         self.gamma = tf.Parameter([1], tf.float32)
         self.gamma2 = tf.Parameter([1], tf.float32)
         self.dx = 5e-3
@@ -127,24 +132,39 @@ class PSI(tf.Module):
         return (lognum(-alpha*r1-beta*r2) + lognum(-alpha*r2-beta*r1)) * lognum(gamma*r12)
     
     def psi_new(self, electrons):
-        #compute orbitals
+        #compute electron-atom relative positions and distances [batch, electron, atom, 3] + [batch, electron, atom]
         b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.atom_n, 3])
         ri = tf.unsqueeze(electrons, axis=-2) - self.atoms[a, d]
         r = tf.norm(ri)
 
+        #concatenate ri and r [batch, electron, atom, 3 + 1]
         b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.atom_n,  4])
-        in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a])
-        out0 = (1.0 + 0.025*(in0 @ self.orbi_layer0) + 0.025*self.orbi_layer0_bias)
-        out1 = (1.0 + 0.025*(in0 @ self.orbi_layer1) + 0.025*self.orbi_layer1_bias)
+        in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) 
+
+        #orbitals around atoms [batch, electron, atom, orbital]
+        out0 = (1.0 + 0.25*(in0 @ self.orbi_layer0) + 0.25*self.orbi_layer0_bias)
+        out1 = (1.0 + 0.25*(in0 @ self.orbi_layer1) + 0.25*self.orbi_layer1_bias)
         envelope = out0 * out1 * tf.exp(-tf.unsqueeze(r) * tf.abs(1.0+self.envelope_layer))
 
-        in1i = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * 4])
-        in1 = envelope[in1i[0], in1i[1], in1i[2] / 4, in1i[2] % 4]
+        #reshape, merge atom orbitals into one dimension [batch, electron, atom*orbital]
+        in1i = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * self.orb_per_atom])
+        in1 = envelope[in1i[0], in1i[1], in1i[2] / self.orb_per_atom, in1i[2] % self.orb_per_atom]
     
-        orbitals = tf.squeeze(in1 @ (1.0 + 0.00001*self.orbi_layer2))
-        orbilog = aslog(orbitals)
-        orbisum = tf.sum(orbilog.value)
+        #get final electron orbitals [batch, electron, determinant]
+        orbitals = in1 @ (1.0 + 0.25*self.orbi_layer2)
 
+        #compute determinant for each set of electron orbitals [batch, determinant]
+        orbilog = aslog(orbitals)
+        orbiprodlog = tf.sum(orbilog.value, axis=-2)
+        orbiprodsign = tf.sum(tf.select(orbilog.sign < 0.0, 1.0, 0.0), axis=-2) #count negative signs
+        orbiprodsign = tf.select(tf.int(orbiprodsign) % 2 == 1, -1.0, 1.0) #determine sign of the determinant
+
+        #sum the determinants (use logsumexp trick)  
+        maxorbiprodlog = tf.max(orbiprodlog)
+        detsum = tf.sum(orbiprodsign * tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
+        orbisum = maxorbiprodlog + tf.log2(tf.abs(detsum))
+
+        #compute the jastrow factor for each pair of electrons
         b, i = tf.indices([electrons.shape[0], 3])
         r12 = tf.norm(electrons[b, 0, i] - electrons[b, 1, i])
         jastrow = lognum(- tf.abs(self.gamma) / (1.0 + tf.abs(self.gamma2) * r12))
@@ -155,7 +175,7 @@ class PSI(tf.Module):
     def log_psi(self, electrons):
         #psi = self.chandrasekhar_helium_psi(electrons)
         psi = self.psi_new(electrons)
-        return psi.value
+        return psi.log()
 
     #get the finite difference gradient and laplacian
     def kinetic_energy(self, e_pos):
@@ -345,7 +365,7 @@ smoothed_energy = 0.0
 smoothed_acceptance_rate = 0.0
 smoothing = 0.9
 for i in progress_bar:
-    if(i == 50): tf.renderdoc_start_capture()
+    if(i == 0): tf.renderdoc_start_capture()
 
     for j in range(metropolis_per_step):
         out = metropolis_step(wavefunction, walkers_tf)
@@ -362,7 +382,7 @@ for i in progress_bar:
         if(acceptance_rate[0] > target_acceptance_rate):
             cur_params[0] *= 1.02
 
-        #if(i > 100): cur_params[1] = 0.4
+        if(i > 500): cur_params[1] = 0.1
 
         wavefunction.params = tf.tensor(cur_params)
 
@@ -379,7 +399,7 @@ for i in progress_bar:
 
     progress_bar.set_postfix(acceptance_rate = smoothed_acceptance_rate, loss = smoothed_loss, energy = smoothed_energy)
 
-    if(i == 50): tf.renderdoc_end_capture()
+    if(i == 0): tf.renderdoc_end_capture()
 
 #compute the final energy
 local_energy, logpsi = compute_energy(wavefunction, walkers_tf)
@@ -389,11 +409,22 @@ sorted_args = np.argsort(local_energy)
 sorted_walkers = walkers[sorted_args]
 sorted_energy = local_energy[sorted_args]
 
+target_energy = -1.173427
 print("Final Energy: ", np.mean(smoothed_energy))
+print("Error, %: ", 100.0 * np.abs((np.mean(smoothed_energy) - target_energy) / target_energy))
 #print weights
 #print("Weights: ", wavefunction.weights.numpy)
 
-list_parameters(wavefunction)
+#print out parameters
+# print("envelope_layer: ", wavefunction.envelope_layer.numpy)
+# print("orbi_layer0: ", wavefunction.orbi_layer0.numpy)
+# print("orbi_layer0_bias: ", wavefunction.orbi_layer0_bias.numpy)
+# print("orbi_layer1: ", wavefunction.orbi_layer1.numpy)
+# print("orbi_layer1_bias: ", wavefunction.orbi_layer1_bias.numpy)
+# print("orbi_layer2: ", wavefunction.orbi_layer2.numpy)
+# print("gamma: ", wavefunction.gamma.numpy)
+# print("gamma2: ", wavefunction.gamma2.numpy)
+
 
 # eN = sorted_energy.shape[0]
 # e0 = sorted_energy[eN // 2 - 32]
@@ -470,29 +501,30 @@ plt.tight_layout()
 fig.subplots_adjust(top=0.95, bottom=0.05, left=0.08, right=0.92, hspace=0.4)
 
 plt.show()
+
 # evalute the wavefunction at a grid of points (first electron, XY plane, second electron fixed at origin)
-n = 128
-x = np.linspace(-100, 100, n)
-y = np.linspace(-100, 100, n)
-X, Y = np.meshgrid(x, y)
-Z = np.zeros((n, n))
-walkers = np.zeros((n * n, 2, 3))
-walkers[:, 0, 0] = X.flatten()
-walkers[:, 0, 1] = Y.flatten()
-walkers_tf = tf.tensor(walkers)
+# n = 128
+# x = np.linspace(-4, 4, n)
+# y = np.linspace(-4, 4, n)
+# X, Y = np.meshgrid(x, y)
+# Z = np.zeros((n, n))
+# walkers = np.zeros((n * n, 2, 3))
+# walkers[:, 0, 0] = X.flatten()
+# walkers[:, 0, 1] = Y.flatten()
+# walkers_tf = tf.tensor(walkers)
 
-tf.renderdoc_start_capture()
-#compute the wavefunction
-_, logpsi = compute_energy(wavefunction, walkers_tf)
-logpsi = logpsi.numpy
-Z = logpsi.reshape(n, n)
+# tf.renderdoc_start_capture()
+# #compute the wavefunction
+# _, logpsi = compute_energy(wavefunction, walkers_tf)
+# logpsi = logpsi.numpy
+# Z = logpsi.reshape(n, n)
 
-tf.renderdoc_end_capture()
-#plot the wavefunction
-plt.figure()
-plt.contourf(X, Y, Z, levels=50)
-plt.xlabel('x, a.u.')
-plt.ylabel('y, a.u.')
-plt.title('Wavefunction')
-plt.colorbar()
-plt.show()
+# tf.renderdoc_end_capture()
+# #plot the wavefunction
+# plt.figure()
+# plt.imshow(Z, extent=(-4, 4, -4, 4), origin='lower')
+# plt.xlabel('x, a.u.')
+# plt.ylabel('y, a.u.')
+# plt.title('Wavefunction')
+# plt.colorbar()
+# plt.show()

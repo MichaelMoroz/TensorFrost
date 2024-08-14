@@ -205,17 +205,26 @@ public:
 	void RemoveUnusedKernels();
 	void CompileIR();
 
+	void UpdateIndex() {
+		int index = 0;
+		for (auto node = begin(); !node.end(); node.next()) {
+			node->UpdateEdges();
+			node->index_ = index++;
+		}
+	}
+
 	void UpdateGraph(const Node* uroot = nullptr) {
 		if (uroot == nullptr) {
 			uroot = root;
 		}
+
+		UpdateIndex();
+
 		// update edges
-		int index = uroot->index_;
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
-			node->UpdateEdges();
 			node->args.ClearOutputs();
-			node->index_ = index++;
 		}
+
 
 		map<Node*, string> invalid_nodes;
 		// check if graph is valid

@@ -1095,6 +1095,8 @@ void IR::TryReplaceModificationsWithVersions()
 				nodes_to_remove.insert(set_node);
 			});
 		}
+
+		UpdateIndex();
 	}
 
 	UpdateGraph();
