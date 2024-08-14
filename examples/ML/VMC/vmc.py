@@ -9,7 +9,7 @@ from atom import *
 
 tf.initialize(tf.opengl)
 
-lr = 0.005
+lr = 0.01
 n_walkers = 4096
 opt_steps = 8000
 
@@ -104,8 +104,8 @@ class PSI(tf.Module):
         in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) 
 
         #orbitals around atoms [batch, electron, atom, orbital]
-        out0 = (1.0 + 0.5*(in0 @ self.orbi_layer0) + 0.5*self.orbi_layer0_bias)
-        out1 = (1.0 + 0.5*(in0 @ self.orbi_layer1) + 0.5*self.orbi_layer1_bias)
+        out0 = (1.0 + 0.5*(in0 @ self.orbi_layer0 + self.orbi_layer0_bias))
+        out1 = (1.0 + 0.5*(in0 @ self.orbi_layer1 + self.orbi_layer1_bias))
         envelope = out0 * out1 * tf.exp(-tf.unsqueeze(r) * tf.abs(1.0+self.envelope_layer))
 
         midi = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * self.orb_per_atom])
@@ -173,6 +173,10 @@ class PSI(tf.Module):
             for j in range(N):
                 m[i].append(orbitals[b, i, j, d])
 
+        return self.determinant_laplace(m, N)
+
+    #VERY slow determinant calculation using Laplace expansion
+    def determinant_laplace(self, m, N):
         if N == 0:
             return 1.0
 
@@ -182,14 +186,14 @@ class PSI(tf.Module):
         if N == 2:
             return m[0][0] * m[1][1] - m[0][1] * m[1][0]
         
-        if N == 3:
-            return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-                    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-                    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
-        
-        if N > 3: #not implemented, throw an error
-            raise ValueError("Determinant calculation not implemented for N > 3")
-
+        if N > 2:
+            result = 0.0
+            for j in range(N):
+                submatrix = [m[i][:j] + m[i][j + 1:] for i in range(1, N)]
+                sign = 1.0 if j % 2 == 0 else -1.0
+                term = sign * m[0][j] * self.determinant_laplace(submatrix, N - 1)
+                result += term
+        return result
 
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
