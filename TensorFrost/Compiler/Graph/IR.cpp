@@ -88,7 +88,7 @@ void IR::CompileIR()
 	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
 	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
 
-	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(1); });
+	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(4); });
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 	RunCompilationPass("Load fusion", [&]() {

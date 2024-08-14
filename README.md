@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.5.4 beta)
+# 🔢🥶 TensorFrost (v0.6.0 beta)
 [![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
 
 
