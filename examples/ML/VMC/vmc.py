@@ -9,9 +9,9 @@ from atom import *
 
 tf.initialize(tf.opengl)
 
-lr = 0.01
+lr = 0.008
 n_walkers = 4096
-opt_steps = 8000
+opt_steps = 3000
 
 #how many metropolis steps to perform per optimization step
 metropolis_per_step = 8
@@ -25,11 +25,11 @@ target_acceptance_rate = 0.5
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simpler and seems to work well
 outlier_fraction = 0.1
 
-atom1 = Atom(1, "H", Vector3(-3.015*0.5, 0.0, 0.0))
-atom2 = Atom(3, "Li", Vector3(3.015*0.5, 0.0, 0.0))
+atom1 = Atom(3, "Li", Vector3(-5.051*0.5, 0.0, 0.0))
+atom2 = Atom(3, "Li", Vector3(5.051*0.5, 0.0, 0.0))
 molecule = Molecule([atom1, atom2])
 molecule.initialize_orbitals()
-target_energy = -8.070548
+target_energy = -14.9954
 
 atoms = molecule.get_atoms()
 atom_n = atoms.shape[0]
