@@ -431,7 +431,7 @@ Currently only backward mode autodifferentiation is supported, with the exceptio
 
 ```python
 y_pred = x @ W + b
-loss = tf.sum((y - y_pred)**2)
+loss = tf.mean((y - y_pred)**2)
 dW = tf.grad(loss, W)
 db = tf.grad(loss, b)
 ```
@@ -450,6 +450,152 @@ In this example, the `grad` function is used to compute the gradient of the pote
 
 Giving a custom gradient tensor is not supported yet, but it is planned for the future.
 
+Additionally you can either stop the gradient computation for some tensors by `tensor.detach_grad()`. In that case the autograd algorithm will stop at this tensor.
+
+Or if you want to force the gradient through a operation without applying the operation gradient you can do `tensor.pass_grad()`. This is useful for example when you want to optimize discrete parameters like a quantized weight.
+### Modules 
+
+TensorFrost has a simple module system similar to PyTorch, where you can define a module with trainable parameters and a forward function that computes the output of the module as well as a loss function. 
+
+```python
+class SmolNet(tf.Module):
+    def __init__(self):
+        #specify a custom random scale and offset for the weights when initializing
+        self.W = tf.Parameter([16, -1], tf.float32, random_scale=0.01, random_offset=0.0)
+        #dont compute gradients for the bias
+        self.b = tf.Parameter([-1], tf.float32, requires_grad=False)
+        
+    def assert_parameters(self):
+        #makes sure that the compiler knows that b has shape compatible with W
+        self.b = tf.assert_tensor(self.b, [self.W.shape[1]], tf.float32)
+        
+    def forward(self, x):
+        return x @ self.W + self.b
+    
+    def loss(self, x, y):
+        y_pred = self.forward(x, y)
+        return tf.mean((y - y_pred)**2)
+```
+
+When initializing the module you can add 3 types of TensorFrost accessible parameters:
+- `tf.Parameter` - a tensor that will be passed to the TensorProgram as an argument, can be trained
+- `tf.ParameterArray` - a dynamic list of parameters, all of them will be passed to the TensorProgram as arguments, can be trained
+- `tf.Module` - another module, all of its parameters will be passed to the TensorProgram as arguments, can be trained
+
+The shape argument of the parameter can be a list of integers, where -1 means that the shape is not specified yet, and will be inferred from the input tensor. If you need to compute an operation over several tensors of unspecified shape, you need to assert the shapes in the `assert_parameters` function.
+`random_scale` and `random_offset` are used to initialize the weights with random values, and are optional, by default the weights are initialized with Xavier initialization for normal random values.
+`requires_grad` is used to specify if the parameter should be trained or not, by default all parameters are trainable. This argument does not stop you from computing `tf.grad` manually, it is just used to specify if the parameter should be updated by the optimizer module.
+
+By itself the module does not do anything, you need to do a second initialization step to either use it inside a TensorProgram, or initialize it as a container for the tensors outside of the program.
+
+```python
+
+def ComputeForward():
+    model = SmolNet()
+    #creates tf.input tensors from all the parameters of the module
+    model.initialize_input()
+    X = tf.input([-1, -1], tf.float32)
+    return model.forward(X)
+
+forward = tf.compile(ComputeForward)
+
+model_container = SmolNet()
+#creates tf.tensor tensors from all the parameters of the module and initializes them
+model_container.initialize_parameters()
+#you can change them afterwards too
+model_container.W = tf.tensor(np.zeros([16, 100], dtype=np.float32))
+
+X = tf.tensor(np.zeros([100, 100], dtype=np.float32))
+#the module is passed as an argument to the compiled function, in the same order as they are created in the function
+Y = forward(model_container, X)
+```
+
+`model.initialize_input()` creates put `tf.input()` tensors for all the parameters of the module. Afterwards `assert_parameters` is automatically called for this and all child modules. This is useful if you want to use the module inside a TensorProgram, as you can just pass the module as an argument to the compiled function, and all the parameters will be automatically created and the shapes will be asserted.
+`model.initialize_parameters()` creates `tf.tensor()` tensors for all the parameters of the module and initializes them with random values. This is useful if you want to use the module outside of a TensorProgram, as you can just pass the module as an argument to the compiled function.
+
+You can not, however, do both at the same time, as the module will not know if it is used inside or outside of a TensorProgram.
+
+### Optimizer modules
+
+TensorFrost has a set of built-in optimizer modules that can be used to train the parameters of the module. 
+- `tf.optimizers.sgd` - Stochastic Gradient Descent, has a `learning_rate` and `grad_clip` parameters, default values are 0.001 and 0.0 respectively.
+- `tf.optimizers.adam` - Adam optimizer, has a `learning_rate`, `beta1`, `beta2` and `grad_clip` parameters, default values are 0.001, 0.9, 0.999 and 0.0 respectively.
+- `tf.optimizers.rmsprop` - RMSProp optimizer, has a `learning_rate`, `decay` and `grad_clip` parameters, default values are 0.001, 0.9 and 0.0 respectively.
+
+All optimizer modules are initialized with the module as the first argument, and the training hyperparameters as the rest of the arguments.
+
+```python
+def OptimizerStep():
+    X = tf.input([-1, -1], tf.float32)
+    Y = tf.input([-1, 10], tf.float32)
+
+    model = SmolNet()
+    opt = tf.optimizers.adam(model, learning_rate=0.001, beta1=0.9, beta2=0.999)
+    opt.initialize_input()
+    
+    #do a single step of the optimizer (automatically computes gradients and updates the parameters)
+    L = opt.step(X, Y) 
+    #or 
+    #L = model.loss(X, Y)
+    #opt.step(L)
+
+    params = opt.parameters()
+    params.append(L)
+    return params
+
+step = tf.compile(OptimizerStep)
+
+model_container = SmolNet()
+opt = tf.optimizers.adam(model_container)
+opt.initialize_parameters()
+
+X = tf.tensor(np.zeros([100, 100], dtype=np.float32))
+Y = tf.tensor(np.zeros([100, 10], dtype=np.float32))
+out = step(X, Y, opt)
+opt.update_parameters(res[:-1])
+loss = res[-1].numpy[0]
+```
+
+Outputting the optimizer state is somewhat inconvenient at the moment, as you can only output a list of tensors from the compiled function, so you need to append the loss to the list of parameters and then extract it from the list afterwards. The optimizer state is not saved in the module, so you need to pass it as an argument to the compiled function, and then update the parameters of the module with the updated parameters from the optimizer.
+
+### Debugging
+
+For debugging convenience there are 2 function types that you can call inside a tensor program:
+
+```python
+tf.renderdoc_start_capture()
+tf.renderdoc_end_capture()
+```
+
+These functions will start and end a RenderDoc capture, only if python is started from the RenderDoc GUI. This is useful for debugging the OpenGL backend, as it allows you to inspect compiled kernel execution, its code and buffers.
+
+```python
+tf.region_begin('Region name')
+tf.region_end('Region name')
+```
+
+When debugging from RenderDoc (or any other OpenGL debugger), these functions will create a region in the RenderDoc capture, which can be useful for profiling and seeing what parts of the program are slow.
+The placement of these functions might not reflect their position in the code, as the code is heavily optimized and fused, so if you placed a region in the middle of a generated kernel, it will be placed at the beginning or end of the kernel. Placing them in a scoped operation might make the compilation fail or unfuse kernels, so be careful with that.
+
+### Usage tips
+
+- Using an explicit shape for the input tensors can help the compiler to optimize the program better, as it can infer the shapes of the tensors in the program better. On top of that some optimizations like loop unrolls or staged reductions only happen if the shape is known at compile time.
+- Large matrix multiplications are currently very much not optimized, as the compiler does not use groupshared memory or any other optimizations for matrix multiplication. This is planned for the future. For now using TensorFrost mostly makes sense for small to medium sized architectures where cache hits are high.
+- Complex operations like convolutions can be implemented through sum + indexing operaitons, example below (taken from [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/ML/module.py))
+
+  While this might seem less optimal than a hand optimized convolution kernel especially when computing its gradient, but it is much more flexible and is actually optimized quite well by the compiler. While the gradient of the indexing operations is an atomicAdd operation, in this case, several of the dimensions of the gradient kernel are not used in the index of the tensors, and get unrolled into sums removing the atomics from the kernel.
+  In such a way you can implement any operation you want, even matrix multiplication works fine (`tf.sum(A[i, k] * B[k, j])`), and the compiler will optimize it and its gradient quite well.
+  Not all atomics will get optimized out however, so be careful when taking gradients of indexed tensors, as the current atomicAdd for floats is an emulated operation and is can get extremely slow with high write contention.
+```python
+def conv2d(self, X, W, b):
+        bi, wi, hi, cout, cin, it = tf.indices([X.shape[0], X.shape[1] - W.shape[2] + 1, X.shape[2] - W.shape[3] + 1, W.shape[0], W.shape[1], W.shape[2] * W.shape[3]])
+        i, j = it%W.shape[2], it/W.shape[2]
+        conv = tf.sum(tf.sum(X[bi, wi + i, hi + j, cin] * W[cout, cin, i, j]))
+        return conv + b 
+```
+
+- Inplace operation gradients simply don't work, even though it does compile, the gradients are not computed correctly. This is planned to be fixed in the future.
+- You can check the compiled code in the Temp folder in `generated_lib_*.cpp` files, it is not very readable, but you can see the operations and the memory allocations, the kernel code is in the same file, only on CPU backend.
 ## Roadmap 
 
 Core features:
@@ -460,7 +606,7 @@ Core features:
 - [x] Backward mode autodifferentiation
 - [ ] Forward mode autodifferentiation
 - [ ] Gradients of control flow operations and gradients from gradients
-- [ ] Kernel code and execution graph export and editing
+- [x] Kernel code and execution graph export and editing
 - [ ] Advanced data types and quantization
 - [ ] Compile from Python AST instead of tracing
 - [ ] Advanced IR optimizations
@@ -468,6 +614,8 @@ Core features:
   
 Algorithm library:
 - [x] Scan, reduction, etc.
+- [x] Module system
+- [x] Optimizer modules (SGD, Adam, RMSProp)
 - [ ] Sorting algorithms
 - [x] Matrix operations (matrix multiplication, etc.)
 - [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.)
@@ -488,6 +636,8 @@ Backends:
 - [ ] WGPU (for web)
 
 (hopefully im not going to abandon this project before finishing lol)
+
+(upd 1 year in: I now know that it is impossible to finish such a project without spending like 10 years on it huh)
 
 ## Contributing
 Contributions are welcome! If you want to contribute, please open an issue first to discuss the changes you want to make.
