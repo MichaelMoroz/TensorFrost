@@ -10,6 +10,9 @@
 
 namespace TensorFrost {
 
+uint GetInitialMax(TFType type);
+uint GetInitialMin(TFType type);
+
 bool IsBoundary(const Node* input, const Node* output, int arg_index,
                 ArgType arg_type);
 
@@ -66,7 +69,9 @@ class Program {
 
 Program* GenerateProgram(IR* ir);
 
-string GetOperationListing(const IR&, bool compact = false,
-                           map<Node*, string> invalid = {});
+bool isConstantAndEqualTo(const Tensor* tensor, float value);
+bool isConstant(const Tensor* tensor);
+Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32);
+Tensor* ApplyUnaryOP(const Tensor* a, std::function<float(float)> opF32, std::function<int(int)> opI32, std::function<uint(uint)> opU32);
 
 }  // namespace TensorFrost

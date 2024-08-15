@@ -75,6 +75,10 @@ uint asuint(float x) {
   return floatBitsToUint(x);
 }
 
+uint asuint(bool x) {
+	return uint(x);
+}
+
 uint asuint(int x) {
   return uint(x);
 }
@@ -86,13 +90,18 @@ uint asuint(uint x) {
 int asint(uint x) {
   return int(x);
 }
+
+bool asbool(uint x) {
+  return bool(x);
+}
+
 )";
 	kernel->var_names = vector<string>(kernel->variables.size());
 	kernel->var_types = vector<string>(kernel->variables.size());
 	header += "\nstruct UBO {\n";
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
-		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+		kernel->var_types[var.second] = type_names[var.first->type];
 	}
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";

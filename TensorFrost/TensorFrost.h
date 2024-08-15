@@ -1,6 +1,6 @@
 #pragma once
 
 #include "Backend/Backend.h"
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Tensor/TensorProgram.h"

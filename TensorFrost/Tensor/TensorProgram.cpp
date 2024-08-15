@@ -12,10 +12,12 @@ void TensorProgram::CreateProgram(string name) {
 
 	// create new IR graph
 	Tensor::SetEvaluationContext(&ir);
+	Tensor::BeginRegion(name);
 	Tensors outputs = evaluate_callback();
+	Tensor::EndRegion(name);
 	// set outputs
 	for (int i = 0; i < outputs.size(); i++) {
-		outputs[i]->SetMemoryType(MemoryType::Output, i);
+		outputs[i]->SetMemoryType(NodeProp::OutputMemory, i);
 	}
 
 	if (outputs.size() == 0) {
@@ -63,7 +65,7 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Host writes: " + to_string(ir.writebacks) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
-	properties += "  Compiler time: " + to_string(external_compile_time) + " ms\n";
+	properties += "  Steps time: " + to_string(external_compile_time) + " ms\n";
 	return properties;
 }
 

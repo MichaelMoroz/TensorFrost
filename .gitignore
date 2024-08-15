@@ -48,3 +48,4 @@ examples/Algorithms/mnist.npz
 *.npz
 examples/ML/mnist.npz
 /cmake-build-*
+*.pyc

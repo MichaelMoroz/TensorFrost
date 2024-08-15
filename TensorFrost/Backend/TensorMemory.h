@@ -32,6 +32,11 @@ extern "C" {
 		const size_t* shape;
 	};
 
+	struct TFTensorList {
+		size_t count;
+		const TFTensor* tensors;
+	};
+
 	struct TFDispatchInfo {
 		size_t kernel_id;
 		size_t read_write_count;
@@ -48,6 +53,7 @@ extern "C" {
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
+	typedef void region_func(const char*, bool, void*);
 
 	struct TFRuntime {
 		alloc_func* alloc;
@@ -55,6 +61,7 @@ extern "C" {
 		readback_func* readback;
 		writeback_func* writeback;
 		dispatch_func* dispatch;
+		region_func* region;
 		void* custom_data;
 	};
 

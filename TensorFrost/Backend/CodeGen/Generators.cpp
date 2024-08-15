@@ -94,7 +94,7 @@ string GetBufferDeclarations(Kernel *kernel, function<string(const string &, con
 
 string ReadVariable(Node* node) {
 	if (node->name == "const") {
-		return to_string(node->GetTensor()->data[0]);
+		return to_string(node->data[0]);
 	}
 	if (node->name == "memory") {
 		return "mem[" + node->var_name + "]";
@@ -103,17 +103,21 @@ string ReadVariable(Node* node) {
 }
 
 string GetNodeName(const Node* node,  bool compact) {
+	string name = node->var_name;
 	if (compact) {
-		if (node->name == "const" && !node->has_been_modified_) {
-			return node->GetTensor()->GetConstantString();
+		if (node->name == "const" && !node->flags.has(NodeProp::Modified)) {
+			name = node->GetTensor()->GetConstantString();
 		}
 	}
 	else {
 		if (node->name == "const") {
-			return node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
+			name = node->var_name + "(" + node->GetTensor()->GetConstantString() + ")";
 		}
 	}
-	return node->var_name;
+	if (name.empty()) {
+		name = node->name + "_" + to_string(node->debug_index);
+	}
+	return name;
 }
 
 //std::string format_float(float x) {
@@ -178,15 +182,17 @@ string format_float(double value) {
 
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
-		switch (type) {
+		switch (node_->type) {
 			case TFType::Float:
-				return format_float(AsFloat(data[0]));
+				return format_float(AsFloat(node_->data[0]));
 			case TFType::Int:
-				return to_string(AsInt(data[0]));
+				return to_string(AsInt(node_->data[0]));
 			case TFType::Uint:
-				return to_string(data[0]) + "u";
+				return to_string(node_->data[0]) + "u";
+			case TFType::Bool:
+				return node_->data[0] == 0 ? "false" : "true";
 			default:
-				return "";
+				throw std::runtime_error("Unsupported constant type");
 		}
 	} else {
 		return "";

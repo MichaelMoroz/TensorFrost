@@ -119,18 +119,27 @@ void ImguiRender() {
 	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
 
+std::string last_error;
+
+void error_callback(int error, const char* description) {
+	last_error = std::string(description);
+}
+
 void StartOpenGL() {
+	glfwSetErrorCallback(error_callback);
+
 	if (!glfwInit()) {
-		throw std::runtime_error("Failed to initialize GLFW");
+		throw std::runtime_error("Failed to initialize GLFW: " + last_error);
 	}
 
-	//make window invisible
+	// Make window invisible
 	glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 	global_window = glfwCreateWindow(800, 600, "TensorFrost", nullptr, nullptr);
 
 	if (!global_window) {
+		int code = glfwGetError(nullptr);
 		glfwTerminate();
-		throw std::runtime_error("Failed to create window");
+		throw std::runtime_error("Failed to create window (error " + std::to_string(code) + "): " + last_error);
 	}
 
 	glfwMakeContextCurrent(global_window);

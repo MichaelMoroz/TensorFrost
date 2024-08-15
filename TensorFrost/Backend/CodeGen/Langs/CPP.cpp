@@ -65,6 +65,16 @@ inline int asint(uint x)
 	return *(int*)&x;
 }
 
+inline uint asuint(bool x)
+{
+	return *(uint*)&x;
+}
+
+inline bool asbool(uint x)
+{
+	return *(bool*)&x;
+}
+
 inline int clamp(int x, int a, int b)
 {
 	return min(max(x, a), b);
@@ -264,6 +274,11 @@ extern "C" {
 		const size_t* shape;
 	};
 
+	struct TFTensorList {
+		size_t count;
+		const TFTensor* tensors;
+	};
+
 	struct TFDispatchInfo {
 		size_t kernel_id;
 		size_t read_write_count;
@@ -280,6 +295,7 @@ extern "C" {
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
 	typedef void dispatch_func(TFDispatchInfo, void*);
+	typedef void region_func(const char*, bool, void*);
 
 	struct TFRuntime {
 		alloc_func* alloc;
@@ -287,9 +303,9 @@ extern "C" {
 		readback_func* readback;
 		writeback_func* writeback;
 		dispatch_func* dispatch;
+		region_func* region;
 		void* custom_data;
 	};
-
 }
 
 class TFContext
@@ -303,9 +319,12 @@ public:
 	void deallocate(TFTensor tensor);
 	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type);
 	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type);
+	TFTensor assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type);
 	uint32_t read(TFTensor tensor, size_t index);
 	void write(TFTensor tensor, size_t index, uint32_t value);
 	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group);
+	void region_begin(std::string name);
+	void region_end(std::string name);
 };
 )";
 
@@ -388,6 +407,12 @@ TFTensor TFContext::reshape(TFTensor tensor, std::string name, std::initializer_
 	return new_tensor;
 }
 
+TFTensor TFContext::assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type)
+{
+	check_tensor(tensor, name, target_shape, target_type);
+	return tensor;
+}
+
 uint TFContext::read(TFTensor tensor, size_t index)
 {
 	return runtime.readback(tensor, index, runtime.custom_data);
@@ -431,6 +456,23 @@ void TFContext::dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_
 
 	runtime.dispatch(info, runtime.custom_data);
 }
+
+void TFContext::region_begin(std::string name)
+{
+	if(runtime.region == nullptr) {
+		return;
+	}
+	runtime.region(name.c_str(), true, runtime.custom_data);
+}
+
+void TFContext::region_end(std::string name)
+{
+	if(runtime.region == nullptr) {
+		return;
+	}
+	runtime.region(name.c_str(), false, runtime.custom_data);
+}
+
 )";
 	return implementation;
 }
@@ -615,7 +657,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	kernel->var_types = vector<string>(kernel->variables.size());
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
-		kernel->var_types[var.second] = type_names[var.first->GetTensor()->type];
+		kernel->var_types[var.second] = type_names[var.first->type];
 	}
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";

@@ -204,6 +204,9 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("reshape", [](const PyTensor& t, py::list shape) {
 		return PT(Tensor::Reshape(T(t), TensorsFromList(shape)));
 	});
+	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
+		return PT(Tensor::Assert(T(t), TensorsFromList(target_shape), target_type));
+	});
 
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
@@ -221,6 +224,12 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 
+	m.def("any", [](const PyTensor& t, const int axis) { return PT(Tensor::Any(T(t), axis)); },
+	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an OR operation along the axis");
+
+	m.def("all", [](const PyTensor& t, const int axis) { return PT(Tensor::All(T(t), axis)); },
+	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an AND operation along the axis");
+
 	m.def("prefix_sum", [](const PyTensor& t, const int axis) { return PT(Tensor::PrefixSum(T(t), axis)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the prefix sum of the tensor along the axis");
 
@@ -233,7 +242,11 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("unsqueeze", [](const PyTensor& t, int dim) {
 		return PT(Tensor::Unsqueeze(T(t), dim));
-	}, py::arg("t"), py::kw_only(), py::arg("dim") = -1, "Unsqueeze the tensor");
+	}, py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Unsqueeze the tensor");
+
+	m.def("squeeze", [](const PyTensor& t, int dim) {
+		return PT(Tensor::Squeeze(T(t), dim));
+	}, py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Squeeze the tensor");
 
 	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
 		return PT(Tensor::Dot(T(t), T(t2), axis));
@@ -242,6 +255,14 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("matmul", [](const PyTensor& t, const PyTensor& t2) {
 		return PT(Tensor::Matmul(T(t), T(t2)));
 	}, py::arg("t"), py::arg("t2"), "Matrix multiplication of two tensors");
+
+	m.def("region_begin", [](const std::string& name) {
+		Tensor::BeginRegion(name);
+	}, py::arg("name"), "Begin a debug region");
+
+	m.def("region_end", [](const std::string& name) {
+		Tensor::EndRegion(name);
+	}, py::arg("name"), "End a debug region");
 }
 
 }  // namespace TensorFrost

@@ -24,7 +24,7 @@
 #include "Backend/CodeGen/Generators.h"
 #include "Backend/KernelManager.h"
 #include "Backend/TensorMemory.h"
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 
 namespace TensorFrost {
 

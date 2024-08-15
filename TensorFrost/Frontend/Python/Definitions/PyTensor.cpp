@@ -78,7 +78,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return PyTensorsFromTensors(t.Get().GetShape());
 	});
 	py_tensor.def_property_readonly(
-	    "type", [](const PyTensor& t) { return t.Get().type; });
+	    "type", [](const PyTensor& t) { return t.Get().GetType(); });
 	py_tensor.def_property_readonly("indices", [](const PyTensor& t) {
 		int dim = T(t).GetDimension();
 		py::tuple indices(dim);
@@ -89,6 +89,16 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	});
 	py_tensor.def("index",
 	              [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
+
+	py_tensor.def("detach_grad", [](const PyTensor& t) {
+		t.Get().DetachGrad();
+		return t;
+	});
+
+	py_tensor.def("pass_grad", [](const PyTensor& t) {
+		t.Get().PassGrad();
+		return t;
+	});
 
 	// operators
 	DefineOperators(py_tensor);
@@ -155,6 +165,13 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	//transpose property 
 	py_tensor.def_property_readonly("T", [](const PyTensor& t) {
 		return PT(Tensor::Transpose(T(t)));
+	});
+
+	py_tensor.def("__str__", [](const PyTensor& t) {
+		return GetNodeString(t.Get().node_);
+	});
+	py_tensor.def("__repr__", [](const PyTensor& t) {
+		return GetNodeString(t.Get().node_);
 	});
 }
 

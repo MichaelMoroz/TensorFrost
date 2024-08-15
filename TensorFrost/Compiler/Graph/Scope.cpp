@@ -1,71 +1,6 @@
-#include "IR.h"
+#include "Scope.h"
 
 namespace TensorFrost {
-
-void ArgumentManager::UpdateOutputs() {
-	for (auto& [id, node] : inputs_) {
-		node->args.AddOutput(id, node_);
-	}
-}
-
-void ArgumentManager::ClearOutputs() {
-	outputs_.clear();
-}
-
-const Tensor *ArgumentManager::GetTensor(ArgType type, int index) const {
-	return Get(type, index)->GetTensor();
-}
-
-const Tensor & ArgumentManager::operator[](int index) const {
-	return *GetTensor(ArgType::Input, index);
-}
-
-map<int, const Tensor *> ArgumentManager::GetTensors(ArgType type) const {
-	map<int, const Tensor *> tensors;
-	for (auto& [id, node] : inputs_) {
-		if (id.first == type) {
-			tensors[id.second] = node->GetTensor();
-		}
-	}
-	return tensors;
-}
-
-ArgumentManager::~ArgumentManager() {
-
-}
-
-bool ArgumentManager::CannotMoveArgument(ArgID id) {
-	Node* from = inputs_[id];
-	Node* to = node_;
-	return (id.first == ArgType::Memory &&
-	        !to->op->HasAllTypes(OpClass::Set)) ||
-	       (id.first  == ArgType::Shape && !to->op->HasAllTypes(OpClass::Memory)) ||
-	       from->op->HasAllTypes(OpClass::Memory) ||
-	       (from->name == "const" && to->op->HasAllTypes(OpClass::Memory)); //FIX THIS
-}
-
-bool ArgumentManager::CannotCopyArgument(ArgID id) {
-	Node* from = inputs_[id];
-	Node* to = node_;
-	bool shape = id.first == ArgType::Shape;
-	bool to_memory = to->op->HasAllTypes(OpClass::Memory);
-	bool shape_not_memory = shape && !to_memory;
-	return id.first == ArgType::Memory || shape_not_memory ||
-	       from->op->HasAllTypes(OpClass::Static) ||
-	       from->op->HasAllTypes(OpClass::Memory) || from->HasBeenModified();
-}
-
-bool ArgumentManager::IsChangingInput(ArgID arg) {
-	return arg.first == ArgType::Memory &&
-	       node_->op->HasAllTypes(OpClass::Modifier);
-}
-
-
-Node* Node::GetLastChild() {
-	NodeIterator it = NodeIterator(this);
-	for (; !it.end(); it.go_to_next()) {}
-	return it.get();
-}
 
 inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
                                     ArgType arg_type, bool is_identity) {
@@ -74,14 +9,14 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 
 	// if this node loads something from another node, that node must not be in
 	// this kernel
-	if (output_op->HasAllTypes(OpClass::Load, OpClass::MemoryOp)) {
+	if (output_op->HasAllTypes(OpProp::Load, OpProp::MemoryOp)) {
 		return arg_type == ArgType::Memory;
 	}
 
 	// if we are modifying memory, then the modified memory must not be in the
 	// kernel
-	if (output_op->HasAnyType(OpClass::Scatter, OpClass::Store) &&
-	    !input_op->HasAnyType(OpClass::Scatter, OpClass::Store)) {
+	if (output_op->HasAnyType(OpProp::Scatter, OpProp::Store) &&
+	    !input_op->HasAnyType(OpProp::Scatter, OpProp::Store)) {
 		return arg_type == ArgType::Memory;
 	}
 
@@ -124,7 +59,7 @@ KernelScope::KernelScope(Node* node,
 	scope_shape = ShapeInfo(node);
 
 	// if host only, then this can not be a valid kernel scope
-	if (node->op->HasAllTypes(OpClass::HostOnly)) {
+	if (node->op->HasAllTypes(OpProp::HostOnly)) {
 		begin = nullptr;
 		end = nullptr;
 		return;
@@ -160,6 +95,13 @@ KernelScope::KernelScope(Node* node,
 	if (scope_count == 0) return;
 
 	output_scopes.insert(child_scopes.begin(), child_scopes.end());
+
+	//if there is more than one child scope, then this node can not be in the scope
+	if (scope_count > 1) {
+		begin = nullptr;
+		end = nullptr;
+		return;
+	}
 
 	KernelScope* child_scope = *child_scopes.begin();
 	AddBoundaryNodes(child_scope->boundary_nodes);
@@ -238,13 +180,121 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 	return new_scope;
 }
 
-const map<ArgType, string> arg_type_names = {
-	{ArgType::Input, "Input"}, {ArgType::Index, "Index"}, {ArgType::Shape, "Shape"},
-	{ArgType::Memory, "Memory"}, {ArgType::None, "None"},
-};
 
-string TypeToString(ArgType type) {
-	return arg_type_names.at(type);
+//if shape nodes are compatible, then return the broadcast shape, if not return nullptr
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match) {
+	ShapeDimCompareResult result;
+	result.broadcast = false;
+	result.a_dim = -1;
+	result.b_dim = -1;
+	if (a_node->name == "const") result.a_dim = a_node->data[0];
+	if (b_node->name == "const") result.b_dim = b_node->data[0];
+
+	// if one of the nodes is a constant = 1, then it is a broadcast
+	if ((result.a_dim == 1 || result.b_dim == 1) && !(result.a_dim == 1 && result.b_dim == 1) && !exact_match) {
+		result.compatible = true;
+		result.broadcast = true;
+		if (result.a_dim == 1) {
+			result.broadcast_dim = b_node;
+			return result;
+		} else {
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
+	// if a and b are constants, then compare their values
+	if (result.a_dim != -1 && result.b_dim != -1) {
+		if (result.a_dim != result.b_dim) {
+			result.compatible = false;
+			return result;
+		} else {
+			result.compatible = true;
+			result.broadcast_dim = a_node;
+			return result;
+		}
+	}
+
+	// otherwise, if a and b are not the same node then they are not the same
+	// shape (possibly)
+	if (a_node != b_node) {
+		result.compatible = false;
+		return result;
+	}
+
+	result.compatible = true;
+	result.broadcast_dim = a_node;
+	return result;
+}
+
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
+	ShapeCompareResult result;
+	result.compatible = true;
+	result.broadcast = false;
+	result.a_dim = a.dim;
+	result.b_dim = b.dim;
+	result.broadcast_dim = max(a.dim, b.dim);
+
+	int min_dim = min(a.dim, b.dim);
+
+	if (exact_match && min_dim > 0) {
+		if (a.dim != b.dim) {
+			result.compatible = false;
+			if (throw_error) {
+				throw std::runtime_error("Shapes must have the same dimension for " +
+				                         a.name + " and " + b.name);
+			}
+			return result;
+		}
+	}
+
+	for (int i = 0; i < min_dim; i++) {
+		Node* a_node = a[a.dim - i - 1];
+		Node* b_node = b[b.dim - i - 1];
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
+
+		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
+
+		if(!res.compatible) {
+			result.compatible = false;
+			if (throw_error) {
+				if(res.a_dim != -1 && res.b_dim != -1) {
+					throw std::runtime_error("Shapes are not compatible for nodes: " + a.name + " and " + b.name + " with constant values " + to_string(res.a_dim) + " and " + to_string(res.b_dim) + " at index " + to_string(i));
+				}
+				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a.name + " and " + b.name + " at index " + to_string(i));
+			}
+			return result;
+		}
+
+		if(res.broadcast) {
+			result.broadcast = true;
+		}
+
+		result.broadcast_shape.AddShape(broadcast_index, res.broadcast_dim);
+	}
+
+	//add the rest of the broadcast shape
+	for (int i = min_dim; i < result.broadcast_dim; i++) {
+		result.broadcast = true;
+		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		if (a.dim > b.dim) {
+			result.broadcast_shape.AddShape(broadcast_index, a[a.dim - i - 1]);
+		} else {
+			result.broadcast_shape.AddShape(broadcast_index, b[b.dim - i - 1]);
+		}
+	}
+
+	if (result.broadcast_shape.dim != result.broadcast_dim) {
+		throw std::runtime_error("Internal Error: Broadcast shape does not match the broadcast dim");
+	}
+
+	return result;
+}
+
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
+	ShapeInfo a_info = ShapeInfo(a);
+	ShapeInfo b_info = ShapeInfo(b);
+	return CompareShape(a_info, b_info, exact_match, throw_error);
 }
 
 }  // namespace TensorFrost

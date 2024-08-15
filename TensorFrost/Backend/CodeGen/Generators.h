@@ -5,7 +5,7 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
-#include "IR/KernelGen.h"
+#include "Compiler/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Backend/Backend.h"
 
@@ -26,6 +26,10 @@ void GenerateCPPKernel(Program* program, Kernel* kernel);
 void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
+
+string GetNodeString(const Node* node);
+string GetOperationListing(const IR&, bool compact = false,
+						   map<Node*, string> invalid = {});
 
 bool IsForbiddenName(const string& name);
 
@@ -87,17 +91,17 @@ protected:
 				name = GetName("var") + name;
 			} else {
 				string expr = node_expression[node];
-				bool is_memory = node->op->HasAllTypes(OpClass::Memory);
-				bool is_static = node->op->HasAllTypes(OpClass::Static) || 
-								 node->op->HasAllTypes(OpClass::CantSubstitute);
-				bool is_constant = node->op->HasAllTypes(OpClass::Constant);
+				bool is_memory = node->op->HasAllTypes(OpProp::Memory);
+				bool is_static = node->op->HasAllTypes(OpProp::Static) ||
+								 node->op->HasAllTypes(OpProp::CantSubstitute);
+				bool is_constant = node->op->class_ == OpClass::Constant;
+				bool is_variable = node->op->class_ == OpClass::Variable;
 				if (is_constant && expr == "") {
 					expr = node->GetTensor()->GetConstantString();
 				}
-				bool is_variable = node->op->HasAllTypes(OpClass::Variable);
 				bool has_name = node->debug_name != "";
 				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
-				bool modified = node->has_been_modified_;
+				bool modified = node->flags.has(NodeProp::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
 				if (can_substitude) {
@@ -140,7 +144,7 @@ protected:
 		string name = node->var_name;
 
 		// get output type
-		TFType output_type = node->tensor_->type;
+		TFType output_type = node->type;
 
 		// generate line
 		string left = "";
@@ -148,21 +152,18 @@ protected:
 		string right = "";
 		bool needs_paranthesis = false;
 
-		if (op->HasAllTypes(OpClass::Special)) {
+		if (op->HasAllTypes(OpProp::Special)) {
 			int dims = args.Count(ArgType::Shape);
 
 			string shape_arg = "{";
-			if (dims == 0) {
-				shape_arg += "1";
-			} else {
-				for (int j = 0; j < dims; j++) {
-					if (j != 0) {
-						shape_arg += ", ";
-					}
-					Node* shape_node = args.Get(ArgType::Shape, j);
 
-					shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
+			for (int j = 0; j < dims; j++) {
+				if (j != 0) {
+					shape_arg += ", ";
 				}
+				Node* shape_node = args.Get(ArgType::Shape, j);
+
+				shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
 			}
 
 			shape_arg += "}";
@@ -174,7 +175,7 @@ protected:
 			} else if (op->name_ == "memory") {
 				// if input memory type then just take the input and store it in the
 				// output
-				if (node->memory_type_ == MemoryType::Input) {
+				if (node->flags.has(NodeProp::InputMemory)) {
 					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 					right += ";";
 				}
@@ -187,20 +188,19 @@ protected:
 			} else if (op->name_ == "deallocate") {
 				left = "tf.deallocate(" + args.Name(ArgType::Memory) + ")";
 				right = ";";
-			}
-			else if (op->name_ == "input_shape")
-			{
+			} else if (op->name_ == "input_shape") {
 				left = "int " + node->var_name + " = ";
-				expression = ir->input_memory_map[node->special_indices_[1]]->var_name + ".shape[" + to_string(node->special_indices_[0]) + "]";
+				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShapeDim)) + "]";
 				right = ";";
-			}
-			else if (op->name_ == "reshape")
-			{
+			} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
 				left = "TFTensor " + node->var_name + " = ";
-				expression = "tf.reshape(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				right = ";";
+			} else if(op->HasAllTypes(OpProp::Debug)) {
+				left = "tf." + op->code_ + "(\"" + node->debug_name + "\")";
 				right = ";";
 			}
-		} else if (op->HasAllTypes(OpClass::MemoryOp)) {
+		} else if (op->HasAllTypes(OpProp::MemoryOp)) {
 			string address;
 
 			if (kernel) {
@@ -226,7 +226,7 @@ protected:
 					        ? args.Name(ArgType::Input)
 					        : TypeReinterpret("uint", args.Name(ArgType::Input));
 					right += ";";
-				} else if (op->HasAllTypes(OpClass::Scatter)) {
+				} else if (op->HasAllTypes(OpProp::Scatter)) {
 					if (output_type != None) {
 						left += type_names[output_type] + " " + name + " = ";
 					}
@@ -258,7 +258,7 @@ protected:
 					string memory_expression = GetName("tf.write") + "(" + tensor_name + ", " + address + ", ";
 					expression += memory_expression + args.Name(ArgType::Input) + ")";
 					right += ";";
-				} else if (op->HasAllTypes(OpClass::Scatter)) {
+				} else if (op->HasAllTypes(OpProp::Scatter)) {
 					throw std::runtime_error("Scatter operation not supported in non-kernel mode");
 				}
 			}
@@ -273,7 +273,7 @@ protected:
 			}
 			string line;
 			string code = op->code_;
-			switch (op->op_classes[0]) {
+			switch (op->class_) {
 				case OpClass::Operator:
 					args.AddParenthesis(true);
 					if ((code == "&" || code == "|") && output_type == Bool) {
@@ -306,7 +306,7 @@ protected:
 					line += op->code_;
 					break;
 				case OpClass::DimensionIndex:
-					line += op->code_ + to_string(node->GetTensor()->data[0]);
+					line += op->code_ + to_string(node->data[0]);
 					break;
 				case OpClass::Variable:
 					line += op->code_;
@@ -328,7 +328,7 @@ protected:
 					needs_paranthesis = true;
 					break;
 				default:
-					line += "";
+					throw std::runtime_error("Unknown operation class");
 					break;
 			}
 			expression += line;
@@ -354,7 +354,7 @@ protected:
 
 	virtual string TypeCast(string type_name, string input)
 	{
-		return "(" + type_name + ")" + input;
+		return "((" + type_name + ")(" + input + "))";
 	}
 
 	virtual string TypeReinterpret(string type_name, string input) {
