@@ -729,7 +729,7 @@ void IR::UnrollKernelDimensions() {
 }
 
 
-#define MAX_KERNEL_COPY_COST 2048.0f
+#define MAX_KERNEL_COPY_COST 16384.0f
 void IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");

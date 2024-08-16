@@ -9,9 +9,9 @@ from atom import *
 
 tf.initialize(tf.opengl)
 
-lr = 0.008
-n_walkers = 4096
-opt_steps = 3000
+lr = 0.005
+n_walkers = 8168
+opt_steps = 2500
 
 #how many metropolis steps to perform per optimization step
 metropolis_per_step = 8
@@ -23,7 +23,7 @@ target_acceptance_rate = 0.5
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
 #ferminet/psiformer used a clipping around the median of the local energy
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simpler and seems to work well
-outlier_fraction = 0.1
+outlier_fraction = 0.15
 
 atom1 = Atom(3, "Li", Vector3(-5.051*0.5, 0.0, 0.0))
 atom2 = Atom(3, "Li", Vector3(5.051*0.5, 0.0, 0.0))
@@ -43,25 +43,26 @@ class PSI(tf.Module):
         self.electron_n = electron_n
         self.spin_up_n = spin_up_n
         self.spin_down_n = electron_n - spin_up_n
+        self.orb_per_atom = 12
+        self.determinants = 4
+        self.orbital_n = self.orb_per_atom * self.atom_n
+
         self.params = tf.Parameter([2], tf.float32, requires_grad = False)
         self.step = tf.Parameter([1], tf.int32, requires_grad = False)
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
         #self.weights = tf.Parameter([3], tf.float32)
-        self.orb_per_atom = 8
-        self.determinants = 4
         self.orbi_layer0 = tf.Parameter([4, self.orb_per_atom], tf.float32)
         self.orbi_layer0_bias = tf.Parameter([self.orb_per_atom], tf.float32)
         self.orbi_layer1 = tf.Parameter([4, self.orb_per_atom], tf.float32)
         self.orbi_layer1_bias = tf.Parameter([self.orb_per_atom], tf.float32)
         self.envelope_layer = tf.Parameter([self.orb_per_atom], tf.float32)
-        self.orbital_n = self.orb_per_atom * self.atom_n
         self.mid_layer1 = tf.Parameter([self.orbital_n, self.orbital_n], tf.float32)
         self.mid_layer1_bias = tf.Parameter([self.orbital_n], tf.float32)
         self.up_layer = tf.Parameter([self.orbital_n, self.determinants * self.spin_up_n], tf.float32)
         self.down_layer = tf.Parameter([self.orbital_n, self.determinants * self.spin_down_n], tf.float32)
         self.gamma = tf.Parameter([4], tf.float32)
-        self.dx = 5e-3
+        self.dx = 1e-2
         self.eps = 1e-6
 
     def metropolis_dx(self):
@@ -82,7 +83,6 @@ class PSI(tf.Module):
         beta = tf.abs(self.weights[1])
         gamma = self.weights[2]
         return (lognum(-alpha*r1-beta*r2) + lognum(-alpha*r2-beta*r1)) * lognum(gamma*r12)
-
 
     def eye(self, N):
         i, j = tf.indices([N, N])
@@ -111,20 +111,20 @@ class PSI(tf.Module):
         midi = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * self.orb_per_atom])
         envelope = envelope[midi[0], midi[1], midi[2] / self.orb_per_atom, midi[2] % self.orb_per_atom]
 
-        envelope = envelope * (1.0 + ELU(0.25*(envelope @ self.mid_layer1 + self.mid_layer1_bias)))
+        envelope = envelope * (1.0 + 0.25*self.mid_layer1_bias) + GELU2(0.25*(envelope @ self.mid_layer1))
 
         #reshape, merge atom orbitals into one dimension [batch, electrons, atom*orbital]
         up1i = tf.indices([electrons.shape[0], self.spin_up_n, self.atom_n * self.orb_per_atom])
         up1 = envelope[up1i[0], up1i[1], up1i[2]]
     
         up_features = up1 @ (self.eye_like(self.up_layer) + 0.15*self.up_layer)
-        det_up = aslog(self.determinant(up_features, self.spin_up_n))
+        det_up = self.determinant(up_features, self.spin_up_n)
 
         down1i = tf.indices([electrons.shape[0], self.spin_down_n, self.atom_n * self.orb_per_atom])
         down1 = envelope[down1i[0], self.spin_up_n + down1i[1], down1i[2]]
 
         down_features = down1 @ (self.eye_like(self.down_layer) + 0.15*self.down_layer)
-        det_down = aslog(self.determinant(down_features, self.spin_down_n))
+        det_down = self.determinant(down_features, self.spin_down_n)
 
         #compute determinant for each set of electron orbitals [batch, determinant]
         orbiprod = det_up * det_down
@@ -134,7 +134,7 @@ class PSI(tf.Module):
         #sum the determinants (use logsumexp trick)  
         maxorbiprodlog = tf.max(orbiprodlog)
         detsum = tf.sum(orbiprodsign * tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
-        orbisum = maxorbiprodlog + tf.log2(tf.clamp(tf.abs(detsum), 1e-6, 1e6))
+        orbisum = maxorbiprodlog + tf.log2(tf.abs(detsum))
 
         psi = lognum(orbisum) * self.jastrow(electrons)
 
@@ -163,6 +163,38 @@ class PSI(tf.Module):
         return lognum(jastrow)
 
     #unrolled determinant calculation (not exactly the best way to do this, but easy auto-differentiation)
+    def logdeterminant(self, orbitals, N):
+        orbitals = tf.reshape(orbitals, [orbitals.shape[0], N, N, self.determinants])
+        b, d = tf.indices([orbitals.shape[0], self.determinants])
+
+        m = []
+        for i in range(N):
+            m.append([])
+            for j in range(N):
+                m[i].append(aslog(orbitals[b, i, j, d]))
+
+        return self.logdeterminant_laplace(m, N)
+
+    #VERY slow determinant calculation using Laplace expansion
+    def logdeterminant_laplace(self, m, N):
+        if N <= 0:
+            return lognum(0.0, 1.0)
+
+        if N == 1:
+            return m[0][0]
+        
+        if N == 2:
+            return m[0][0] * m[1][1] - m[0][1] * m[1][0]
+        
+        result = aslog(0.0)
+        for j in range(N):
+            submatrix = [m[i][:j] + m[i][j + 1:] for i in range(1, N)]
+            sign = lognum(0.0, 1.0 if j % 2 == 0 else -1.0)
+            term = sign * m[0][j] * self.logdeterminant_laplace(submatrix, N - 1)
+            result = term + result
+        return result
+    
+    #unrolled determinant calculation (not exactly the best way to do this, but easy auto-differentiation)
     def determinant(self, orbitals, N):
         orbitals = tf.reshape(orbitals, [orbitals.shape[0], N, N, self.determinants])
         b, d = tf.indices([orbitals.shape[0], self.determinants])
@@ -173,7 +205,7 @@ class PSI(tf.Module):
             for j in range(N):
                 m[i].append(orbitals[b, i, j, d])
 
-        return self.determinant_laplace(m, N)
+        return aslog(self.determinant_laplace(m, N))
 
     #VERY slow determinant calculation using Laplace expansion
     def determinant_laplace(self, m, N):
@@ -182,7 +214,7 @@ class PSI(tf.Module):
 
         if N == 1:
             return m[0][0]
-        
+
         if N == 2:
             return m[0][0] * m[1][1] - m[0][1] * m[1][0]
         
@@ -283,9 +315,9 @@ class PSI(tf.Module):
         median_mask = tf.select((ids >= fraction) & (ids < (sample_count - fraction)), tf.float(sample_count)/tf.float(num_masked), 0.0)
 
         #clip the local energy to a region around the median
-        median = x_sorted[fraction]
+        median = x_sorted[sample_count / 2]
         mad_median = tf.mean(tf.abs(x_sorted - median)*median_mask)
-        x_clipped = tf.clamp(x_sorted, median - 2.0 * mad_median, median + 2.0 * mad_median)
+        x_clipped = tf.clamp(x_sorted, median - 3.0 * mad_median, median + 3.0 * mad_median)
 
         x_mean = tf.mean(x_clipped*median_mask)
         return tf.mean(2.0 * (x_clipped - x_mean).detach_grad() * psi_sorted * median_mask), x_mean
@@ -360,6 +392,8 @@ def OptimizeEnergy():
 
 optimize_energy = tf.compile(OptimizeEnergy)
 
+np.random.seed(0)
+
 optimizer, wavefunction = GetModelOptimizer()
 optimizer.initialize_parameters()
 optimizer.net.params = tf.tensor(np.array([0.5, outlier_fraction]).astype(np.float32))
@@ -368,7 +402,6 @@ optimizer.net.atoms = tf.tensor(atoms)
 optimizer.net.step = tf.tensor(np.array([0], np.int32))
 optimizer.net.seed = tf.tensor(np.array([0], np.uint32))
 
-np.random.seed(0)
 walkers = np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
 walkers_tf = tf.tensor(walkers)
 
@@ -386,7 +419,7 @@ smoothed_energy = 0.0
 smoothed_acceptance_rate = 0.0
 smoothing = 0.99
 for i in progress_bar:
-    if(i == 0): tf.renderdoc_start_capture()
+    if(i == 2400): tf.renderdoc_start_capture()
 
     for j in range(metropolis_per_step):
         out = metropolis_step(wavefunction, walkers_tf)
@@ -415,7 +448,7 @@ for i in progress_bar:
     energy_history.append(smoothed_energy)
 
     progress_bar.set_postfix(acceptance_rate = '{0:.6f}'.format(smoothed_acceptance_rate), loss = '{0:.6f}'.format(smoothed_loss[0]), energy = '{0:.6f}'.format(smoothed_energy[0]))
-    if(i == 0): tf.renderdoc_end_capture()
+    if(i == 2400): tf.renderdoc_end_capture()
 
 print("Final Energy: ", np.mean(smoothed_energy))
 print("Error, %: ", 100.0 * np.abs((np.mean(smoothed_energy) - target_energy) / target_energy))
@@ -450,12 +483,12 @@ plt.grid(True)
 plt.show()
 
 #print out parameters
-# print("envelope_layer: ", wavefunction.envelope_layer.numpy)
-# print("orbi_layer0: ", wavefunction.orbi_layer0.numpy)
-# print("orbi_layer0_bias: ", wavefunction.orbi_layer0_bias.numpy)
-# print("orbi_layer1: ", wavefunction.orbi_layer1.numpy)
-# print("orbi_layer1_bias: ", wavefunction.orbi_layer1_bias.numpy)
-# print("orbi_layer2: ", wavefunction.orbi_layer2.numpy)
-# print("gamma: ", wavefunction.gamma.numpy)
-# print("gamma2: ", wavefunction.gamma2.numpy)
-# print("dx: ", wavefunction.dx)
+print("envelope_layer: ", wavefunction.envelope_layer.numpy)
+print("orbi_layer0: ", wavefunction.orbi_layer0.numpy)
+print("orbi_layer0_bias: ", wavefunction.orbi_layer0_bias.numpy)
+print("orbi_layer1: ", wavefunction.orbi_layer1.numpy)
+print("orbi_layer1_bias: ", wavefunction.orbi_layer1_bias.numpy)
+print("orbi_layer2: ", wavefunction.orbi_layer2.numpy)
+print("gamma: ", wavefunction.gamma.numpy)
+print("gamma2: ", wavefunction.gamma2.numpy)
+print("dx: ", wavefunction.dx)

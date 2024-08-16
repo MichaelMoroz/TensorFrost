@@ -35,6 +35,9 @@ def Sort(keys, values, element_count):
 def sqr(x):
     return x * x
 
+def aslog(x):
+    return lognum(tf.log2(tf.max(tf.abs(x), 1e-8)), tf.sign(x))
+
 class lognum():
     def __init__(self, value = 0.0, sign = 1.0):
         self.value = value
@@ -46,12 +49,15 @@ class lognum():
     def __neg__(self):
         return lognum(self.value, -self.sign)
     
-    def __add__(self, other):
+    def add(self, other):
         maxv, minv = tf.max(self.value, other.value), tf.min(self.value, other.value)
         diff = maxv - minv
         value = maxv + tf.select(diff > 24.0, 0.0, tf.log2(1.0 + self.sign * other.sign * tf.exp2(-diff)))
         sign = tf.select(self.value > other.value, self.sign, other.sign)
         return lognum(value, sign)
+
+    def __add__(self, other):
+        return self.add(other)
     
     def __sub__(self, other):
         return self + (-other)
@@ -68,9 +74,6 @@ class lognum():
     def log(self):
         return self.value * 0.69314718056
     
-def aslog(x):
-    return lognum(tf.log2(tf.max(tf.abs(x), 1e-8)), tf.sign(x))
-
 def GELU(x):
     return x / (1.0 + tf.exp(-1.702 * x))
 
@@ -79,3 +82,6 @@ def ELU(x):
 
 def GLIN(X):
     return 0.5*X + 0.5*X/(1.0 + tf.exp(-X))
+
+def GELU2(x):
+    return x*(1.0 + 0.95*tf.tanh(x - 0.779))
