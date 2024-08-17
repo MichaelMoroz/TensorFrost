@@ -537,14 +537,39 @@ public:
 		Tensors new_shape = Tensors();
 		for (int i = 0; i < dims; i++) {
 			if (i == axis) {
-				new_shape.push_back(&Tensor::Constant(split_size));
 				new_shape.push_back(&((*shape[i] + Tensor::Constant(split_size - 1)) / Tensor::Constant(split_size)));
+				new_shape.push_back(&Tensor::Constant(split_size));
 			} else {
 				new_shape.push_back(shape[i]);
 			}
 		}
 		Tensor& output = OpShape("dim_split", new_shape, &tensor);
 		output.SetData({(uint)axis, (uint)split_size});
+		return output;
+	}
+
+	static Tensor& MergeDim(const Tensor& tensor, int axis = -1, const Tensor* target_size = nullptr) {
+		ShapeInfo shapeinfo = tensor.GetShapeInfo();
+		int dims = shapeinfo.dim;
+		Tensors shape = shapeinfo.GetTensors();
+		if(axis == 0) axis = 1;
+		const Tensor* target_size_tensor = nullptr;
+		if(target_size == nullptr) {
+			target_size_tensor = &(*shape[axis - 1] * *shape[axis]);
+		} else {
+			target_size_tensor = target_size;
+		}
+		axis = GetAxis(dims, axis);
+		Tensors new_shape = Tensors();
+		for (int i = 0; i < dims; i++) {
+			if(i == axis - 1) {
+				new_shape.push_back(target_size_tensor);
+			} else if(i != axis) {
+				new_shape.push_back(shape[i]);
+			}
+		}
+		Tensor& output = OpShape("dim_merge", new_shape, &tensor);
+		output.SetData(axis);
 		return output;
 	}
 

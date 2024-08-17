@@ -296,6 +296,7 @@ Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int spli
 		if (i == axis) {
 			Tensor* index1 = &Tensor::Index(new_shape, i);
 			Tensor* index2 = &Tensor::Index(new_shape, i + 1);
+			//merged index
 			indices.push_back(&(*index1 * (*new_shape[i + 1]) + *index2));
 		} else if(i < axis) {
 			indices.push_back(&Tensor::Index(new_shape, i));
@@ -305,6 +306,28 @@ Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int spli
 	}
 	Tensor* loaded = ConstantOutOfBounds(array, indices, 0);
 	loaded->SetDebugName("split");
+	return loaded;
+}
+
+Tensor* MergeDim(const Tensor* array, const Tensor* merged, int axis) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	axis = GetAxis(dims, axis);
+	Tensors shape = shapeinfo.GetTensors();
+	Tensors new_shape = merged->GetShape();
+	Tensors indices = Tensors();
+	for (int i = 0; i < dims-1; i++) {
+		if (i == axis-1) {
+			Tensor* merged_index = &Tensor::Index(new_shape, i);
+			//get split index
+			indices.push_back(&(*merged_index / *shape[axis]));
+			indices.push_back(&(*merged_index % *shape[axis]));
+		} else {
+			indices.push_back(&Tensor::Index(new_shape, i));
+		}
+	}
+	Tensor* loaded = ConstantOutOfBounds(array, indices, 0);
+	loaded->SetDebugName("merged");
 	return loaded;
 }
 
@@ -491,8 +514,10 @@ void IR::InsertAlgorithmicPrimitives() {
 				result = ReverseDim(inputs[0], axes[0]);
 			} else if (node->name == "dim_split") {
 				result = SplitDim(inputs[0], node->GetTensor(), axes[0], axes[1]);
+			} else if (node->name == "dim_merge") {
+				result = MergeDim(inputs[0], node->GetTensor(), axes[0]);
 			} else {
-				throw std::runtime_error("Unknown algorithmic primitive " + node->name);
+				throw std::runtime_error("Algorithmic primitive " + node->name + " at " + node->debug_name + " not found");
 			}
 
 			//replace the node with the sum

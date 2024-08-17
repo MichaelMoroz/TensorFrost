@@ -58,8 +58,10 @@ enum class OpProp {
 	Static, //can not be removed or copied
 	HostOnly,
 	KernelOnly,
+	Composite,
 	Algorithm,
 	Reduction,
+	Scan,
 	Modifier,
 	MemoryReuse,
 	Gradient,

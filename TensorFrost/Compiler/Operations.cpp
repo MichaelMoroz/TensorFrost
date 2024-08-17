@@ -41,16 +41,16 @@ const vector<Operation> operations = {
 
     //Algorithms
     //Reduction
-    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // sum of the last dimension
-    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}), // length(norm) of the last dimension (cant just split dimensions so, didnt add reduction prop)
-    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // max of the last dimension
-    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // min of the last dimension
-    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // mean of the last dimension
-    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}), // product of the last dimension
-    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}), // any of the last dimension
-    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}), // all of the last dimension
+    Operation("dim_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}),
+    Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
+    Operation("dim_max", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}),
+    Operation("dim_min", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}),
+    Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}),
+    Operation("dim_prod", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Reduction}),
+    Operation("dim_any", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}),
+    Operation("dim_all", {"u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm, OpProp::Nondiff, OpProp::Reduction}),
 	//Scan
-	Operation("dim_prefix_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm}),
+	Operation("dim_prefix_sum", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Algorithm, OpProp::Scan}),
     //Matrix
     Operation("transpose", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpProp::Algorithm}), // dot product of the last dimensions
@@ -65,23 +65,26 @@ const vector<Operation> operations = {
 	// Operation("tile_reduce", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	// Operation("dim_concat", {"ff_f", "uu_u", "ii_i", "bb_b"}, 0, "", {OpProperty::Algorithm}),
 	Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
+	Operation("dim_merge", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	// Operation("dim_pad", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
-	// Operation("split_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
-	// Operation("merge_dims", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	Operation("unsqueeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("squeeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 
-	//Native operations (built-in shader operations, only for size <= 4)
-    //Operation("native_dot", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_matmul", {"ff_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_norm", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_max", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_min", {"f_f"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_any", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
-    //Operation("native_all", {"u_u", "i_i", "b_b"}, 0, "", {OpType::Static, OpType::Algorithm}),
+    //Composite algorithms
+ //    Operation("dim_sort", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("dim_argsort", {"f_i", "u_i", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
+	// Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("dim_median", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("dim_var", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 
-    //Advanced
-    //Operation("sort", {"_f", "_u", "_i"}, 0, "", {OpType::Static}),
+	//linalg
+	Operation("linalg_qr", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
+	// Operation("linalg_lu", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("linalg_svd", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("linalg_eig", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+	// Operation("linalg_inv", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
+
 
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Static, OpProp::Gradient}),
