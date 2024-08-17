@@ -810,7 +810,7 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 		if (idx.find(dim) != idx.end()) {
 			out = const_cast<Tensor*>(idx[dim]);
 		} else {
-			throw std::runtime_error("Finalize memory indexing: node index not found");
+			throw std::runtime_error("Finalize memory indexing: node index not found for dimension " + to_string(dim) + " in memory node with dimensions " + to_string(memory_dim));
 		}
 
 		switch (mode)

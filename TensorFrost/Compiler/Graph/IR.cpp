@@ -81,8 +81,8 @@ void IR::CompileIR()
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 
-	RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); });
-	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); }, true);
+	RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); }, true);
+	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
 	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
 	RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
 	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });

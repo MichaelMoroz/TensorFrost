@@ -85,6 +85,8 @@ KernelScope::KernelScope(Node* node,
 	auto child_scopes = all_scopes.first;
 	bool host_only = all_scopes.second;
 
+	output_scopes.insert(child_scopes.begin(), child_scopes.end());
+
 	if(host_only) {
 		begin = nullptr;
 		end = nullptr;
@@ -93,8 +95,6 @@ KernelScope::KernelScope(Node* node,
 
 	int scope_count = (int)child_scopes.size();
 	if (scope_count == 0) return;
-
-	output_scopes.insert(child_scopes.begin(), child_scopes.end());
 
 	//if there is more than one child scope, then this node can not be in the scope
 	if (scope_count > 1) {
@@ -132,7 +132,8 @@ pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *r
 			if (merged->IsValid()) {
 				current_scope = merged;
 			} else {
-				if (current_scope->IsValid()) {
+				bool current_is_valid = current_scope->IsValid();
+				if (current_is_valid) {
 					scopes.insert(current_scope);
 				}
 				current_scope = node_scope;
@@ -141,7 +142,8 @@ pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *r
 			// add all child scopes
 			scopes.insert(child_scopes.begin(), child_scopes.end());
 			// add current scope
-			if (current_scope->IsValid()) {
+			bool current_is_valid = current_scope->IsValid();
+			if (current_is_valid) {
 				scopes.insert(current_scope);
 			}
 			// create a new empty scope
