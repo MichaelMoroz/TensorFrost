@@ -210,9 +210,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("split_dim", [](const PyTensor& t, const int split_size, const int axis) {
 		return PT(Tensor::SplitDim(T(t), split_size, axis));
 	}, py::arg("t"), py::arg("split_size"), py::arg("axis") = -1);
-	m.def("merge_dim", [](const PyTensor& t, const int axis, const PyTensor& target_size) {
-		return PT(Tensor::MergeDim(T(t), axis, &T(target_size)));
-	}, py::arg("t"), py::arg("axis") = -1, py::arg("target_size") = -1);
+	m.def("merge_dim", [](const PyTensor& t, const int axis, const PyTensor* target_size) {
+		const Tensor* target_size_ptr = target_size ? &T(*target_size) : nullptr;
+		return PT(Tensor::MergeDim(T(t), axis, target_size_ptr));
+	}, py::arg("t"), py::arg("axis") = -1, py::arg("target_size") = nullptr);
 
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
