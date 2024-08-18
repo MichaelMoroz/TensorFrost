@@ -293,12 +293,37 @@ public:
 		return result;
 	}
 
+	size_t CountNodesOfType(OpProp type) const {
+		size_t count = 0;
+		for (auto node = begin(); !node.end(); node.next()) {
+			if (node->op->HasAllTypes(type)) {
+				count++;
+			}
+		}
+		return count;
+	}
+
 	vector<Node*> GetChildren(Node* node) const {
 		vector<Node*> result;
 		for (auto child = NodeIterator(node); !child.end(); child.next()) {
 			result.push_back(*child);
 		}
 		return result;
+	}
+
+	size_t CombineHashes(size_t hash1, size_t hash2) const {
+		return hash1 ^ (hash2 + 0x9e3779b9 + (hash1 << 6) + (hash1 >> 2));
+	}
+
+	size_t GetApproximateStateHash() const {
+		size_t hash = 0;
+		for (auto node = begin(); !node.end(); node.next()) {
+			size_t node_hash1 = std::hash<std::string>{}(node->name);
+			size_t node_hash2 = std::hash<std::string>{}(node->debug_name);
+			size_t node_hash3 = std::hash<int>{}(node->debug_index);
+			hash = CombineHashes(hash, CombineHashes(node_hash1, CombineHashes(node_hash2, node_hash3)));
+		}
+		return hash;
 	}
 
 	int input_memory_count = 0;

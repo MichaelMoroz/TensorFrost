@@ -90,7 +90,7 @@ public:
 
 	Operation() = default;
 
-	Operation(string name, initializer_list<string> overloads, float cost,
+	Operation(string name, vector<string> overloads, float cost,
 	          string code = "", initializer_list<OpProp> op_props = {},  OpClass op_class = OpClass::Function)
 	    : name_(std::move(name)){
 		if (code.empty()) {
@@ -237,5 +237,7 @@ const Operation* FindOperation(const string& name);
 string DataTypeToString(TFType type);
 
 string RemoveSpaces(string str);
+
+void RegisterNewOperation(const Operation* op);
 
 }  // namespace TensorFrost

@@ -84,16 +84,12 @@ class Tensor {
 	}
 
 public:
-	template <typename... Args>
-	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+	static Tensor& OpShape(std::string op, Tensors shape, Tensors tensors) {
 		op = RemoveSpaces(op);
 
 		if (op.empty()) {
 			throw std::runtime_error("Operation name cannot be empty");
 		}
-
-		// convert the parameter pack to a std::vector
-		Tensors tensors = {args...};
 
 		// get the operation and output type
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors, false);
@@ -105,6 +101,14 @@ public:
 		AddArguments(arguments, shape, ArgType::Shape);
 
 		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
+	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		return OpShape(op, shape, tensors);
 	}
 
 	template <typename... Args>
@@ -224,6 +228,10 @@ public:
 	}
 
 	string GetConstantString() const;
+
+	static Tensor& CustomOperation(const string & name, Tensors inputs, Tensors shape) {
+		return OpShape(name, shape, inputs);
+	}
 
 	Node* node_ = nullptr;
 

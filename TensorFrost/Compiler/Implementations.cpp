@@ -241,9 +241,16 @@ map<string, VJPGradientFunction> gradient_functions =
 
 VJPGradientFunction GetVJPForOperation(string name) {
 	if (!gradient_functions.contains(name)) {
-		throw std::runtime_error("Cannot compute gradient for operation " + name);
+		throw std::runtime_error("Cannot compute VJP for operation " + name);
 	}
 	return gradient_functions[name];
+}
+
+void RegisterVJP(string name, VJPGradientFunction vjp) {
+	if (gradient_functions.contains(name)) {
+		throw std::runtime_error("VJP for operation " + name + " already registered");
+	}
+	gradient_functions[name] = vjp;
 }
 
 Tensor* ComputeReduction(const Tensor* array, int axis,
@@ -735,6 +742,50 @@ ImplementationFunction GetImplementationForOperation(string name) {
 		throw std::runtime_error("Cannot compute implementation for operation " + name);
 	}
 	return implementation_functions[name];
+}
+
+void RegisterImplementation(string name, ImplementationFunction impl) {
+	if (implementation_functions.contains(name)) {
+		throw std::runtime_error("Implementation for operation " + name + " already exists");
+	}
+	implementation_functions[name] = impl;
+}
+
+
+map<string, AlgorithmVJPGradientFunction> algorithm_vjps = {};
+
+AlgorithmVJPGradientFunction GetAlgorithmVJPForOperation(string name) {
+	if (!algorithm_vjps.contains(name)) {
+		throw std::runtime_error("Cannot compute VJP for operation " + name);
+	}
+	return algorithm_vjps[name];
+}
+
+void RegisterAlgorithmVJP(string name, AlgorithmVJPGradientFunction vjp) {
+	if (algorithm_vjps.contains(name)) {
+		throw std::runtime_error("VJP for operation " + name + " already registered");
+	}
+	algorithm_vjps[name] = vjp;
+}
+
+VJPGradientFunction CreateAlgorithmVJP(const string& name) {
+	VJPGradientFunction vjp = [name](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+		auto inputs = in.GetTensors(ArgType::Input);
+		AlgorithmVJPGradientFunction impl = GetAlgorithmVJPForOperation(name);
+		Tensors grad_tensors = impl(inputs, &grad, &out);
+		for (int i = 0; i < (int)grad_tensors.size(); i++) {
+			grads.Add(ArgType::Input, i, *const_cast<Tensor*>(grad_tensors[i]));
+		}
+	};
+	return vjp;
+}
+
+void RegisterAlgorithmicPrimitive(const string& name, vector<string> overloads,  ImplementationFunction impl, AlgorithmVJPGradientFunction vjp) {
+	Operation* newop = new Operation(name, overloads, 0, "", {OpProp::Custom, OpProp::Algorithm});
+	RegisterNewOperation(newop);
+	RegisterImplementation(name, impl);
+	RegisterAlgorithmVJP(name, vjp);
+	RegisterVJP(name, CreateAlgorithmVJP(name));
 }
 
 } // namespace TensorFrost

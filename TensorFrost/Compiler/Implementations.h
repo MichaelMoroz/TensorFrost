@@ -72,13 +72,18 @@ public:
 
 
 typedef function<void(ArgumentManager&, Tensor&, Tensor&, NodeGrads&)> VJPGradientFunction;
+typedef function<Tensors(map<int, const Tensor*> inputs, const Tensor* gradient, const Tensor* tensor)> AlgorithmVJPGradientFunction;
 
 VJPGradientFunction GetVJPForOperation(string name);
+void RegisterVJP(string name, VJPGradientFunction vjp);
 
 //TODO JVPGradientFunction for forward mode autodiff
 
 typedef function<void(Tensors& output, map<int, const Tensor*> inputs, const Tensor* tensor, vector<int> axes)> ImplementationFunction;
 
 ImplementationFunction GetImplementationForOperation(string name);
+void RegisterImplementation(string name, ImplementationFunction impl);
+
+void RegisterAlgorithmicPrimitive(const string& name, vector<string> overloads,  ImplementationFunction impl, AlgorithmVJPGradientFunction vjp);
 
 }

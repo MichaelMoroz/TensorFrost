@@ -79,13 +79,11 @@ const vector<Operation> operations = {
 	// Operation("dim_var", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 
 	//linalg
-	Operation("linalg_qr", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
+	//Operation("linalg_qr", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
 	// Operation("linalg_lu", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 	// Operation("linalg_svd", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 	// Operation("linalg_eig", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("linalg_inv", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-
-	Operation("custom", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Custom}),
+	// Operation("linalg_inv", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite})
 
 
     //Autodiff
@@ -208,6 +206,10 @@ unordered_map<string, const Operation*> CreateOperationMap() {
 }
 
 unordered_map<string, const Operation*> operation_map = CreateOperationMap();
+
+void RegisterNewOperation(const Operation* op) {
+	RegisterNewOperation(operation_map, op);
+}
 
 DataTypeList Types(initializer_list<TFType> elements) {
 	return DataTypeList(elements);

@@ -270,6 +270,48 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("region_end", [](const std::string& name) {
 		Tensor::EndRegion(name);
 	}, py::arg("name"), "End a debug region");
+
+	m.def("register_custom_operation", [](const std::string& name, vector<string> overloads, py::function impl, py::function vjp) {
+		auto cpp_impl = [impl](Tensors& output, map<int, const Tensor*> inputs, const Tensor* tensor, vector<int> axes) {
+			py::list input_list;
+			for (auto& [id, tensor] : inputs) {
+				input_list.append(PT(*tensor));
+			}
+			py::list output_list = impl(input_list, PT(*tensor), axes).cast<py::list>();
+			for (int i = 0; i < output_list.size(); i++) {
+				PyTensor* t = output_list[i].cast<PyTensor*>();
+				output.push_back(&t->Get());
+			}
+		};
+
+		auto cpp_vjp = [vjp](map<int, const Tensor*> inputs, const Tensor* gradient, const Tensor* tensor) {
+			py::list input_list;
+			for (auto& [id, tensor] : inputs) {
+				input_list.append(PT(*tensor));
+			}
+			py::list output_list = vjp(input_list, PT(*gradient), PT(*tensor)).cast<py::list>();
+			Tensors gradients;
+			for (int i = 0; i < output_list.size(); i++) {
+				PyTensor* t = output_list[i].cast<PyTensor*>();
+				gradients.push_back(&t->Get());
+			}
+			return gradients;
+		};
+
+		RegisterAlgorithmicPrimitive(name, overloads, cpp_impl, cpp_vjp);
+	}, py::arg("name"), py::arg("overloads"), py::arg("impl"), py::arg("vjp"), "Register a custom operation");
+
+	m.def("custom", [](const std::string& name, py::list inputs, py::list shape) {
+		Tensors input_tensors = TensorsFromList(inputs);
+		Tensors shape_tensors = TensorsFromList(shape);
+		return PT(Tensor::CustomOperation(name, input_tensors, shape_tensors));
+	}, py::arg("name"), py::arg("inputs"), py::arg("shape"), "Run custom operation");
+
+	m.def("custom", [](const std::string& name, py::list inputs) {
+		Tensors input_tensors = TensorsFromList(inputs);
+		Tensors shape_tensors = input_tensors[0]->GetShape();
+		return PT(Tensor::CustomOperation(name, input_tensors, shape_tensors));
+	}, py::arg("name"), py::arg("inputs"), "Run custom operation");
 }
 
 }  // namespace TensorFrost

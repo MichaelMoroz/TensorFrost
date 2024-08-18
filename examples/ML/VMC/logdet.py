@@ -29,7 +29,7 @@ def invert_triangular_tensorfrost(matrix, lower=True):
 
     if not lower: #transpose the matrix to make it lower triangular
         matrix = matrix.T
-
+    
     with tf.loop(n) as i:
         inverted[i, i] = 1.0 / matrix[i, i]
         p, k = tf.indices([i, i])
@@ -62,7 +62,6 @@ tf.register_custom_operation("logdet", ["f_f"], logdet_op, logdet_op_vjp)
 
 def ProgramTest():
     A = tf.input([-1, -1], tf.float32)
-    A = tf.assert_tensor(A, [A.shape[0], A.shape[0]], tf.float32)
     B = tf.custom("logdet", [A], [])
     dB_dA = tf.grad(B, A)
     return B, dB_dA
