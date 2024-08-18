@@ -85,6 +85,8 @@ const vector<Operation> operations = {
 	// Operation("linalg_eig", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 	// Operation("linalg_inv", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
 
+	Operation("custom", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Custom}),
+
 
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Static, OpProp::Gradient}),
@@ -190,13 +192,17 @@ const vector<Operation> operations = {
     Operation("const", {"_f", "_u", "_i", "_b"}, 0, "", {OpProp::Nondiff}, OpClass::Constant),
 };
 
+void RegisterNewOperation(unordered_map<string, const Operation*>& operation_map, const Operation* op) {
+	if (operation_map.contains(op->name_)) {
+		throw runtime_error("Operation already exists: " + op->name_);
+	}
+	operation_map[op->name_] = op;
+}
+
 unordered_map<string, const Operation*> CreateOperationMap() {
     unordered_map<string, const Operation*> operation_map;
     for (const auto& op : operations) {
-        if (operation_map.contains(op.name_)) {
-			throw runtime_error("Operation already exists: " + op.name_);
-		}
-		operation_map[op.name_] = &op;
+        RegisterNewOperation(operation_map, &op);
 	}
     return operation_map;
 }

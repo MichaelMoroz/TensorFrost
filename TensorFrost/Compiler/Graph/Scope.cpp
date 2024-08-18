@@ -65,6 +65,13 @@ KernelScope::KernelScope(Node* node,
 		return;
 	}
 
+	if(node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp)) {
+		if(scope_shape.dim == 0) {
+			//must be at 1d scalar to properly generate the kernel
+			scope_shape.ExpandDimensionsTo(1);
+		}
+	}
+
 	// find boundary nodes
 	bool identity = node->args.Count(ArgType::Index) == 0;
 

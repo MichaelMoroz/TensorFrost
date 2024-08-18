@@ -7,6 +7,7 @@
 
 #include "Backend/TensorMemory.h"
 #include "Tensor/Tensor.h"
+#include "Compiler/Implementations.h"
 
 namespace TensorFrost {
 

@@ -7,7 +7,7 @@ tf.initialize(tf.opengl)
 
 def PrefixSum(A, axis = -1):
     axis = len(A.shape) + axis if axis < 0 else axis
-    group_size = 128
+    group_size = 64
     grouped = tf.split_dim(A, group_size, axis)
     group_scan = tf.prefix_sum(tf.sum(grouped, axis = axis + 1), axis = axis)
     ids = grouped.indices
@@ -18,7 +18,7 @@ def PrefixSum(A, axis = -1):
     full_scan = tf.merge_dim(group_scan, target_size = A.shape[axis], axis = axis + 1)
     return full_scan
 
-def RadixSort(keys, values, bits_per_pass = 4, max_bits = 32):
+def RadixSort(keys, values, bits_per_pass = 8, max_bits = 32):
     iters = (max_bits + bits_per_pass - 1) // bits_per_pass
     group_size = 128
     histogram_size = 2 ** bits_per_pass
@@ -32,9 +32,20 @@ def RadixSort(keys, values, bits_per_pass = 4, max_bits = 32):
         def SortIteration(A, B, C, D, iter):
             tf.region_begin('SortIteration')
             grouped = tf.split_dim(GetBits(A, iter), group_size)
-            g, e, i = tf.indices([grouped.shape[0], grouped.shape[1], histogram_size])
-            is_bit = tf.select((grouped[g, e] == i) & ((g*group_size + e) < A.shape[0]), 1, 0)
-            group_histogram = tf.sum(is_bit, axis = 1)
+
+            # Do a packed histogram, since we sum 128 elements at a time, we can pack 4 values into a single uint32
+            g, e, i = tf.indices([grouped.shape[0], grouped.shape[1], tf.int(histogram_size/4)])
+            this_key = grouped[g, e]
+            packed_is_bit = (tf.uint(this_key == 4*i)) + (tf.uint(this_key == 4*i+1) << 8) + (tf.uint(this_key == 4*i+2) << 16) + (tf.uint(this_key == 4*i+3) << 24)
+            packed_is_bit = tf.select((g*group_size + e) < A.shape[0], packed_is_bit, tf.uint(0))
+            group_histogram_packed = tf.sum(packed_is_bit, axis = 1)
+            g, i = tf.indices([grouped.shape[0], histogram_size])
+            group_histogram = tf.int((group_histogram_packed[g, i / 4] >> (8*(i % 4))) & tf.uint(0xFF))
+
+            # g, e, i = tf.indices([grouped.shape[0], grouped.shape[1], histogram_size])
+            # is_bit = tf.select((grouped[g, e] == i) & ((g*group_size + e) < A.shape[0]), 1, 0)
+            # group_histogram = tf.sum(is_bit, axis = 1)
+
             group_histogram_scan = PrefixSum(group_histogram, axis = 0)
             i, = tf.indices([histogram_size])
             total_bit_histogram = tf.prefix_sum(group_histogram_scan[group_histogram_scan.shape[0] - 1, i])
@@ -106,8 +117,10 @@ sort_program1 = tf.compile(Sort1)
 
 # %%
 # Generate some random data to scan (ints between 0 and 10)
-keys = np.random.randint(0, 1234567, 2**24).astype(np.int32)
-values = np.random.randint(0, 1234567, 2**24).astype(np.int32)
+N = 2**20
+MaxValue = 2**31 - 1
+keys = np.random.randint(0, MaxValue, N).astype(np.int32)
+values = np.random.randint(0, MaxValue, N).astype(np.int32)
 
 tf.renderdoc_start_capture()
 

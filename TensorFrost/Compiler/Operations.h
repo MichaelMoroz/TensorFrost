@@ -60,6 +60,7 @@ enum class OpProp {
 	KernelOnly,
 	Composite,
 	Algorithm,
+	Custom,
 	Reduction,
 	Scan,
 	Modifier,

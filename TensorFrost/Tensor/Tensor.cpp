@@ -18,7 +18,7 @@ vector<int> ShapeInfo::GetShape(int default_value) const {
 	return shape;
 }
 
-void ShapeInfo::ExpandDimensions(int new_dim)
+void ShapeInfo::ExpandDimensionsTo(int new_dim)
 {
 	if(new_dim <= dim) {
 		return;

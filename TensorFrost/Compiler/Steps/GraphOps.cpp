@@ -4,7 +4,11 @@
 namespace TensorFrost {
 
 void IR::SeparateOperationsIntoKernels() {
-	auto kernel_scopes = KernelScope::ComputeScopes(root);
+
+	pair<unordered_set<KernelScope*>, bool> kernel_scopes;
+	ExecuteExpressionFirstChild(root, [&]() {
+		kernel_scopes = KernelScope::ComputeScopes(root);
+	});
 
 	// create kernel nodes for all kernel scopes
 	for (auto scope : kernel_scopes.first) {

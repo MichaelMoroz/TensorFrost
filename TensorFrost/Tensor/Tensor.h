@@ -579,7 +579,7 @@ public:
 		int dims = std::max(std::max(axis1, axis2), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
 		int a1 = GetAxis(dims, axis1);
 		int a2 = GetAxis(dims, axis2);
-		shapeinfo.ExpandDimensions(dims);
+		shapeinfo.ExpandDimensionsTo(dims);
 		Tensors shape = shapeinfo.GetTensors();
 		//swap the axes
 		std::swap(shape[a1], shape[a2]);
@@ -638,10 +638,10 @@ public:
 		}
 
 		if(shape_a.dim < 2) {
-			shape_a.ExpandDimensions(2);
+			shape_a.ExpandDimensionsTo(2);
 		}
 		if(shape_b.dim < 2) {
-			shape_b.ExpandDimensions(2);
+			shape_b.ExpandDimensionsTo(2);
 		}
 
 		Tensors shape_a_tensors = shape_a.GetTensors();
