@@ -28,7 +28,7 @@ const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target
 		bool b_expanded = targetinfo.IsExpanded(i);
 		if(b_expanded || (val_a != val_b && val_b == 1)) {
 			axes_to_reduce.push_back(i);
-			bool should_unsqueeze = i >= (dim - target.GetDimension());
+			bool should_unsqueeze = i < target.GetDimension();
 			unsqueeze.push_back(should_unsqueeze);
 		}
 	}
@@ -51,15 +51,6 @@ const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target
 #endif
 
 	return *reduced;
-}
-
-int GetGradAxis(const Tensor &out, const Tensor &grad) {
-	int axis = (int)out.node_->data[0];
-	int dim1 = out.GetDimension();
-	int dim2 = grad.GetDimension();
-	axis = out.GetDimension() - axis - 1;
-	axis = std::max(dim1, dim2) - axis - 1;
-	return axis;
 }
 
 map<string, VJPGradientFunction> gradient_functions =
@@ -138,40 +129,40 @@ map<string, VJPGradientFunction> gradient_functions =
 		grads.Add(Tensor::Matmul(grad, Tensor::Transpose(in[1])), Tensor::Matmul(Tensor::Transpose(in[0]), grad));
 	}},
 	{"transpose", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Transpose(grad, out.node_->data[1], out.node_->data[0]));
+		grads.Add(Tensor::Transpose(grad, out.axis(1), out.axis(0)));
 	}},
 	{"dot", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.node_->data[0]);
+		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.axis());
 		grads.Add(unsq_grad * in[1], unsq_grad * in[0]);
 	}},
 	{"unsqueeze", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Squeeze(grad, out.node_->data[0]));
+		grads.Add(Tensor::Squeeze(grad, out.axis()));
 	}},
 	{"squeeze", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Unsqueeze(grad, out.node_->data[0]));
+		grads.Add(Tensor::Unsqueeze(grad, out.axis()));
 	}},
 	{"dim_sum", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Unsqueeze(grad, GetGradAxis(out, grad)));
+		grads.Add(Tensor::Unsqueeze(grad, out.axis()));
 	}},
 	{"dim_mean", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		int axis = (int)out.node_->data[0];
+		int axis = out.axis();
 		Tensors shape = in[0].GetShape();
 		Tensor& dim_size = Tensor::tofloat(*shape[axis]);
 		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
 	}},
 	{"dim_norm", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//TODO: store axis from the right instead of the left
-		Tensor& unsq = Tensor::Unsqueeze(grad/out, GetGradAxis(out, grad));
+		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.axis());
 		grads.Add(unsq * in[0]);
 	}},
 	{"dim_max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
-		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
+		auto& out_unsq = Tensor::Unsqueeze(out, out.axis());
+		auto& grad_unsq = Tensor::Unsqueeze(grad, out.axis());
 		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
 	{"dim_min", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
-		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
+		auto& out_unsq = Tensor::Unsqueeze(out, out.axis());
+		auto& grad_unsq = Tensor::Unsqueeze(grad, out.axis());
 		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
 	{"dim_prefix_sum", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
@@ -495,8 +486,8 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	//permute indices to load the values
 	Tensors perm_indices = Tensors(old_dim, nullptr);
 	for (int i = 0; i < permuted_dim; i++) {
-		int old = permutation[i] - std::max(permuted_dim - old_dim, 0);
-		if(old >= 0) {
+		int old = permutation[i];
+		if(old < old_dim) {
 			perm_indices[old] = indices[i];
 		}
 	}
@@ -630,13 +621,12 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 		max_shape = shape_a_tensors;
 	}
 
-	for (int i = 0; i < max_dim - 2; i++) {
+	shape_c.push_back(shape_b_tensors[0]);
+	shape_c.push_back(shape_a_tensors[1]);
+	for (int i = 2; i < max_dim; i++) {
 		shape_c.push_back(max_shape[i]);
 	}
-	shape_c.push_back(shape_a_tensors[dim_a - 2]);
-	shape_c.push_back(shape_b_tensors[dim_b - 1]);
-
-	ShapeDimCompareResult result = CompareShapeDim(shape_a_tensors[dim_a - 1]->node_, shape_b_tensors[dim_b - 2]->node_);
+	ShapeDimCompareResult result = CompareShapeDim(shape_a_tensors[0]->node_, shape_b_tensors[1]->node_);
 	if (!result.compatible) {
 		throw std::runtime_error("Inner dimensions of the matrices must match");
 	}
@@ -659,19 +649,21 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 
 		// get indices for a elements
 		Tensors indices_a = Tensors();
-		for (int i = 0; i < dim_a - 2; i++) {
-			indices_a.push_back(indices_c[max_dim - dim_a + i]);
-		}
-		indices_a.push_back(indices_c[max_dim - 2]);
+
 		indices_a.push_back(&k);
+		indices_a.push_back(indices_c[1]);
+		for (int i = 2; i < dim_a; i++) {
+			indices_a.push_back(indices_c[i]);
+		}
 
 		// get indices for b elements
 		Tensors indices_b = Tensors();
-		for (int i = 0; i < dim_b - 2; i++) {
-			indices_b.push_back(indices_c[max_dim - dim_b + i]);
-		}
+
+		indices_b.push_back(indices_c[0]);
 		indices_b.push_back(&k);
-		indices_b.push_back(indices_c[max_dim - 1]);
+		for (int i = 2; i < dim_b; i++) {
+			indices_b.push_back(indices_c[i]);
+		}
 
 		// load the value
 		Tensor* value = &(Tensor::Load(*a, indices_a, IndexingMode::Unsafe) *
@@ -718,11 +710,11 @@ map<string, ImplementationFunction> implementation_functions =
 		dim = std::max(dim, axes[0] + 1);
 		for(int i = 0; i < dim; i++) {
 			if(i == axes[0]) {
-				permutation[i] = 0;
+				permutation[i] = dim-1;
 			} else if (i < axes[0]) {
-				permutation[i] = i + 1;
-			} else {
 				permutation[i] = i;
+			} else {
+				permutation[i] = i - 1;
 			}
 		}
 		outputs.push_back(Transpose(inputs[0], permutation));

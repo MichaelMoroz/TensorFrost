@@ -112,7 +112,7 @@ void IR::CompileIR()
 		auto current_state = GetApproximateStateHash();
 		for (int i = 0; i < MAX_COMPILATION_ITERATIONS; i++) {
 			RunCompilationPass("AddKernelGlobalLoadOperations", [&]() { AddKernelGlobalLoadOperations(); });
-			RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
+			RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
 			RunCompilationPass("OptimizeKernelLoadOperations", [&]() { OptimizeKernelLoadOperations(); });
 			RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 

@@ -618,7 +618,7 @@ void IR::AddMemoryOpIndices() {
 					if (isConstantAndEqualTo(shape[i], 1.0)) {
 						index = &Tensor::Constant(0);
 					} else {
-						index = indices[kernel_dim - memory_dim + i];
+						index = indices[i];
 					}
 					node->args.AddArgument(ArgType::Index, i, index->node_);
 				}

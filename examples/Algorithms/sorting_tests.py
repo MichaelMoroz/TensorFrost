@@ -3,7 +3,7 @@ import numpy as np
 import TensorFrost as tf
 import matplotlib.pyplot as plt
 
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
 
 def PrefixSum(A, axis = -1):
     axis = len(A.shape) + axis if axis < 0 else axis

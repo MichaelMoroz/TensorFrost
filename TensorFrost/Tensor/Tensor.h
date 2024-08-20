@@ -599,10 +599,10 @@ public:
 		return output;
 	}
 
-	static Tensor& Transpose(const Tensor& tensor, const int axis1 = 0, const int axis2 = 1) {
+	static Tensor& Transpose(const Tensor& tensor, const int axis1 = 1, const int axis2 = 0) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 
-		int dims = std::max(std::max(axis1, axis2), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
+		int dims = std::max(std::max(axis1+1, axis2+1), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
 		int a1 = GetAxis(dims, axis1);
 		int a2 = GetAxis(dims, axis2);
 		shapeinfo.ExpandDimensionsTo(dims);
@@ -688,14 +688,13 @@ public:
 			max_shape = shape_a_tensors;
 		}
 
-		for (int i = 0; i < max_dim - 2; i++) {
+		shape_c.push_back(shape_b_tensors[0]);
+		shape_c.push_back(shape_a_tensors[1]);
+		for (int i = 2; i < max_dim; i++) {
 			shape_c.push_back(max_shape[i]);
 		}
-		shape_c.push_back(shape_a_tensors[dim_a - 2]);
-		shape_c.push_back(shape_b_tensors[dim_b - 1]);
-
-		//make sure that the inner dimensions match
-		if (!CompareShapeDim(shape_a_tensors[dim_a - 1]->node_, shape_b_tensors[dim_b - 2]->node_).compatible) {
+		ShapeDimCompareResult result = CompareShapeDim(shape_a_tensors[0]->node_, shape_b_tensors[1]->node_);
+		if (!result.compatible) {
 			throw std::runtime_error("Inner dimensions of the matrices must match");
 		}
 
@@ -1021,6 +1020,14 @@ public:
 
 	static void BeginRegion(const string& name);
 	static void EndRegion(const string& name);
+
+	int axis(int i = 0) const {
+		return (int)node_->data[i];
+	}
+
+	uint data(int i = 0) const {
+		return node_->data[i];
+	}
 };
 
 }  // namespace TensorFrost

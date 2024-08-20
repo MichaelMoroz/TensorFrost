@@ -1,6 +1,8 @@
 import TensorFrost as tf
 import numpy as np
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import time
 from tqdm import tqdm
 
@@ -23,45 +25,118 @@ class ADGrad(tf.Module):
             self.grad[i] = tf.grad(L, param)
     
 
-N = 10
+def GELU(X):
+    return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
+
+def log_softmax(X):
+    X = X - tf.unsqueeze(tf.max(X))
+    return X - tf.log(tf.unsqueeze(tf.sum(tf.exp(X))))
 
 #tensorfrost module
 class TestModule1(tf.Module):
-    def __init__(self):
+    def __init__(self, input_resolution = 28, output_size = 10):
         super().__init__()
-        # self.fc1 = tf.Parameter([N, N], tf.float32) 
-        # self.fc1_bias = tf.Parameter([N], tf.float32)
-        self.fc2 = tf.Parameter([N, N], tf.float32)
-        self.fc2_bias = tf.Parameter([N], tf.float32)
-   
-    def forward(self, x):
-        # x = x @ self.fc1 + self.fc1_bias
-        # x = tf.tanh(x)
-        x = x @ self.fc2 + self.fc2_bias
-        return x
+        self.resolution = input_resolution
+        self.kernel_size = 5
+        self.kernel_rad = self.kernel_size // 2
+        self.res1 = (self.resolution - self.kernel_size + 1)
+        self.res1p = self.res1 // 2
+        self.res2 = (self.res1p - self.kernel_size + 1)
+        self.res2p = self.res2 // 2
+        self.kernels1 = 16
+        self.kernels2 = 64
+        self.layer1 = 256
+        self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * 1)))
+        #self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
+        self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * self.kernels1)))
+        #self.conv2_bias = tf.Parameter([self.kernels2], tf.float32, random_scale = 0.0)
+        self.fc1 = tf.Parameter([self.kernels2 * self.res2p ** 2, self.layer1], tf.float32)
+        self.fc1_bias = tf.Parameter([self.layer1], tf.float32, random_scale = 0.0)
+        self.fc2 = tf.Parameter([self.layer1, output_size], tf.float32)
+        self.fc2_bias = tf.Parameter([output_size], tf.float32, random_scale = 0.0)
+
+    def assert_parameters(self):
+        self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
+
+    def conv2d(self, X, W):
+        bi, cout, wi, hi, cin, it = tf.indices([X.shape[0], W.shape[0], X.shape[2] - W.shape[2] + 1, X.shape[3] - W.shape[3] + 1, W.shape[1], W.shape[2] * W.shape[3]])
+        i, j = it%W.shape[2], it/W.shape[2]
+        conv = tf.sum(tf.sum(X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]))
+        return conv
+    
+    def max_pool2d(self, X):
+        bi, ci, wi, hi, i, j = tf.indices([X.shape[0], X.shape[1], X.shape[2] / 2, X.shape[3] / 2, 2, 2])
+        return tf.max(tf.max(X[bi, ci, 2 * wi + i, 2 * hi + j]))
+    
+    def forward(self, X):
+        tf.region_begin('Forward')
+        X = tf.reshape(X, [X.shape[0], 1, self.resolution, self.resolution])
+        X = self.max_pool2d(self.conv2d(X, self.conv1))
+        X = GELU(X)
+        X = self.max_pool2d(self.conv2d(X, self.conv2))
+        X = GELU(X)
+        X = tf.reshape(X, [X.shape[0], self.fc1.shape[0]])
+        X = GELU(X @ self.fc1 + self.fc1_bias)
+        X = X @ self.fc2 + self.fc2_bias
+        tf.region_end('Forward')
+        return X
 
     def loss(self, X, Y):
-        Y_pred = self.forward(X)
-        return tf.sum((Y - Y_pred)**2.0)
-    
+        Yhat = self.forward(X)
+        #loss = tf.mean(tf.sum(-Y * log_softmax(Yhat)))
+        loss = tf.mean(tf.mean((Y - Yhat)**2.0))
+        return loss, Yhat
+
+def log_softmax_torch(X):
+    X = X - torch.unsqueeze(torch.max(X), dim=-1)
+    return X - torch.log(torch.unsqueeze(torch.sum(torch.exp(X), dim=-1), dim=-1))
+
+def GELU_torch(X):
+    return 0.5*X*(1.0 + torch.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
+
 #pytorch module
 class TestModule2(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, input_resolution = 28, output_size = 10):
         super().__init__()
-        # self.fc1 = torch.nn.Parameter(torch.randn(N, N))
-        # self.fc1_bias = torch.nn.Parameter(torch.randn(N))
-        self.fc2 = torch.nn.Parameter(torch.randn(N, N))
-        self.fc2_bias = torch.nn.Parameter(torch.randn(N))
+        self.resolution = input_resolution
+        self.kernel_size = 5
+        self.kernel_rad = self.kernel_size // 2
+        self.res1 = (self.resolution - self.kernel_size + 1)
+        self.res1p = self.res1 // 2
+        self.res2 = (self.res1p - self.kernel_size + 1)
+        self.res2p = self.res2 // 2
+        self.kernels1 = 16
+        self.kernels2 = 64
+        self.layer1 = 256
+        self.conv1 = torch.nn.Parameter(0.1*torch.randn(self.kernels1, 1, self.kernel_size, self.kernel_size))
+        #self.conv1_bias = torch.nn.Parameter(torch.randn(self.kernels1))
+        self.conv2 = torch.nn.Parameter(0.1*torch.randn(self.kernels2, self.kernels1, self.kernel_size, self.kernel_size))
+        #self.conv2_bias = torch.nn.Parameter(torch.randn(self.kernels2))
+        self.fc1 = torch.nn.Parameter(0.1*torch.randn(self.kernels2 * self.res2p ** 2, self.layer1))
+        self.fc1_bias = torch.nn.Parameter(torch.randn(self.layer1))
+        self.fc2 = torch.nn.Parameter(0.1*torch.randn(self.layer1, output_size))
+        self.fc2_bias = torch.nn.Parameter(torch.randn(output_size))
+
+    def conv2d(self, X, W):
+        conv = torch.nn.functional.conv2d(X, W)
+        return conv
 
     def forward(self, x):
-        # x = x @ self.fc1 + self.fc1_bias
-        # x = torch.tanh(x)
+        x = x.reshape([-1, 1, self.resolution, self.resolution])
+        x = F.max_pool2d(self.conv2d(x, self.conv1), 2)
+        x = GELU_torch(x)
+        x = F.max_pool2d(self.conv2d(x, self.conv2), 2)
+        x = GELU_torch(x)
+        x = x.reshape(-1, self.fc1.shape[0])
+        x = GELU_torch(x @ self.fc1 + self.fc1_bias)
         x = x @ self.fc2 + self.fc2_bias
         return x
     
     def loss(self, X, Y):
         Y_pred = self.forward(X)
-        return torch.sum((Y - Y_pred)**2.0)
+        #return torch.mean((Y - Y_pred)**2.0)
+        #return torch.mean(torch.sum(-Y * log_softmax_torch(Y_pred), 0))
+        return torch.mean(torch.mean((Y - Y_pred)**2.0)), Y_pred
     
 #create the modules
 # pytorch
@@ -72,15 +147,25 @@ model_torch = TestModule2()
 model_tf = TestModule1()
 tf_grads = ADGrad(model_tf)
 tf_grads.initialize_parameters()
-# model_tf.fc1 = tf.tensor(model_torch.fc1.detach().numpy())
-# model_tf.fc1_bias = tf.tensor(model_torch.fc1_bias.detach().numpy())
-model_tf.fc2 = tf.tensor(model_torch.fc2.detach().numpy())
-model_tf.fc2_bias = tf.tensor(model_torch.fc2_bias.detach().numpy())
 
-x = np.random.randn(N).astype(np.float32)
+#copy torch weights to tensorfrost
+params = tf_grads.parameters()
+for i, param in enumerate(model_torch.parameters()):
+    params[i] = param.detach().numpy()
+    params[i] = tf.tensor(params[i])
+tf_grads.update_parameters(params)
+
+
+#create random MNIST data
+ImSize = 28
+N = 64
+x = np.random.randn(N, ImSize**2).astype(np.float32)
 x_tf = tf.tensor(x)
 x_torch = torch.tensor(x)
-y = np.random.randn(N).astype(np.float32)
+
+#random categorical data for 10 classes using numpy
+y = np.random.randint(0, 10, N).astype(np.int32)
+y = np.eye(10)[y]
 y_tf = tf.tensor(y)
 y_torch = torch.tensor(y)
 
@@ -90,27 +175,33 @@ def grad_computer():
     grads = ADGrad(model)
     grads.initialize_input()
 
-    x = tf.input([N], tf.float32)
-    y = tf.input([N], tf.float32)
-    loss = model.loss(x, y)
+    x = tf.input([N, ImSize**2], tf.float32)
+    y = tf.input([N, 10], tf.float32)
+    loss, yhat = model.loss(x, y)
     grads.compute(loss)
     params = grads.parameters()
     params.append(loss)
+    params.append(yhat)
     return params
 
 grad_compute = tf.compile(grad_computer)
 
 #compute tensorfrost gradients
 all_params = grad_compute(tf_grads, x_tf, y_tf)
-tf_grads.update_parameters(all_params[:-1])
-loss_tf = all_params[-1]
+tf_grads.update_parameters(all_params[:-2])
+loss_tf = all_params[-2]
+yhat_tf = all_params[-1]
 print("Tensorfrost loss: ", loss_tf.numpy)
+print("Tensorfrost yhat: ", np.max(yhat_tf.numpy))
 
 #compute pytorch gradients
 model_torch.zero_grad()
-loss_torch = model_torch.loss(x_torch, y_torch)
+loss_torch, yhat = model_torch.loss(x_torch, y_torch)
 loss_torch.backward()
 print("Pytorch loss: ", loss_torch.item())
+print("Pytorch yhat: ", torch.max(yhat).item())
+
+print("Yhat error: ", np.mean(np.abs(yhat.detach().numpy() - yhat_tf.numpy)))
 
 #compare the gradients
 for i, param in enumerate(model_torch.parameters()):
