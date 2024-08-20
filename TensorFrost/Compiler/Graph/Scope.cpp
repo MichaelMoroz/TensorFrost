@@ -65,9 +65,11 @@ KernelScope::KernelScope(Node* node,
 		return;
 	}
 
-	if(node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp)) {
+	if(node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp) && !node->op->HasAllTypes(OpProp::Scatter)) {
 		if(scope_shape.dim == 0) {
-			//must be at 1d scalar to properly generate the kernel
+			//must be at 1d scalar to properly generate the kernel with a non-atomic write operation
+			//technically this is also applicable to scatter operations, but when making an atomic counter, it is sometimes nice for its shape to be implicitly
+			//determined by the shape of the neighboring tensors
 			scope_shape.ExpandDimensionsTo(1);
 		}
 	}

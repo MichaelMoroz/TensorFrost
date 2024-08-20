@@ -87,8 +87,8 @@ const vector<Operation> operations = {
 
 
     //Autodiff
-    Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Static, OpProp::Gradient}),
-    Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Static, OpProp::Gradient}),
+    Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
+    Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
 
     // Memory operations
     //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph

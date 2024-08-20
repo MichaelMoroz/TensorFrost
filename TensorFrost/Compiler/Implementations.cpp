@@ -42,6 +42,14 @@ const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target
 		}
 	}
 
+#ifndef NDEBUG
+	//check if the reduced shape is the same as the target shape
+	ShapeCompareResult result = CompareShape(reduced->node_, target.node_);
+	if(!result.compatible) {
+		throw std::runtime_error("Gradient shape not compatible with target tensor, function ReduceGradientToShape failed");
+	}
+#endif
+
 	return *reduced;
 }
 
@@ -57,46 +65,46 @@ int GetGradAxis(const Tensor &out, const Tensor &grad) {
 map<string, VJPGradientFunction> gradient_functions =
 {
 	//elementwise operations
-    {"copy", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad); }},
-	{"add", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad, grad); }},
-	{"sub", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad, -grad); }},
-	{"mul", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1], grad * in[0]); }},
-	{"div", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / in[1], -grad * in[0] / (in[1] * in[1])); }},
-	{"neg", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(-grad); }},
-	{"exp", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * out); }},
-	{"log", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / in[0]); }},
-	{"sin", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::cos(in[0])); }},
-	{"cos", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(-grad * Tensor::sin(in[0])); }},
-	{"tan", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * (Tensor::Constant(1.0f) + out * out)); }},
-	{"asin", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
-	{"acos", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(-grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
-	{"atan", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / (Tensor::Constant(1.0f) + out * out)); }},
-	{"abs", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::sign(in[0])); }},
-	{"sign", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"exp2", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::Constant(log(2.0f)) * out); }},
-	{"log2", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / (in[0] * Tensor::Constant(log(2.0f)))); }},
-	{"sqrt", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad / (Tensor::Constant(2.0f) * out)); }},
-	{"rsqrt", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(-grad / (Tensor::Constant(2.0f) * in[0] * out)); }},
-	{"floor", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"ceil", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"round", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"frac", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"atan2", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] / (in[0] * in[0] + in[1] * in[1]), -grad * in[0] / (in[0] * in[0] + in[1] * in[1])); }},
-	{"lerp", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
-	{"max", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},
-	{"min", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f))); }},
-	{"pow", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] * Tensor::pow(in[0], in[1] - Tensor::Constant(1.0f)), grad * Tensor::log(in[0]) * out); }},
-	{"tanh", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * (Tensor::Constant(1.0f) - out * out)); }},
-	{"clamp", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+    {"copy", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad); }},
+	{"add", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad, grad); }},
+	{"sub", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad, -grad); }},
+	{"mul", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1], grad * in[0]); }},
+	{"div", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / in[1], -grad * in[0] / (in[1] * in[1])); }},
+	{"neg", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(-grad); }},
+	{"exp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * out); }},
+	{"log", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / in[0]); }},
+	{"sin", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::cos(in[0])); }},
+	{"cos", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(-grad * Tensor::sin(in[0])); }},
+	{"tan", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * (Tensor::Constant(1.0f) + out * out)); }},
+	{"asin", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
+	{"acos", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(-grad / Tensor::sqrt(Tensor::Constant(1.0f) - out * out)); }},
+	{"atan", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / (Tensor::Constant(1.0f) + out * out)); }},
+	{"abs", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::sign(in[0])); }},
+	{"sign", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"exp2", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * Tensor::Constant(log(2.0f)) * out); }},
+	{"log2", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / (in[0] * Tensor::Constant(log(2.0f)))); }},
+	{"sqrt", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad / (Tensor::Constant(2.0f) * out)); }},
+	{"rsqrt", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(-grad / (Tensor::Constant(2.0f) * in[0] * out)); }},
+	{"floor", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"ceil", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"round", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"frac", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"atan2", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] / (in[0] * in[0] + in[1] * in[1]), -grad * in[0] / (in[0] * in[0] + in[1] * in[1])); }},
+	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
+	{"max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},
+	{"min", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f))); }},
+	{"pow", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] * Tensor::pow(in[0], in[1] - Tensor::Constant(1.0f)), grad * Tensor::log(in[0]) * out); }},
+	{"tanh", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * (Tensor::Constant(1.0f) - out * out)); }},
+	{"clamp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//clamp = min(max(x, min), max)
 		Tensor& dc_dx = Tensor::select((in[0] < in[1]) || (in[0] > in[2]), Tensor::Constant(0.0f), grad);
 		Tensor& dc_dmin = Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f));
 		Tensor& dc_dmax = Tensor::select(in[0] > in[2], grad, Tensor::Constant(0.0f));
 		grads.Add(dc_dx, dc_dmin, dc_dmax);
 	}},
-	{"ternary", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
-	{"lerp", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
-	{"smoothstep", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"ternary", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
+	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
+	{"smoothstep", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//smoothstep equation:
 		//t = (x - e0) / (e1 - e0)
 		//tc = clamp(t, 0.0, 1.0);
@@ -121,52 +129,52 @@ map<string, VJPGradientFunction> gradient_functions =
 		const Tensor& dt_de1 = (e0 - x) * (dt_dx * dt_dx);
 		grads.Add( grad_dt * dt_de0, grad_dt * dt_de1, grad_dt * dt_dx);
 	}},
-	{"step", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::Constant(0.0f)); }},
-	{"modf", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(grad, Tensor::Constant(0.0f)); }},
-	{"fma", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) { grads.Add(in[1] * grad, in[0] * grad, grad); }},
+	{"step", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::Constant(0.0f)); }},
+	{"modf", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad, Tensor::Constant(0.0f)); }},
+	{"fma", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(in[1] * grad, in[0] * grad, grad); }},
 
 	//matrix operations
-	{"matmul", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"matmul", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Matmul(grad, Tensor::Transpose(in[1])), Tensor::Matmul(Tensor::Transpose(in[0]), grad));
 	}},
-	{"transpose", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"transpose", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Transpose(grad, out.node_->data[1], out.node_->data[0]));
 	}},
-	{"dot", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dot", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		Tensor& unsq_grad = Tensor::Unsqueeze(grad, out.node_->data[0]);
 		grads.Add(unsq_grad * in[1], unsq_grad * in[0]);
 	}},
-	{"unsqueeze", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"unsqueeze", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Squeeze(grad, out.node_->data[0]));
 	}},
-	{"squeeze", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"squeeze", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(grad, out.node_->data[0]));
 	}},
-	{"dim_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_sum", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(grad, GetGradAxis(out, grad)));
 	}},
-	{"dim_mean", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_mean", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		int axis = (int)out.node_->data[0];
 		Tensors shape = in[0].GetShape();
 		Tensor& dim_size = Tensor::tofloat(*shape[axis]);
 		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
 	}},
-	{"dim_norm", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_norm", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//TODO: store axis from the right instead of the left
 		Tensor& unsq = Tensor::Unsqueeze(grad/out, GetGradAxis(out, grad));
 		grads.Add(unsq * in[0]);
 	}},
-	{"dim_max", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
 		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
 		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
-	{"dim_min", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_min", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		auto& out_unsq = Tensor::Unsqueeze(out, out.node_->data[0]);
 		auto& grad_unsq = Tensor::Unsqueeze(grad, out.node_->data[0]);
 		grads.Add(Tensor::select(in[0] == out_unsq, grad_unsq, Tensor::Constant(0.0f)));
 	}},
-	{"dim_prefix_sum", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_prefix_sum", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//b_i = a_0 + ... + a_i
 		//db_i/da_j = 1 if i >= j, 0 otherwise
 		//dL/da_j = sum_i dL/db_i * db_i/da_j
@@ -177,19 +185,19 @@ map<string, VJPGradientFunction> gradient_functions =
 		//dL/da_j = c_0 + c_1 + ... + c_j = prefix_sum(c)_j
 		grads.Add(Tensor::PrefixSum(Tensor::Reverse(grad, out.node_->data[0]), out.node_->data[0]));
 	}},
-	{"dim_reverse", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"dim_reverse", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Reverse(grad, out.node_->data[0]));
 	}},
-	{"reshape", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"reshape", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		grads.Add(ArgType::Memory, 0, Tensor::Reshape(grad, memory_input->GetShape()));
 	}},
-	{"assert", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"assert", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		grads.Add(ArgType::Memory, 0, Tensor::Assert(grad, memory_input->GetShape(), memory_input->GetType()));
 	}},
 	//memory operations
-	{"load", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"load", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of load is scatter gradient to the load memory addresses
 		int index_count = in.Count(ArgType::Index);
 
@@ -198,10 +206,10 @@ map<string, VJPGradientFunction> gradient_functions =
 			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
 		}
 
-		Tensor& curGrad = *grads.GetGrad(ArgType::Memory, 0);
+		const Tensor& curGrad = *grads.GetGrad(ArgType::Memory, 0);
 		Tensor::ScatterAdd(curGrad, grad, tensor_indices);
 	}},
-	{"store", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"store", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of store is load gradient at the store memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
@@ -211,10 +219,10 @@ map<string, VJPGradientFunction> gradient_functions =
 			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
 		}
 
-		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
+		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
 		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
 	}},
-	{"InterlockedAdd", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"InterlockedAdd", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of scatter_add is load gradient at the scatter memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
@@ -224,17 +232,17 @@ map<string, VJPGradientFunction> gradient_functions =
 			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
 		}
 
-		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
+		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
 		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
 	}},
-	{"set", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"set", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of set is the gradient of the setted value to the input
-		Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
+		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
 		grads.Add(ArgType::Input, 0, memory_grad);
 	}},
-	{"detached_grad", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"detached_grad", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 	}},
-	{"passthrough_grad", [](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	{"passthrough_grad", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(grad);
 	}},
 };
@@ -769,7 +777,7 @@ void RegisterAlgorithmVJP(string name, AlgorithmVJPGradientFunction vjp) {
 }
 
 VJPGradientFunction CreateAlgorithmVJP(const string& name) {
-	VJPGradientFunction vjp = [name](ArgumentManager& in, Tensor& out, Tensor& grad, NodeGrads& grads) {
+	VJPGradientFunction vjp = [name](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		auto inputs = in.GetTensors(ArgType::Input);
 		AlgorithmVJPGradientFunction impl = GetAlgorithmVJPForOperation(name);
 		Tensors grad_tensors = impl(inputs, &grad, &out);

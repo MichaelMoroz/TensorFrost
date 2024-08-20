@@ -448,7 +448,14 @@ public:
 	                     const Tensors& indices = Tensors(), bool unsafe = false);
 
 	void Set(const Tensor& value) const  {
+		//check if memory and value shapes are compatible
+		ShapeCompareResult shape_result = CompareShape(node_, value.node_, true);
+		if (!shape_result.compatible) {
+            throw std::runtime_error("Cannot set tensor with incompatible shape");
+        }
 		MemoryOp("set", this, {}, &value);
+		//update the shape of the tensor
+		SetShape(shape_result.broadcast_shape.GetTensors());
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,

@@ -6,18 +6,21 @@ from tqdm import tqdm
 
 from utils import *
 from atom import *
+from logdet import *
 
 tf.initialize(tf.opengl)
+
+register_logdet()
 
 lr = 0.005
 n_walkers = 8168
 opt_steps = 2500
 
 #how many metropolis steps to perform per optimization step
-metropolis_per_step = 8
+metropolis_per_step = 12
 
 #what target fraction of the walkers to move in each step
-target_acceptance_rate = 0.5
+target_acceptance_rate = 0.4
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
@@ -44,7 +47,7 @@ class PSI(tf.Module):
         self.spin_up_n = spin_up_n
         self.spin_down_n = electron_n - spin_up_n
         self.orb_per_atom = 12
-        self.determinants = 4
+        self.determinants = 1
         self.orbital_n = self.orb_per_atom * self.atom_n
 
         self.params = tf.Parameter([2], tf.float32, requires_grad = False)
@@ -94,6 +97,7 @@ class PSI(tf.Module):
 
     def psi_new(self, electrons):
         tf.region_begin('Psi')
+        tf.region_begin('AtomOrbitals')
         #compute electron-atom relative positions and distances [batch, electron, atom, 3] + [batch, electron, atom]
         b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.atom_n, 3])
         ri = tf.unsqueeze(electrons, axis=-2) - self.atoms[a, d]
@@ -104,27 +108,32 @@ class PSI(tf.Module):
         in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) 
 
         #orbitals around atoms [batch, electron, atom, orbital]
-        out0 = (1.0 + 0.5*(in0 @ self.orbi_layer0 + self.orbi_layer0_bias))
-        out1 = (1.0 + 0.5*(in0 @ self.orbi_layer1 + self.orbi_layer1_bias))
+        out0 = (1.0 + 0.1*(in0 @ self.orbi_layer0 + self.orbi_layer0_bias))
+        out1 = (1.0 + 0.1*(in0 @ self.orbi_layer1 + self.orbi_layer1_bias))
         envelope = out0 * out1 * tf.exp(-tf.unsqueeze(r) * tf.abs(1.0+self.envelope_layer))
 
+        tf.region_end('AtomOrbitals')
+
+        tf.region_begin('Orbitals')
         midi = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * self.orb_per_atom])
         envelope = envelope[midi[0], midi[1], midi[2] / self.orb_per_atom, midi[2] % self.orb_per_atom]
 
-        envelope = envelope * (1.0 + 0.25*self.mid_layer1_bias) + GELU2(0.25*(envelope @ self.mid_layer1))
+        envelope = envelope * (1.0 + 0.15*self.mid_layer1_bias) + GELU2(0.15*(envelope @ self.mid_layer1))
 
         #reshape, merge atom orbitals into one dimension [batch, electrons, atom*orbital]
         up1i = tf.indices([electrons.shape[0], self.spin_up_n, self.atom_n * self.orb_per_atom])
         up1 = envelope[up1i[0], up1i[1], up1i[2]]
-    
-        up_features = up1 @ (self.eye_like(self.up_layer) + 0.15*self.up_layer)
-        det_up = self.determinant(up_features, self.spin_up_n)
-
+        up_features = up1 @ (0.0*self.eye_like(self.up_layer) + self.up_layer)
+        
         down1i = tf.indices([electrons.shape[0], self.spin_down_n, self.atom_n * self.orb_per_atom])
         down1 = envelope[down1i[0], self.spin_up_n + down1i[1], down1i[2]]
+        down_features = down1 @ (0.0*self.eye_like(self.down_layer) + self.down_layer)
 
-        down_features = down1 @ (self.eye_like(self.down_layer) + 0.15*self.down_layer)
-        det_down = self.determinant(down_features, self.spin_down_n)
+        tf.region_end('Orbitals')
+
+        tf.region_begin('SlaterDeterminant')
+        det_down = self.logdeterminant(down_features, self.spin_down_n)
+        det_up = self.logdeterminant(up_features, self.spin_up_n)
 
         #compute determinant for each set of electron orbitals [batch, determinant]
         orbiprod = det_up * det_down
@@ -132,11 +141,15 @@ class PSI(tf.Module):
         orbiprodsign = orbiprod.sign
 
         #sum the determinants (use logsumexp trick)  
-        maxorbiprodlog = tf.max(orbiprodlog)
-        detsum = tf.sum(orbiprodsign * tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
-        orbisum = maxorbiprodlog + tf.log2(tf.abs(detsum))
+        maxorbiprodlog = tf.squeeze(orbiprodlog)+1.0#tf.max(orbiprodlog)
+        #detsum = tf.sum(orbiprodsign * tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
+        orbisum = maxorbiprodlog #+ tf.log2(tf.abs(detsum))
 
+        tf.region_end('SlaterDeterminant')
+
+        tf.region_begin('Jastrow')
         psi = lognum(orbisum) * self.jastrow(electrons)
+        tf.region_end('Jastrow')
 
         tf.region_end('Psi')
         return psi
@@ -165,15 +178,25 @@ class PSI(tf.Module):
     #unrolled determinant calculation (not exactly the best way to do this, but easy auto-differentiation)
     def logdeterminant(self, orbitals, N):
         orbitals = tf.reshape(orbitals, [orbitals.shape[0], N, N, self.determinants])
-        b, d = tf.indices([orbitals.shape[0], self.determinants])
+        # b, d = tf.indices([orbitals.shape[0], self.determinants])
 
-        m = []
-        for i in range(N):
-            m.append([])
-            for j in range(N):
-                m[i].append(aslog(orbitals[b, i, j, d]))
+        # m = []
+        # for i in range(N):
+        #     m.append([])
+        #     for j in range(N):
+        #         m[i].append(aslog(orbitals[b, i, j, d]))
 
-        return self.logdeterminant_laplace(m, N)
+        # return self.logdeterminant_laplace(m, N)
+
+        bi, i, j = tf.indices([orbitals.shape[0] * self.determinants, N, N])
+        b = bi / self.determinants
+        d = bi % self.determinants
+
+        reordered = orbitals[b, i, j, d]
+        logdet = tf.custom("logdet", [reordered], [reordered.shape[0]])
+        logdet = tf.reshape(logdet, [orbitals.shape[0], self.determinants])
+        return lognum(logdet / 0.69314718056)
+
 
     #VERY slow determinant calculation using Laplace expansion
     def logdeterminant_laplace(self, m, N):
@@ -419,7 +442,7 @@ smoothed_energy = 0.0
 smoothed_acceptance_rate = 0.0
 smoothing = 0.99
 for i in progress_bar:
-    if(i == 2400): tf.renderdoc_start_capture()
+    if(i == 100): tf.renderdoc_start_capture()
 
     for j in range(metropolis_per_step):
         out = metropolis_step(wavefunction, walkers_tf)
@@ -448,7 +471,7 @@ for i in progress_bar:
     energy_history.append(smoothed_energy)
 
     progress_bar.set_postfix(acceptance_rate = '{0:.6f}'.format(smoothed_acceptance_rate), loss = '{0:.6f}'.format(smoothed_loss[0]), energy = '{0:.6f}'.format(smoothed_energy[0]))
-    if(i == 2400): tf.renderdoc_end_capture()
+    if(i == 100): tf.renderdoc_end_capture()
 
 print("Final Energy: ", np.mean(smoothed_energy))
 print("Error, %: ", 100.0 * np.abs((np.mean(smoothed_energy) - target_energy) / target_energy))

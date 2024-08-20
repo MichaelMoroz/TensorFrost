@@ -2,21 +2,25 @@
 
 namespace TensorFrost {
 
-void ComputeNodeGradients(Node* value, Tensor* grad, NodeGrads& grads)
+void ComputeNodeGradients(Node* value, const Tensor* grad, NodeGrads& grads)
 {
-	string op_name = value->name;
-	//add input arguments
-	if(value->flags.has(NodeProp::PassGrad)) {
-		op_name = "passthrough_grad";
-	}
-	if(value->flags.has(NodeProp::DetachGrad)) {
-		op_name = "detached_grad";
-	}
+	try {
+		string op_name = value->name;
+		//add input arguments
+		if(value->flags.has(NodeProp::PassGrad)) {
+			op_name = "passthrough_grad";
+		}
+		if(value->flags.has(NodeProp::DetachGrad)) {
+			op_name = "detached_grad";
+		}
 
-	VJPGradientFunction gradient_func = GetVJPForOperation(op_name);
+		VJPGradientFunction gradient_func = GetVJPForOperation(op_name);
 
-	Tensor out = *value->tensor_;
-	gradient_func(value->args, out, *grad, grads);
+		Tensor out = *value->tensor_;
+		gradient_func(value->args, out, *grad, grads);
+	} catch (const std::exception& e) {
+		throw std::runtime_error("Error in gradient computation for " + value->debug_name + "(" + to_string(value->debug_index) + "): " + e.what());
+	}
 }
 
 void IR::ComputeAutodiff()
@@ -44,7 +48,7 @@ void IR::ComputeAutodiff()
 	map<Node*, Node*> grad_to_computed_grad;
 	for (auto loss : loss_nodes) {
 		set<Node*> visited;
-		map<Node*, Tensor*> node_to_grad;
+		map<Node*, const Tensor*> node_to_grad;
 
 		unordered_set<Node*> loss_deps = GetDependencies({loss});
 
@@ -76,6 +80,8 @@ void IR::ComputeAutodiff()
 					continue;
 				}
 
+				node_to_grad[node] = &ReduceGradientToShape(*node_to_grad[node], *node->GetTensor());
+
 				NodeGrads grads = NodeGrads(node, node_to_grad);
 				ComputeNodeGradients(node, node_to_grad[node], grads);
 
@@ -85,7 +91,7 @@ void IR::ComputeAutodiff()
 						continue;
 					}
 
-					Tensor& new_grad = *grads.GetGrad(id);
+					const Tensor& new_grad = *grads.GetGrad(id);
 					node_to_grad[input] = &new_grad;
 
 					//TODO: maybe add a function to get temp names
