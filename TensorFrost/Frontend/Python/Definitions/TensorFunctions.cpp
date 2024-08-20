@@ -210,55 +210,55 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Assert(T(t), Reverse(TensorsFromList(target_shape)), target_type));
 	});
 	m.def("split_dim", [](const PyTensor& t, const int split_size, const int axis) {
-		return PT(Tensor::SplitDim(T(t), split_size, axis));
+		return PT(Tensor::SplitDim(T(t), split_size, -axis-1));
 	}, py::arg("t"), py::arg("split_size"), py::arg("axis") = -1);
 	m.def("merge_dim", [](const PyTensor& t, const int axis, const PyTensor* target_size) {
 		const Tensor* target_size_ptr = target_size ? &T(*target_size) : nullptr;
-		return PT(Tensor::MergeDim(T(t), axis, target_size_ptr));
+		return PT(Tensor::MergeDim(T(t), -axis-1, target_size_ptr));
 	}, py::arg("t"), py::arg("axis") = -1, py::arg("target_size") = nullptr);
 
 	//algorithm functions
-	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), axis)); },
+	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1,  "Sum the elements of the tensor along the axis");
 
-	m.def("norm", [](const PyTensor& t, const int axis) { return PT(Tensor::Norm(T(t), axis)); },
+	m.def("norm", [](const PyTensor& t, const int axis) { return PT(Tensor::Norm(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the norm of the tensor along the axis");
 
-	m.def("mean", [](const PyTensor& t, const int axis) { return PT(Tensor::Mean(T(t), axis)); },
+	m.def("mean", [](const PyTensor& t, const int axis) { return PT(Tensor::Mean(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the mean of the tensor along the axis");
 
-	m.def("min", [](const PyTensor& t, const int axis) { return PT(Tensor::Min(T(t), axis)); },
+	m.def("min", [](const PyTensor& t, const int axis) { return PT(Tensor::Min(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the min of the tensor along the axis");
 
-	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), axis)); },
+	m.def("max", [](const PyTensor& t, const int axis) { return PT(Tensor::Max(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the max of the tensor along the axis");
 
-	m.def("any", [](const PyTensor& t, const int axis) { return PT(Tensor::Any(T(t), axis)); },
+	m.def("any", [](const PyTensor& t, const int axis) { return PT(Tensor::Any(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an OR operation along the axis");
 
-	m.def("all", [](const PyTensor& t, const int axis) { return PT(Tensor::All(T(t), axis)); },
+	m.def("all", [](const PyTensor& t, const int axis) { return PT(Tensor::All(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Do an AND operation along the axis");
 
-	m.def("prefix_sum", [](const PyTensor& t, const int axis) { return PT(Tensor::PrefixSum(T(t), axis)); },
+	m.def("prefix_sum", [](const PyTensor& t, const int axis) { return PT(Tensor::PrefixSum(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Compute the prefix sum of the tensor along the axis");
 
-	m.def("reverse", [](const PyTensor& t, const int axis) { return PT(Tensor::Reverse(T(t), axis)); },
+	m.def("reverse", [](const PyTensor& t, const int axis) { return PT(Tensor::Reverse(T(t), -axis-1)); },
 	    py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Reverse the tensor along the axis");
 
 	m.def("transpose", [](const PyTensor& t, int dim1, int dim2) {
-		return PT(Tensor::Transpose(T(t), dim1, dim2));
+		return PT(Tensor::Transpose(T(t), -dim1-1, -dim2-1));
 	}, py::arg("t"), py::kw_only(), py::arg("dim1") = -2, py::arg("dim2") = -1, "Transpose the tensor");
 
 	m.def("unsqueeze", [](const PyTensor& t, int dim) {
-		return PT(Tensor::Unsqueeze(T(t), dim));
+		return PT(Tensor::Unsqueeze(T(t), -dim-1));
 	}, py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Unsqueeze the tensor");
 
 	m.def("squeeze", [](const PyTensor& t, int dim) {
-		return PT(Tensor::Squeeze(T(t), dim));
+		return PT(Tensor::Squeeze(T(t), -dim-1));
 	}, py::arg("t"), py::kw_only(), py::arg("axis") = -1, "Squeeze the tensor");
 
 	m.def("dot", [](const PyTensor& t, const PyTensor& t2, int axis) {
-		return PT(Tensor::Dot(T(t), T(t2), axis));
+		return PT(Tensor::Dot(T(t), T(t2), -axis-1));
 	}, py::arg("t"),  py::arg("t2"), py::kw_only(), py::arg("axis") = -1, "Dot product of two tensors");
 
 	m.def("matmul", [](const PyTensor& t, const PyTensor& t2) {

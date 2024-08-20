@@ -1,29 +1,22 @@
-import TensorFrost as tf
 import numpy as np
+import TensorFrost as tf
+import matplotlib.pyplot as plt
 
 tf.initialize(tf.cpu)
 
-def sqr(x):
-    return x * x
+def Test():
+    data = tf.input([-1, -1, -1], tf.int32)
+    splitted = tf.split_dim(data, 32, 0)
+    merged = tf.merge_dim(splitted, axis = 1)
+    return merged, splitted
+
+testprog = tf.compile(Test)
+
+data = np.random.randint(0, 100, (128, 128, 32), dtype=np.int32)
+merged, splitted = testprog(data)
 
 
-def ProgramTest():
-    A = tf.input([3, 1], tf.float32)
-    B = tf.input([1, 3], tf.float32)
-    return A + B
-
-test = tf.compile(ProgramTest)
-
-A = np.array([[1], [2], [3]], dtype=np.float32)
-B = np.array([[1, 2, 3]], dtype=np.float32)
-
-Atf = tf.tensor(A)
-Btf = tf.tensor(B)
-
-Ctf = test(Atf, Btf)
-
-print(Ctf.numpy)
-print(A + B)
-
-
+print(merged.shape)
+print(splitted.shape)
+print(np.sum(np.abs(data - merged.numpy)))
 

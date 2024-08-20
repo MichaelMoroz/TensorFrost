@@ -547,7 +547,6 @@ Tensor* ConstantOutOfBounds(const Tensor* array, Tensors indices, uint constant)
 Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int split_size) {
 	ShapeInfo shapeinfo = array->GetShapeInfo();
 	int dims = shapeinfo.dim;
-	axis = GetAxis(dims, axis);
 	Tensors new_shape = splitted->GetShape();
 	Tensors indices = Tensors();
 	for (int i = 0; i < dims; i++) {
@@ -555,7 +554,7 @@ Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int spli
 			Tensor* index1 = &Tensor::Index(new_shape, i);
 			Tensor* index2 = &Tensor::Index(new_shape, i + 1);
 			//merged index
-			indices.push_back(&(*index1 * (*new_shape[i + 1]) + *index2));
+			indices.push_back(&(*index2 * (*new_shape[i]) + *index1));
 		} else if(i < axis) {
 			indices.push_back(&Tensor::Index(new_shape, i));
 		} else {
@@ -575,11 +574,11 @@ Tensor* MergeDim(const Tensor* array, const Tensor* merged, int axis) {
 	Tensors new_shape = merged->GetShape();
 	Tensors indices = Tensors();
 	for (int i = 0; i < dims-1; i++) {
-		if (i == axis-1) {
+		if (i == axis) {
 			Tensor* merged_index = &Tensor::Index(new_shape, i);
 			//get split index
-			indices.push_back(&(*merged_index / *shape[axis]));
 			indices.push_back(&(*merged_index % *shape[axis]));
+			indices.push_back(&(*merged_index / *shape[axis]));
 		} else {
 			indices.push_back(&Tensor::Index(new_shape, i));
 		}

@@ -18,6 +18,10 @@ vector<int> Reverse(const vector<int>& vec) {
 	return reversed;
 }
 
+int ReverseDim(int dim, size_t dims) {
+	return (int)dims - dim - 1;
+}
+
 IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }

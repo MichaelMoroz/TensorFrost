@@ -780,7 +780,7 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 			idx0 = &(*idx0 / *sizes[dims - i - 2]);
 		}
 		if (i > 0) {
-			temp = &(*temp * *kernel_shape[i]);
+			temp = &(*temp * *kernel_shape[dims - i - 1]);
 			idx0 = &(*idx0 - *temp);
 			if (i != dims - 1) temp = &(*temp + *idx0);
 		} else {

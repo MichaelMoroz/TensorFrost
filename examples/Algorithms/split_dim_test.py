@@ -2,7 +2,7 @@ import numpy as np
 import TensorFrost as tf
 import matplotlib.pyplot as plt
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
 def Test():
     data = tf.input([-1, -1, -1], tf.int32)
