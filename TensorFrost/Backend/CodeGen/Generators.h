@@ -163,7 +163,7 @@ protected:
 				}
 				Node* shape_node = args.Get(ArgType::Shape, j);
 
-				shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
+				shape_arg += "(uint)" + args.Name(ArgType::Shape, dims - j - 1);
 			}
 
 			shape_arg += "}";

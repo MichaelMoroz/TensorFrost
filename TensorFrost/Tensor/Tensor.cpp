@@ -2,6 +2,22 @@
 
 namespace TensorFrost {
 
+Tensors Reverse(const Tensors& tensors) {
+	Tensors reversed;
+	for (int i = (int)tensors.size() - 1; i >= 0; i--) {
+		reversed.push_back(tensors[i]);
+	}
+	return reversed;
+}
+
+vector<int> Reverse(const vector<int>& vec) {
+	vector<int> reversed;
+	for (int i = (int)vec.size() - 1; i >= 0; i--) {
+		reversed.push_back(vec[i]);
+	}
+	return reversed;
+}
+
 IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }
@@ -25,7 +41,7 @@ void ShapeInfo::ExpandDimensionsTo(int new_dim)
 	}
 	Tensor& one = Tensor::Constant(1);
 	for(int i = dim; i < new_dim; i++) {
-	   InsertDim(0, one.node_, true);
+	   InsertDim(i, one.node_, true);
 	}
 }
 
@@ -186,7 +202,8 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
-			mem.node_->flags.set(NodeProp::InputShapeDim, dim);
+			//make sure its reversed on the backend
+			mem.node_->flags.set(NodeProp::InputShapeDim, (int)shape.size() - dim - 1);
 			result.push_back(&mem);
 		}
 		else

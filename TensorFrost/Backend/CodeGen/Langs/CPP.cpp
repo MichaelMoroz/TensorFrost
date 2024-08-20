@@ -537,11 +537,12 @@ void GenerateCode(Program* program) {
 		variable_args += "}";
 
 		string shape_args = "{";
+		int dims = (int)kernel.shape.size();
 		for (int d = 0; d < kernel.shape.size(); d++) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
-			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape,d)]);
+			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape, dims - d - 1)]);
 		}
 		shape_args += "}";
 

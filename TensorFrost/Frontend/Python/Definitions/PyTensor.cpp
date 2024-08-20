@@ -75,7 +75,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 
 	// properties
 	py_tensor.def_property_readonly("shape", [](const PyTensor& t) {
-		return PyTensorsFromTensors(t.Get().GetShape());
+		return PyTensorsFromTensors(Reverse(t.Get().GetShape()));
 	});
 	py_tensor.def_property_readonly(
 	    "type", [](const PyTensor& t) { return t.Get().GetType(); });
@@ -83,12 +83,14 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		int dim = T(t).GetDimension();
 		py::tuple indices(dim);
 		for (int i = 0; i < dim; i++) {
-			indices[i] = PT(T(t).Index(i));
+			indices[i] = PT(T(t).Index(dim - i - 1));
 		}
 		return indices;
 	});
-	py_tensor.def("index",
-	              [](const PyTensor& t, int dim) { return PT(T(t).Index(dim)); });
+	py_tensor.def("index",[](const PyTensor& t, int dim) {
+		  int dims = T(t).GetDimension();
+          return PT(T(t).Index(dims - dim - 1));
+	});
 
 	py_tensor.def("detach_grad", [](const PyTensor& t) {
 		t.Get().DetachGrad();
@@ -122,7 +124,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return PyTensor(&t.Get(), indices);
 	});
 	py_tensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
-		Tensors indices = TensorsFromTuple(indices_tuple);
+		Tensors indices = Reverse(TensorsFromTuple(indices_tuple));
 		if (indices.size() != t.Get().GetDimension()) {
 			throw std::runtime_error(
 			    "Indices must have the same dimension as the tensor");
@@ -142,7 +144,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	              });
 	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
 	                                const PyTensor& t2) {
-		Tensors indices = TensorsFromTuple(indices_tuple);
+		Tensors indices = Reverse(TensorsFromTuple(indices_tuple));
 		if (indices.size() != t.Get().GetDimension()) {
 			throw std::runtime_error(
 			    "Indices must have the same dimension as the tensor");

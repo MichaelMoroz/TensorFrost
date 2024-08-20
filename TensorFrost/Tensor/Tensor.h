@@ -17,6 +17,9 @@ namespace TensorFrost {
 
 using Tensors = vector<const Tensor*>;
 
+Tensors Reverse(const Tensors& tensors);
+vector<int> Reverse(const vector<int>& vec);
+
 class Tensor {
  private:
 	static IR* evaluation_context_ir_;
@@ -260,6 +263,12 @@ public:
 	Tensors GetShape() const {
 		ShapeInfo shape_info = ShapeInfo(node_);
 		return shape_info.GetTensors();
+	}
+
+	Tensors GetReverseShape() const {
+		Tensors shape = GetShape();
+		std::reverse(shape.begin(), shape.end());
+		return shape;
 	}
 
 	ShapeInfo GetShapeInfo() const {

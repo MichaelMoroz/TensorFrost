@@ -253,16 +253,16 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 			result.compatible = false;
 			if (throw_error) {
 				throw std::runtime_error("Shapes must have the same dimension for " +
-				                         a.name + " and " + b.name);
+										 a.name + " and " + b.name);
 			}
 			return result;
 		}
 	}
 
 	for (int i = 0; i < min_dim; i++) {
-		Node* a_node = a[a.dim - i - 1];
-		Node* b_node = b[b.dim - i - 1];
-		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		Node* a_node = a[i];
+		Node* b_node = b[i];
+		int broadcast_index = i;
 
 		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
 
@@ -287,11 +287,11 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 	//add the rest of the broadcast shape
 	for (int i = min_dim; i < result.broadcast_dim; i++) {
 		result.broadcast = true;
-		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		int broadcast_index = i;
 		if (a.dim > b.dim) {
-			result.broadcast_shape.AddShape(broadcast_index, a[a.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, a[i]);
 		} else {
-			result.broadcast_shape.AddShape(broadcast_index, b[b.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, b[i]);
 		}
 	}
 

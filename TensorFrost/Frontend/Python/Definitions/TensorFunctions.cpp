@@ -97,71 +97,72 @@ void TensorFunctionsDefinition(py::module& m) {
 	});
 
 	m.def("buffer", [](py::list shape, TFType type) {
-		    return PT(Tensor::Memory(TensorsFromList(shape), type));
+		    return PT(Tensor::Memory(Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 	m.def("buffer", [](std::vector<int> shape, TFType type) {
-		    return PT(Tensor::Memory(shape, type));
+		    return PT(Tensor::Memory(Reverse(shape), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("zeros", [](py::list shape, TFType type) {
 		switch (type)
 		{
 			case TFType::Float:
-				return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
 			case TFType::Uint:
-				return PT(Tensor::Constant(TensorsFromList(shape), 0u));
+				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0u));
 			case TFType::Int:
-				return PT(Tensor::Constant(TensorsFromList(shape), 0));
+				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0));
 			default:
-				return PT(Tensor::Constant(TensorsFromList(shape), 0.0f));
+				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
 		}
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 	m.def("zeros", [](std::vector<int> shape, TFType type) {
 		switch (type)
 		{
 			case TFType::Float:
-				return PT(Tensor::Constant(shape, 0.0f));
+				return PT(Tensor::Constant(Reverse(shape), 0.0f));
 			case TFType::Uint:
-				return PT(Tensor::Constant(shape, 0u));
+				return PT(Tensor::Constant(Reverse(shape), 0u));
 			case TFType::Int:
-				return PT(Tensor::Constant(shape, 0));
+				return PT(Tensor::Constant(Reverse(shape), 0));
 			default:
-				return PT(Tensor::Constant(shape, 0.0f));
+				return PT(Tensor::Constant(Reverse(shape), 0.0f));
 		}
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("const", [](float value, py::list shape) {
-		return PT(Tensor::Constant(TensorsFromList(shape), value));
+		return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), value));
 	});
 	m.def("const", [](float value, std::vector<int> shape) {
-		return PT(Tensor::Constant(shape, value));
+		return PT(Tensor::Constant(Reverse(shape), value));
 	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
 
 	m.def("const", [](int value, py::list shape) {
-		return PT(Tensor::Constant(TensorsFromList(shape), value));
+		return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), value));
 	});
 	m.def("const", [](int value, std::vector<int> shape) {
-		return PT(Tensor::Constant(shape, value));
+		return PT(Tensor::Constant(Reverse(shape), value));
 	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
 
 	m.def("input", [](std::vector<int> shape, TFType type) {
-		return PT(Tensor::Input(shape, type));
+		return PT(Tensor::Input(Reverse(shape), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 	m.def("input", [](py::list shape, TFType type) {
-		return PT(Tensor::Input(TensorsFromList(shape), type));
+		return PT(Tensor::Input(Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("index", [](int dim, py::list shape) {
-		return PT(Tensor::Index(TensorsFromList(shape), dim));
+		return PT(Tensor::Index(Reverse(TensorsFromList(shape)), dim));
 	});
 
 	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
 
 	m.def("indices", [](py::list shape) {
-		Tensors shape_tensors = TensorsFromList(shape);
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
+		int dim = (int)shape_tensors.size();
 		py::tuple indices = py::tuple(shape_tensors.size());
 		for (int i = 0; i < shape_tensors.size(); i++) {
-			auto t = PT(Tensor::Index(shape_tensors, i));
+			auto t = PT(Tensor::Index(shape_tensors, dim - i - 1));
 			indices[i] = t;
 		}
 		return indices;
@@ -169,17 +170,18 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("indices", [](std::vector<int> shape) {
 		py::tuple indices = py::tuple(shape.size());
+		int dim = (int)shape.size();
 		for (int i = 0; i < shape.size(); i++) {
-			auto t = PT(Tensor::Index(shape, i));
+			auto t = PT(Tensor::Index(Reverse(shape), dim - i - 1));
 			indices[i] = t;
 		}
 		return indices;
 	});
 
 	m.def("index_grid", [](py::list begin, py::list end) {
-		Tensors begin_tensors = TensorsFromList(begin);
-		Tensors end_tensors = TensorsFromList(end);
-		Tensors index_grid = Tensor::IndexGrid(begin_tensors, end_tensors);
+		Tensors begin_tensors = Reverse(TensorsFromList(begin));
+		Tensors end_tensors = Reverse(TensorsFromList(end));
+		Tensors index_grid = Reverse(Tensor::IndexGrid(begin_tensors, end_tensors));
 
 		py::tuple indices = py::tuple(begin.size());
 		for (int i = 0; i < index_grid.size(); i++) {
@@ -189,10 +191,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	});
 
 	m.def("index_grid", [](py::list begin, py::list end, py::list step) {
-		Tensors begin_tensors = TensorsFromList(begin);
-		Tensors end_tensors = TensorsFromList(end);
-		Tensors step_tensors = TensorsFromList(step);
-		Tensors index_grid = Tensor::IndexGrid(begin_tensors, end_tensors, step_tensors);
+		Tensors begin_tensors = Reverse(TensorsFromList(begin));
+		Tensors end_tensors = Reverse(TensorsFromList(end));
+		Tensors step_tensors = Reverse(TensorsFromList(step));
+		Tensors index_grid = Reverse(Tensor::IndexGrid(begin_tensors, end_tensors, step_tensors));
 
 		py::tuple indices = py::tuple(begin.size());
 		for (int i = 0; i < index_grid.size(); i++) {
@@ -202,10 +204,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	});
 
 	m.def("reshape", [](const PyTensor& t, py::list shape) {
-		return PT(Tensor::Reshape(T(t), TensorsFromList(shape)));
+		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape))));
 	});
 	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
-		return PT(Tensor::Assert(T(t), TensorsFromList(target_shape), target_type));
+		return PT(Tensor::Assert(T(t), Reverse(TensorsFromList(target_shape)), target_type));
 	});
 	m.def("split_dim", [](const PyTensor& t, const int split_size, const int axis) {
 		return PT(Tensor::SplitDim(T(t), split_size, axis));

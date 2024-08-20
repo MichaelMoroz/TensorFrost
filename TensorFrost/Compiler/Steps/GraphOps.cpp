@@ -768,9 +768,9 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 {
 	vector<Tensor*> indices = vector<Tensor*>(dims);
 	Tensors sizes = Tensors(dims);
-	sizes[0] = kernel_shape[dims - 1];
+	sizes[0] = kernel_shape[0];
 	for (size_t i = 1; i < dims - 1; i++) {
-		sizes[i] = &(*sizes[i - 1] * *kernel_shape[dims - i - 1]);
+		sizes[i] = &(*sizes[i - 1] * *kernel_shape[i]);
 	}
 
 	Tensor* temp;
@@ -786,7 +786,7 @@ vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shap
 		} else {
 			temp = idx0;
 		}
-		indices[i] = idx0;
+		indices[dims - i - 1] = idx0;
 	}
 
 	return indices;
@@ -804,17 +804,19 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 	int kernel_dim = (int)indices.size();
 
 	function<const Tensor*(int)> get_shape = [&](int dim) {
+		dim = memory_dim - dim - 1;
 		return memory_shape[ArgID(ArgType::Shape, dim)]->GetTensor();
 	};
 
 	// function to get index for given dimension, if not found then return
 	// default dim index
 	function<Tensor*(int)> get_index = [&](int dim) {
+		int idxdim = memory_dim - dim - 1;
 		Tensor* out;
-		if (idx.find(dim) != idx.end()) {
-			out = const_cast<Tensor*>(idx[dim]);
+		if (idx.find(idxdim) != idx.end()) {
+			out = const_cast<Tensor*>(idx[idxdim]);
 		} else {
-			throw std::runtime_error("Finalize memory indexing: node index not found for dimension " + to_string(dim) + " in memory node with dimensions " + to_string(memory_dim));
+			throw std::runtime_error("Finalize memory indexing: node index not found for dimension " + to_string(idxdim) + " in memory node with dimensions " + to_string(memory_dim));
 		}
 
 		switch (mode)
@@ -898,11 +900,10 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	Tensors block_size_tensors = {};
 	for (int i = 0; i < block_dim; i++) {
 		block_size_tensors.push_back(&Tensor::Constant(block_size[i]));
-		//block_size_tensors[i]->SetDebugName("block_size_" + to_string(i));
 	}
 	vector<Tensor*> in_block_indices;
 	for (int i = 0; i < block_dim; i++) {
-		in_block_indices.push_back(&block_index->BlockThreadIndex(block_dim - 1 - i));
+		in_block_indices.push_back(&block_index->BlockThreadIndex(i));
 	}
 
 	//compute out-of-block index
@@ -914,26 +915,24 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	//the rest are divided into blocks of the given size
 	for (int i = 0; i < block_dim; i++) {
 		const Tensor block_size = *block_size_tensors[i];
-		const Tensor shape = *kernel_shape[dims - block_dim + i];
+		const Tensor shape = *kernel_shape[i];
 		Tensor& ceil = (shape + block_size - Tensor::Constant(1)) / block_size;
 		blocks_shape.push_back(&ceil);
-		blocks_shape[dims - block_dim + i]->SetDebugName("blocks_shape_" + to_string(dims - block_dim + i));
+		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
 	}
 	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);
-	for (int i = 0; i < dims; i++) {
-		//out_block_indices[i]->SetDebugName("out_block_index_" + to_string(i));
-	}
 
-	//combine the indices
+	//combine the final indices
 	vector<Tensor*> indices = {};
-	for (int i = 0; i < dims - block_dim; i++) {
-		indices.push_back(out_block_indices[i]);
+
+	for (int i = 0; i < block_dim; i++) {
+		indices.push_back(&(*out_block_indices[i] * *block_size_tensors[i] + *in_block_indices[i]));
 		indices[i]->SetDebugName("index_" + to_string(i));
 	}
-	//the rest are sum of block index and in-block index
-	for (int i = 0; i < block_dim; i++) {
-		indices.push_back(&(*out_block_indices[dims - block_dim + i] * *block_size_tensors[i] + *in_block_indices[i]));
-		indices[dims - block_dim + i]->SetDebugName("index_" + to_string(dims - block_dim + i));
+
+	for (int i = block_dim; i < dims; i++) {
+		indices.push_back(out_block_indices[i]);
+		indices[i]->SetDebugName("index_" + to_string(i));
 	}
 
 	return indices;
@@ -964,7 +963,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 		//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
 		int group_dim = (int)kernel_->group_size.size();
 		for (int i = 0; i < group_dim; i++) {
-			int shape = kernel_shape[dims - group_dim + i]->TryGetConstant();
+			int shape = kernel_shape[i]->TryGetConstant();
 			if (shape > 0) {
 				kernel_->group_size[i] = min(kernel_->group_size[i], shape);
 			}
