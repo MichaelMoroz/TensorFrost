@@ -43,14 +43,17 @@ class TestModule1(tf.Module):
         self.res1p = self.res1 // 2
         self.res2 = (self.res1p - self.kernel_size + 1)
         self.res2p = self.res2 // 2
+        self.dense_res = self.res2p ** 2
+        #self.dense_res = self.res1 ** 2
         self.kernels1 = 16
         self.kernels2 = 64
-        self.layer1 = 256
+        self.layer1 = 32
         self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * 1)))
         #self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
         self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * self.kernels1)))
         #self.conv2_bias = tf.Parameter([self.kernels2], tf.float32, random_scale = 0.0)
-        self.fc1 = tf.Parameter([self.kernels2 * self.res2p ** 2, self.layer1], tf.float32)
+        self.fc1 = tf.Parameter([self.kernels2 * self.dense_res, self.layer1], tf.float32)
+        #self.fc1 = tf.Parameter([self.kernels1 * self.dense_res, self.layer1], tf.float32)
         self.fc1_bias = tf.Parameter([self.layer1], tf.float32, random_scale = 0.0)
         self.fc2 = tf.Parameter([self.layer1, output_size], tf.float32)
         self.fc2_bias = tf.Parameter([output_size], tf.float32, random_scale = 0.0)
@@ -59,8 +62,10 @@ class TestModule1(tf.Module):
         self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
 
     def conv2d(self, X, W):
-        bi, cout, wi, hi, cin, it = tf.indices([X.shape[0], W.shape[0], X.shape[2] - W.shape[2] + 1, X.shape[3] - W.shape[3] + 1, W.shape[1], W.shape[2] * W.shape[3]])
-        i, j = it%W.shape[2], it/W.shape[2]
+        N, CIN, HI, WI = X.shape
+        COUT, CIN, h, w = W.shape
+        bi, cout, wi, hi, cin, it = tf.indices([N, COUT, HI - h + 1, WI - w + 1, CIN, h * w])
+        i, j = it%w, it/w
         conv = tf.sum(tf.sum(X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]))
         return conv
     
@@ -71,7 +76,8 @@ class TestModule1(tf.Module):
     def forward(self, X):
         tf.region_begin('Forward')
         X = tf.reshape(X, [X.shape[0], 1, self.resolution, self.resolution])
-        X = self.max_pool2d(self.conv2d(X, self.conv1))
+        X = self.conv2d(X, self.conv1)
+        X = self.max_pool2d(X)
         X = GELU(X)
         X = self.max_pool2d(self.conv2d(X, self.conv2))
         X = GELU(X)
@@ -83,8 +89,8 @@ class TestModule1(tf.Module):
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
-        #loss = tf.mean(tf.sum(-Y * log_softmax(Yhat)))
-        loss = tf.mean(tf.mean((Y - Yhat)**2.0))
+        loss = tf.mean(tf.sum(-Y * log_softmax(Yhat)))
+        #loss = tf.mean(tf.mean((Y - Yhat)**2.0))
         return loss, Yhat
 
 def log_softmax_torch(X):
@@ -105,14 +111,17 @@ class TestModule2(torch.nn.Module):
         self.res1p = self.res1 // 2
         self.res2 = (self.res1p - self.kernel_size + 1)
         self.res2p = self.res2 // 2
+        self.dense_res = self.res2p ** 2
+        #self.dense_res = self.res1 ** 2
         self.kernels1 = 16
         self.kernels2 = 64
-        self.layer1 = 256
+        self.layer1 = 32
         self.conv1 = torch.nn.Parameter(0.1*torch.randn(self.kernels1, 1, self.kernel_size, self.kernel_size))
         #self.conv1_bias = torch.nn.Parameter(torch.randn(self.kernels1))
         self.conv2 = torch.nn.Parameter(0.1*torch.randn(self.kernels2, self.kernels1, self.kernel_size, self.kernel_size))
         #self.conv2_bias = torch.nn.Parameter(torch.randn(self.kernels2))
         self.fc1 = torch.nn.Parameter(0.1*torch.randn(self.kernels2 * self.res2p ** 2, self.layer1))
+        #self.fc1 = torch.nn.Parameter(0.1*torch.randn(self.kernels1 * self.dense_res, self.layer1))
         self.fc1_bias = torch.nn.Parameter(torch.randn(self.layer1))
         self.fc2 = torch.nn.Parameter(0.1*torch.randn(self.layer1, output_size))
         self.fc2_bias = torch.nn.Parameter(torch.randn(output_size))
@@ -123,7 +132,8 @@ class TestModule2(torch.nn.Module):
 
     def forward(self, x):
         x = x.reshape([-1, 1, self.resolution, self.resolution])
-        x = F.max_pool2d(self.conv2d(x, self.conv1), 2)
+        x = self.conv2d(x, self.conv1)
+        x = F.max_pool2d(x, 2)
         x = GELU_torch(x)
         x = F.max_pool2d(self.conv2d(x, self.conv2), 2)
         x = GELU_torch(x)
@@ -135,8 +145,8 @@ class TestModule2(torch.nn.Module):
     def loss(self, X, Y):
         Y_pred = self.forward(X)
         #return torch.mean((Y - Y_pred)**2.0)
-        #return torch.mean(torch.sum(-Y * log_softmax_torch(Y_pred), 0))
-        return torch.mean(torch.mean((Y - Y_pred)**2.0)), Y_pred
+        return torch.mean(torch.sum(-Y * log_softmax_torch(Y_pred), dim = -1)), Y_pred
+        #return torch.mean(torch.mean((Y - Y_pred)**2.0)), Y_pred
     
 #create the modules
 # pytorch
@@ -192,16 +202,20 @@ tf_grads.update_parameters(all_params[:-2])
 loss_tf = all_params[-2]
 yhat_tf = all_params[-1]
 print("Tensorfrost loss: ", loss_tf.numpy)
-print("Tensorfrost yhat: ", np.max(yhat_tf.numpy))
 
 #compute pytorch gradients
 model_torch.zero_grad()
 loss_torch, yhat = model_torch.loss(x_torch, y_torch)
 loss_torch.backward()
 print("Pytorch loss: ", loss_torch.item())
-print("Pytorch yhat: ", torch.max(yhat).item())
 
-print("Yhat error: ", np.mean(np.abs(yhat.detach().numpy() - yhat_tf.numpy)))
+
+def ComputeRelativeError(a, b):
+    a = a.numpy
+    b = b.detach().numpy()
+    return np.mean(np.abs(a - b) / np.maximum(np.abs(a), np.abs(b)))
+
+print("Yhat error: ", ComputeRelativeError(yhat_tf, yhat))
 
 #compare the gradients
 for i, param in enumerate(model_torch.parameters()):
@@ -214,5 +228,5 @@ for i, param in enumerate(model_torch.parameters()):
     # print(param)
     # print("Tensorfrost param: ")
     # print(tf_grads.net.parameters()[i].numpy)
-    print("Gradient error: ", np.mean(np.abs(param.grad.detach().numpy() - tf_grads.grad[i].numpy)))
-    print("Parameter error: ", np.mean(np.abs(param.detach().numpy() - tf_grads.net.parameters()[i].numpy)))
+    print("Gradient error: ", ComputeRelativeError(tf_grads.grad[i], param.grad))
+    print("Parameter error: ", ComputeRelativeError(tf_grads.net.parameters()[i], param))

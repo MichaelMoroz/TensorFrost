@@ -908,16 +908,15 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 
 	//compute out-of-block index
 	Tensors blocks_shape = {};
-	for (int i = 0; i < dims - block_dim; i++) {
-		blocks_shape.push_back(kernel_shape[i]);
-		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
-	}
-	//the rest are divided into blocks of the given size
 	for (int i = 0; i < block_dim; i++) {
 		const Tensor block_size = *block_size_tensors[i];
 		const Tensor shape = *kernel_shape[i];
 		Tensor& ceil = (shape + block_size - Tensor::Constant(1)) / block_size;
 		blocks_shape.push_back(&ceil);
+		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
+	}
+	for (int i = block_dim; i < dims; i++) {
+		blocks_shape.push_back(kernel_shape[i]);
 		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
 	}
 	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);

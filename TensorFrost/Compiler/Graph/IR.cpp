@@ -66,6 +66,7 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 }
 
 #define MAX_COMPILATION_ITERATIONS 32
+#define LOAD_FUSION
 
 void IR::CompileIR()
 {
@@ -108,6 +109,7 @@ void IR::CompileIR()
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
+#ifdef LOAD_FUSION
 	RunCompilationPass("Iterative load fusion", [&]() {
 		auto current_state = GetApproximateStateHash();
 		for (int i = 0; i < MAX_COMPILATION_ITERATIONS; i++) {
@@ -121,6 +123,7 @@ void IR::CompileIR()
 			}
 		}
 	});
+#endif
 
 	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
 	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
