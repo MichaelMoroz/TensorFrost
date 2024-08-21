@@ -209,7 +209,6 @@ loss_torch, yhat = model_torch.loss(x_torch, y_torch)
 loss_torch.backward()
 print("Pytorch loss: ", loss_torch.item())
 
-
 def ComputeRelativeError(a, b):
     a = a.numpy
     b = b.detach().numpy()

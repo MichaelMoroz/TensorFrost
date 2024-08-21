@@ -38,6 +38,14 @@ public:
             _requires_grad[index] = py::cast<Parameter&>(value).requires_grad;
         }
     }
+
+    vector<pair<size_t, py::object>> items() {
+        vector<pair<size_t, py::object>> params;
+        for (auto& param : _parameters) {
+            params.push_back({param.first, param.second});
+        }
+        return params;
+    }
 };
 
 class Module {

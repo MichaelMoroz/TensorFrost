@@ -30,11 +30,18 @@ public:
         RMSProp
     };
 
+    enum class RegularizerType {
+        None,
+        L1,
+        L2
+    };
+
     OptimizerType optimizer_type;
+    RegularizerType regularizer_type;
     const float epsilon = 1e-8f;
 
-    ModuleOptimizer(OptimizerType type, Module* net, map<string, py::object> params)
-        : PyModule(), optimizer_type(type) {
+    ModuleOptimizer(OptimizerType type, RegularizerType reg, Module* net, map<string, py::object> params)
+        : PyModule(), optimizer_type(type), regularizer_type(reg) {
         setattr("net", py::cast(net));
 
         for (auto& [name, value] : params) {
@@ -146,7 +153,17 @@ public:
                     break;
             }
 
+            switch (regularizer_type) {
+                case RegularizerType::L1:
+                    param = param - learning_rate * getattr("reg") * tf.attr("sign")(param);
+                break;
+                case RegularizerType::L2:
+                    param = param - learning_rate * getattr("reg") * param;
+                break;
+            }
+
             param = param - update;
+
             net_params[i] = param;
         }
         Tensor::EndRegion("UpdateWeights");
@@ -203,7 +220,8 @@ void ModuleDefinitions(py::module& m) {
     py::class_<ParameterArray>(m, "ParameterArray")
         .def(py::init<>())
         .def("__getitem__", &ParameterArray::getitem)
-        .def("__setitem__", &ParameterArray::setitem);
+        .def("__setitem__", &ParameterArray::setitem)
+        .def("items", &ParameterArray::items);
 
     py::class_<Module, PyModule>(m, "Module")
         .def(py::init<bool>(), py::arg("requires_grad") = true)
@@ -226,8 +244,19 @@ void ModuleDefinitions(py::module& m) {
         .value("SGD", ModuleOptimizer::OptimizerType::SGD)
         .value("RMSProp", ModuleOptimizer::OptimizerType::RMSProp);
 
+    py::module regularizers = m.def_submodule("regularizers", "Regularizers submodule");
+
+    auto regularizer_type = py::enum_<ModuleOptimizer::RegularizerType>(m, "RegularizerType")
+        .value("None", ModuleOptimizer::RegularizerType::None)
+        .value("L1", ModuleOptimizer::RegularizerType::L1)
+        .value("L2", ModuleOptimizer::RegularizerType::L2);
+
+
+    regularizers.attr("l1") = ModuleOptimizer::RegularizerType::L1;
+    regularizers.attr("l2") = ModuleOptimizer::RegularizerType::L2;
+
     py::class_<ModuleOptimizer, Module>(m, "ModuleOptimizer")
-        .def(py::init<ModuleOptimizer::OptimizerType, Module*, map<string, py::object>>(), py::arg("type"), py::arg("net"), py::arg("params"))
+        .def(py::init<ModuleOptimizer::OptimizerType, ModuleOptimizer::RegularizerType, Module*, map<string, py::object>>(), py::arg("type"),  py::arg("reg_type"), py::arg("net"), py::arg("params"))
         .def("assert_parameters", &ModuleOptimizer::assert_parameters)
         .def("step", py::overload_cast<py::object, py::object>(&ModuleOptimizer::step))
         .def("step", py::overload_cast<py::object>(&ModuleOptimizer::step));
@@ -235,38 +264,41 @@ void ModuleDefinitions(py::module& m) {
     py::module optimizers = m.def_submodule("optimizers", "Optimizers submodule");
 
     optimizers.def("adam",
-        [](Module* net, py::object learning_rate, py::object beta1, py::object beta2, py::object clip) {
-            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::ADAM, net, {
+        [](Module* net, ModuleOptimizer::RegularizerType reg_type, py::object learning_rate, py::object beta1, py::object beta2, py::object clip, py::object reg) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::ADAM, reg_type, net, {
                 {"learning_rate", learning_rate},
                 {"beta1", beta1},
                 {"beta2", beta2},
-                {"grad_clip", clip}
+                {"grad_clip", clip},
+                {"reg", reg},
             });
         },
-        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("beta1") = 0.9f, py::arg("beta2") = 0.999f, py::arg("clip") = 0.0f,
+        py::arg("net"), py::arg("reg_type") = ModuleOptimizer::RegularizerType::None, py::arg("learning_rate") = 0.001f, py::arg("beta1") = 0.9f, py::arg("beta2") = 0.999f, py::arg("clip") = 0.0f, py::arg("reg") = 0.0f,
         py::return_value_policy::take_ownership
     );
 
     optimizers.def("sgd",
-        [](Module* net, py::object learning_rate, py::object clip) {
-            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::SGD, net, {
+        [](Module* net, ModuleOptimizer::RegularizerType reg_type, py::object learning_rate, py::object clip, py::object reg) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::SGD, reg_type, net, {
                 {"learning_rate", learning_rate},
-                {"grad_clip", clip}
+                {"grad_clip", clip},
+                {"reg", reg},
             });
         },
-        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("clip") = 0.0f,
+        py::arg("net"), py::arg("reg_type") = ModuleOptimizer::RegularizerType::None, py::arg("learning_rate") = 0.001f, py::arg("clip") = 0.0f, py::arg("reg") = 0.0f,
         py::return_value_policy::take_ownership
     );
 
     optimizers.def("rmsprop",
-        [](Module* net, py::object learning_rate, py::object decay, py::object clip) {
-            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::RMSProp, net, {
+        [](Module* net, ModuleOptimizer::RegularizerType reg_type, py::object learning_rate, py::object decay, py::object clip, py::object reg) {
+            return new ModuleOptimizer(ModuleOptimizer::OptimizerType::RMSProp, reg_type, net, {
                 {"learning_rate", learning_rate},
                 {"decay", decay},
-                {"grad_clip", clip}
+                {"grad_clip", clip},
+                {"reg", reg},
             });
         },
-        py::arg("net"), py::arg("learning_rate") = 0.001f, py::arg("decay") = 0.9f, py::arg("clip") = 0.0f,
+        py::arg("net"), py::arg("reg_type") = ModuleOptimizer::RegularizerType::None, py::arg("learning_rate") = 0.001f, py::arg("decay") = 0.9f, py::arg("clip") = 0.0f, py::arg("reg") = 0.0f,
         py::return_value_policy::take_ownership
     );
 }
