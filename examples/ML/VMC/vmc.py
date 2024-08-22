@@ -12,9 +12,9 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
-lr = 0.01
-n_walkers = 8168
-opt_steps = 2500
+lr = 0.005
+n_walkers = 2048
+opt_steps = 5000
 
 #how many metropolis steps to perform per optimization step
 metropolis_per_step = 12
@@ -26,16 +26,61 @@ target_acceptance_rate = 0.5
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
 #ferminet/psiformer used a clipping around the median of the local energy
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simpler and seems to work well
-outlier_fraction = 0.2
+outlier_fraction = 0.25
 
 
 smoothing = 0.96
 
-atom1 = Atom(3, "Li", Vector3(-5.051*0.5, 0.0, 0.0))
-atom2 = Atom(3, "Li", Vector3(5.051*0.5, 0.0, 0.0))
-molecule = Molecule([atom1, atom2])
+# atom1 = Atom(3, "Li", Vector3(-5.051*0.5, 0.0, 0.0))
+# atom2 = Atom(3, "Li", Vector3(5.051*0.5, 0.0, 0.0))
+# molecule = Molecule([atom1, atom2])
+# molecule.initialize_orbitals()
+# target_energy = -14.9954
+
+# atom = Atom(6, "C", Vector3(0.0, 0.0, 0.0))
+# molecule = Molecule([atom])
+# molecule.initialize_orbitals()
+# target_energy = -37.846772
+
+# Methane
+# atomC = Atom(6, "C", Vector3(0.0, 0.0, 0.0))
+# atomH1 = Atom(1, "H", Vector3(1.18886, 1.18886, 1.18886))
+# atomH2 = Atom(1, "H", Vector3(-1.18886, -1.18886, 1.18886))
+# atomH3 = Atom(1, "H", Vector3(-1.18886, 1.18886, -1.18886))
+# atomH4 = Atom(1, "H", Vector3(1.18886, -1.18886, -1.18886))
+# molecule = Molecule([atomC, atomH1, atomH2, atomH3, atomH4])
+# molecule.initialize_orbitals()
+# target_energy = -40.51400
+
+# Oxygen
+# atom = Atom(8, "O", Vector3(0.0, 0.0, 0.0))
+# molecule = Molecule([atom])
+# molecule.initialize_orbitals()
+# target_energy = -75.06655
+
+# Neon
+# atom = Atom(10, "Ne", Vector3(0.0, 0.0, 0.0))
+# molecule = Molecule([atom])
+# molecule.initialize_orbitals()
+# target_energy = -128.9366
+
+# Ethane
+# C1 (0.0, 0.0, 1.26135)
+# C2 (0.0, 0.0, -1.26135)
+# H1 (0.0, 1.74390, 2.33889)
+# H2 (0.0, -1.74390, 2.33889)
+# H3 (0.0, 1.74390, -2.33889)
+# H4 (0.0, -1.74390, -2.33889)
+atomC1 = Atom(6, "C", Vector3(0.0, 0.0, 1.26135))
+atomC2 = Atom(6, "C", Vector3(0.0, 0.0, -1.26135))
+atomH1 = Atom(1, "H", Vector3(0.0, 1.74390, 2.33889))
+atomH2 = Atom(1, "H", Vector3(0.0, -1.74390, 2.33889))
+atomH3 = Atom(1, "H", Vector3(0.0, 1.74390, -2.33889))
+atomH4 = Atom(1, "H", Vector3(0.0, -1.74390, -2.33889))
+molecule = Molecule([atomC1, atomC2, atomH1, atomH2, atomH3, atomH4])
 molecule.initialize_orbitals()
-target_energy = -14.9954
+target_energy = -78.5844
+
 
 atoms = molecule.get_atoms()
 atom_n = atoms.shape[0]
@@ -52,23 +97,21 @@ class PSI(tf.Module):
         self.orb_per_atom = 12
         self.determinants = 1
         self.orbital_n = self.orb_per_atom * self.atom_n
+        self.mid_n = 16
 
         self.params = tf.Parameter([2], tf.float32, requires_grad = False)
         self.step = tf.Parameter([1], tf.int32, requires_grad = False)
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
-        #self.weights = tf.Parameter([3], tf.float32)
         self.orbi_layer0 = tf.Parameter([4, self.orb_per_atom], tf.float32)
         self.orbi_layer0_bias = tf.Parameter([self.orb_per_atom], tf.float32)
-        self.orbi_layer1 = tf.Parameter([4, self.orb_per_atom], tf.float32)
-        self.orbi_layer1_bias = tf.Parameter([self.orb_per_atom], tf.float32)
         self.envelope_layer = tf.Parameter([self.orb_per_atom], tf.float32)
-        self.mid_layer1 = tf.Parameter([self.orbital_n, self.orbital_n], tf.float32)
-        self.mid_layer1_bias = tf.Parameter([self.orbital_n], tf.float32)
-        self.up_layer = tf.Parameter([self.orbital_n, self.determinants * self.spin_up_n], tf.float32)
-        self.down_layer = tf.Parameter([self.orbital_n, self.determinants * self.spin_down_n], tf.float32)
+        self.mid_layer1A = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
+        self.mid_layer1B = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
+        self.up_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_up_n], tf.float32)
+        self.down_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_down_n], tf.float32)
         self.gamma = tf.Parameter([4], tf.float32)
-        self.dx = 1e-2
+        self.dx = 5e-3
         self.eps = 1e-6
 
     def metropolis_dx(self):
@@ -111,9 +154,9 @@ class PSI(tf.Module):
         in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) 
 
         #orbitals around atoms [batch, electron, atom, orbital]
-        out0 = (1.0 + 0.1*(in0 @ self.orbi_layer0 + self.orbi_layer0_bias))
-        out1 = (1.0 + 0.1*(in0 @ self.orbi_layer1 + self.orbi_layer1_bias))
-        envelope = out0 * out1 * tf.exp(-tf.unsqueeze(r) * tf.abs(1.0+self.envelope_layer))
+        out0 = (in0 @ self.orbi_layer0 + self.orbi_layer0_bias)
+
+        envelope = out0 * tf.exp(-tf.unsqueeze(r) * tf.abs(self.envelope_layer))
 
         tf.region_end('AtomOrbitals')
 
@@ -121,16 +164,16 @@ class PSI(tf.Module):
         midi = tf.indices([electrons.shape[0], self.electron_n, self.atom_n * self.orb_per_atom])
         envelope = envelope[midi[0], midi[1], midi[2] / self.orb_per_atom, midi[2] % self.orb_per_atom]
 
-        envelope = envelope * (1.0 + 0.15*self.mid_layer1_bias) + GELU2(0.15*(envelope @ self.mid_layer1))
+        envelope = envelope @ self.mid_layer1A + tf.tanh(envelope @ self.mid_layer1B)
 
         #reshape, merge atom orbitals into one dimension [batch, electrons, atom*orbital]
-        up1i = tf.indices([electrons.shape[0], self.spin_up_n, self.atom_n * self.orb_per_atom])
+        up1i = tf.indices([electrons.shape[0], self.spin_up_n, self.mid_n])
         up1 = envelope[up1i[0], up1i[1], up1i[2]]
-        up_features = up1 @ (self.eye_like(self.up_layer) + 0.25*self.up_layer)
+        up_features = up1 @ self.up_layer
         
-        down1i = tf.indices([electrons.shape[0], self.spin_down_n, self.atom_n * self.orb_per_atom])
+        down1i = tf.indices([electrons.shape[0], self.spin_down_n, self.mid_n])
         down1 = envelope[down1i[0], self.spin_up_n + down1i[1], down1i[2]]
-        down_features = down1 @ (self.eye_like(self.down_layer) + 0.25*self.down_layer)
+        down_features = down1 @ self.down_layer
 
         tf.region_end('Orbitals')
 
@@ -354,7 +397,7 @@ class PSI(tf.Module):
         return tf.mean(2.0 * (x_clipped - x_mean).detach_grad() * psi_sorted * median_mask), x_mean
 
     def prob_density(self, e_pos):
-        return tf.exp(2.0 * self.log_psi(e_pos))
+        return 2.0 * self.log_psi(e_pos)
 
     def inc_step(self):
         self.step += 1
@@ -379,7 +422,7 @@ class PSI(tf.Module):
         e_pos_new = e_pos + self.randn(e_pos.shape) * self.metropolis_dx()
         new_prob = self.prob_density(e_pos_new)
 
-        ratio = new_prob / old_prob
+        ratio = tf.exp(tf.clamp(new_prob - old_prob, -50.0, 50.0))
 
         accept = self.rand(ratio.shape) < ratio
         acceptance_rate = tf.mean(tf.float(accept))
@@ -406,7 +449,7 @@ metropolis_step = tf.compile(MetropolisStep)
 
 def GetModelOptimizer():
     wavefunction = PSI()
-    optimizer = tf.optimizers.adam(wavefunction, learning_rate = lr, beta1 = 0.0, reg_type = tf.regularizers.l2, reg = 0.2, clip = 0.05)
+    optimizer = tf.optimizers.adam(wavefunction, learning_rate = lr, beta1 = 0.0, reg_type = tf.regularizers.l2, reg = 0.05, clip = 0.5)
     return optimizer, wavefunction
 
 def OptimizeEnergy():

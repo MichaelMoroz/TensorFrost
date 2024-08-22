@@ -20,7 +20,7 @@ def ProgramTest():
 test = tf.compile(ProgramTest)
 
 tf.renderdoc_start_capture()
-np.random.seed(0)
+#np.random.seed(0)
 A = np.random.randn(16, 16, 16).astype(np.float32)
 B, dB_dA, loss = test(A)
 tf.renderdoc_end_capture()
@@ -41,7 +41,7 @@ print("loss = ", loss.numpy)
 print("Gradient error = ", np.mean(np.abs(dB_dA.numpy - A_torch.grad.numpy())))
 
 # print the gradient
-print("Gradient = ", dB_dA.numpy )
+#print("Gradient = ", dB_dA.numpy )
 
 
 
