@@ -84,7 +84,7 @@ class Atom:
         return electronic_structure
     
 class Molecule:
-    def __init__(self, atoms: List[Atom], ionization_level: int = 0, orbitals_per_electron: int = 1):
+    def __init__(self, atoms: List[Atom], name = "", target_energy = 0.0, ionization_level: int = 0, orbitals_per_electron: int = 1):
         self.atoms = atoms
         self.ionization_level = ionization_level
         self.orbitals_per_electron = orbitals_per_electron
@@ -93,6 +93,9 @@ class Molecule:
         self.spin_up_electrons = 0
         self.spin_down_electrons = 0
         self.electron_count = 0
+        self.target_energy = target_energy
+        self.name = name
+        self.initialize_orbitals()
 
     def initialize_orbitals(self):
         self.spin_up_electrons = 0
@@ -126,17 +129,30 @@ class Molecule:
 
         self.electron_count = self.spin_up_electrons + self.spin_down_electrons
 
-        print(f"Electron Count: {self.electron_count}")
-        print(f"Spin Up Electrons: {self.spin_up_electrons}")
-        print(f"Spin Down Electrons: {self.spin_down_electrons}")
-        print(f"Orbital Count: {len(self.orbitals)}")
-
-        # Log distances between atoms
-        for i in range(len(self.atoms)):
-            for j in range(i + 1, len(self.atoms)):
-                distance = self.atoms[i].position.distance(self.atoms[j].position)
-                print(f"Distance between {self.atoms[i].name} and {self.atoms[j].name} is {distance} Bohr")
-
     def get_atoms(self) -> List[Vector4]:
         atom_array = [[atom.position.x, atom.position.y, atom.position.z, atom.get_charge()] for atom in self.atoms]
         return np.array(atom_array, dtype=np.float32)
+    
+    def get_orbitals(self) -> List[Vector4]:
+        return np.array([[orbital.atom_id, orbital.qnum_n, orbital.qnum_l, orbital.qnum_m] for orbital in self.orbitals], dtype=np.float32)
+    
+    def print_summary(self):
+        print(f"Molecule: {self.name}")
+
+        dict_atoms = {}
+        for atom in self.atoms:
+            if atom.name in dict_atoms:
+                dict_atoms[atom.name] += 1
+            else:
+                dict_atoms[atom.name] = 1
+        
+        structure = ""
+        for atom_name, atom_count in dict_atoms.items():
+            structure += f"{atom_name}{atom_count} "
+        print(f"Structure: {structure}")
+        
+        print(f"Electron count: {self.electron_count}")
+        print(f"Spin up electrons: {self.spin_up_electrons}")
+        print(f"Spin down electrons: {self.spin_down_electrons}")
+        print(f"Target energy: {self.target_energy}")
+        print(f"Orbitals: {self.orbital_array}")

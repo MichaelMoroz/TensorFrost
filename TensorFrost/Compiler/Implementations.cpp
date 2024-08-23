@@ -204,10 +204,10 @@ map<string, VJPGradientFunction> gradient_functions =
 		//dL/da_j = g_j + g_{j+1} + ... + g_n = g_n + g_{n-1} + ... + g_j
 		//c_i == g_{n-i}
 		//dL/da_j = c_0 + c_1 + ... + c_j = prefix_sum(c)_j
-		grads.Add(Tensor::PrefixSum(Tensor::Reverse(grad, out.node_->data[0]), out.node_->data[0]));
+		grads.Add(Tensor::PrefixSum(Tensor::Reverse(grad, out.axis()), out.axis()));
 	}},
 	{"dim_reverse", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		grads.Add(Tensor::Reverse(grad, out.node_->data[0]));
+		grads.Add(Tensor::Reverse(grad, out.axis()));
 	}},
 	{"reshape", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);

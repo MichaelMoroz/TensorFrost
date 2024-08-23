@@ -73,6 +73,11 @@ class MNIST_net(tf.Module):
         
 lr = 0.0005
 
+def GetModelOptimizer(is_compiler = False, learning_rate = 0.0005):
+    model = MNIST_net(is_compiler = is_compiler)
+    opt = tf.optimizers.adam(model, learning_rate = learning_rate)
+    return model, opt
+
 def OptimizerStep():
     X = tf.input([-1, -1], tf.float32)
     Y = tf.input([-1, 10], tf.float32)
@@ -82,8 +87,7 @@ def OptimizerStep():
     batch_size = tf.int(info[1])
     learning_rate = info[2]
 
-    model = MNIST_net(is_compiler = True)
-    opt = tf.optimizers.adam(model, learning_rate)
+    model, opt = GetModelOptimizer(is_compiler = True, learning_rate = learning_rate)
     opt.initialize_input()
 
     #TODO: implement slicing instead of this crap
@@ -127,8 +131,7 @@ iterations = Xtrain.shape[0] // batch_size
 smoothing = 5.0 / iterations
 print("Iterations per epoch: ", iterations)
 
-model = MNIST_net()
-opt = tf.optimizers.adam(model, lr)
+model, opt = GetModelOptimizer(is_compiler = False, learning_rate = lr)
 opt.initialize_parameters()
 
 Xtf = tf.tensor(Xtrain)

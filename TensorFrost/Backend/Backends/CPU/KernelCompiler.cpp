@@ -7,21 +7,21 @@ namespace TensorFrost {
 std::string kernel_compile_options;
 
 bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
-	std::basic_stringstream<char> ss;
+    std::basic_stringstream<char> ss;
+    std::string output;
 
 #if defined(_WIN32)
-	if (kernel_compile_options.empty()) {
+    if (kernel_compile_options.empty()) {
 #ifdef NDEBUG
-		kernel_compile_options = "/O2 /fp:fast /openmp:experimental";
+        kernel_compile_options = "/O2 /fp:fast /openmp:experimental";
 #else
-		kernel_compile_options = "/Zi";
+        kernel_compile_options = "/Zi";
 #endif
-	}
-	//what the fu..
-	ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl " 
-	   << kernel_compile_options << " /LD " << tempPath
-	   << sourcePath << " /Fe:" << dllName
-	   << "\"\"\\\"\"";  // MSVC
+    }
+    ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl "
+       << kernel_compile_options << " /LD " << tempPath
+       << sourcePath << " /Fe:" << dllName
+       << "\"\"\\\"\"";
 #else
     if (kernel_compile_options.empty()) {
 #ifdef NDEBUG
@@ -31,73 +31,76 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
 #endif
     }
     ss << "g++ " << kernel_compile_options << " -shared -fPIC " << tempPath
-       << sourcePath << " -o " << dllName;  // GCC
+       << sourcePath << " -o " << dllName;
 #endif
 
-	
-	cout << "Compile options: " << kernel_compile_options << endl;
-	std::basic_string<char> command = ss.str();
+    std::basic_string<char> command = ss.str();
 
-	cout << "Command: " << command << endl;
-
-	// Run the compiler
+    // Run the compiler
 #if defined(_WIN32)
-	STARTUPINFO si;
-	PROCESS_INFORMATION pi;
-	ZeroMemory(&si, sizeof(si));
-	si.cb = sizeof(si);
-	ZeroMemory(&pi, sizeof(pi));
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(SECURITY_ATTRIBUTES);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = NULL;
 
-	// Start the child process
-	if (!CreateProcess(nullptr,         // No module name (use command line)
-	                   command.data(),  // Command line
-	                   nullptr,         // Process handle not inheritable
-	                   nullptr,         // Thread handle not inheritable
-	                   FALSE,           // Set handle inheritance to FALSE
-	                   0,               // No creation flags
-	                   nullptr,         // Use parent's environment block
-	                   nullptr,         // Use parent's starting directory
-	                   &si,             // Pointer to STARTUPINFO structure
-	                   &pi  // Pointer to PROCESS_INFORMATION structure
-	                   )) {
-		throw std::runtime_error(std::string("Steps error: cannot create compiler process. Command line: ") + command.data() + "\n");
-	}
+    HANDLE hReadPipe, hWritePipe;
+    if (!CreatePipe(&hReadPipe, &hWritePipe, &sa, 0)) {
+        throw std::runtime_error("Failed to create pipe");
+    }
 
-	// Wait until child process exits
-	WaitForSingleObject(pi.hProcess, INFINITE);
+    STARTUPINFO si;
+    PROCESS_INFORMATION pi;
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.hStdError = hWritePipe;
+    si.hStdOutput = hWritePipe;
+    si.dwFlags |= STARTF_USESTDHANDLES;
 
-	// Check for compiler errors
-	DWORD exit_code;
-	GetExitCodeProcess(pi.hProcess, &exit_code);
-	if (exit_code != 0) {
-		throw std::runtime_error(
-		    "Steps error: compiler exited with non-zero exit code (Error "
-		    "code: " +
-		    to_string(exit_code) + ")");
-	}
+    if (!CreateProcess(nullptr, command.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr, &si, &pi)) {
+        throw std::runtime_error(std::string("Steps error: cannot create compiler process. Command line: ") + command.data() + "\n");
+    }
 
-	// Close process and thread handles
-	CloseHandle(pi.hProcess);
-	CloseHandle(pi.hThread);
+    CloseHandle(hWritePipe);
+
+    char buffer[4096];
+    DWORD bytesRead;
+    while (ReadFile(hReadPipe, buffer, sizeof(buffer), &bytesRead, NULL) && bytesRead != 0) {
+        output.append(buffer, bytesRead);
+    }
+
+    WaitForSingleObject(pi.hProcess, INFINITE);
+
+    DWORD exit_code;
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    if (exit_code != 0) {
+        throw std::runtime_error(
+            "Steps error: compiler exited with non-zero exit code (Error "
+            "code: " + std::to_string(exit_code) + ")\nCompiler output:\n" + output);
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    CloseHandle(hReadPipe);
 #else
-	//Use linux execl
-	pid_t pid = fork();
-	if (pid == 0) {
-		execl("/bin/sh", "sh", "-c", command.data(), nullptr);
-		exit(127);
-	} else {
-		int status;
-		waitpid(pid, &status, 0);
-		if (status != 0) {
-			throw std::runtime_error(
-			    "Steps error: compiler exited with non-zero exit code (Error "
-			    "code: " +
-			    to_string(status) + ")");
-		}
-	}
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        output += buffer;
+    }
+
+    int status = pclose(pipe);
+    if (status != 0) {
+        throw std::runtime_error(
+            "Steps error: compiler exited with non-zero exit code (Error "
+            "code: " + std::to_string(status) + ")\nCompiler output:\n" + output);
+    }
 #endif
 
-	return true;
+    return true;
 }
 
 void CompileKernelLibrary(const string& sourceCode, char* tempPath,
