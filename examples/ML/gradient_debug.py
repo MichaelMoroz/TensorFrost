@@ -47,7 +47,7 @@ class TestModule1(tf.Module):
         #self.dense_res = self.res1 ** 2
         self.kernels1 = 16
         self.kernels2 = 64
-        self.layer1 = 32
+        self.layer1 = 64
         self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * 1)))
         #self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
         self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * self.kernels1)))
@@ -57,6 +57,12 @@ class TestModule1(tf.Module):
         self.fc1_bias = tf.Parameter([self.layer1], tf.float32, random_scale = 0.0)
         self.fc2 = tf.Parameter([self.layer1, output_size], tf.float32)
         self.fc2_bias = tf.Parameter([output_size], tf.float32, random_scale = 0.0)
+
+        self.sum_layer1 = tf.Parameter([16, 8], tf.float32, random_scale = 0.1)
+        self.sum_layer1_bias = tf.Parameter([8], tf.float32, random_scale = 0.0)
+
+        self.sum_layer2 = tf.Parameter([8, 16], tf.float32, random_scale = 0.1)
+        self.sum_layer2_bias = tf.Parameter([16], tf.float32, random_scale = 0.0)
 
     def assert_parameters(self):
         self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
@@ -73,19 +79,25 @@ class TestModule1(tf.Module):
         bi, ci, wi, hi, i, j = tf.indices([X.shape[0], X.shape[1], X.shape[2] / 2, X.shape[3] / 2, 2, 2])
         return tf.max(tf.max(X[bi, ci, 2 * wi + i, 2 * hi + j]))
     
-    def forward(self, X):
+    def forward(self, x):
         tf.region_begin('Forward')
-        X = tf.reshape(X, [X.shape[0], 1, self.resolution, self.resolution])
-        X = self.conv2d(X, self.conv1)
-        X = self.max_pool2d(X)
-        X = GELU(X)
-        X = self.max_pool2d(self.conv2d(X, self.conv2))
-        X = GELU(X)
-        X = tf.reshape(X, [X.shape[0], self.fc1.shape[0]])
-        X = GELU(X @ self.fc1 + self.fc1_bias)
-        X = X @ self.fc2 + self.fc2_bias
+        x = tf.reshape(x, [x.shape[0], 1, self.resolution, self.resolution])
+        x = self.conv2d(x, self.conv1)
+        x = self.max_pool2d(x)
+        x = GELU(x)
+        x = self.max_pool2d(self.conv2d(x, self.conv2))
+        x = GELU(x)
+        x = tf.reshape(x, [x.shape[0], self.fc1.shape[0]])
+        x = GELU(x @ self.fc1 + self.fc1_bias)
+        x = tf.reshape(x, [x.shape[0], 64//16, 16])
+        r = tf.tanh(x @ self.sum_layer1 + self.sum_layer1_bias)
+        r = tf.sum(r, axis=1)
+        r = tf.unsqueeze(r, axis=1)
+        x = x + tf.tanh(r @ self.sum_layer2 + self.sum_layer2_bias)
+        x = tf.reshape(x, [x.shape[0], 64])
+        x = x @ self.fc2 + self.fc2_bias
         tf.region_end('Forward')
-        return X
+        return x
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
@@ -115,7 +127,7 @@ class TestModule2(torch.nn.Module):
         #self.dense_res = self.res1 ** 2
         self.kernels1 = 16
         self.kernels2 = 64
-        self.layer1 = 32
+        self.layer1 = 64
         self.conv1 = torch.nn.Parameter(0.1*torch.randn(self.kernels1, 1, self.kernel_size, self.kernel_size))
         #self.conv1_bias = torch.nn.Parameter(torch.randn(self.kernels1))
         self.conv2 = torch.nn.Parameter(0.1*torch.randn(self.kernels2, self.kernels1, self.kernel_size, self.kernel_size))
@@ -125,6 +137,12 @@ class TestModule2(torch.nn.Module):
         self.fc1_bias = torch.nn.Parameter(torch.randn(self.layer1))
         self.fc2 = torch.nn.Parameter(0.1*torch.randn(self.layer1, output_size))
         self.fc2_bias = torch.nn.Parameter(torch.randn(output_size))
+
+        self.sum_layer1 = torch.nn.Parameter(0.1*torch.randn(16, 8))
+        self.sum_layer1_bias = torch.nn.Parameter(torch.randn(8))
+        self.sum_layer2 = torch.nn.Parameter(0.1*torch.randn(8, 16))
+        self.sum_layer2_bias = torch.nn.Parameter(torch.randn(16))
+
 
     def conv2d(self, X, W):
         conv = torch.nn.functional.conv2d(X, W)
@@ -139,6 +157,12 @@ class TestModule2(torch.nn.Module):
         x = GELU_torch(x)
         x = x.reshape(-1, self.fc1.shape[0])
         x = GELU_torch(x @ self.fc1 + self.fc1_bias)
+        x = x.reshape(-1, 64//16, 16)
+        r = torch.tanh(x @ self.sum_layer1 + self.sum_layer1_bias)
+        r = r.sum(dim=1)
+        r = torch.unsqueeze(r, dim=1)
+        x = x + torch.tanh(r @ self.sum_layer2 + self.sum_layer2_bias)
+        x = x.reshape(-1, 64)
         x = x @ self.fc2 + self.fc2_bias
         return x
     
@@ -150,7 +174,7 @@ class TestModule2(torch.nn.Module):
     
 #create the modules
 # pytorch
-torch.manual_seed(0)
+torch.manual_seed(1)
 model_torch = TestModule2()
 
 # tensorfrost

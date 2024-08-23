@@ -1,6 +1,6 @@
 import TensorFrost as tf
 
-eps = 1e-7
+eps = 1e-8
 
 def safe_divide(a, b):
     return a / tf.select(tf.abs(b) < eps, eps * tf.sign(b), b)

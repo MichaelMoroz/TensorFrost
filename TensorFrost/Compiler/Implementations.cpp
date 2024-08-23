@@ -53,6 +53,36 @@ const Tensor& ReduceGradientToShape(const Tensor& gradient, const Tensor& target
 	return *reduced;
 }
 
+Tensor* ConstantOutOfBounds(const Tensor* array, Tensors indices, uint constant) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	Tensors shape = shapeinfo.GetTensors();
+	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
+	for (int i = 0; i < dims; i++) {
+		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
+		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
+	}
+	is_out_of_bounds->SetDebugName("out_of_bounds");
+	Tensor* value = &Tensor::Constant(constant, array->node_->type);
+	Tensor* loaded = &Tensor::Load(*array, indices);
+	return &Tensor::select(*is_out_of_bounds, *value, *loaded);
+}
+
+
+Tensor* IsOutOfBounds(const Tensor* array, Tensors indices) {
+	ShapeInfo shapeinfo = array->GetShapeInfo();
+	int dims = shapeinfo.dim;
+	Tensors shape = shapeinfo.GetTensors();
+	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
+	for (int i = 0; i < dims; i++) {
+		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
+		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
+	}
+	is_out_of_bounds->SetDebugName("out_of_bounds");
+	return is_out_of_bounds;
+}
+
+
 map<string, VJPGradientFunction> gradient_functions =
 {
 	//elementwise operations
@@ -198,7 +228,9 @@ map<string, VJPGradientFunction> gradient_functions =
 		}
 
 		const Tensor& curGrad = *grads.GetGrad(ArgType::Memory, 0);
-		Tensor::ScatterAdd(curGrad, grad, tensor_indices);
+		const Tensor& is_out_of_bounds = *IsOutOfBounds(in.GetTensor(ArgType::Memory), tensor_indices);
+		const Tensor& grad_out_of_bounds = Tensor::select(is_out_of_bounds, Tensor::Constant(0.0f), grad);
+		Tensor::ScatterAdd(curGrad, grad_out_of_bounds, tensor_indices);
 	}},
 	{"store", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of store is load gradient at the store memory addresses
@@ -518,21 +550,6 @@ Tensor* ReverseDim(const Tensor* array, int axis) {
 	Tensor& loaded = Tensor::Load(*array, indices, IndexingMode::Unsafe);
 	loaded.SetDebugName("reversed");
 	return &loaded;
-}
-
-Tensor* ConstantOutOfBounds(const Tensor* array, Tensors indices, uint constant) {
-	ShapeInfo shapeinfo = array->GetShapeInfo();
-	int dims = shapeinfo.dim;
-	Tensors shape = shapeinfo.GetTensors();
-	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
-	for (int i = 0; i < dims; i++) {
-		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
-		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
-	}
-	is_out_of_bounds->SetDebugName("out_of_bounds");
-	Tensor* value = &Tensor::Constant(constant, array->node_->type);
-	Tensor* loaded = &Tensor::Load(*array, indices);
-	return &Tensor::select(*is_out_of_bounds, *value, *loaded);
 }
 
 Tensor* SplitDim(const Tensor* array, const Tensor* splitted, int axis, int split_size) {
