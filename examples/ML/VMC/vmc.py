@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as patheffects
 from tqdm import tqdm
+import time
 
 from utils import *
 from atom import *
@@ -18,7 +19,7 @@ lr0 = 0.005
 lr1 = 0.001
 reg0 = 0.05
 reg1 = 0.005
-n_walkers = 512
+n_walkers = 2048
 opt_steps = 10000
 
 def scheduler(step):
@@ -33,13 +34,14 @@ target_acceptance_rate = 0.4
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
-#ferminet/psiformer used a clipping around the median of the local energy
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simpler and seems to work well
 outlier_fraction = 0.15
+#range for clipping around the median of the local energy from ferminet/psiformer (in variance units)
+mad_range = 3.0
 
 smoothing = 0.995
 
-molecule = c2h4_molecule
+molecule = li2_molecule
 
 molecule.print_summary()
 
@@ -56,7 +58,7 @@ class PSI(tf.Module):
         self.electron_n = electron_n
         self.spin_up_n = spin_up_n
         self.spin_down_n = electron_n - spin_up_n
-        self.orb_per_atom = 12
+        self.orb_per_atom = 8
         self.determinants = 1
         self.orbital_n = self.orb_per_atom * self.atom_n
         self.mid_n = 24
@@ -76,7 +78,6 @@ class PSI(tf.Module):
         self.mid_layer1A = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
         self.mid_layer1B = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
         self.mid_layer2 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
-
 
         self.exchange_layer_out_up = tf.Parameter([self.mid_n, self.spin_up_n], tf.float32)
         self.exchange_layer_out_down = tf.Parameter([self.mid_n, self.spin_down_n], tf.float32)
@@ -167,6 +168,7 @@ class PSI(tf.Module):
         tf.region_begin('SlaterDeterminant')
 
         #compute determinant for each set of electron orbitals [batch, determinant]
+        #todo: output sign of the determinants
         det_down = self.logdeterminant(down_features, self.spin_down_n)
         det_up = self.logdeterminant(up_features, self.spin_up_n)
 
@@ -317,7 +319,7 @@ class PSI(tf.Module):
         #clip the local energy to a region around the median
         median = x_sorted[sample_count / 2]
         mad_median = tf.mean(tf.abs(x_sorted - median)*median_mask)
-        x_clipped = tf.clamp(x_sorted, median - 3.0 * mad_median, median + 3.0 * mad_median)
+        x_clipped = tf.clamp(x_sorted, median - mad_range * mad_median, median + mad_range * mad_median)
 
         x_mean = tf.mean(x_clipped*median_mask)
         return tf.mean(2.0 * (x_clipped - x_mean).detach_grad() * psi_sorted * median_mask), x_mean
@@ -373,9 +375,15 @@ def MetropolisStep():
     wavefunction.initialize_input()
 
     walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
-    update_prob = tf.input([1], tf.int32)[0]
+    allsteps_walkers = tf.input([n_walkers * metropolis_per_step, wavefunction.electron_n, 3], tf.float32)
+    metropolis_params = tf.input([2], tf.int32)
+    update_prob = metropolis_params[0]
+    cur_step = metropolis_params[1]
 
     new_walkers, acceptance_rate = wavefunction.metropolis_step(walkers, update_prob)
+
+    i, j, k = new_walkers.indices
+    allsteps_walkers[i * metropolis_per_step + cur_step, j, k] = new_walkers
 
     params = wavefunction.parameters()
     params.append(new_walkers)
@@ -415,30 +423,30 @@ optimizer.net.atoms = tf.tensor(atoms)
 optimizer.net.step = tf.tensor(np.array([0], np.int32))
 optimizer.net.seed = tf.tensor(np.array([0], np.uint32))
 
-walkers = np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
-walkers_tf = tf.tensor(walkers)
 
-acceptance_rate_history = []
-energy_history = []
+class Status:
+    def __init__(self):
+        self.acceptance_rate_history = []
+        self.energy_history = []
+        self.smoothed_loss = 0.0
+        self.smoothed_energy = 0.0
+        self.smoothed_acceptance_rate = 0.0
 
+status = Status()
 
-progress_bar = tqdm(range(opt_steps))
-smoothed_loss = 0.0
-smoothed_energy = 0.0
-smoothed_acceptance_rate = 0.0
-
-def OptimizationStep(i):
+def OptimizationStep(i, optimizer, walkers_tf, allsteps_walkers_tf, status):
     for j in range(metropolis_per_step):
-        update_prob = [1 if (j == 0) else 0] #must update the stored probability in the first step, since wavefunction has changed
-        out = metropolis_step(wavefunction, walkers_tf, update_prob)
+        update_prob = 1 if (j == 0) else 0 #must update the stored probability in the first step, since wavefunction has changed
+        metropolis_params = [update_prob, j]
+        out = metropolis_step(optimizer.net, walkers_tf, allsteps_walkers_tf, metropolis_params)
         walkers_tf = out[-2]
         acceptance_rate = out[-1]
-        wavefunction.update_parameters(out[:-2])
+        optimizer.net.update_parameters(out[:-2])
         
         acceptance_rate = acceptance_rate.numpy
-        smoothed_acceptance_rate = smoothing * smoothed_acceptance_rate + (1.0 - smoothing) * acceptance_rate[0]
-        acceptance_rate_history.append(smoothed_acceptance_rate)
-        cur_params = wavefunction.params.numpy
+        status.smoothed_acceptance_rate = smoothing * status.smoothed_acceptance_rate + (1.0 - smoothing) * acceptance_rate[0]
+        status.acceptance_rate_history.append(status.smoothed_acceptance_rate)
+        cur_params = optimizer.net.params.numpy
 
         #update the metropolis step size based on the acceptance rate
         if(acceptance_rate[0] < target_acceptance_rate):
@@ -446,7 +454,7 @@ def OptimizationStep(i):
         if(acceptance_rate[0] > target_acceptance_rate):
             cur_params[0] *= 1.02
 
-        wavefunction.params = tf.tensor(cur_params)
+        optimizer.net.params = tf.tensor(cur_params)
 
     cur_lr, cur_reg = scheduler(i)
 
@@ -455,39 +463,52 @@ def OptimizationStep(i):
     Emean = out[-1].numpy
     optimizer.update_parameters(out[:-2])
 
-    return loss, Emean
+    status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * Emean
+    status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * loss
+    status.energy_history.append(status.smoothed_energy)
 
-# for i in progress_bar:
-#     if(i == 0): tf.renderdoc_start_capture()
+    return loss, Emean, walkers_tf
 
-#     loss, Emean = OptimizationStep(i)
+walkers = np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
+walkers_tf = tf.tensor(walkers)
 
-#     smoothed_energy = smoothing * smoothed_energy + (1.0 - smoothing) * Emean
-#     smoothed_loss = smoothing * smoothed_loss + (1.0 - smoothing) * loss
-#     energy_history.append(smoothed_energy)
-
-#     progress_bar.set_postfix(acceptance_rate = '{0:.6f}'.format(smoothed_acceptance_rate), loss = '{0:.6f}'.format(smoothed_loss[0]), energy = '{0:.6f}'.format(smoothed_energy[0]))
-#     if(i == 0): tf.renderdoc_end_capture()
+allsteps_walkers = np.random.randn(n_walkers * metropolis_per_step, wavefunction.electron_n, 3).astype(np.float32)
+allsteps_walkers_tf = tf.tensor(allsteps_walkers)
 
 vis = CompileVisualizer(1280, 720, 1.0)
 
-cam = Camera(position=np.array([0.0, 0.0, 0.0]), quaternion=np.array([0.0, 0.0, 0.0, 1.0]), W=1280, H=720, focal_length=1.0, angular_speed = 0.005, camera_speed = 0.01)
+cam = Camera(position=np.array([0.0, 0.0, 0.0]), quaternion=np.array([0.0, 0.0, 0.0, 1.0]), W=1280, H=720, angular_speed = 0.005, camera_speed = 0.2)
 cam.initialize_parameters()
 
 tf.show_window(cam.W, cam.H, "Walker renderer")
 
+cur_time = time.time()
+prev_time = time.time()
+smooth_delta_time = 0.0
 frame = 0
 while not tf.window_should_close():
+    cur_time = time.time()
+    delta_time = cur_time - prev_time
+    smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
+
+    loss, Emean, walkers_tf = OptimizationStep(frame, optimizer, walkers_tf, allsteps_walkers_tf, status)
+
     cam.controller_update()
-    OptimizationStep(frame)
-    image = vis(cam, walkers_tf)
+
+    tf.imgui_text("Simulation time: %.3f ms" % (1000.0 * smooth_delta_time))
+    tf.imgui_text("FPS: %.1f" % (1.0 / (smooth_delta_time + 1e-5)))
+    
+    tf.imgui_text("Energy: %.3f" % status.smoothed_energy)
+    tf.imgui_text("Loss: %.3f" % status.smoothed_loss)
+    tf.imgui_text("Acceptance rate: %.3f" % status.smoothed_acceptance_rate)
+    tf.imgui_text("Step: %d" % frame)
+ 
+    tf.imgui_text("Error, %.3f" % (100.0 * np.abs((status.smoothed_energy - target_energy) / target_energy)))
+
+    image = vis(cam, allsteps_walkers_tf)
     tf.render_frame(image)
     frame += 1
-
-print("Final Energy: ", np.mean(smoothed_energy))
-print("Error, %: ", 100.0 * np.abs((np.mean(smoothed_energy) - target_energy) / target_energy))
-#print weights
-#print("Weights: ", wavefunction.weights.numpy)
+    prev_time = cur_time
 
 #print walker position variance
 walkers = walkers_tf.numpy
