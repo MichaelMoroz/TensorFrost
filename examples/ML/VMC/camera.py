@@ -30,19 +30,19 @@ def axis_angle_quaternion(axis, angle):
     angle /= 2
     return np.array([np.cos(angle), axis[0] * np.sin(angle), axis[1] * np.sin(angle), axis[2] * np.sin(angle)])
 
-FIXED_POINT_SIZE = 4096
+FIXED_POINT_SIZE = 4096.0
 
 def float2int(f):
     return tf.int(f * FIXED_POINT_SIZE)
 
 def int2float(i):
-    return tf.float(i) / float(FIXED_POINT_SIZE)
+    return tf.float(i) / FIXED_POINT_SIZE
     
 class Camera(tf.Module):
     def __init__(self, position = [0.0, 0.0, 0.0], quaternion = [1.0, 0.0, 0.0, 0.0], W = 512, H = 512, focal_length = 1.0, angular_speed = 0.005, rot_angular_speed = 0.5, camera_speed = 0.01):
         super().__init__()
         self.camera = tf.Parameter([4, 3], tf.float32, requires_grad = False)
-        #self.params = tf.Parameter([3], tf.float32)
+        self.params = tf.Parameter([3], tf.float32)
         self.position = np.array(position, dtype=np.float32)
         self.quaternion = np.array(quaternion, dtype=np.float32)
         self.W = W
@@ -54,6 +54,9 @@ class Camera(tf.Module):
         self.rot_angular_speed = rot_angular_speed
         self.pmx = 0
         self.pmy = 0
+        self.brightness = 1.0
+        self.distance_clip = 10.0
+        self.point_radius = 1.0
 
     #Compiler only
     def assert_parameters(self):
@@ -62,6 +65,9 @@ class Camera(tf.Module):
         self.cam_f = vec3(self.camera[3, 0], self.camera[3, 1], self.camera[3, 2])
         self.cam_u = vec3(self.camera[2, 0], self.camera[2, 1], self.camera[2, 2])
         self.cam_v = vec3(self.camera[1, 0], self.camera[1, 1], self.camera[1, 2])
+        self.brightness = self.params[0]
+        self.distance_clip = self.params[1]
+        self.point_radius = self.params[2]
 
     def uv_to_ij(self, u, v):
         i = v * tf.float(self.min_res) + 0.5 * tf.float(self.H)
@@ -98,19 +104,35 @@ class Camera(tf.Module):
         image[image.indices] = 0
         return image
     
-    def splat_point_additive(self, image, x, y, z, color):
+    def splat_point_additive(self, image, x, y, z, color, rad_mul = 1.0):
         pos = vec3(x, y, z)
         u, v, z = self.project(pos)
         i, j = self.uv_to_ij(u, v)
 
         is_inside = (i >= 0.0) & (i < tf.float(self.H)) & (j >= 0.0) & (j < tf.float(self.W)) & (z > 0.0)
 
+        #brightness is proportional to the inverse square of the distance
+        brightness = self.brightness * tf.clamp(self.distance_clip / (z * z), 0.0, 1.0)
+        render_rad = tf.clamp(self.point_radius * rad_mul, 1.0, 10.0)
+
+        def add(i, j, color, brightness):
+            tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
+            tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
+            tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
+        
         with tf.if_cond(is_inside):
-            xi = tf.int(tf.round(i))
-            yi = tf.int(tf.round(j))
-            tf.scatterAdd(image[xi, yi, 0], float2int(color.x))
-            tf.scatterAdd(image[xi, yi, 1], float2int(color.y))
-            tf.scatterAdd(image[xi, yi, 2], float2int(color.z))
+            xi = tf.int(i)
+            yi = tf.int(j)
+            radius = tf.int(tf.ceil(render_rad))
+            with tf.loop(-radius, radius + 1) as ii:
+                with tf.loop(-radius, radius + 1) as jj:
+                    i_new = xi + ii
+                    j_new = yi + jj
+                    dx = tf.float(i_new) - i
+                    dy = tf.float(j_new) - j
+                    dist = tf.sqrt(dx*dx + dy*dy)
+                    weight = tf.exp(- 2.0*dist*dist / (render_rad * render_rad)) / (math.pi * render_rad * render_rad)
+                    add(i_new, j_new, color, brightness * weight)
 
     #Host only
     def axis(self, axis):
@@ -125,10 +147,12 @@ class Camera(tf.Module):
     def get_camera_matrix(self):
         return np.stack([self.position, *quaternion_to_matrix(self.quaternion)])
     
-    def update_camera_matrix(self):
+    def update_params(self):
         self.camera = tf.tensor(self.get_camera_matrix())
+        all_params = [self.brightness, self.distance_clip, self.point_radius]
+        self.params = tf.tensor(np.array(all_params, dtype=np.float32))
 
-    def controller_update(self):
+    def update(self):
         mx, my = tf.get_mouse_position()
 
         if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
@@ -153,4 +177,4 @@ class Camera(tf.Module):
         self.pmx = mx
         self.pmy = my
 
-        self.update_camera_matrix()
+        self.update_params()

@@ -347,6 +347,11 @@ bool ImGuiCheckbox(std::string text, bool* value) {
 	return ImGui::Checkbox(text.c_str(), value);
 }
 
+void ImGuiScaleAllSizes(float scale) {
+	ImGuiStyle& style = ImGui::GetStyle();
+	style.ScaleAllSizes(scale);
+}
+
 void StartDebugRegion(const std::string& name) {
 	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, (GLsizei)name.size(), name.c_str());
 }

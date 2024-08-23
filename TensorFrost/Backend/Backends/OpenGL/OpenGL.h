@@ -40,6 +40,8 @@ void ImGuiSlider(std::string text, float* value, float min, float max);
 bool ImGuiCheckbox(std::string text, bool* value);
 bool ImGuiButton(std::string text);
 
+void ImGuiScaleAllSizes(float scale);
+
 void StartDebugRegion(const std::string& name);
 void EndDebugRegion();
 

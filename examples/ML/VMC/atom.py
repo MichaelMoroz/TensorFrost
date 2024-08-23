@@ -133,12 +133,22 @@ class Molecule:
         atom_array = [[atom.position.x, atom.position.y, atom.position.z, atom.get_charge()] for atom in self.atoms]
         return np.array(atom_array, dtype=np.float32)
     
-    def get_orbitals(self) -> List[Vector4]:
-        return np.array([[orbital.atom_id, orbital.qnum_n, orbital.qnum_l, orbital.qnum_m] for orbital in self.orbitals], dtype=np.float32)
-    
-    def print_summary(self):
-        print(f"Molecule: {self.name}")
+    def get_orbitals(self, add_per_atom = 0, multiply_per_atom = 1) -> np.ndarray:
+        orbs = [orbital.atom_id for orbital in self.orbitals]
 
+        # multiply per atom orbitals (just repeat the orbitals)
+        orbs = orbs * multiply_per_atom
+
+        # add per atom orbitals
+        for i, atom in enumerate(self.atoms):
+            for _ in range(add_per_atom):
+                orbs.append(i)
+
+        return np.array(orbs, dtype=np.int32)
+        
+    
+    def get_summary(self):
+        summary = "Molecule: {}\n".format(self.name)
         dict_atoms = {}
         for atom in self.atoms:
             if atom.name in dict_atoms:
@@ -148,11 +158,14 @@ class Molecule:
         
         structure = ""
         for atom_name, atom_count in dict_atoms.items():
-            structure += f"{atom_name}{atom_count} "
-        print(f"Structure: {structure}")
+            structure += "{}{} ".format(atom_name, atom_count)
+
+        summary += "Structure: {}\n".format(structure)
+        summary += "Electron count: {}\n".format(self.electron_count)
+        summary += "Spin up electrons: {}\n".format(self.spin_up_electrons)
+        summary += "Spin down electrons: {}\n".format(self.spin_down_electrons)
+        summary += "Target energy: {} Ha\n".format(self.target_energy)
+
+        return summary
         
-        print(f"Electron count: {self.electron_count}")
-        print(f"Spin up electrons: {self.spin_up_electrons}")
-        print(f"Spin down electrons: {self.spin_down_electrons}")
-        print(f"Target energy: {self.target_energy}")
-        print(f"Orbitals: {self.orbital_array}")
+        

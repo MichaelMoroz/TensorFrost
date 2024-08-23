@@ -73,6 +73,9 @@ void WindowDefinitions(py::module& m) {
 			   return *value;
 	      }, "Add a checkbox to the current ImGui window");
 
+	m.def("imgui_scale_all_sizes", [](float scale) { ImGuiScaleAllSizes(scale); },
+	      "Scale all ImGui sizes by a factor");
+
 	m.attr("MOUSE_BUTTON_0") = GLFW_MOUSE_BUTTON_1;
 	m.attr("MOUSE_BUTTON_1") = GLFW_MOUSE_BUTTON_2;
 	m.attr("MOUSE_BUTTON_2") = GLFW_MOUSE_BUTTON_3;
