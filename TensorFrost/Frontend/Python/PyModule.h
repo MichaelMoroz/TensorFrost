@@ -18,6 +18,15 @@ public:
 
     Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
         : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), requires_grad(requires_grad) {}
+
+    bool CanBeInitialized() {
+        for (int i = 0; i < shape.size(); i++) {
+            if (shape[i] == -1) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 class ParameterArray {
@@ -175,6 +184,9 @@ public:
 
         for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
             Parameter& p = py::cast<Parameter&>(param.second);
+            if (!p.CanBeInitialized()) {
+                continue;
+            }
             py::object tensor = initialize_parameter(p);
             setattr(param.first, tensor);
         }
@@ -183,6 +195,9 @@ public:
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 Parameter& p = py::cast<Parameter&>(param.second);
+                if (!p.CanBeInitialized()) {
+                    continue;
+                }
                 py::object tensor = initialize_parameter(p);
                 param_array.setitem(param.first, tensor);
             }
@@ -203,6 +218,25 @@ public:
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 params.append(param.second);
+            }
+        }
+        return params;
+    }
+
+    py::list named_parameters() {
+        py::list params;
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
+            params += module.second.attr("named_parameters")();
+        }
+
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            params.append(py::make_tuple(param.first, param.second));
+        }
+
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
+            ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
+            for (auto& param : param_array._parameters) {
+                params.append(py::make_tuple(array.first + "[" + std::to_string(param.first) + "]", param.second));
             }
         }
         return params;

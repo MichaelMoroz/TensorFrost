@@ -32,10 +32,10 @@ def CompileVisualizer(W, H, focal_length):
         y_pos = atoms[atom_id, 1]
         z_pos = atoms[atom_id, 2]
 
-        camera.splat_point_additive(image, x_pos, y_pos, z_pos, vec3(200.0, 200.0, 1000.0), rad_mul = 3.0)
+        camera.splat_point_additive(image, x_pos, y_pos, z_pos, 1e5*vec3(0.2, 0.2, 1.0), rad_mul = 3.0)
 
 
-        fimage = 1.0 - tf.tanh(int2float(image))
+        fimage = 1.0 - tf.tanh(tf.pow(int2float(image), 0.25))
         return fimage
     
     vis = tf.compile(Visualizer)

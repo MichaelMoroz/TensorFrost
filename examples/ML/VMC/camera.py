@@ -30,7 +30,7 @@ def axis_angle_quaternion(axis, angle):
     angle /= 2
     return np.array([np.cos(angle), axis[0] * np.sin(angle), axis[1] * np.sin(angle), axis[2] * np.sin(angle)])
 
-FIXED_POINT_SIZE = 4096.0
+FIXED_POINT_SIZE = 16384.0
 
 def float2int(f):
     return tf.int(f * FIXED_POINT_SIZE)
@@ -42,7 +42,7 @@ class Camera(tf.Module):
     def __init__(self, position = [0.0, 0.0, 0.0], quaternion = [1.0, 0.0, 0.0, 0.0], W = 512, H = 512, focal_length = 1.0, angular_speed = 0.005, rot_angular_speed = 0.5, camera_speed = 0.01):
         super().__init__()
         self.camera = tf.Parameter([4, 3], tf.float32, requires_grad = False)
-        self.params = tf.Parameter([3], tf.float32)
+        self.params = tf.Parameter([-1], tf.float32)
         self.position = np.array(position, dtype=np.float32)
         self.quaternion = np.array(quaternion, dtype=np.float32)
         self.W = W
@@ -68,6 +68,7 @@ class Camera(tf.Module):
         self.brightness = self.params[0]
         self.distance_clip = self.params[1]
         self.point_radius = self.params[2]
+        self.focal_length = self.params[3]
 
     def uv_to_ij(self, u, v):
         i = v * tf.float(self.min_res) + 0.5 * tf.float(self.H)
@@ -116,9 +117,10 @@ class Camera(tf.Module):
         render_rad = tf.clamp(self.point_radius * rad_mul, 1.0, 10.0)
 
         def add(i, j, color, brightness):
-            tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
-            tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
-            tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
+            with tf.if_cond(brightness > 1.0/FIXED_POINT_SIZE):
+                tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
+                tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
+                tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
         
         with tf.if_cond(is_inside):
             xi = tf.int(i)
@@ -131,7 +133,7 @@ class Camera(tf.Module):
                     dx = tf.float(i_new) - i
                     dy = tf.float(j_new) - j
                     dist = tf.sqrt(dx*dx + dy*dy)
-                    weight = tf.exp(- 2.0*dist*dist / (render_rad * render_rad)) / (math.pi * render_rad * render_rad)
+                    weight = tf.exp(- 3.0*dist*dist / (render_rad * render_rad)) / (math.pi * render_rad * render_rad)
                     add(i_new, j_new, color, brightness * weight)
 
     #Host only
@@ -149,7 +151,7 @@ class Camera(tf.Module):
     
     def update_params(self):
         self.camera = tf.tensor(self.get_camera_matrix())
-        all_params = [self.brightness, self.distance_clip, self.point_radius]
+        all_params = [self.brightness, self.distance_clip, self.point_radius, self.focal_length]
         self.params = tf.tensor(np.array(all_params, dtype=np.float32))
 
     def update(self):

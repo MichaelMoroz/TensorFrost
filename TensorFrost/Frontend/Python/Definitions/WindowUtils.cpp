@@ -73,6 +73,10 @@ void WindowDefinitions(py::module& m) {
 			   return *value;
 	      }, "Add a checkbox to the current ImGui window");
 
+	m.def("imgui_plotlines", [](string label, py::array_t<float> values, int values_offset, string overlay_text, float scale_min, float scale_max, py::tuple graph_size, int stride) {
+		ImGuiPlotLines(label.c_str(), values.data(), (int)values.size(), values_offset, overlay_text.c_str(), scale_min, scale_max, ImVec2(graph_size[0].cast<float>(), graph_size[1].cast<float>()), stride);
+	}, py::arg("label"), py::arg("values"), py::arg("values_offset") = 0, py::arg("overlay_text") = "", py::arg("scale_min") = FLT_MAX, py::arg("scale_max") = FLT_MAX, py::arg("graph_size") = py::make_tuple(0.0f, 0.0f), py::arg("stride") = sizeof(float));
+
 	m.def("imgui_scale_all_sizes", [](float scale) { ImGuiScaleAllSizes(scale); },
 	      "Scale all ImGui sizes by a factor");
 

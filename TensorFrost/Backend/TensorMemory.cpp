@@ -108,8 +108,13 @@ void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {
     DeleteBuffer(buffer);
 }
 
+//#define READBACK_DEBUG
+
 vector<uint32_t> TensorMemoryManager::Readback(const TFTensor *memory) {
     vector<uint32_t> data(GetSize(memory));
+#ifdef READBACK_DEBUG
+    cout << "Reading back " << data.size() << " elements from buffer of size " << memory->buffer->size << endl;
+#endif
     ((TFBufferTemplate*)memory->buffer)->GetDataAtOffset(0, data.size(), data.data());
     return data;
 }

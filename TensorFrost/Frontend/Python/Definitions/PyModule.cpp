@@ -36,12 +36,18 @@ public:
         L2
     };
 
+    enum class ClippingType {
+        Clamp,
+        Norm
+    };
+
     OptimizerType optimizer_type;
     RegularizerType regularizer_type;
+    ClippingType clipping_type;
     const float epsilon = 1e-8f;
 
     ModuleOptimizer(OptimizerType type, RegularizerType reg, Module* net, map<string, py::object> params)
-        : PyModule(), optimizer_type(type), regularizer_type(reg) {
+        : PyModule(), optimizer_type(type), regularizer_type(reg), clipping_type(ClippingType::Clamp) {
         setattr("net", py::cast(net));
 
         for (auto& [name, value] : params) {
@@ -52,6 +58,10 @@ public:
         setattr("t", py::cast(t));
 
         initializeOptimizer(net);
+    }
+
+    void SetClippingType(ClippingType type) {
+        clipping_type = type;
     }
 
     void initializeOptimizer(Module* net) {
@@ -89,6 +99,22 @@ public:
         assertParameterArray("m", net_params, requires_grads);
         assertParameterArray("v", net_params, requires_grads);
     }
+
+    py::object gradient_norm(py::object grad) {
+        //get number of dimensions
+        py::object shape = grad.attr("shape");
+        py::list shape_list = py::cast<py::list>(shape);
+        int num_dims_int = (int)py::len(shape_list);
+
+        //compute the norm over all dimensions
+        py::object sum = grad * grad;
+        for (int i = 0; i < num_dims_int; i++) {
+            sum = tf.attr("sum")(sum);
+        }
+
+        return tf.attr("sqrt")(sum);
+    }
+
 
     void assertParameterArray(const string& name, py::list& net_params, py::list& requires_grads) {
         if (hasattr(name)) {
@@ -137,7 +163,16 @@ public:
             py::object param = net_params[i];
             py::object grad = tf.attr("grad")(loss, param);
             if(has_clip) {
-                grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
+                //grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
+                switch (clipping_type) {
+                    case ClippingType::Clamp:
+                        grad = tf.attr("clamp")(grad, -grad_clip, grad_clip);
+                        break;
+                    case ClippingType::Norm:
+                        py::object grad_norm = tf.attr("max")(py::float_(1e-6), gradient_norm(grad));
+                        grad = grad * tf.attr("min")(py::float_(1.0), grad_clip / grad_norm);
+                        break;
+                }
             }
 
             py::object update;
@@ -232,6 +267,7 @@ void ModuleDefinitions(py::module& m) {
         .def("initialize_input", &Module::initialize_input)
         .def("initialize_parameters", &Module::initialize_parameters)
         .def("parameters", &Module::parameters)
+        .def("named_parameters", &Module::named_parameters)
         .def("requires_grads_list", &Module::requires_grads_list)
         .def("create_input", &Module::create_input)
         .def("update_parameters", &Module::update_parameters)
@@ -251,15 +287,23 @@ void ModuleDefinitions(py::module& m) {
         .value("L1", ModuleOptimizer::RegularizerType::L1)
         .value("L2", ModuleOptimizer::RegularizerType::L2);
 
+    py::module clipping = m.def_submodule("clipping", "Clipping submodule");
+
+    auto clipping_type = py::enum_<ModuleOptimizer::ClippingType>(m, "ClippingType")
+        .value("Clamp", ModuleOptimizer::ClippingType::Clamp)
+        .value("Norm", ModuleOptimizer::ClippingType::Norm);
 
     regularizers.attr("l1") = ModuleOptimizer::RegularizerType::L1;
     regularizers.attr("l2") = ModuleOptimizer::RegularizerType::L2;
+    clipping.attr("clamp") = ModuleOptimizer::ClippingType::Clamp;
+    clipping.attr("norm") = ModuleOptimizer::ClippingType::Norm;
 
     py::class_<ModuleOptimizer, Module>(m, "ModuleOptimizer")
         .def(py::init<ModuleOptimizer::OptimizerType, ModuleOptimizer::RegularizerType, Module*, map<string, py::object>>(), py::arg("type"),  py::arg("reg_type"), py::arg("net"), py::arg("params"))
         .def("assert_parameters", &ModuleOptimizer::assert_parameters)
         .def("step", py::overload_cast<py::object, py::object>(&ModuleOptimizer::step))
-        .def("step", py::overload_cast<py::object>(&ModuleOptimizer::step));
+        .def("step", py::overload_cast<py::object>(&ModuleOptimizer::step))
+        .def("set_clipping_type", &ModuleOptimizer::SetClippingType);
 
     py::module optimizers = m.def_submodule("optimizers", "Optimizers submodule");
 

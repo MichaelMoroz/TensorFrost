@@ -125,6 +125,8 @@ void error_callback(int error, const char* description) {
 	last_error = std::string(description);
 }
 
+//#define OPENGL_DEBUG
+
 void StartOpenGL() {
 	glfwSetErrorCallback(error_callback);
 
@@ -170,12 +172,12 @@ void StartOpenGL() {
 	printf("Maximum SSBO bindings supported: %d\n", max_ssbo_bindings);
 
 	// Enable debug output
-	#ifndef NDEBUG
+	#if !defined(NDEBUG) || defined(OPENGL_DEBUG)
 	if (GLAD_GL_KHR_debug) {
 		glEnable(GL_DEBUG_OUTPUT);
 		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 		glDebugMessageCallback(DebugCallback, nullptr);
-		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr,
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_HIGH, 0, nullptr,
 		                      GL_TRUE);
 	}
 	#endif
@@ -341,6 +343,11 @@ void ImGuiSlider(std::string text, float* value, float min, float max) {
 
 bool ImGuiButton(std::string text) {
 	return ImGui::Button(text.c_str());
+}
+
+void ImGuiPlotLines(const char *label, const float *values, int values_count, int values_offset,
+	const char *overlay_text, float scale_min, float scale_max, ImVec2 graph_size, int stride) {
+	ImGui::PlotLines(label, values, values_count, values_offset, overlay_text, scale_min, scale_max, graph_size, stride);
 }
 
 bool ImGuiCheckbox(std::string text, bool* value) {

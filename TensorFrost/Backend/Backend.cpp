@@ -99,6 +99,8 @@ void Region(const char* name, bool begin, void* data) {
 	}
 }
 
+//#define PROFILE_EXECUTION
+
 vector<TFTensor*> ExecuteProgram(
     Program* program, vector<TFTensor*> inputs) {
 
@@ -125,7 +127,18 @@ vector<TFTensor*> ExecuteProgram(
 	TFTensor* in = input_tensors.data();
 	TFTensor* out = new TFTensor[output_count];
 
+#ifdef PROFILE_EXECUTION
+	auto start = chrono::high_resolution_clock::now();
+#endif
+
 	program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, Region, nullptr});
+
+#ifdef PROFILE_EXECUTION
+	Finish();
+	auto end = chrono::high_resolution_clock::now();
+	float milliseconds = chrono::duration<float, std::milli>(end - start).count();
+	program->last_execution_time = milliseconds;
+#endif
 
 	vector<TFTensor*> outputs = vector<TFTensor*>(output_count);
 	for (int i = 0; i < output_count; i++) {

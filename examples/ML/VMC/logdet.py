@@ -36,7 +36,9 @@ def invert_triangular_batched_tensorfrost(matrix, lower=True):
 
     bi, = tf.indices([b])
 
-    with tf.loop(n) as i:
+    inverted[bi, 0, 0] = safe_divide(1.0, matrix[bi, 0, 0])
+
+    with tf.loop(1, n) as i:
         inverted[bi, i, i] = safe_divide(1.0, matrix[bi, i, i])
         bpk, p, k = tf.indices([b, i, i])
         bt, t, = tf.indices([b, i])

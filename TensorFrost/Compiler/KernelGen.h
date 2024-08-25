@@ -56,6 +56,8 @@ class Program {
 	string main_function_;
 	string program_name = "TensorProgram";
 
+	float last_execution_time = 0.0f;
+
 	function<main_func> execute_callback;
 
 	explicit Program(IR* ir) : ir_(ir) {}

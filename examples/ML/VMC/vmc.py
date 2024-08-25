@@ -17,20 +17,40 @@ register_logdet()
 
 lr0 = 0.005
 lr1 = 0.001
-reg0 = 0.05
+reg0 = 0.01
 reg1 = 0.005
+clip0 = 0.3
+clip1 = 0.1
 n_walkers = 2048
-opt_steps = 10000
+opt_steps = 8000
+
+pause_training = False
+custom_hyperparameters = False
+custom_lr = lr0
+custom_reg = reg0
+custom_clip = clip0
 
 def scheduler(step):
     t = min(max(float(step) / float(opt_steps), 0.0), 1.0)
-    return lr0 + (lr1 - lr0) * t,  reg0 + (reg1 - reg0) * t
+    cur_lr = lr0 * (1.0 - t) + lr1 * t
+    cur_reg = reg0 * (1.0 - t) + reg1 * t
+    cur_clip = clip0 * (1.0 - t) + clip1 * t
+    if custom_hyperparameters:
+        cur_lr = custom_lr
+        cur_reg = custom_reg
+        cur_clip = custom_clip
+    if pause_training:
+        cur_lr = 0.0
+    return cur_lr, cur_reg, cur_clip
 
 #how many metropolis steps to perform per optimization step
 metropolis_per_step = 12
 
+#how many metropolis steps to store in the history to render
+metropolis_history_length = 128
+
 #what target fraction of the walkers to move in each step
-target_acceptance_rate = 0.6
+target_acceptance_rate = 0.4
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
@@ -48,7 +68,7 @@ print(molecule_info)
 
 target_energy = molecule.target_energy
 atoms = molecule.get_atoms()
-orbitals = molecule.get_orbitals(3, 2)
+orbitals = molecule.get_orbitals(2, 2)
 print(orbitals)
 atom_n = atoms.shape[0]
 electron_n = molecule.electron_count
@@ -81,18 +101,20 @@ class PSI(tf.Module):
 
         self.orbi_layer1 = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
         self.mid_layer1 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.mid_layer1_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
         self.mid_layer2 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.mid_layer3 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.mid_layer3_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
 
         self.exchange_layer_out_up = tf.Parameter([self.mid_n, self.corr_n], tf.float32)
         self.exchange_layer_out_down = tf.Parameter([self.mid_n, self.corr_n], tf.float32)
-        self.exchange_layer_in_up = tf.Parameter([self.corr_n, self.mid_n], tf.float32)
-        self.exchange_layer_in_down = tf.Parameter([self.corr_n, self.mid_n], tf.float32)
+        self.exchange_layer_in = tf.Parameter([self.corr_n*2, self.mid_n], tf.float32)
 
         self.up_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_up_n], tf.float32)
         self.down_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_down_n], tf.float32)
         self.gamma = tf.Parameter([4], tf.float32)
-        self.dx = 7e-3
-        self.eps = 1e-6
+        self.dx = 5e-3
+        self.eps = 1e-7
 
     def metropolis_dx(self):
         return self.params[0]
@@ -128,6 +150,10 @@ class PSI(tf.Module):
     def get_spin_down(self, data):
         downi = tf.indices([data.shape[0], self.spin_down_n, data.shape[2]])
         return data[downi[0], self.spin_up_n + downi[1], downi[2]]
+    
+    def concat_exchange(self, exchange_up, exchange_down):
+        idx = tf.indices([exchange_up.shape[0], exchange_up.shape[1], self.corr_n*2])
+        return tf.select(idx[2] < exchange_up.shape[2], exchange_up[idx[0], idx[1], idx[2]], exchange_down[idx[0], idx[1], idx[2] - exchange_up.shape[2]])
 
     def psi_new(self, electrons):
         tf.region_begin('Psi')
@@ -149,15 +175,19 @@ class PSI(tf.Module):
         tf.region_end('AtomOrbitals')
 
         tf.region_begin('Orbitals')
+        atom_orbitals = tf.reshape(atom_orbitals, atom_orbitals.shape) #force compiler to not fuse with previous operations
         orbitals = atom_orbitals @ self.orbi_layer1 
-        orbitals = orbitals + tf.tanh(orbitals @ self.mid_layer1)
+        orbitals = orbitals*tf.tanh(self.mid_layer1_bias + orbitals @ self.mid_layer1)
 
         #exchange layer for electron correlation
         exchange_out_up = self.get_spin_up(orbitals) @ self.exchange_layer_out_up
         exchange_out_down = self.get_spin_down(orbitals) @ self.exchange_layer_out_down
         exchange_in_up = tf.unsqueeze(tf.mean(exchange_out_up, axis=1), axis=1)
         exchange_in_down = tf.unsqueeze(tf.mean(exchange_out_down, axis=1), axis=1)
-        orbitals = orbitals + (orbitals @ self.mid_layer2) * tf.tanh((exchange_in_up @ self.exchange_layer_in_up) + (exchange_in_down @ self.exchange_layer_in_down))
+        exchange_in = self.concat_exchange(exchange_in_up, exchange_in_down)
+        orbitals = orbitals + (orbitals @ self.mid_layer2) * tf.tanh(exchange_in @ self.exchange_layer_in)
+
+        orbitals = orbitals*tf.tanh(self.mid_layer3_bias + orbitals @ self.mid_layer3)
 
         #up and down features
         #note: since we didn't use biases and multiplied the correlation layer with the orbitals, we dont really need an envelope function
@@ -240,6 +270,7 @@ class PSI(tf.Module):
     def kinetic_energy(self, e_pos):
         logpsi_center = self.log_psi(e_pos)
 
+        tf.region_begin('Laplacian')
         #fd sampling (TODO: use forward mode autodiff)
         n_samples = self.electron_n * 3 * 2
         b, s, i, c = tf.indices([e_pos.shape[0], n_samples, self.electron_n, 3])
@@ -261,6 +292,7 @@ class PSI(tf.Module):
                 psi1 = logpsi[b, 6 * electron + 2 * d + 1]
                 kinetic += (psi0 + psi1 - 2.0 * logpsi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (self.dx * self.dx)
 
+        tf.region_end('Laplacian')
         return - 0.5 * kinetic, logpsi_center
     
     def electron_potential(self, e_pos):
@@ -376,7 +408,7 @@ def MetropolisStep():
     wavefunction.initialize_input()
 
     walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
-    allsteps_walkers = tf.input([n_walkers * metropolis_per_step, wavefunction.electron_n, 3], tf.float32)
+    allsteps_walkers = tf.input([-1, wavefunction.electron_n, 3], tf.float32)
     metropolis_params = tf.input([2], tf.int32)
     update_prob = metropolis_params[0]
     cur_step = metropolis_params[1]
@@ -384,7 +416,7 @@ def MetropolisStep():
     new_walkers, acceptance_rate = wavefunction.metropolis_step(walkers, update_prob)
 
     i, j, k = new_walkers.indices
-    allsteps_walkers[i * metropolis_per_step + cur_step, j, k] = new_walkers
+    allsteps_walkers[i * metropolis_history_length + cur_step, j, k] = new_walkers
 
     params = wavefunction.parameters()
     params.append(new_walkers)
@@ -395,7 +427,9 @@ metropolis_step = tf.compile(MetropolisStep)
 
 def GetModelOptimizer():
     wavefunction = PSI()
-    optimizer = tf.optimizers.adam(wavefunction, beta1 = 0.0, beta2 = 0.95, reg_type = tf.regularizers.l2, reg = 0.02, clip = 0.35)
+    optimizer = tf.optimizers.adam(wavefunction, beta1 = 0.0, beta2 = 0.999, reg_type = tf.regularizers.l2, reg = 0.02, clip = 0.01)
+    #optimizer = tf.optimizers.sgd(wavefunction, reg_type = tf.regularizers.l2, reg = 0.02, clip = 0.01)
+    optimizer.set_clipping_type(tf.clipping.norm)
     return optimizer, wavefunction
 
 def OptimizeEnergy():
@@ -403,9 +437,10 @@ def OptimizeEnergy():
     optimizer.initialize_input()
 
     walkers = tf.input([n_walkers, wavefunction.electron_n, 3], tf.float32)
-    in_params = tf.input([2], tf.float32)
+    in_params = tf.input([3], tf.float32)
     optimizer.learning_rate = in_params[0]
     optimizer.reg = in_params[1]
+    optimizer.clip = in_params[2]
     loss, Emean = wavefunction.loss(walkers)
     optimizer.step(loss)
     params = optimizer.parameters()
@@ -432,14 +467,20 @@ class Status:
         self.smoothed_loss = 0.0
         self.smoothed_energy = 0.0
         self.smoothed_acceptance_rate = 0.0
+        self.improvement = 0.0
 
 status = Status()
 
-def OptimizationStep(i, optimizer, walkers_tf, allsteps_walkers_tf, status):
+def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
+
+    start_time = time.time()
+
     for j in range(metropolis_per_step):
         update_prob = 1 if (j == 0) else 0 #must update the stored probability in the first step, since wavefunction has changed
-        metropolis_params = [update_prob, j]
-        out = metropolis_step(optimizer.net, walkers_tf, allsteps_walkers_tf, metropolis_params)
+        total_step = i * metropolis_per_step + j
+        history_step = total_step % metropolis_history_length
+        metropolis_params = [update_prob, history_step]
+        out = metropolis_step(optimizer.net, walkers_tf, walker_history_tf, metropolis_params)
         walkers_tf = out[-2]
         acceptance_rate = out[-1]
         optimizer.net.update_parameters(out[:-2])
@@ -457,28 +498,44 @@ def OptimizationStep(i, optimizer, walkers_tf, allsteps_walkers_tf, status):
 
         optimizer.net.params = tf.tensor(cur_params)
 
-    cur_lr, cur_reg = scheduler(i)
+    metropolis_step_time = time.time() - start_time
+    start_time = time.time()
 
-    out = optimize_energy(optimizer, walkers_tf, [cur_lr, cur_reg])
-    loss = out[-2].numpy[0]
-    Emean = out[-1].numpy[0]
-    optimizer.update_parameters(out[:-2])
+    cur_lr, cur_reg, cur_clip = scheduler(i)
 
-    status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * Emean
-    status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * loss
-    status.energy_history.append(status.smoothed_energy)
+    loss, Emean = 0.0, 0.0
+    if cur_lr > 0.0:
+        if(status.improvement < 0.0):
+            cur_lr *= 0.25
 
-    return loss, Emean, walkers_tf
+        out = optimize_energy(optimizer, walkers_tf, [cur_lr, cur_reg, cur_clip])
+        loss = out[-2].numpy[0]
+        Emean = out[-1].numpy[0]
+        optimizer.update_parameters(out[:-2])
+        old_smoothed_energy = status.smoothed_energy
+        status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * Emean
+        status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * loss
+
+        improvement = old_smoothed_energy - status.smoothed_energy
+        omsmoothing = 5.0*(1.0 - smoothing)
+        status.improvement = (1.0 - omsmoothing) * status.improvement + omsmoothing * improvement
+
+        status.energy_history.append(status.smoothed_energy)
+
+    optimize_energy_time = time.time() - start_time
+
+    return loss, Emean, walkers_tf, metropolis_step_time, optimize_energy_time
 
 walkers = np.random.randn(n_walkers, wavefunction.electron_n, 3).astype(np.float32)
 walkers_tf = tf.tensor(walkers)
 
-allsteps_walkers = np.random.randn(n_walkers * metropolis_per_step, wavefunction.electron_n, 3).astype(np.float32)
-allsteps_walkers_tf = tf.tensor(allsteps_walkers)
+walker_history = np.random.randn(n_walkers * metropolis_history_length, wavefunction.electron_n, 3).astype(np.float32)
+walker_history_tf = tf.tensor(walker_history)
 
-vis = CompileVisualizer(1280, 720, 1.0)
 
-cam = Camera(position=np.array([0.0, 0.0, 0.0]), quaternion=np.array([0.0, 0.0, 0.0, 1.0]), W=1280, H=720, angular_speed = 0.005, camera_speed = 0.2)
+vis = CompileVisualizer(1920, 1080, 1.0)
+cam = Camera(position=np.array([0.0, 0.0, 0.0]), quaternion=np.array([0.0, 0.0, 0.0, 1.0]), W=1920, H=1080, angular_speed = 0.005, camera_speed = 0.2)
+
 cam.initialize_parameters()
 
 tf.show_window(cam.W, cam.H, "Walker renderer")
@@ -492,7 +549,7 @@ while not tf.window_should_close():
     delta_time = cur_time - prev_time
     smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
 
-    loss, Emean, walkers_tf = OptimizationStep(frame, optimizer, walkers_tf, allsteps_walkers_tf, status)
+    loss, Emean, walkers_tf, metropolis_step_time, optimize_energy_time = OptimizationStep(frame, optimizer, walkers_tf, walker_history_tf, status)
 
     cam.update()
 
@@ -502,14 +559,19 @@ while not tf.window_should_close():
     tf.imgui_text("Energy: %.3f Ha" % status.smoothed_energy)
     tf.imgui_text("Loss: %.3f" % status.smoothed_loss)
     tf.imgui_text("Acceptance rate: %.3f" % status.smoothed_acceptance_rate)
+    tf.imgui_text("Improvement: %.3f" % status.improvement)
     tf.imgui_text("Step: %d" % frame)
  
     tf.imgui_text("Error rel: {:.3f} %".format(100.0 * np.abs((status.smoothed_energy - target_energy) / target_energy)))
     tf.imgui_text("Error abs: %.3f mHa" % (1000.0 * np.abs(status.smoothed_energy - target_energy)))
 
-    lr, reg = scheduler(frame)
+    lr, reg, clip = scheduler(frame)
     tf.imgui_text("Learning rate: %.5f" % lr)
     tf.imgui_text("L2 Regularization: %.5f" % reg)
+    tf.imgui_text("Gradient clipping: %.5f" % clip)
+
+    tf.imgui_text("Optimization step took: %.3f ms" % (optimize_energy_time * 1000.0))
+    tf.imgui_text("Metropolis steps took: %.3f ms" % (metropolis_step_time * 1000.0))
 
     #print molecule info
     tf.imgui_text(molecule_info)
@@ -521,7 +583,18 @@ while not tf.window_should_close():
     cam.distance_clip = tf.imgui_slider("Distance clip", cam.distance_clip, 0.0, 100.0)
     cam.point_radius = tf.imgui_slider("Point radius", cam.point_radius, 0.0, 10.0)
 
-    tf.render_frame(vis(cam, allsteps_walkers_tf, optimizer.net.atoms))
+    pause_training = tf.imgui_checkbox("Pause training", pause_training)
+    custom_hyperparameters = tf.imgui_checkbox("Custom hyperparameters", custom_hyperparameters)
+    custom_lr = tf.imgui_slider("Learning rate", custom_lr, 0.0, 0.01)
+    custom_reg = tf.imgui_slider("L2 Regularization", custom_reg, 0.0, 0.01)
+    custom_clip = tf.imgui_slider("Gradient clipping", custom_clip, 0.0, 0.5)
+
+    target_acceptance_rate = tf.imgui_slider("Target acceptance rate", target_acceptance_rate, 0.0, 1.0)
+    smoothing = tf.imgui_slider("Statistics smoothing", smoothing, 0.9, 1.0)
+
+    tf.imgui_plotlines("Energy history", status.energy_history, graph_size=(0, 200))
+
+    tf.render_frame(vis(cam, walker_history_tf, optimizer.net.atoms))
     frame += 1
     prev_time = cur_time
 

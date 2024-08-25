@@ -102,3 +102,21 @@ def GLIN(X):
 
 def GELU2(x):
     return x*(1.0 + 0.95*tf.tanh(x - 0.779))
+
+def arcsinh(x):
+    return tf.log(x + tf.sqrt(x*x + 1.0))
+
+def arcsinh_vjp(g, x):
+    return g / tf.sqrt(x*x + 1.0)
+
+def arcsinh_op(inputs, tensor, axes):
+    return [arcsinh(inputs[0])]
+
+def arcsinh_op_vjp(inputs, gradient, tensor):
+    return [arcsinh_vjp(gradient, inputs[0])]
+
+def register_arcsinh():
+    tf.register_custom_operation("arcsinh", ["f_f"], arcsinh_op, arcsinh_op_vjp)
+
+def tf_arcsinh(x):
+    return tf.custom("arcsinh", [x])
