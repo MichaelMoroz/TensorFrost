@@ -16,6 +16,15 @@
 *.dylib
 *.dll
 
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
 # Fortran module files
 *.mod
 *.smod
