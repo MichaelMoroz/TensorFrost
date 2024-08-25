@@ -118,7 +118,7 @@ Certain Linux distributions (e.g. Arch Linux) want you to use their package mana
     ```
 
 > [!TIP]
-> The newly-created venv is treated like a fresh Python installation, so you may need to reinstall any needed packages such as `numpy`, `matplotlib`, amd `tqdm`. `pip` works fine as usual once the venv is active (e.g. `pip install numpy`).
+> The newly-created venv is treated like a fresh Python installation, so you may need to reinstall any needed packages such as `numpy`, `matplotlib`, and `tqdm` if you are trying out the examples. `pip` works fine once the venv is active (e.g. `pip install numpy`).
 
 ## Usage
 
