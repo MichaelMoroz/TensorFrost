@@ -8,6 +8,10 @@
 #include <vector>
 #include <variant>
 
+// for FLT_MAX, INT_MAX, etc.
+#include <float.h>
+#include <limits.h>
+
 #include <math.h>
 
 #include "Compiler/Graph/IR.h"

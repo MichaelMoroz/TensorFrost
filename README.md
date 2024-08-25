@@ -66,7 +66,7 @@ pip install tensorfrost
 
 ## From source
 
-You need to have CMake installed to build the library. 
+You need to have CMake installed to build the library.
 
 First clone the repository:
 ```bash
@@ -74,16 +74,51 @@ git clone --recurse-submodules https://github.com/MichaelMoroz/TensorFrost.git
 cd TensorFrost
 ```
 
-Then run cmake to build the library:
+Then run cmake to build the library.
+
 ```bash
 cmake -S . -B build && cmake --build build
 ```
+
+> [!TIP]
+> If you are using a Linux distribution that doesn't support installing packages through pip (e.g. Arch Linux), read **[Using a Virtual Environment](#using-a-virtual-environment)**.
 
 The cmake script will automatically install the compiled python module into your python environment.
 
 ### Building wheel packages (optional)
 
 You can either call `clean_rebuild.bat %PYTHON_VERSION%` to build the wheel packages for the specified python version (the version needs to be installed beforehand), or you can build them for all versions by calling `build_all_python_versions.bat`. The scripts will automatically build and install the library for each python version, and then build the wheel packages to the `PythonBuild/dist` folder.
+
+### Using a Virtual Environment
+
+Certain Linux distributions (e.g. Arch Linux) want you to use their package manager to manage system-wide Python packages instead of pip. TensorFrost uses pip to install itself once built, so before running CMake you will need to activate a Virtual Environment.
+
+1. From the TensorFrost directory, create a venv:
+
+    ```sh
+    python -m venv ./venv
+    ```
+
+2. Activate the venv:
+
+    ```sh
+    source venv/bin/activate
+    ```
+
+3. Install `jinja` (required for building)
+
+    ```sh
+    pip install jinja
+    ```
+
+4. Now, you can use CMake as usual.
+
+    ```bash
+    cmake -S . -B build && cmake --build build
+    ```
+
+> [!TIP]
+> The newly-created venv is treated like a fresh Python installation, so you may need to reinstall any needed packages such as `numpy`, `matplotlib`, and `tqdm` if you are trying out the examples. `pip` works fine once the venv is active (e.g. `pip install numpy`).
 
 ## Usage
 
