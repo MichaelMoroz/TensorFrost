@@ -1,5 +1,6 @@
 import numpy as np
 import TensorFrost as tf
+from TensorFrost import window
 import math
 
 from vec3 import *
@@ -58,9 +59,7 @@ class Camera(tf.Module):
         self.distance_clip = 10.0
         self.point_radius = 1.0
 
-    #Compiler only
-    def assert_parameters(self):
-        #initialize camera vectors
+    def initialize_properties(self):
         self.cam_p = vec3(self.camera[0, 0], self.camera[0, 1], self.camera[0, 2])
         self.cam_f = vec3(self.camera[3, 0], self.camera[3, 1], self.camera[3, 2])
         self.cam_u = vec3(self.camera[2, 0], self.camera[2, 1], self.camera[2, 2])
@@ -70,9 +69,13 @@ class Camera(tf.Module):
         self.point_radius = self.params[2]
         self.focal_length = self.params[3]
 
+    #Compiler only
+    def assert_parameters(self):
+        self.initialize_properties()
+
     def uv_to_ij(self, u, v):
-        i = v * tf.float(self.min_res) + 0.5 * tf.float(self.H)
-        j = u * tf.float(self.min_res) + 0.5 * tf.float(self.W)
+        i = v * float(self.min_res) + 0.5 * float(self.H)
+        j = u * float(self.min_res) + 0.5 * float(self.W)
         return i, j
     
     def ij_to_uv(self, i, j):
@@ -98,29 +101,29 @@ class Camera(tf.Module):
         u = dot(dpos, self.cam_u) * norm
         v = dot(dpos, self.cam_v) * norm
         z = dot(dpos, self.cam_f)
-        return u, v, z
+        i, j = self.uv_to_ij(u, v)
+        return i, j, z
     
     def create_image(self):
         image = tf.buffer([self.H, self.W, 3], tf.int32)
         image[image.indices] = 0
         return image
     
-    def splat_point_additive(self, image, x, y, z, color, rad_mul = 1.0):
+    def splat_point_additive(self, image, x, y, z, color, rad_mul = 1.0, const_brightness = False):
         pos = vec3(x, y, z)
-        u, v, z = self.project(pos)
-        i, j = self.uv_to_ij(u, v)
-
+        i, j, z = self.project(pos)
+        
         is_inside = (i >= 0.0) & (i < tf.float(self.H)) & (j >= 0.0) & (j < tf.float(self.W)) & (z > 0.0)
 
         #brightness is proportional to the inverse square of the distance
         brightness = self.brightness * tf.clamp(self.distance_clip / (z * z), 0.0, 1.0)
+
         render_rad = tf.clamp(self.point_radius * rad_mul, 1.0, 10.0)
 
         def add(i, j, color, brightness):
-            with tf.if_cond(brightness > 1.0/FIXED_POINT_SIZE):
-                tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
-                tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
-                tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
+            tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
+            tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
+            tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
         
         with tf.if_cond(is_inside):
             xi = tf.int(i)
@@ -133,8 +136,10 @@ class Camera(tf.Module):
                     dx = tf.float(i_new) - i
                     dy = tf.float(j_new) - j
                     dist = tf.sqrt(dx*dx + dy*dy)
-                    weight = tf.exp(- 3.0*dist*dist / (render_rad * render_rad)) / (math.pi * render_rad * render_rad)
-                    add(i_new, j_new, color, brightness * weight)
+                    weight = brightness * tf.exp(- 3.0*dist*dist / (render_rad * render_rad)) / (math.pi * render_rad * render_rad)
+                    if const_brightness:
+                        weight = 1.0
+                    add(i_new, j_new, color, weight)
 
     #Host only
     def axis(self, axis):
@@ -150,30 +155,34 @@ class Camera(tf.Module):
         return np.stack([self.position, *quaternion_to_matrix(self.quaternion)])
     
     def update_params(self):
-        self.camera = tf.tensor(self.get_camera_matrix())
+        self.camera = self.get_camera_matrix()
         all_params = [self.brightness, self.distance_clip, self.point_radius, self.focal_length]
-        self.params = tf.tensor(np.array(all_params, dtype=np.float32))
+        self.params = np.array(all_params, dtype=np.float32)
+
+    def update_tensors(self):
+        self.camera = tf.tensor(self.camera)
+        self.params = tf.tensor(self.params)
 
     def update(self):
-        mx, my = tf.get_mouse_position()
+        mx, my = window.get_mouse_position()
 
-        if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+        if window.is_mouse_button_pressed(window.MOUSE_BUTTON_0):
             self.rotate_axis(0, (mx - self.pmx) * self.angular_speed)
             self.rotate_axis(1, (my - self.pmy) * self.angular_speed)
 
-        if tf.is_key_pressed(tf.KEY_W):
+        if window.is_key_pressed(window.KEY_W):
             self.move_axis(2, self.camera_speed)
-        if tf.is_key_pressed(tf.KEY_S):
+        if window.is_key_pressed(window.KEY_S):
             self.move_axis(2, -self.camera_speed)
 
-        if tf.is_key_pressed(tf.KEY_A):
+        if window.is_key_pressed(window.KEY_A):
             self.move_axis(1, -self.camera_speed)
-        if tf.is_key_pressed(tf.KEY_D):
+        if window.is_key_pressed(window.KEY_D):
             self.move_axis(1, self.camera_speed)
 
-        if tf.is_key_pressed(tf.KEY_Q):
+        if window.is_key_pressed(window.KEY_Q):
             self.rotate_axis(2, self.angular_speed*2)
-        if tf.is_key_pressed(tf.KEY_E):
+        if window.is_key_pressed(window.KEY_E):
             self.rotate_axis(2, -self.angular_speed*2)
 
         self.pmx = mx

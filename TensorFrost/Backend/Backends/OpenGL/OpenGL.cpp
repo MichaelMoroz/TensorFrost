@@ -359,6 +359,11 @@ void ImGuiScaleAllSizes(float scale) {
 	style.ScaleAllSizes(scale);
 }
 
+void ImGuiAddBackgroundText(const std::string &text, const ImVec2 &pos, const ImVec4 &color) {
+	ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
+	draw_list->AddText(pos, ImGui::GetColorU32(color), text.c_str());
+}
+
 void StartDebugRegion(const std::string& name) {
 	glPushDebugGroup(GL_DEBUG_SOURCE_APPLICATION, 0, (GLsizei)name.size(), name.c_str());
 }

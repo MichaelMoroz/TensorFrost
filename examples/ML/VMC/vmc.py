@@ -1,4 +1,6 @@
 import TensorFrost as tf
+from TensorFrost import imgui
+from TensorFrost import window
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as patheffects
@@ -15,13 +17,15 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
+molecule = nh3_molecule
+
 lr0 = 0.005
-lr1 = 0.001
+lr1 = 0.0005
 reg0 = 0.01
 reg1 = 0.005
 clip0 = 0.3
-clip1 = 0.1
-n_walkers = 2048
+clip1 = 0.01
+n_walkers = 1024
 opt_steps = 8000
 
 pause_training = False
@@ -39,15 +43,13 @@ def scheduler(step):
         cur_lr = custom_lr
         cur_reg = custom_reg
         cur_clip = custom_clip
-    if pause_training:
-        cur_lr = 0.0
     return cur_lr, cur_reg, cur_clip
 
 #how many metropolis steps to perform per optimization step
 metropolis_per_step = 12
 
 #how many metropolis steps to store in the history to render
-metropolis_history_length = 128
+metropolis_history_length = 512
 
 #what target fraction of the walkers to move in each step
 target_acceptance_rate = 0.4
@@ -61,7 +63,7 @@ mad_range = 3.0
 
 smoothing = 0.995
 
-molecule = ch4_molecule
+finitedifference_dx = 1e-2
 
 molecule_info = molecule.get_summary()
 print(molecule_info)
@@ -83,11 +85,11 @@ class PSI(tf.Module):
         self.spin_down_n = electron_n - spin_up_n
         self.determinants = 1
         self.orbital_n = orbitals.shape[0]
-        self.mid_n = 16
+        self.mid_n = 24
         self.corr_n = 12
 
         # Parameters
-        self.params = tf.Parameter([2], tf.float32, requires_grad = False)
+        self.params = tf.Parameter([-1], tf.float32, requires_grad = False)
         self.step = tf.Parameter([1], tf.int32, requires_grad = False)
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
@@ -96,8 +98,8 @@ class PSI(tf.Module):
 
         # Weights
         self.orbi_layer0 = tf.Parameter([self.orbital_n, 4], tf.float32, random_scale = 0.025)
-        self.orbi_layer0_bias = tf.Parameter([self.orbital_n], tf.float32, random_scale = 1.0)
-        self.envelope_layer = tf.Parameter([self.orbital_n], tf.float32, random_scale = 3.0)
+        self.orbi_layer0_bias = tf.Parameter([self.orbital_n], tf.float32, random_scale = 0.25, random_offset = 1.0)
+        self.envelope_layer = tf.Parameter([self.orbital_n], tf.float32, random_scale = 0.5, random_offset = 2.0)
 
         self.orbi_layer1 = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
         self.mid_layer1 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
@@ -121,6 +123,12 @@ class PSI(tf.Module):
     
     def outlier_fraction(self):
         return self.params[1]
+    
+    def mad_range(self):
+        return self.params[2]
+    
+    def finitedifference_dx(self):
+        return self.params[3]
 
     def assert_parameters(self):
         self.seed = tf.assert_tensor(self.seed, [1], tf.uint32)
@@ -259,6 +267,7 @@ class PSI(tf.Module):
         logdet = tf.reshape(logdet, [orbitals.shape[0], self.determinants])
         logdet = tf.squeeze(logdet)
         return logdet / 0.69314718056
+        #TODO: fix compiler bug here
         return tf.squeeze(logdet / 0.69314718056)
 
     #computing psi in log space is more numerically stable
@@ -271,13 +280,19 @@ class PSI(tf.Module):
         logpsi_center = self.log_psi(e_pos)
 
         tf.region_begin('Laplacian')
+
+        #compute distance to atoms for better numerical stability when computing the finite difference
+        cd = self.avg_distance_to_atoms(e_pos)
+        dx_estimate = tf.max(cd * self.finitedifference_dx(), 1e-4)
+
         #fd sampling (TODO: use forward mode autodiff)
         n_samples = self.electron_n * 3 * 2
         b, s, i, c = tf.indices([e_pos.shape[0], n_samples, self.electron_n, 3])
         eid = s / 6 #electron index
         did = (s / 2) % 3 #dimension index
         sid = s % 2 #forward or backward
-        deltaD = tf.select(sid == 0, self.dx, -self.dx)
+        cd_dx = dx_estimate[b, i]
+        deltaD = tf.select(sid == 0, cd_dx, -cd_dx)
         pos = tf.unsqueeze(e_pos, axis=1) + tf.select((did == c) & (eid == i), deltaD, 0.0)
         pos = tf.reshape(pos, [e_pos.shape[0] * n_samples, self.electron_n, 3])
         logpsi = self.log_psi(pos)
@@ -285,45 +300,59 @@ class PSI(tf.Module):
 
         #laplacian of the wavefunction divided by the wavefunction (which is the laplacian + the gradient squared of the log wavefunction)
         b, = tf.indices([e_pos.shape[0]])
-        kinetic = 0.0
-        for electron in range(self.electron_n):
-            for d in range(3):
+        kinetic = tf.const(0.0)
+
+        with tf.loop(self.electron_n) as electron:
+            with tf.loop(3) as d:
                 psi0 = logpsi[b, 6 * electron + 2 * d + 0]
                 psi1 = logpsi[b, 6 * electron + 2 * d + 1]
-                kinetic += (psi0 + psi1 - 2.0 * logpsi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (self.dx * self.dx)
+                this_dx = dx_estimate[b, electron]
+                kinetic.val += (psi0 + psi1 - 2.0 * logpsi_center + 0.25*(psi0 - psi1)*(psi0 - psi1)) / (this_dx * this_dx)
 
         tf.region_end('Laplacian')
         return - 0.5 * kinetic, logpsi_center
     
     def electron_potential(self, e_pos):
         b, = tf.indices([e_pos.shape[0]])
-        V = 0.0
+        V = tf.const(0.0)
 
         #compute the nuclei potential sum for each electron*nuclei
-        for electron in range(self.electron_n):
-            for n in range(self.atom_n):
+        with tf.loop(self.electron_n) as electron:
+            with tf.loop(self.atom_n) as n:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - self.atoms[n, 0]) + sqr(e_pos[b, electron, 1] - self.atoms[n, 1]) + sqr(e_pos[b, electron, 2] - self.atoms[n, 2]))
-                V -= self.atoms[n, 3] / tf.max(r, self.eps)
+                V.val -= self.atoms[n, 3] / tf.max(r, self.eps)
 
         #compute the electron-electron potential sum
-        for electron in range(self.electron_n):
-            for f in range(electron + 1, self.electron_n):
+        with tf.loop(self.electron_n) as electron:
+            with tf.loop(electron + 1, self.electron_n) as f:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - e_pos[b, f, 0]) + sqr(e_pos[b, electron, 1] - e_pos[b, f, 1]) + sqr(e_pos[b, electron, 2] - e_pos[b, f, 2]))
-                V += 1.0 / tf.max(r, self.eps)
+                V.val += 1.0 / tf.max(r, self.eps)
 
         return V
 
     def nuclei_potential(self):
-        V = 0.0
+        V = tf.const(0.0)
 
         #compute the potential between nuclei
-        for n in range(self.atom_n):
-            for m in range(n + 1, self.atom_n):
+        with tf.loop(self.atom_n) as n:
+            with tf.loop(n + 1, self.atom_n) as m:
                 r = tf.sqrt(sqr(self.atoms[n, 0] - self.atoms[m, 0]) + sqr(self.atoms[n, 1] - self.atoms[m, 1]) + sqr(self.atoms[n, 2] - self.atoms[m, 2]))
-                V += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
+                V.val += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
 
         return V
-
+    
+    #average distance to atoms weighted by the atom weights
+    def avg_distance_to_atoms(self, e_pos):
+        b, i = tf.indices([e_pos.shape[0], e_pos.shape[1]])
+        cd = tf.const(0.0)
+        norm = tf.const(0.0)
+        with tf.loop(self.atom_n) as n:
+            d = tf.sqrt(sqr(e_pos[b, i, 0] - self.atoms[n, 0]) + sqr(e_pos[b, i, 1] - self.atoms[n, 1]) + sqr(e_pos[b, i, 2] - self.atoms[n, 2]))
+            w = self.atoms[n, 3]
+            cd.val += d * w
+            norm.val += w
+        return cd / tf.max(norm, self.eps)
+    
     def local_energy(self, e_pos):
         kinetic, logpsi = self.kinetic_energy(e_pos)
         return kinetic + self.electron_potential(e_pos) + self.nuclei_potential(), logpsi
@@ -352,7 +381,8 @@ class PSI(tf.Module):
         #clip the local energy to a region around the median
         median = x_sorted[sample_count / 2]
         mad_median = tf.mean(tf.abs(x_sorted - median)*median_mask)
-        x_clipped = tf.clamp(x_sorted, median - mad_range * mad_median, median + mad_range * mad_median)
+        cur_mad_range = self.mad_range()
+        x_clipped = tf.clamp(x_sorted, median - cur_mad_range * mad_median, median + cur_mad_range * mad_median)
 
         x_mean = tf.mean(x_clipped*median_mask)
         return tf.mean(2.0 * (x_clipped - x_mean).detach_grad() * psi_sorted * median_mask), x_mean
@@ -384,10 +414,22 @@ class PSI(tf.Module):
         #reuse the previous step probability for better performance
         old_prob = self.probability #self.log_prob_density(e_pos)
 
-        e_pos_new = e_pos + tf.select(update_prob, 0.0, self.randn(e_pos.shape) * self.metropolis_dx())
+        metro_dx = self.metropolis_dx()
+        dx_estimate_old = metro_dx*tf.max(self.avg_distance_to_atoms(e_pos), 2.5) 
+
+        de_pos = tf.select(update_prob, 0.0, self.randn(e_pos.shape) * tf.unsqueeze(dx_estimate_old))
+        #make sure they dont fly away
+        e_pos_new = tf.clamp(e_pos + de_pos, -10.0, 10.0)
         new_prob = self.log_prob_density(e_pos_new)
 
-        ratio = tf.exp(tf.clamp(new_prob - old_prob, -50.0, 50.0))
+        de_r = tf.norm(de_pos)
+        dx_estimate_new = metro_dx*tf.max(self.avg_distance_to_atoms(e_pos_new), 2.5)
+        proposal_old_to_new = tf.log(self.gaussian_probability_3d(de_r, dx_estimate_old))
+        proposal_new_to_old = tf.log(self.gaussian_probability_3d(de_r, dx_estimate_new))
+
+        proposal_ratio = tf.sum(proposal_new_to_old - proposal_old_to_new)
+
+        ratio = tf.exp(tf.clamp(new_prob - old_prob, -50.0, 50.0) + proposal_ratio)
 
         accept = (self.rand(ratio.shape) < ratio)
 
@@ -402,6 +444,9 @@ class PSI(tf.Module):
 
         self.inc_step()
         return e_pos, acceptance_rate
+    
+    def gaussian_probability_3d(self, r, sigma):
+        return tf.exp(-0.5 * sqr(r) / sqr(sigma)) / tf.pow(2.0 * np.pi * sqr(sigma), 3.0 / 2.0)
 
 def MetropolisStep():
     wavefunction = PSI()
@@ -450,11 +495,11 @@ def OptimizeEnergy():
 
 optimize_energy = tf.compile(OptimizeEnergy)
 
-np.random.seed(1)
+np.random.seed(3)
 
 optimizer, wavefunction = GetModelOptimizer()
 optimizer.initialize_parameters()
-optimizer.net.params = tf.tensor(np.array([0.5, outlier_fraction]).astype(np.float32))
+optimizer.net.params = tf.tensor(np.array([0.5, outlier_fraction, mad_range, finitedifference_dx], np.float32))
 optimizer.net.atoms = tf.tensor(atoms)
 optimizer.net.orbital_atom_id = tf.tensor(orbitals)
 optimizer.net.step = tf.tensor(np.array([0], np.int32))
@@ -464,6 +509,8 @@ class Status:
     def __init__(self):
         self.acceptance_rate_history = []
         self.energy_history = []
+        self.energy = 0.0
+        self.loss = 0.0
         self.smoothed_loss = 0.0
         self.smoothed_energy = 0.0
         self.smoothed_acceptance_rate = 0.0
@@ -496,6 +543,10 @@ def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
         if(acceptance_rate[0] > target_acceptance_rate):
             cur_params[0] *= 1.02
 
+        cur_params[1] = outlier_fraction
+        cur_params[2] = mad_range
+        cur_params[3] = finitedifference_dx
+
         optimizer.net.params = tf.tensor(cur_params)
 
     metropolis_step_time = time.time() - start_time
@@ -504,17 +555,17 @@ def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
     cur_lr, cur_reg, cur_clip = scheduler(i)
 
     loss, Emean = 0.0, 0.0
-    if cur_lr > 0.0:
+    if not pause_training:
         if(status.improvement < 0.0):
             cur_lr *= 0.25
 
         out = optimize_energy(optimizer, walkers_tf, [cur_lr, cur_reg, cur_clip])
-        loss = out[-2].numpy[0]
-        Emean = out[-1].numpy[0]
+        status.loss = out[-2].numpy[0]
+        status.energy = out[-1].numpy[0]
         optimizer.update_parameters(out[:-2])
         old_smoothed_energy = status.smoothed_energy
-        status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * Emean
-        status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * loss
+        status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * status.energy
+        status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * status.loss
 
         improvement = old_smoothed_energy - status.smoothed_energy
         omsmoothing = 5.0*(1.0 - smoothing)
@@ -535,66 +586,80 @@ walker_history_tf = tf.tensor(walker_history)
 
 vis = CompileVisualizer(1920, 1080, 1.0)
 cam = Camera(position=np.array([0.0, 0.0, 0.0]), quaternion=np.array([0.0, 0.0, 0.0, 1.0]), W=1920, H=1080, angular_speed = 0.005, camera_speed = 0.2)
-
+cam.brightness = 0.15
 cam.initialize_parameters()
 
-tf.show_window(cam.W, cam.H, "Walker renderer")
+window.show(cam.W, cam.H, "Walker renderer")
 
 cur_time = time.time()
 prev_time = time.time()
 smooth_delta_time = 0.0
 frame = 0
-while not tf.window_should_close():
+while not window.should_close():
     cur_time = time.time()
     delta_time = cur_time - prev_time
     smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
 
     loss, Emean, walkers_tf, metropolis_step_time, optimize_energy_time = OptimizationStep(frame, optimizer, walkers_tf, walker_history_tf, status)
 
-    cam.update()
-
-    tf.imgui_text("Simulation time: %.3f ms" % (1000.0 * smooth_delta_time))
-    tf.imgui_text("FPS: %.1f" % (1.0 / (smooth_delta_time + 1e-5)))
+    imgui.text("Simulation time: %.3f ms" % (1000.0 * smooth_delta_time))
+    imgui.text("FPS: %.1f" % (1.0 / (smooth_delta_time + 1e-5)))
     
-    tf.imgui_text("Energy: %.3f Ha" % status.smoothed_energy)
-    tf.imgui_text("Loss: %.3f" % status.smoothed_loss)
-    tf.imgui_text("Acceptance rate: %.3f" % status.smoothed_acceptance_rate)
-    tf.imgui_text("Improvement: %.3f" % status.improvement)
-    tf.imgui_text("Step: %d" % frame)
+    imgui.text("Smoothed Energy: %.3f Ha" % status.smoothed_energy)
+    imgui.text("Smoothed loss: %.3f" % status.smoothed_loss)
+    imgui.text("Loss: %.3f" % status.loss)
+    imgui.text("Energy: %.3f" % status.energy)
+    imgui.text("Acceptance rate: %.3f" % status.smoothed_acceptance_rate)
+    imgui.text("Improvement: %.3f" % status.improvement)
+    imgui.text("Step: %d" % frame)
  
-    tf.imgui_text("Error rel: {:.3f} %".format(100.0 * np.abs((status.smoothed_energy - target_energy) / target_energy)))
-    tf.imgui_text("Error abs: %.3f mHa" % (1000.0 * np.abs(status.smoothed_energy - target_energy)))
+    imgui.text("Error rel: {:.3f} %".format(100.0 * np.abs((status.smoothed_energy - target_energy) / target_energy)))
+    imgui.text("Error abs: %.3f mHa" % (1000.0 * np.abs(status.smoothed_energy - target_energy)))
 
     lr, reg, clip = scheduler(frame)
-    tf.imgui_text("Learning rate: %.5f" % lr)
-    tf.imgui_text("L2 Regularization: %.5f" % reg)
-    tf.imgui_text("Gradient clipping: %.5f" % clip)
+    imgui.text("Learning rate: %.5f" % lr)
+    imgui.text("L2 Regularization: %.5f" % reg)
+    imgui.text("Gradient clipping: %.5f" % clip)
 
-    tf.imgui_text("Optimization step took: %.3f ms" % (optimize_energy_time * 1000.0))
-    tf.imgui_text("Metropolis steps took: %.3f ms" % (metropolis_step_time * 1000.0))
+    imgui.text("Optimization step took: %.3f ms" % (optimize_energy_time * 1000.0))
+    imgui.text("Metropolis steps took: %.3f ms" % (metropolis_step_time * 1000.0))
 
     #print molecule info
-    tf.imgui_text(molecule_info)
+    imgui.text(molecule_info)
 
-    cam.angular_speed = tf.imgui_slider("Angular speed", cam.angular_speed, 0.0, 0.01)
-    cam.camera_speed = tf.imgui_slider("Camera speed", cam.camera_speed, 0.0, 0.5)
-    cam.focal_length = tf.imgui_slider("Focal length", cam.focal_length, 0.1, 10.0)
-    cam.brightness = tf.imgui_slider("Brightness", cam.brightness, 0.0, 5.0)
-    cam.distance_clip = tf.imgui_slider("Distance clip", cam.distance_clip, 0.0, 100.0)
-    cam.point_radius = tf.imgui_slider("Point radius", cam.point_radius, 0.0, 10.0)
+    cam.angular_speed = imgui.slider("Angular speed", cam.angular_speed, 0.0, 0.01)
+    cam.camera_speed = imgui.slider("Camera speed", cam.camera_speed, 0.0, 0.5)
+    cam.focal_length = imgui.slider("Focal length", cam.focal_length, 0.1, 10.0)
+    cam.brightness = imgui.slider("Brightness", cam.brightness, 0.0, 0.5)
+    cam.distance_clip = imgui.slider("Distance clip", cam.distance_clip, 0.0, 100.0)
+    cam.point_radius = imgui.slider("Point radius", cam.point_radius, 0.0, 10.0)
 
-    pause_training = tf.imgui_checkbox("Pause training", pause_training)
-    custom_hyperparameters = tf.imgui_checkbox("Custom hyperparameters", custom_hyperparameters)
-    custom_lr = tf.imgui_slider("Learning rate", custom_lr, 0.0, 0.01)
-    custom_reg = tf.imgui_slider("L2 Regularization", custom_reg, 0.0, 0.01)
-    custom_clip = tf.imgui_slider("Gradient clipping", custom_clip, 0.0, 0.5)
+    pause_training = imgui.checkbox("Pause training", pause_training)
+    custom_hyperparameters = imgui.checkbox("Custom hyperparameters", custom_hyperparameters)
+    custom_lr = imgui.slider("Learning rate", custom_lr, 0.0, 0.01)
+    custom_reg = imgui.slider("L2 Regularization", custom_reg, 0.0, 0.01)
+    custom_clip = imgui.slider("Gradient clipping", custom_clip, 0.0, 0.5)
 
-    target_acceptance_rate = tf.imgui_slider("Target acceptance rate", target_acceptance_rate, 0.0, 1.0)
-    smoothing = tf.imgui_slider("Statistics smoothing", smoothing, 0.9, 1.0)
+    target_acceptance_rate = imgui.slider("Target acceptance rate", target_acceptance_rate, 0.0, 1.0)
+    outlier_fraction = imgui.slider("Outlier fraction", outlier_fraction, 0.0, 0.3)
+    mad_range = imgui.slider("MAD clipping range", mad_range, 0.5, 10.0)
+    finitedifference_dx = imgui.slider("Finite difference dx", finitedifference_dx, 1e-5, 1e-1)
+    smoothing = imgui.slider("Statistics smoothing", smoothing, 0.9, 1.0)
 
-    tf.imgui_plotlines("Energy history", status.energy_history, graph_size=(0, 200))
+    imgui.plotlines("Energy history", status.energy_history[-256:], graph_size=(0, 200))
 
-    tf.render_frame(vis(cam, walker_history_tf, optimizer.net.atoms))
+    cam.update()
+
+    atom_screen = ProjectPoints(cam, atoms)
+    for i in range(atoms.shape[0]):
+        if atom_screen[i, 2] > 0.0:
+            q = atoms[i, 3]
+            name = Atom.ELEMENT_NAMES[int(q)]
+            imgui.add_background_text(name, (atom_screen[i, 1], cam.H - atom_screen[i, 0]), (255, 255, 255, 255))
+
+    cam.update_tensors()
+    window.render_frame(vis(cam, walker_history_tf, optimizer.net.atoms))
+    
     frame += 1
     prev_time = cur_time
 

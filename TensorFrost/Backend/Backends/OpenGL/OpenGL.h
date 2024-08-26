@@ -44,6 +44,8 @@ void ImGuiPlotLines(const char* label, const float* values, int values_count, in
 
 void ImGuiScaleAllSizes(float scale);
 
+void ImGuiAddBackgroundText(const std::string& text, const ImVec2& pos, const ImVec4& color);
+
 void StartDebugRegion(const std::string& name);
 void EndDebugRegion();
 

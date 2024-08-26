@@ -10,6 +10,9 @@ class Vector3:
 
     def distance(self, other: 'Vector3') -> float:
         return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2 + (self.z - other.z)**2)
+    
+    def __mul__(self, other: float) -> 'Vector3':
+        return Vector3(self.x * other, self.y * other, self.z * other)
 
 class Vector4:
     def __init__(self, x: float, y: float, z: float, w: float):
@@ -17,6 +20,9 @@ class Vector4:
         self.y = y
         self.z = z
         self.w = w
+
+    def __mul__(self, other: float) -> 'Vector4':
+        return Vector4(self.x * other, self.y * other, self.z * other, self.w * other)
 
 class Orbital(NamedTuple):
     atom_id: int
