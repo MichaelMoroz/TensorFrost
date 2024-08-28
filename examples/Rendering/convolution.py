@@ -7,10 +7,10 @@ import matplotlib.pyplot as plt
 
 tf.initialize(tf.cpu)
 
-input_img = np.array(plt.imread("H:/TensorFrost/examples/Rendering/test.png"), dtype=np.float32)
-#input_img = input_img[:,:,0:3].reshape(input_img.shape[0], input_img.shape[1], 3)
-#plt.imshow(input_img)
-#plt.show()
+#print out current folder
+
+
+input_img = np.array(plt.imread("examples/Rendering/test.png"), dtype=np.float32)
 print(input_img.shape)
 
 H, W, C = input_img.shape
@@ -22,9 +22,7 @@ def conv2d(X, W):
     COUT, CIN, h, w = W.shape
     bi, cout, wi, hi, cin, it = tf.indices([N, COUT, HI - h + 1, WI - w + 1, CIN, h * w])
     i, j = it%w, it/w
-    prod = X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]
-    conv = tf.sum(1.0+tf.sum(prod))
-    return conv
+    return  tf.sum(tf.sum( X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]))
 
 def convtest():
     img = tf.input([1, C, H, W], tf.float32)
