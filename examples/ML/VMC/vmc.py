@@ -17,7 +17,7 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = nh3_molecule
+molecule = c_molecule
 
 lr0 = 0.005
 lr1 = 0.0005
@@ -52,26 +52,29 @@ metropolis_per_step = 12
 metropolis_history_length = 512
 
 #what target fraction of the walkers to move in each step
-target_acceptance_rate = 0.4
+target_acceptance_rate = 0.3
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
-#but I found that sorting and ignoring a fixed fraction of the sorted walkers is simpler and seems to work well
-outlier_fraction = 0.15
+#but I found that sorting and ignoring a fixed fraction of the sorted walkers is simple and works well
+outlier_fraction = 0.1
 #range for clipping around the median of the local energy from ferminet/psiformer (in variance units)
 mad_range = 3.0
 
-smoothing = 0.995
+#how many previous steps to average the local energy statistics
+average_count = 2048
 
-finitedifference_dx = 1e-2
+#finite difference step factor for computing the laplacian
+#(currently is modulated by the distance to the nearest atom)
+#(will be replaced by forward mode autodiff in the future)
+finitedifference_dx = 2.5e-2
 
+#get the molecule information
 molecule_info = molecule.get_summary()
-print(molecule_info)
-
 target_energy = molecule.target_energy
 atoms = molecule.get_atoms()
-orbitals = molecule.get_orbitals(2, 2)
-print(orbitals)
+feature_atom_id = molecule.get_orbitals(2, 2)
+print(feature_atom_id)
 atom_n = atoms.shape[0]
 electron_n = molecule.electron_count
 spin_up_n = molecule.spin_up_electrons
@@ -84,36 +87,38 @@ class PSI(tf.Module):
         self.spin_up_n = spin_up_n
         self.spin_down_n = electron_n - spin_up_n
         self.determinants = 1
-        self.orbital_n = orbitals.shape[0]
-        self.mid_n = 24
-        self.corr_n = 12
+        self.atom_features = feature_atom_id.shape[0]
+        self.mid_n = 6
+        self.corr_n = 6
+        self.input_features = 8
 
-        # Parameters
+        # Hyperparameters
         self.params = tf.Parameter([-1], tf.float32, requires_grad = False)
         self.step = tf.Parameter([1], tf.int32, requires_grad = False)
         self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
         self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
-        self.orbital_atom_id = tf.Parameter([self.orbital_n], tf.int32, requires_grad = False)
+        self.feature_atom_id = tf.Parameter([self.atom_features], tf.int32, requires_grad = False)
         self.probability = tf.Parameter([n_walkers], tf.float32, requires_grad = False)
 
         # Weights
-        self.orbi_layer0 = tf.Parameter([self.orbital_n, 4], tf.float32, random_scale = 0.025)
-        self.orbi_layer0_bias = tf.Parameter([self.orbital_n], tf.float32, random_scale = 0.25, random_offset = 1.0)
-        self.envelope_layer = tf.Parameter([self.orbital_n], tf.float32, random_scale = 0.5, random_offset = 2.0)
+        self.feature_layer = tf.Parameter([self.atom_features, self.input_features], tf.float32, random_scale = 0.4)
+        self.feature_layer_bias = tf.Parameter([self.atom_features], tf.float32, random_scale = 1.0)
+        self.feature_envelope_layer = tf.Parameter([self.atom_features], tf.float32, random_scale = 0.5, random_offset = 1.25)
 
-        self.orbi_layer1 = tf.Parameter([self.orbital_n, self.mid_n], tf.float32)
-        self.mid_layer1 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
-        self.mid_layer1_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
-        self.mid_layer2 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
-        self.mid_layer3 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
-        self.mid_layer3_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
+        self.features_to_orbitals = tf.Parameter([self.atom_features, self.mid_n], tf.float32)
+        self.orbi_layer1 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.orbi_layer1_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
+        self.orbi_layer2 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.orbi_layer3 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
+        self.orbi_layer3_bias = tf.Parameter([self.mid_n], tf.float32, random_scale = 1.0)
 
         self.exchange_layer_out_up = tf.Parameter([self.mid_n, self.corr_n], tf.float32)
         self.exchange_layer_out_down = tf.Parameter([self.mid_n, self.corr_n], tf.float32)
-        self.exchange_layer_in = tf.Parameter([self.corr_n*2, self.mid_n], tf.float32)
+        self.exchange_layer_in_up = tf.Parameter([self.corr_n, self.mid_n], tf.float32)
+        self.exchange_layer_in_down = tf.Parameter([self.corr_n, self.mid_n], tf.float32)
 
-        self.up_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_up_n], tf.float32)
-        self.down_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_down_n], tf.float32)
+        self.up_feature_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_up_n], tf.float32)
+        self.down_feature_layer = tf.Parameter([self.mid_n, self.determinants * self.spin_down_n], tf.float32)
         self.gamma = tf.Parameter([4], tf.float32)
         self.dx = 5e-3
         self.eps = 1e-7
@@ -133,24 +138,6 @@ class PSI(tf.Module):
     def assert_parameters(self):
         self.seed = tf.assert_tensor(self.seed, [1], tf.uint32)
 
-    def chandrasekhar_helium_psi(self, electrons):
-        b, i = tf.indices([electrons.shape[0], 3])
-        r12 = tf.norm(electrons[b, 0, i] - electrons[b, 1, i])
-        r1 = tf.norm(electrons[b, 0, i] - self.atoms[0, i])
-        r2 = tf.norm(electrons[b, 1, i] - self.atoms[0, i])
-        alpha = tf.abs(self.weights[0])
-        beta = tf.abs(self.weights[1])
-        gamma = self.weights[2]
-        return (lognum(-alpha*r1-beta*r2) + lognum(-alpha*r2-beta*r1)) * lognum(gamma*r12)
-
-    def eye(self, N):
-        i, j = tf.indices([N, N])
-        return tf.select(i == j, 1.0, 0.0)
-
-    def eye_like(self, X):
-        i, j = X.indices
-        return tf.select(i == j, 1.0, 0.0)
-
     def get_spin_up(self, data):
         upi = tf.indices([data.shape[0], self.spin_up_n, data.shape[2]])
         return data[upi[0], upi[1], upi[2]]
@@ -158,50 +145,49 @@ class PSI(tf.Module):
     def get_spin_down(self, data):
         downi = tf.indices([data.shape[0], self.spin_down_n, data.shape[2]])
         return data[downi[0], self.spin_up_n + downi[1], downi[2]]
-    
-    def concat_exchange(self, exchange_up, exchange_down):
-        idx = tf.indices([exchange_up.shape[0], exchange_up.shape[1], self.corr_n*2])
-        return tf.select(idx[2] < exchange_up.shape[2], exchange_up[idx[0], idx[1], idx[2]], exchange_down[idx[0], idx[1], idx[2] - exchange_up.shape[2]])
 
     def psi_new(self, electrons):
         tf.region_begin('Psi')
 
-        tf.region_begin('AtomOrbitals')
+        tf.region_begin('AtomFeatures')
         #compute electron-atom relative positions and distances [batch, electron, orbital_features, 3] + [batch, electron, orbital_features]
-        b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.orbital_n, 3])
-        atom_id = self.orbital_atom_id[a]
+        b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.atom_features, 3])
+        atom_id = self.feature_atom_id[a]
         ri = tf.unsqueeze(electrons, axis=-2) - self.atoms[atom_id, d]
         r = tf.norm(ri)
 
-        #concatenate ri and r [batch, electron, orbital_features, 3 + 1]
-        b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.orbital_n,  4])
-        in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) 
-
-        #orbitals around atoms [batch, electron, orbital_features]
-        out0 = (tf.dot(in0, self.orbi_layer0) + self.orbi_layer0_bias)
-        atom_orbitals = out0 * tf.exp(-r * tf.abs(self.envelope_layer))
-        tf.region_end('AtomOrbitals')
+        #concatenate input features
+        b, e, a, d = tf.indices([electrons.shape[0], self.electron_n, self.atom_features, self.input_features])
+        in0 = tf.select(d < 3, ri[b, e, a, d], r[b, e, a]) #concatenate ri and r
+        in0 = tf.select(d < 4, in0, 0.5 * ri[b, e, a, d-4] ** 2.0) #add ri^2
+        in0 = tf.select(d < 7, in0, 0.5 * tf.float(e < self.spin_up_n)) #add spin up/down indicator
+ 
+        #atom featuress
+        out0 = (tf.dot(in0, self.feature_layer) + self.feature_layer_bias)
+        atom_features = out0 * tf.exp(-r * tf.abs(self.feature_envelope_layer))
+        tf.region_end('AtomFeatures')
 
         tf.region_begin('Orbitals')
-        atom_orbitals = tf.reshape(atom_orbitals, atom_orbitals.shape) #force compiler to not fuse with previous operations
-        orbitals = atom_orbitals @ self.orbi_layer1 
-        orbitals = orbitals*tf.tanh(self.mid_layer1_bias + orbitals @ self.mid_layer1)
+        atom_features = tf.reshape(atom_features, atom_features.shape) #force compiler to not fuse with previous operations (reshape is unfuzable)
+        orbitals = atom_features @ self.features_to_orbitals 
+        orbitals = orbitals * tf.tanh(self.orbi_layer1_bias + orbitals @ self.orbi_layer1)
 
-        #exchange layer for electron correlation
+        #exchange layer for symmetric information exchange between electrons
         exchange_out_up = self.get_spin_up(orbitals) @ self.exchange_layer_out_up
         exchange_out_down = self.get_spin_down(orbitals) @ self.exchange_layer_out_down
+        #average the exchange features to make it symmetric (could also use attention)
         exchange_in_up = tf.unsqueeze(tf.mean(exchange_out_up, axis=1), axis=1)
         exchange_in_down = tf.unsqueeze(tf.mean(exchange_out_down, axis=1), axis=1)
-        exchange_in = self.concat_exchange(exchange_in_up, exchange_in_down)
-        orbitals = orbitals + (orbitals @ self.mid_layer2) * tf.tanh(exchange_in @ self.exchange_layer_in)
+        exchange_features_in = exchange_in_up @ self.exchange_layer_in_up + exchange_in_down @ self.exchange_layer_in_down
+        orbitals = orbitals + tf.tanh((orbitals @ self.orbi_layer2) * exchange_features_in)
 
-        orbitals = orbitals*tf.tanh(self.mid_layer3_bias + orbitals @ self.mid_layer3)
+        orbitals = orbitals * tf.tanh(self.orbi_layer3_bias + orbitals @ self.orbi_layer3)
 
         #up and down features
-        #note: since we didn't use biases and multiplied the correlation layer with the orbitals, we dont really need an envelope function
+        #note: since we didn't use biases and multiplied the exchange layer with the orbitals, we dont really need an envelope function here
         #the orbitals should already satisfy the boundary conditions
-        up_features = self.get_spin_up(orbitals) @ self.up_layer
-        down_features = self.get_spin_down(orbitals) @ self.down_layer
+        up_features = self.get_spin_up(orbitals) @ self.up_feature_layer
+        down_features = self.get_spin_down(orbitals) @ self.down_feature_layer
         tf.region_end('Orbitals')
 
         tf.region_begin('SlaterDeterminant')
@@ -282,7 +268,7 @@ class PSI(tf.Module):
         tf.region_begin('Laplacian')
 
         #compute distance to atoms for better numerical stability when computing the finite difference
-        cd = self.avg_distance_to_atoms(e_pos)
+        cd = self.min_distance_to_atoms(e_pos)
         dx_estimate = tf.max(cd * self.finitedifference_dx(), 1e-4)
 
         #fd sampling (TODO: use forward mode autodiff)
@@ -342,16 +328,16 @@ class PSI(tf.Module):
         return V
     
     #average distance to atoms weighted by the atom weights
-    def avg_distance_to_atoms(self, e_pos):
+    def min_distance_to_atoms(self, e_pos):
         b, i = tf.indices([e_pos.shape[0], e_pos.shape[1]])
-        cd = tf.const(0.0)
-        norm = tf.const(0.0)
+        cd = tf.const(1e10)
+        #norm = tf.const(0.0)
         with tf.loop(self.atom_n) as n:
             d = tf.sqrt(sqr(e_pos[b, i, 0] - self.atoms[n, 0]) + sqr(e_pos[b, i, 1] - self.atoms[n, 1]) + sqr(e_pos[b, i, 2] - self.atoms[n, 2]))
-            w = self.atoms[n, 3]
-            cd.val += d * w
-            norm.val += w
-        return cd / tf.max(norm, self.eps)
+            #w = self.atoms[n, 3]
+            cd.val = tf.min(cd, d)
+            #norm.val += w
+        return cd #/ tf.max(norm, self.eps)
     
     def local_energy(self, e_pos):
         kinetic, logpsi = self.kinetic_energy(e_pos)
@@ -415,7 +401,7 @@ class PSI(tf.Module):
         old_prob = self.probability #self.log_prob_density(e_pos)
 
         metro_dx = self.metropolis_dx()
-        dx_estimate_old = metro_dx*tf.max(self.avg_distance_to_atoms(e_pos), 2.5) 
+        dx_estimate_old = metro_dx*tf.max(self.min_distance_to_atoms(e_pos), 2.5) 
 
         de_pos = tf.select(update_prob, 0.0, self.randn(e_pos.shape) * tf.unsqueeze(dx_estimate_old))
         #make sure they dont fly away
@@ -423,7 +409,7 @@ class PSI(tf.Module):
         new_prob = self.log_prob_density(e_pos_new)
 
         de_r = tf.norm(de_pos)
-        dx_estimate_new = metro_dx*tf.max(self.avg_distance_to_atoms(e_pos_new), 2.5)
+        dx_estimate_new = metro_dx*tf.max(self.min_distance_to_atoms(e_pos_new), 2.5)
         proposal_old_to_new = tf.log(self.gaussian_probability_3d(de_r, dx_estimate_old))
         proposal_new_to_old = tf.log(self.gaussian_probability_3d(de_r, dx_estimate_new))
 
@@ -501,24 +487,34 @@ optimizer, wavefunction = GetModelOptimizer()
 optimizer.initialize_parameters()
 optimizer.net.params = tf.tensor(np.array([0.5, outlier_fraction, mad_range, finitedifference_dx], np.float32))
 optimizer.net.atoms = tf.tensor(atoms)
-optimizer.net.orbital_atom_id = tf.tensor(orbitals)
+optimizer.net.feature_atom_id = tf.tensor(feature_atom_id)
 optimizer.net.step = tf.tensor(np.array([0], np.int32))
 optimizer.net.seed = tf.tensor(np.array([0], np.uint32))
 
-class Status:
+class StatisticsLogger:
     def __init__(self):
-        self.acceptance_rate_history = []
-        self.energy_history = []
-        self.energy = 0.0
-        self.loss = 0.0
-        self.smoothed_loss = 0.0
-        self.smoothed_energy = 0.0
-        self.smoothed_acceptance_rate = 0.0
+        self.history = np.array([])
+        self.avg_history = np.array([])
+        self.value = 0.0
+        self.avg_value = 0.0
         self.improvement = 0.0
+        self.variance = 0.0
+    
+    def update(self, value):
+        self.value = value
+        self.history = np.append(self.history, value)
+        chunk = self.history[-average_count:]
+        self.avg_value = np.mean(chunk)
+        self.variance = np.var(chunk)
+        self.avg_history = np.append(self.avg_history, self.avg_value)
+        avg_chunk = self.avg_history[-average_count:]
+        self.improvement = -np.mean(np.diff(avg_chunk))
 
-status = Status()
+energy_log = StatisticsLogger()
+loss_log = StatisticsLogger()
+acceptance_rate_log = StatisticsLogger()
 
-def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
+def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf):
 
     start_time = time.time()
 
@@ -529,14 +525,11 @@ def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
         metropolis_params = [update_prob, history_step]
         out = metropolis_step(optimizer.net, walkers_tf, walker_history_tf, metropolis_params)
         walkers_tf = out[-2]
-        acceptance_rate = out[-1]
+        acceptance_rate = out[-1].numpy
         optimizer.net.update_parameters(out[:-2])
-        
-        acceptance_rate = acceptance_rate.numpy
-        status.smoothed_acceptance_rate = smoothing * status.smoothed_acceptance_rate + (1.0 - smoothing) * acceptance_rate[0]
-        status.acceptance_rate_history.append(status.smoothed_acceptance_rate)
         cur_params = optimizer.net.params.numpy
-
+        
+        acceptance_rate_log.update(acceptance_rate[0])
         #update the metropolis step size based on the acceptance rate
         if(acceptance_rate[0] < target_acceptance_rate):
             cur_params[0] *= 0.98
@@ -556,22 +549,13 @@ def OptimizationStep(i, optimizer, walkers_tf, walker_history_tf, status):
 
     loss, Emean = 0.0, 0.0
     if not pause_training:
-        if(status.improvement < 0.0):
+        if(energy_log.improvement < 0.0):
             cur_lr *= 0.25
 
         out = optimize_energy(optimizer, walkers_tf, [cur_lr, cur_reg, cur_clip])
-        status.loss = out[-2].numpy[0]
-        status.energy = out[-1].numpy[0]
+        loss_log.update(out[-2].numpy[0])
+        energy_log.update(out[-1].numpy[0])
         optimizer.update_parameters(out[:-2])
-        old_smoothed_energy = status.smoothed_energy
-        status.smoothed_energy = smoothing * status.smoothed_energy + (1.0 - smoothing) * status.energy
-        status.smoothed_loss = smoothing * status.smoothed_loss + (1.0 - smoothing) * status.loss
-
-        improvement = old_smoothed_energy - status.smoothed_energy
-        omsmoothing = 5.0*(1.0 - smoothing)
-        status.improvement = (1.0 - omsmoothing) * status.improvement + omsmoothing * improvement
-
-        status.energy_history.append(status.smoothed_energy)
 
     optimize_energy_time = time.time() - start_time
 
@@ -600,21 +584,22 @@ while not window.should_close():
     delta_time = cur_time - prev_time
     smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
 
-    loss, Emean, walkers_tf, metropolis_step_time, optimize_energy_time = OptimizationStep(frame, optimizer, walkers_tf, walker_history_tf, status)
+    loss, Emean, walkers_tf, metropolis_step_time, optimize_energy_time = OptimizationStep(frame, optimizer, walkers_tf, walker_history_tf)
 
     imgui.text("Simulation time: %.3f ms" % (1000.0 * smooth_delta_time))
     imgui.text("FPS: %.1f" % (1.0 / (smooth_delta_time + 1e-5)))
     
-    imgui.text("Smoothed Energy: %.3f Ha" % status.smoothed_energy)
-    imgui.text("Smoothed loss: %.3f" % status.smoothed_loss)
-    imgui.text("Loss: %.3f" % status.loss)
-    imgui.text("Energy: %.3f" % status.energy)
-    imgui.text("Acceptance rate: %.3f" % status.smoothed_acceptance_rate)
-    imgui.text("Improvement: %.3f" % status.improvement)
+    imgui.text("Smoothed Energy: %.4f Ha" % energy_log.avg_value)
+    imgui.text("Energy statistics variance: %.4f Ha" % energy_log.variance)
+    imgui.text("Smoothed loss: %.4f" % loss_log.avg_value)
+    imgui.text("Loss: %.3f" % loss_log.value)
+    imgui.text("Energy: %.3f" % energy_log.value)
+    imgui.text("Acceptance rate: %.3f" % acceptance_rate_log.value)
+    imgui.text("Improvement: %.5f" % energy_log.improvement)
     imgui.text("Step: %d" % frame)
  
-    imgui.text("Error rel: {:.3f} %".format(100.0 * np.abs((status.smoothed_energy - target_energy) / target_energy)))
-    imgui.text("Error abs: %.3f mHa" % (1000.0 * np.abs(status.smoothed_energy - target_energy)))
+    imgui.text("Error rel: {:.4f} %".format(100.0 * np.abs((energy_log.avg_value - target_energy) / target_energy)))
+    imgui.text("Error abs: %.4f mHa" % (1000.0 * np.abs(energy_log.avg_value - target_energy)))
 
     lr, reg, clip = scheduler(frame)
     imgui.text("Learning rate: %.5f" % lr)
@@ -644,9 +629,9 @@ while not window.should_close():
     outlier_fraction = imgui.slider("Outlier fraction", outlier_fraction, 0.0, 0.3)
     mad_range = imgui.slider("MAD clipping range", mad_range, 0.5, 10.0)
     finitedifference_dx = imgui.slider("Finite difference dx", finitedifference_dx, 1e-5, 1e-1)
-    smoothing = imgui.slider("Statistics smoothing", smoothing, 0.9, 1.0)
+    average_count = imgui.slider("Average stats over", average_count, 1, 4096)
 
-    imgui.plotlines("Energy history", status.energy_history[-256:], graph_size=(0, 200))
+    imgui.plotlines("Energy history", energy_log.avg_history[-512:], graph_size=(0, 200))
 
     cam.update()
 
@@ -677,3 +662,7 @@ total_param_count = 0
 for i, grad in momentum_grads:
     total_param_count += grad.numpy.size
 print("Total parameter count: ", total_param_count)
+
+print(wavefunction.feature_layer.numpy)
+print(wavefunction.feature_layer_bias.numpy)
+print(wavefunction.feature_envelope_layer.numpy)

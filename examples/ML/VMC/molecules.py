@@ -3,6 +3,10 @@ from atom import *
 
 angstrom_to_bohr = 1.88973
 
+atomH = Atom(1, "H", Vector3(3.015*0.5, 0.0, 0.0))
+atomLi = Atom(3, "Li", Vector3(-3.015*0.5, 0.0, 0.0))
+lih_molecule = Molecule([atomH, atomLi], "LiH", target_energy = -8.070548)
+
 atom1 = Atom(3, "Li", Vector3(-5.051*0.5, 0.0, 0.0))
 atom2 = Atom(3, "Li", Vector3(5.051*0.5, 0.0, 0.0))
 li2_molecule = Molecule([atom1, atom2], "Li2", target_energy = -14.9966)
@@ -53,3 +57,26 @@ atomH3 = Atom(1, "H", Vector3(-0.4582, -1.0994, -0.8124))
 atomH4 = Atom(1, "H", Vector3(0.5928, 1.0567, 0.8807))
 atomH5 = Atom(1, "H", Vector3(0.5928, 1.0567, -0.8807))
 ch3nh2_molecule = Molecule([atomC, atomN, atomH1, atomH2, atomH3, atomH4, atomH5], "Methylamine", target_energy = -95.8554)
+
+atomC1 = Atom(6, "C", Vector3(2.2075, -0.7566, 0.0))
+atomC2 = Atom(6, "C", Vector3(0.0, 1.0572, 0.0))
+atomO = Atom(8, "O", Vector3(-2.2489, -0.4302, 0.0))
+atomH1 = Atom(1, "H", Vector3(-3.6786, 0.7210, 0.0))
+atomH2 = Atom(1, "H", Vector3(0.0804, 2.2819, 1.6761))
+atomH3 = Atom(1, "H", Vector3(0.0804, 2.2819, -1.6761))
+atomH4 = Atom(1, "H", Vector3(3.9985, 0.2736, 0.0))
+atomH5 = Atom(1, "H", Vector3(2.1327, -1.9601, 1.6741))
+c2oh5_molecule = Molecule([atomC1, atomC2, atomO, atomH1, atomH2, atomH3, atomH4, atomH5], "Ethanol", target_energy = -155.0308)
+
+
+atomC1 = Atom(6, "C", Vector3(0.0, 2.13792, 0.58661))
+atomC2 = Atom(6, "C", Vector3(0.0, -2.13792, 0.58661))
+atomC3 = Atom(6, "C", Vector3(1.41342, 0.0, -0.58924))
+atomC4 = Atom(6, "C", Vector3(-1.41342, 0.0, -0.58924))
+atomH1 = Atom(1, "H", Vector3(0.0, 2.33765, 2.64110))
+atomH2 = Atom(1, "H", Vector3(0.0, 3.92566, -0.43023))
+atomH3 = Atom(1, "H", Vector3(0.0, -2.33765, 2.64110))
+atomH4 = Atom(1, "H", Vector3(0.0, -3.92566, -0.43023))
+atomH5 = Atom(1, "H", Vector3(2.67285, 0.0, -2.19514))
+atomH6 = Atom(1, "H", Vector3(-2.67285, 0.0, -2.19514))
+c4h6_molecule = Molecule([atomC1, atomC2, atomC3, atomC4, atomH1, atomH2, atomH3, atomH4, atomH5, atomH6], "Bicyclobutane", target_energy = -155.9263)

@@ -22,8 +22,8 @@ def conv2d(X, W):
     COUT, CIN, h, w = W.shape
     bi, cout, wi, hi, cin, it = tf.indices([N, COUT, HI - h + 1, WI - w + 1, CIN, h * w])
     i, j = it%w, it/w
-    prod = 1.0+X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]
-    conv = 1.0+tf.sum(1.0+tf.sum(prod))
+    prod = X[bi, cin, wi + i, hi + j] * W[cout, cin, i, j]
+    conv = tf.sum(1.0+tf.sum(prod))
     return conv
 
 def convtest():
