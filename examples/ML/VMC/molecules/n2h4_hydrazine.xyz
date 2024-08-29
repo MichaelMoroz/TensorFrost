@@ -1,0 +1,8 @@
+6
+TF name="Hydrazine" target_energy=-111.682321 comment="NIST Computational Chemistry Comparison and Benchmark Database\nNIST Standard Reference Database Number 101\nRelease 22, May 2022, Editor: Russell D. Johnson III\nhttp://cccbdb.nist.gov/\nDOI:10.18434/T47C7Z"
+N     0.000000000     0.723000000    -0.112300000
+N     0.000000000    -0.723000000    -0.112300000
+H    -0.447000000     1.003100000     0.756200000
+H     0.447000000    -1.003100000     0.756200000
+H     0.966300000     1.003100000     0.030100000
+H    -0.966300000    -1.003100000     0.030100000

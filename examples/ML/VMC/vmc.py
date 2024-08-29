@@ -11,13 +11,15 @@ from utils import *
 from atom import *
 from logdet import *
 from molecules import *
+from read_xyz import *
 from visualizer import *
 
 tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = c_molecule
+#molecule = c4h6_molecule
+molecule = read_xyz("examples/ML/VMC/molecules/n2h4_hydrazine.xyz", use_custom_metadata=True)
 
 lr0 = 0.005
 lr1 = 0.0005
@@ -252,9 +254,9 @@ class PSI(tf.Module):
         logdet = tf.custom("logdet", [reordered], [reordered.shape[0]])
         logdet = tf.reshape(logdet, [orbitals.shape[0], self.determinants])
         logdet = tf.squeeze(logdet)
-        return logdet / 0.69314718056
+        return logdet / 0.693147180559945309
         #TODO: fix compiler bug here
-        return tf.squeeze(logdet / 0.69314718056)
+        return tf.squeeze(logdet / 0.693147180559945309)
 
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
