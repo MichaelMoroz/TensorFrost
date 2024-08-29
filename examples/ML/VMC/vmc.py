@@ -252,9 +252,9 @@ class PSI(tf.Module):
         logdet = tf.custom("logdet", [reordered], [reordered.shape[0]])
         logdet = tf.reshape(logdet, [orbitals.shape[0], self.determinants])
         logdet = tf.squeeze(logdet)
-        return logdet / 0.69314718056
+        return logdet / 0.693147180559945309
         #TODO: fix compiler bug here
-        return tf.squeeze(logdet / 0.69314718056)
+        return tf.squeeze(logdet / 0.693147180559945309)
 
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
