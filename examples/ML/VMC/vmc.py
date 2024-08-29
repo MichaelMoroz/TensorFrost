@@ -11,13 +11,15 @@ from utils import *
 from atom import *
 from logdet import *
 from molecules import *
+from read_xyz import *
 from visualizer import *
 
 tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = c_molecule
+#molecule = c4h6_molecule
+molecule = read_xyz("examples/ML/VMC/molecules/n2h4_hydrazine.xyz", use_custom_metadata=True)
 
 lr0 = 0.005
 lr1 = 0.0005

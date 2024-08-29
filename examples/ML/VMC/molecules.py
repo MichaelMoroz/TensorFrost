@@ -5,9 +5,13 @@ from atom import *
 # a_0 = 5.291 772 105 44(82) x 10^-11 m
 angstrom_to_bohr = 1.0/0.529177210544
 
+# https://physics.nist.gov/cgi-bin/cuu/Value?hrev
+# E_h = 27.211 386 245 981(30) eV
+eV_to_hartree = 27.211386245981
+
 # Hydrogen (H)
 atom = Atom(1, "H", Vector3(0.0, 0.0, 0.0))
-h_molecule = Molecule([atom], "Hydrogen", target_energy = -0.500273)
+h_molecule = Molecule([atom], "Hydrogen", target_energy = -0.5)
 
 # Carbon (C)
 atom = Atom(6, "C", Vector3(0.0, 0.0, 0.0))

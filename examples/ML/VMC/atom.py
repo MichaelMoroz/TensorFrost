@@ -135,7 +135,7 @@ class Molecule:
 
         self.electron_count = self.spin_up_electrons + self.spin_down_electrons
 
-    def get_atoms(self) -> List[Vector4]:
+    def get_atoms(self) -> np.ndarray:
         atom_array = [[atom.position.x, atom.position.y, atom.position.z, atom.get_charge()] for atom in self.atoms]
         return np.array(atom_array, dtype=np.float32)
     
