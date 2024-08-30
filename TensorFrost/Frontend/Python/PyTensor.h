@@ -66,6 +66,7 @@ class PyTensor {
 	explicit PyTensor(float value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(int value) { tensor_ = &Tensor::Constant(value); }
 	explicit PyTensor(unsigned int value) { tensor_ = &Tensor::Constant(value); }
+	explicit PyTensor(bool value) { tensor_ = &Tensor::Constant(value); }
 
 	std::variant<PyTensor*, py::tuple> __enter__() {
 		//py::print("Entering node scope");

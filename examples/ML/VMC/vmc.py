@@ -640,7 +640,7 @@ while not window.should_close():
         if atom_screen[i, 2] > 0.0:
             q = atoms[i, 3]
             name = Atom.ELEMENT_NAMES[int(q)]
-            imgui.add_background_text(name, (atom_screen[i, 1], cam.H - atom_screen[i, 0]), (255, 255, 255, 255))
+            imgui.add_background_text(name, (atom_screen[i, 1], atom_screen[i, 0]), (255, 255, 255, 255))
 
     cam.update_tensors()
     window.render_frame(vis(cam, walker_history_tf, optimizer.net.atoms))

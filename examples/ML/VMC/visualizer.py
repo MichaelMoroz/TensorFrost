@@ -5,9 +5,14 @@ from camera import *
 
 def ProjectPoints(cam, points):
     cam.initialize_properties()
+    wx, wy = tf.window.get_size()
     projected = []
     for i in range(points.shape[0]):
-        projected.append(cam.project(vec3(points[i, 0], points[i, 1], points[i, 2])))
+        x, y, z = cam.project(vec3(points[i, 0], points[i, 1], points[i, 2]))
+        #resize to window size
+        x = (cam.H - x) * float(wy) / float(cam.H)
+        y = y * float(wx) / float(cam.W)
+        projected.append([x, y, z])
     return np.array(projected)
 
 def CompileVisualizer(W, H, focal_length):

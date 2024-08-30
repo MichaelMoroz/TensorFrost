@@ -313,6 +313,11 @@ public:
 		output.SetData(value);
 		return output;
 	}
+	static Tensor& Constant(bool value) {
+		Tensor& output = Static("const", TFType::Bool);
+		output.SetData(value);
+		return output;
+	}
 	static Tensor& Constant(uint value, TFType type) {
 		Tensor& output = Static("const", type);
 		output.SetData(value);

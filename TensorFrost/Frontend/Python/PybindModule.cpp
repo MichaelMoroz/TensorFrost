@@ -54,9 +54,9 @@ PYBIND11_MODULE(TensorFrost, m) {
 
 	// implicit conversion from TensorView to PyTensor
 	py::implicitly_convertible<float, PyTensor>();
+	py::implicitly_convertible<bool, PyTensor>();
 	py::implicitly_convertible<int, PyTensor>();
 	py::implicitly_convertible<unsigned int, PyTensor>();
-	py::implicitly_convertible<bool, PyTensor>();
 
 	TensorFunctionsDefinition(m);
 	TensorProgramDefinition(m, tensor_program);

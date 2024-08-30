@@ -41,7 +41,7 @@ while not window.should_close():
     atom_screen = ProjectPoints(cam, atoms)
     for i in range(atoms.shape[0]):
         if atom_screen[i, 2] > 0.0:
-            imgui.add_background_text("Atom", (atom_screen[i, 1], cam.H - atom_screen[i, 0]), (255, 255, 255, 255))
+            imgui.add_background_text("Atom", (atom_screen[i, 1], atom_screen[i, 0]), (255, 255, 255, 255))
 
     cam.update_tensors()
     window.render_frame(vis(cam, walkers_tf, atoms_tf))

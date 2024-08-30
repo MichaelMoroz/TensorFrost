@@ -121,9 +121,10 @@ class Camera(tf.Module):
         render_rad = tf.clamp(self.point_radius * rad_mul, 1.0, 10.0)
 
         def add(i, j, color, brightness):
-            tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
-            tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
-            tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
+            with tf.if_cond(tf.bool(brightness > 1.0/FIXED_POINT_SIZE) & (i >= 0) & (i < self.H) & (j >= 0) & (j < self.W)):
+                tf.scatterAdd(image[i, j, 0], float2int(brightness*color.x))
+                tf.scatterAdd(image[i, j, 1], float2int(brightness*color.y))
+                tf.scatterAdd(image[i, j, 2], float2int(brightness*color.z))
         
         with tf.if_cond(is_inside):
             xi = tf.int(i)
