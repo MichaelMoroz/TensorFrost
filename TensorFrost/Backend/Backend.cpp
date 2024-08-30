@@ -22,7 +22,7 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 	}
 
 	if (!compilerOptions.empty()) {
-		kernel_compile_options = compilerOptions;
+		kernelCompileOptions = compilerOptions;
 	}
 
 	current_backend = backendType;

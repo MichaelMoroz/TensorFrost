@@ -17,9 +17,9 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = c_molecule
+molecule = c2h5oh_molecule
 
-lr0 = 0.005
+lr0 = 0.001
 lr1 = 0.0005
 reg0 = 0.01
 reg1 = 0.005
@@ -49,15 +49,15 @@ def scheduler(step):
 metropolis_per_step = 12
 
 #how many metropolis steps to store in the history to render
-metropolis_history_length = 512
+metropolis_history_length = 128
 
 #what target fraction of the walkers to move in each step
-target_acceptance_rate = 0.3
+target_acceptance_rate = 0.4
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simple and works well
-outlier_fraction = 0.1
+outlier_fraction = 0.2
 #range for clipping around the median of the local energy from ferminet/psiformer (in variance units)
 mad_range = 3.0
 
@@ -88,8 +88,8 @@ class PSI(tf.Module):
         self.spin_down_n = electron_n - spin_up_n
         self.determinants = 1
         self.atom_features = feature_atom_id.shape[0]
-        self.mid_n = 6
-        self.corr_n = 6
+        self.mid_n = 24
+        self.corr_n = 16
         self.input_features = 8
 
         # Hyperparameters

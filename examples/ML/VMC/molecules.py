@@ -66,7 +66,8 @@ atomH2 = Atom(1, "H", Vector3(0.0804, 2.2819, 1.6761))
 atomH3 = Atom(1, "H", Vector3(0.0804, 2.2819, -1.6761))
 atomH4 = Atom(1, "H", Vector3(3.9985, 0.2736, 0.0))
 atomH5 = Atom(1, "H", Vector3(2.1327, -1.9601, 1.6741))
-c2oh5_molecule = Molecule([atomC1, atomC2, atomO, atomH1, atomH2, atomH3, atomH4, atomH5], "Ethanol", target_energy = -155.0308)
+atomH6 = Atom(1, "H", Vector3(2.1327, -1.9601, -1.6741)) 
+c2h5oh_molecule = Molecule([atomC1, atomC2, atomO, atomH1, atomH2, atomH3, atomH4, atomH5, atomH6], "Ethanol", target_energy = -155.0308)
 
 
 atomC1 = Atom(6, "C", Vector3(0.0, 2.13792, 0.58661))

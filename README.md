@@ -2,7 +2,7 @@
 [![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
 
 
-A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
+A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
 | Backend/OS | CPU | OpenGL | CUDA | Vulkan |
@@ -430,34 +430,34 @@ TensorFrost has simple bindings for the GLFW window library, and some ImGui bind
 
 ```python
 
-#at this moment you can only open one window
-tf.show_window(1280, 720, "a window")
+#creates a single global window (can only be one at the moment)
+tf.window.show(1280, 720, "a window")
 
 while not tf.window_should_close(): #window will close if you press the close button and this will return True
     mx, my = tf.get_mouse_position()
     wx, wy = tf.get_window_size()
 
     #simple input example
-    if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
-        tf.imgui_text("Mouse button 0 is pressed")
+    if tf.window.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+        tf.imgui.text("Mouse button 0 is pressed")
 
-    if tf.is_key_pressed(tf.KEY_W):
-        tf.imgui_text("W is pressed")
+    if tf.window.is_key_pressed(tf.KEY_W):
+        tf.imgui.text("W is pressed")
 
     #ImGui example
-    tf.imgui_begin("an imgui window")
-    tf.imgui_text("some text")
-    value = tf.imgui_slider("slider", value, 0.0, 10.0)
-    if(tf.imgui_button("a button")):
+    tf.imgui.begin("an imgui window")
+    tf.imgui.text("some text")
+    value = tf.imgui.slider("slider", value, 0.0, 10.0)
+    if(tf.imgui.button("a button")):
         print("button pressed")
-    tf.imgui_end()
+    tf.imgui.end()
 
     #exectute a tensorfrost program that outputs a [-1, -1, 3] float32 tensor
-    img, = render_image(...)
+    img = render_image(...)
 
     #display the image (will be stretched to the window size with nearest neighbor interpolation)
     tf.render_frame(img)
-
+    
 ```
 
 ### Autodifferentiation

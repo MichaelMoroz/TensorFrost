@@ -4,33 +4,33 @@
 
 namespace TensorFrost {
 
-std::string kernel_compile_options;
+std::string kernelCompileOptions;
 
 bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
     std::basic_stringstream<char> ss;
     std::string output;
 
 #if defined(_WIN32)
-    if (kernel_compile_options.empty()) {
+    if (kernelCompileOptions.empty()) {
 #ifdef NDEBUG
-        kernel_compile_options = "/O2 /fp:fast /openmp:experimental";
+        kernelCompileOptions = "/O2 /fp:fast /openmp:experimental";
 #else
-        kernel_compile_options = "/Zi";
+        kernelCompileOptions = "/Zi";
 #endif
     }
     ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl "
-       << kernel_compile_options << " /LD " << tempPath
+       << kernelCompileOptions << " /LD " << tempPath
        << sourcePath << " /Fe:" << dllName
        << "\"\"\\\"\"";
 #else
-    if (kernel_compile_options.empty()) {
+    if (kernelCompileOptions.empty()) {
 #ifdef NDEBUG
-        kernel_compile_options = "-O3 -ffast-math -fopenmp";
+        kernelCompileOptions = "-O3 -ffast-math -fopenmp";
 #else
-        kernel_compile_options = "-g";
+        kernelCompileOptions = "-g";
 #endif
     }
-    ss << "g++ " << kernel_compile_options << " -shared -fPIC " << tempPath
+    ss << "g++ " << kernelCompileOptions << " -shared -fPIC " << tempPath
        << sourcePath << " -o " << dllName;
 #endif
 

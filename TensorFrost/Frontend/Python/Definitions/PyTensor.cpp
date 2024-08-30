@@ -72,6 +72,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def(py::init<float>());
 	py_tensor.def(py::init<int>());
 	py_tensor.def(py::init<unsigned int>());
+	py_tensor.def(py::init<bool>());
 
 	// properties
 	py_tensor.def_property_readonly("shape", [](const PyTensor& t) {
