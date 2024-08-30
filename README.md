@@ -291,7 +291,7 @@ def MatrixMultiplication():
     i, j, k = tf.indices([N, K, M])
     C = tf.sum(A[i, k] * B[k, j], axis=2) #by default axis is -1 (last axis)
 
-    return [C]
+    return C
 
 matmul = tf.compile(MatrixMultiplication)
 ```
@@ -310,7 +310,7 @@ def Broadcasting():
 
     C = A + B
 
-    return [C]
+    return C
 ```
 
 Here the `+` operation is used to add the two input tensors. The shapes of the input tensors are `[1, 3]` and `[3, 1]`, and the shape of the output tensor is `[3, 3]`. The `+` operation is broadcasted over the input tensors, and the result is a tensor with the shape `[3, 3]`.
@@ -326,7 +326,7 @@ def Reshape():
 
     B = tf.reshape(A, [3, 2])
 
-    return [B]
+    return B
 ```
 
 Here the `reshape` operation is used to change the shape of the input tensor from `[2, 3]` to `[3, 2]`.
@@ -342,7 +342,7 @@ def Transpose():
     B = tf.transpose(A) #shape is [3, 2]
     C = B.T #shape is [2, 3]
 
-    return [C]
+    return C
 ```
 
 ```python
@@ -351,7 +351,7 @@ def Unsqueeze():
 
     B = tf.unsqueeze(A, 1) #shape is [2, 1, 3]
 
-    return [B]
+    return B
 ```
 
 ### Matrix operations
@@ -367,14 +367,14 @@ def MatrixMultiplication():
 
     C = tf.matmul(A, B) #or A @ B
 
-    return [C]
+    return C
 
 matmul = tf.compile(MatrixMultiplication)
 
 A = tf.tensor(np.zeros([100, 100], dtype=np.float32))
 B = tf.tensor(np.zeros([100, 100], dtype=np.float32))
 
-C, = matmul(A, B)
+C = matmul(A, B)
 ```
 
 Here the `matmul` operation is used to multiply the input matrices `A` and `B`. The shapes of the input tensors are `[N, M]` and `[M, K]`, and the shape of the output tensor is `[N, K]`.
@@ -433,15 +433,15 @@ TensorFrost has simple bindings for the GLFW window library, and some ImGui bind
 #creates a single global window (can only be one at the moment)
 tf.window.show(1280, 720, "a window")
 
-while not tf.window_should_close(): #window will close if you press the close button and this will return True
-    mx, my = tf.get_mouse_position()
-    wx, wy = tf.get_window_size()
+while not tf.window.should_close(): #window will close if you press the close button and this will return True
+    mx, my = tf.window.get_mouse_position()
+    wx, wy = tf.window.get_size()
 
     #simple input example
-    if tf.window.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+    if tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0):
         tf.imgui.text("Mouse button 0 is pressed")
 
-    if tf.window.is_key_pressed(tf.KEY_W):
+    if tf.window.is_key_pressed(tf.window.KEY_W):
         tf.imgui.text("W is pressed")
 
     #ImGui example
@@ -456,7 +456,7 @@ while not tf.window_should_close(): #window will close if you press the close bu
     img = render_image(...)
 
     #display the image (will be stretched to the window size with nearest neighbor interpolation)
-    tf.render_frame(img)
+    tf.window.render_frame(img)
     
 ```
 
