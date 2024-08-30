@@ -40,6 +40,12 @@ void ImGuiSlider(std::string text, float* value, float min, float max);
 bool ImGuiCheckbox(std::string text, bool* value);
 bool ImGuiButton(std::string text);
 
+void ImGuiPlotLines(const char* label, const float* values, int values_count, int values_offset = 0, const char* overlay_text = NULL, float scale_min = FLT_MAX, float scale_max = FLT_MAX, ImVec2 graph_size = ImVec2(0, 0), int stride = sizeof(float));
+
+void ImGuiScaleAllSizes(float scale);
+
+void ImGuiAddBackgroundText(const std::string& text, const ImVec2& pos, const ImVec4& color);
+
 void StartDebugRegion(const std::string& name);
 void EndDebugRegion();
 

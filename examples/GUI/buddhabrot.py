@@ -101,16 +101,14 @@ frame = np.zeros([S, S, 3], np.float32)
 frame_tf = tf.tensor(frame)
 frame_id = tf.tensor(np.array([0], np.int32))
 
-tf.show_window(S, S, "Buddhabrot")
+tf.window.show(S, S, "Buddhabrot")
 
 init_time = time.time()
 
-while not tf.window_should_close():
+while not tf.window.should_close():
     cur_time = time.time() - init_time
     time_tf = tf.tensor(np.array([cur_time], np.float32))
     frame_tf, frame_id = mand(frame_tf, frame_id, time_tf)
-    tf.render_frame(frame_tf)
+    tf.window.render_frame(frame_tf)
     render_time = time.time() - init_time - cur_time
-    tf.imgui_text("Render time: %.3f ms" % (render_time * 1000))
-
-tf.hide_window()
+    tf.imgui.text("Render time: %.3f ms" % (render_time * 1000))

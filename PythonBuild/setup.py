@@ -6,7 +6,7 @@ with open("../README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='TensorFrost',
-    version='0.6.0',
+    version='0.6.1',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
     description="Tensor library with automatic kernel fusion",
@@ -34,7 +34,9 @@ setup(
     ],
     python_requires='>=3.7',
     packages=["TensorFrost"],
-
+    install_requires=[
+        'numpy',
+    ],
     # Include pre-compiled extension
     package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll"]},
     has_ext_modules=lambda: True

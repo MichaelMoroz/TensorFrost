@@ -8,6 +8,10 @@
 #include <vector>
 #include <variant>
 
+// for FLT_MAX, INT_MAX, etc.
+#include <float.h>
+#include <limits.h>
+
 #include <math.h>
 
 #include "Compiler/Graph/IR.h"
@@ -16,6 +20,10 @@
 namespace TensorFrost {
 
 using Tensors = vector<const Tensor*>;
+
+Tensors Reverse(const Tensors& tensors);
+vector<int> Reverse(const vector<int>& vec);
+int ReverseDim(int dim, size_t dims);
 
 class Tensor {
  private:
@@ -84,16 +92,12 @@ class Tensor {
 	}
 
 public:
-	template <typename... Args>
-	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+	static Tensor& OpShape(std::string op, Tensors shape, Tensors tensors) {
 		op = RemoveSpaces(op);
 
 		if (op.empty()) {
 			throw std::runtime_error("Operation name cannot be empty");
 		}
-
-		// convert the parameter pack to a std::vector
-		Tensors tensors = {args...};
 
 		// get the operation and output type
 		auto [operation, output_type, shape_info] = GetOperation(op, tensors, false);
@@ -105,6 +109,14 @@ public:
 		AddArguments(arguments, shape, ArgType::Shape);
 
 		return CreateNode(output_type, arguments, op);
+	}
+
+	template <typename... Args>
+	static Tensor& OpShape(std::string op, Tensors shape, const Args*... args) {
+		// convert the parameter pack to a std::vector
+		Tensors tensors = {args...};
+
+		return OpShape(op, shape, tensors);
 	}
 
 	template <typename... Args>
@@ -225,6 +237,10 @@ public:
 
 	string GetConstantString() const;
 
+	static Tensor& CustomOperation(const string & name, Tensors inputs, Tensors shape) {
+		return OpShape(name, shape, inputs);
+	}
+
 	Node* node_ = nullptr;
 
 	TFType GetType() const;
@@ -252,6 +268,12 @@ public:
 	Tensors GetShape() const {
 		ShapeInfo shape_info = ShapeInfo(node_);
 		return shape_info.GetTensors();
+	}
+
+	Tensors GetReverseShape() const {
+		Tensors shape = GetShape();
+		std::reverse(shape.begin(), shape.end());
+		return shape;
 	}
 
 	ShapeInfo GetShapeInfo() const {
@@ -440,7 +462,14 @@ public:
 	                     const Tensors& indices = Tensors(), bool unsafe = false);
 
 	void Set(const Tensor& value) const  {
+		//check if memory and value shapes are compatible
+		ShapeCompareResult shape_result = CompareShape(node_, value.node_, true);
+		if (!shape_result.compatible) {
+            throw std::runtime_error("Cannot set tensor with incompatible shape");
+        }
 		MemoryOp("set", this, {}, &value);
+		//update the shape of the tensor
+		SetShape(shape_result.broadcast_shape.GetTensors());
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
@@ -485,42 +514,42 @@ public:
 		return axis;
 	}
 
-	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = -1, bool keepdims = false);
-	static Tensor& ScanOP(string name, const Tensor& tensor, int axis = -1);
+	static Tensor& ReductionOP(string name, const Tensor& tensor, int axis = 0, bool keepdims = false);
+	static Tensor& ScanOP(string name, const Tensor& tensor, int axis = 0);
 
-	static Tensor& Sum(const Tensor& tensor, int axis = -1) {
+	static Tensor& Sum(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_sum", tensor, axis);
 	}
 
-	static Tensor& Norm(const Tensor& tensor, int axis = -1) {
+	static Tensor& Norm(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_norm", tensor, axis);
 	}
 
-	static Tensor& Mean(const Tensor& tensor, int axis = -1) {
+	static Tensor& Mean(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_mean", tensor, axis);
 	}
 
-	static Tensor& Max(const Tensor& tensor, int axis = -1) {
+	static Tensor& Max(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_max", tensor, axis);
 	}
 
-	static Tensor& Any(const Tensor& tensor, int axis = -1) {
+	static Tensor& Any(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_any", tensor, axis);
 	}
 
-	static Tensor& All(const Tensor& tensor, int axis = -1) {
+	static Tensor& All(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_all", tensor, axis);
 	}
 
-	static Tensor& Min(const Tensor& tensor, int axis = -1) {
+	static Tensor& Min(const Tensor& tensor, int axis = 0) {
 		return ReductionOP("dim_min", tensor, axis);
 	}
 
-	static Tensor& PrefixSum(const Tensor& tensor, int axis = -1) {
+	static Tensor& PrefixSum(const Tensor& tensor, int axis = 0) {
 		return ScanOP("dim_prefix_sum", tensor, axis);
 	}
 
-	static Tensor& Reverse(const Tensor& tensor, int axis = -1) {
+	static Tensor& Reverse(const Tensor& tensor, int axis = 0) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);
@@ -529,7 +558,7 @@ public:
 		return output;
 	}
 
-	static Tensor& SplitDim(const Tensor& tensor, int split_size = 128, int axis = -1) {
+	static Tensor& SplitDim(const Tensor& tensor, int split_size = 128, int axis = 0) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 		int dims = shapeinfo.dim;
 		Tensors shape = shapeinfo.GetTensors();
@@ -548,13 +577,39 @@ public:
 		return output;
 	}
 
-	static Tensor& Transpose(const Tensor& tensor, const int axis1 = -1, const int axis2 = -2) {
+	static Tensor& MergeDim(const Tensor& tensor, int axis = 0, const Tensor* target_size = nullptr) {
+		ShapeInfo shapeinfo = tensor.GetShapeInfo();
+		int dims = shapeinfo.dim;
+		Tensors shape = shapeinfo.GetTensors();
+		axis = GetAxis(dims, axis);
+		if(axis == 0) axis = 1;
+		const Tensor* target_size_tensor = nullptr;
+		if(target_size == nullptr) {
+			target_size_tensor = &(*shape[axis] * *shape[axis+1]);
+		} else {
+			target_size_tensor = target_size;
+		}
+		axis = GetAxis(dims, axis);
+		Tensors new_shape = Tensors();
+		for (int i = 0; i < dims; i++) {
+			if(i == axis) {
+				new_shape.push_back(target_size_tensor);
+			} else if(i != axis+1) {
+				new_shape.push_back(shape[i]);
+			}
+		}
+		Tensor& output = OpShape("dim_merge", new_shape, &tensor);
+		output.SetData(axis);
+		return output;
+	}
+
+	static Tensor& Transpose(const Tensor& tensor, const int axis1 = 1, const int axis2 = 0) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 
-		int dims = std::max(std::max(axis1, axis2), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
+		int dims = std::max(std::max(axis1+1, axis2+1), std::max(shapeinfo.dim, -std::min(axis1, axis2)));
 		int a1 = GetAxis(dims, axis1);
 		int a2 = GetAxis(dims, axis2);
-		shapeinfo.ExpandDimensions(dims);
+		shapeinfo.ExpandDimensionsTo(dims);
 		Tensors shape = shapeinfo.GetTensors();
 		//swap the axes
 		std::swap(shape[a1], shape[a2]);
@@ -565,7 +620,7 @@ public:
 	}
 
 	//dot product of
-	static Tensor& Dot(const Tensor& tensor1, const Tensor& tensor2, int axis = -1) {
+	static Tensor& Dot(const Tensor& tensor1, const Tensor& tensor2, int axis = 0) {
 		Tensors shape = tensor1.GetShape();
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);
@@ -575,7 +630,7 @@ public:
 		return output;
 	}
 
-	static Tensor& Unsqueeze(const Tensor& tensor, int axis = -1) {
+	static Tensor& Unsqueeze(const Tensor& tensor, int axis = 0) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		if(axis < 0) {
@@ -590,7 +645,7 @@ public:
 
 	static bool AreTensorsEqual(const Tensor& a, const Tensor& b);
 
-	static Tensor& Squeeze(const Tensor& tensor, int axis = -1) {
+	static Tensor& Squeeze(const Tensor& tensor, int axis = 0) {
 		Tensors shape = tensor.GetShape();
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);
@@ -613,10 +668,10 @@ public:
 		}
 
 		if(shape_a.dim < 2) {
-			shape_a.ExpandDimensions(2);
+			shape_a.ExpandDimensionsTo(2);
 		}
 		if(shape_b.dim < 2) {
-			shape_b.ExpandDimensions(2);
+			shape_b.ExpandDimensionsTo(2);
 		}
 
 		Tensors shape_a_tensors = shape_a.GetTensors();
@@ -637,14 +692,13 @@ public:
 			max_shape = shape_a_tensors;
 		}
 
-		for (int i = 0; i < max_dim - 2; i++) {
+		shape_c.push_back(shape_b_tensors[0]);
+		shape_c.push_back(shape_a_tensors[1]);
+		for (int i = 2; i < max_dim; i++) {
 			shape_c.push_back(max_shape[i]);
 		}
-		shape_c.push_back(shape_a_tensors[dim_a - 2]);
-		shape_c.push_back(shape_b_tensors[dim_b - 1]);
-
-		//make sure that the inner dimensions match
-		if (!CompareShapeDim(shape_a_tensors[dim_a - 1]->node_, shape_b_tensors[dim_b - 2]->node_).compatible) {
+		ShapeDimCompareResult result = CompareShapeDim(shape_a_tensors[0]->node_, shape_b_tensors[1]->node_);
+		if (!result.compatible) {
 			throw std::runtime_error("Inner dimensions of the matrices must match");
 		}
 
@@ -970,6 +1024,14 @@ public:
 
 	static void BeginRegion(const string& name);
 	static void EndRegion(const string& name);
+
+	int axis(int i = 0) const {
+		return (int)node_->data[i];
+	}
+
+	uint data(int i = 0) const {
+		return node_->data[i];
+	}
 };
 
 }  // namespace TensorFrost

@@ -10,6 +10,9 @@ class Vector3:
 
     def distance(self, other: 'Vector3') -> float:
         return math.sqrt((self.x - other.x)**2 + (self.y - other.y)**2 + (self.z - other.z)**2)
+    
+    def __mul__(self, other: float) -> 'Vector3':
+        return Vector3(self.x * other, self.y * other, self.z * other)
 
 class Vector4:
     def __init__(self, x: float, y: float, z: float, w: float):
@@ -17,6 +20,9 @@ class Vector4:
         self.y = y
         self.z = z
         self.w = w
+
+    def __mul__(self, other: float) -> 'Vector4':
+        return Vector4(self.x * other, self.y * other, self.z * other, self.w * other)
 
 class Orbital(NamedTuple):
     atom_id: int
@@ -84,7 +90,7 @@ class Atom:
         return electronic_structure
     
 class Molecule:
-    def __init__(self, atoms: List[Atom], ionization_level: int = 0, orbitals_per_electron: int = 1):
+    def __init__(self, atoms: List[Atom], name = "", target_energy = 0.0, ionization_level: int = 0, orbitals_per_electron: int = 1):
         self.atoms = atoms
         self.ionization_level = ionization_level
         self.orbitals_per_electron = orbitals_per_electron
@@ -93,6 +99,9 @@ class Molecule:
         self.spin_up_electrons = 0
         self.spin_down_electrons = 0
         self.electron_count = 0
+        self.target_energy = target_energy
+        self.name = name
+        self.initialize_orbitals()
 
     def initialize_orbitals(self):
         self.spin_up_electrons = 0
@@ -126,17 +135,43 @@ class Molecule:
 
         self.electron_count = self.spin_up_electrons + self.spin_down_electrons
 
-        print(f"Electron Count: {self.electron_count}")
-        print(f"Spin Up Electrons: {self.spin_up_electrons}")
-        print(f"Spin Down Electrons: {self.spin_down_electrons}")
-        print(f"Orbital Count: {len(self.orbitals)}")
-
-        # Log distances between atoms
-        for i in range(len(self.atoms)):
-            for j in range(i + 1, len(self.atoms)):
-                distance = self.atoms[i].position.distance(self.atoms[j].position)
-                print(f"Distance between {self.atoms[i].name} and {self.atoms[j].name} is {distance} Bohr")
-
     def get_atoms(self) -> List[Vector4]:
         atom_array = [[atom.position.x, atom.position.y, atom.position.z, atom.get_charge()] for atom in self.atoms]
         return np.array(atom_array, dtype=np.float32)
+    
+    def get_orbitals(self, add_per_atom = 0, multiply_per_atom = 1) -> np.ndarray:
+        orbs = [orbital.atom_id for orbital in self.orbitals]
+
+        # multiply per atom orbitals (just repeat the orbitals)
+        orbs = orbs * multiply_per_atom
+
+        # add per atom orbitals
+        for i, atom in enumerate(self.atoms):
+            for _ in range(add_per_atom):
+                orbs.append(i)
+
+        return np.array(orbs, dtype=np.int32)
+        
+    
+    def get_summary(self):
+        summary = "Molecule: {}\n".format(self.name)
+        dict_atoms = {}
+        for atom in self.atoms:
+            if atom.name in dict_atoms:
+                dict_atoms[atom.name] += 1
+            else:
+                dict_atoms[atom.name] = 1
+        
+        structure = ""
+        for atom_name, atom_count in dict_atoms.items():
+            structure += "{}{} ".format(atom_name, atom_count)
+
+        summary += "Structure: {}\n".format(structure)
+        summary += "Electron count: {}\n".format(self.electron_count)
+        summary += "Spin up electrons: {}\n".format(self.spin_up_electrons)
+        summary += "Spin down electrons: {}\n".format(self.spin_down_electrons)
+        summary += "Target energy: {} Ha\n".format(self.target_energy)
+
+        return summary
+        
+        

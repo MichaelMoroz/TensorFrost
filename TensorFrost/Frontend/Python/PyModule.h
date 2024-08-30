@@ -18,6 +18,15 @@ public:
 
     Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
         : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), requires_grad(requires_grad) {}
+
+    bool CanBeInitialized() {
+        for (int i = 0; i < shape.size(); i++) {
+            if (shape[i] == -1) {
+                return false;
+            }
+        }
+        return true;
+    }
 };
 
 class ParameterArray {
@@ -37,6 +46,14 @@ public:
         if (py::isinstance<Parameter>(value)) {
             _requires_grad[index] = py::cast<Parameter&>(value).requires_grad;
         }
+    }
+
+    vector<pair<size_t, py::object>> items() {
+        vector<pair<size_t, py::object>> params;
+        for (auto& param : _parameters) {
+            params.push_back({param.first, param.second});
+        }
+        return params;
     }
 };
 
@@ -146,18 +163,40 @@ public:
         // Convert the shape vector to a tuple
         py::tuple shape_tuple = py::cast(param.shape);
 
-        py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
-        float shape_sum = 0.0f;
-        for (int i = 0; i < param.shape.size(); i++) {
-            shape_sum += (float)param.shape[i];
+        // py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
+        // float shape_sum = 0.0f;
+        // for (int i = 0; i < param.shape.size(); i++) {
+        //     shape_sum += (float)param.shape[i];
+        // }
+        // float scale = sqrt(2.0f / shape_sum);
+        // if(param.random_scale >= 0.0f) {
+        //     scale = param.random_scale;
+        // }
+        if(param.dtype == TFType::Float) {
+            // Generate uniform random values instead of normal
+            py::array_t<float> arr = random.attr("uniform")(-1.0f, 1.0f, shape_tuple).cast<py::array_t<float>>();
+            float shape_sum = 0.0f;
+            for (int i = 0; i < param.shape.size(); i++) {
+                shape_sum += (float)param.shape[i];
+            }
+            float scale = sqrt(6.0f / shape_sum);
+            if(param.random_scale >= 0.0f) {
+                scale = param.random_scale;
+            }
+
+            arr = arr.attr("__mul__")(py::float_(scale));
+            arr = arr.attr("__add__")(py::float_(param.random_offset));
+            return tf.attr("tensor")(arr);
+        } else if (param.dtype == TFType::Int) { //just use zeros
+            py::array_t<int> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<int>>();
+            return tf.attr("tensor")(arr);
+        } else if (param.dtype == TFType::Uint) { //just use zeros
+            py::array_t<unsigned int> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<unsigned int>>();
+            return tf.attr("tensor")(arr);
+        } else { //just use zeros
+            py::array_t<bool> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<bool>>();
+            return tf.attr("tensor")(arr);
         }
-        float scale = sqrt(2.0f / shape_sum);
-        if(param.random_scale >= 0.0f) {
-            scale = param.random_scale;
-        }
-        arr = arr.attr("__mul__")(py::float_(scale));
-        arr = arr.attr("__add__")(py::float_(param.random_offset));
-        return tf.attr("tensor")(arr);
     }
 
     void initialize_parameters() {
@@ -167,6 +206,9 @@ public:
 
         for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
             Parameter& p = py::cast<Parameter&>(param.second);
+            if (!p.CanBeInitialized()) {
+                continue;
+            }
             py::object tensor = initialize_parameter(p);
             setattr(param.first, tensor);
         }
@@ -175,6 +217,9 @@ public:
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 Parameter& p = py::cast<Parameter&>(param.second);
+                if (!p.CanBeInitialized()) {
+                    continue;
+                }
                 py::object tensor = initialize_parameter(p);
                 param_array.setitem(param.first, tensor);
             }
@@ -195,6 +240,25 @@ public:
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
                 params.append(param.second);
+            }
+        }
+        return params;
+    }
+
+    py::list named_parameters() {
+        py::list params;
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
+            params += module.second.attr("named_parameters")();
+        }
+
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            params.append(py::make_tuple(param.first, param.second));
+        }
+
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
+            ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
+            for (auto& param : param_array._parameters) {
+                params.append(py::make_tuple(array.first + "[" + std::to_string(param.first) + "]", param.second));
             }
         }
         return params;

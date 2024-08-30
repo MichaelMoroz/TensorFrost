@@ -152,6 +152,10 @@ void TensorProgramDefinition(py::module& m,
 		return program.program->main_function_;
 	});
 
+	tensor_program.def("get_last_execution_time", [](TensorProgram& program) {
+		return program.program->last_execution_time;
+	});
+
 	m.def("get_all_generated_main_functions", []() {
 		return global_kernel_manager->GetAllMainFunctions();
 	});

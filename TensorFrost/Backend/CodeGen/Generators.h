@@ -120,7 +120,10 @@ protected:
 	void RegenerateNodeName(Node* node) {
 		string debug = node->debug_name;
 		if (debug.empty()) {
-			return;
+			debug = "v" + node->name;//return;
+		}
+		if (IsForbiddenName(debug)) {
+			debug = debug + "0";
 		}
 		// check if the name is already used
 		if (name_count.contains(debug)) {
@@ -129,16 +132,14 @@ protected:
 		} else {
 			name_count[debug] = 1;
 		}
-		if (IsForbiddenName(debug)) {
-			debug = debug + "0";
-		}
+
 		node->var_name = debug;
 	}
 
 	virtual Line* GenerateLine(Node* node)  {
 		ArgumentManager& args = node->args;
-		GenerateArgumentNames(args);
 		if (kernel) RegenerateNodeName(node);
+		GenerateArgumentNames(args);
 		const Operation* op = node->op;
 
 		string name = node->var_name;
@@ -163,7 +164,7 @@ protected:
 				}
 				Node* shape_node = args.Get(ArgType::Shape, j);
 
-				shape_arg += "(uint)" + args.Name(ArgType::Shape, j);
+				shape_arg += "(uint)" + args.Name(ArgType::Shape, dims - j - 1);
 			}
 
 			shape_arg += "}";

@@ -1,5 +1,22 @@
 import TensorFrost as tf
 
+eps = 1e-8
+
+def safe_divide(a, b):
+    return a / tf.select(tf.abs(b) < eps, eps * tf.sign(b), b)
+
+def safe_log(x):
+    return tf.log(tf.max(x, eps))
+
+def safe_log2(x):
+    return tf.log2(tf.max(x, eps))
+
+def safe_exp(x):
+    return tf.exp(tf.clamp(x, -50.0, 50.0))
+
+def safe_exp2(x):
+    return tf.exp2(tf.clamp(x, -50.0, 50.0))
+
 def Sort(keys, values, element_count):
     tf.region_begin('Sort')
     log2N = tf.ceil(tf.log2(tf.float(element_count)))
@@ -36,7 +53,7 @@ def sqr(x):
     return x * x
 
 def aslog(x):
-    return lognum(tf.log2(tf.max(tf.abs(x), 1e-8)), tf.sign(x))
+    return lognum(safe_log2(tf.abs(x)), tf.sign(x))
 
 class lognum():
     def __init__(self, value = 0.0, sign = 1.0):
@@ -52,7 +69,7 @@ class lognum():
     def add(self, other):
         maxv, minv = tf.max(self.value, other.value), tf.min(self.value, other.value)
         diff = maxv - minv
-        value = maxv + tf.select(diff > 24.0, 0.0, tf.log2(1.0 + self.sign * other.sign * tf.exp2(-diff)))
+        value = maxv + tf.select(diff > 24.0, 0.0, safe_log2(1.0 + self.sign * other.sign * safe_exp2(-diff)))
         sign = tf.select(self.value > other.value, self.sign, other.sign)
         return lognum(value, sign)
 
@@ -85,3 +102,21 @@ def GLIN(X):
 
 def GELU2(x):
     return x*(1.0 + 0.95*tf.tanh(x - 0.779))
+
+def arcsinh(x):
+    return tf.log(x + tf.sqrt(x*x + 1.0))
+
+def arcsinh_vjp(g, x):
+    return g / tf.sqrt(x*x + 1.0)
+
+def arcsinh_op(inputs, tensor, axes):
+    return [arcsinh(inputs[0])]
+
+def arcsinh_op_vjp(inputs, gradient, tensor):
+    return [arcsinh_vjp(gradient, inputs[0])]
+
+def register_arcsinh():
+    tf.register_custom_operation("arcsinh", ["f_f"], arcsinh_op, arcsinh_op_vjp)
+
+def tf_arcsinh(x):
+    return tf.custom("arcsinh", [x])

@@ -447,8 +447,9 @@ void TFContext::dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_
 	}
 
 	//only the last dimensions are divided by the group size
+	//TODO: consider reversing indices on backend too
 	for (size_t i = 0; i < group_dim; i++) {
-		size_t dim = shape_arr[dispatch_dim - group_dim + i];
+		size_t dim = shape_arr[dispatch_dim - i - 1];
 		work_group_count *= (dim + group_arr[i] - 1) / group_arr[i];
 	}
 
@@ -537,11 +538,12 @@ void GenerateCode(Program* program) {
 		variable_args += "}";
 
 		string shape_args = "{";
+		int dims = (int)kernel.shape.size();
 		for (int d = 0; d < kernel.shape.size(); d++) {
 			if (d != 0) {
 				shape_args += ", ";
 			}
-			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape,d)]);
+			shape_args += "(uint)" + ReadVariable(kernel.shape[ArgID(ArgType::Shape, dims - d - 1)]);
 		}
 		shape_args += "}";
 
@@ -671,7 +673,7 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		int dim = (int)kernel->root->group_size.size() - d - 1;
 		loop += "    for (int block_thread_id" + to_string(dim) +
 		        " = 0; block_thread_id" + to_string(dim) + " < " +
-		        to_string(kernel->root->group_size[d]) + "; block_thread_id" +
+		        to_string(kernel->root->group_size[dim]) + "; block_thread_id" +
 		        to_string(dim) + "++)\n";
 	}
 	loop += "    {\n";

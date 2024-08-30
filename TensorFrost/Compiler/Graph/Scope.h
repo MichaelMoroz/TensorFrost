@@ -93,7 +93,7 @@ class ShapeInfo {
 		dim++;
 	}
 
-	void ExpandDimensions(int new_dim);
+	void ExpandDimensionsTo(int new_dim);
 };
 
 struct ShapeCompareResult {

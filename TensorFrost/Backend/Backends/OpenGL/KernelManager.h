@@ -138,8 +138,10 @@ class OpenGLKernelManager : public KernelManager {
 		// Wait for the kernel to finish
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-		// Unbind the memory buffer
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+		// Unbind the memory buffers
+		for (size_t i = 0; i < info.read_write_count; i++) {
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, (GLuint)i, 0);
+		}
 
 		// Unbind the program
 		glUseProgram(0);

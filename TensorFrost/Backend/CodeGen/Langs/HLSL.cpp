@@ -95,8 +95,6 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_bindings_ += "cbuffer ubo : register(b0) { UBO var; }\n";
 
 	vector<int> group_size = kernel->root->group_size;
-	// reverse vector
-	reverse(group_size.begin(), group_size.end());
 	// pad with 1s
 	while (group_size.size() < 3) {
 		group_size.push_back(1);

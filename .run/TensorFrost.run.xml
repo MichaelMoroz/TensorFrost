@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="TensorFrost" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="H:\TensorFrost\examples\debug.py" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="TensorFrost" TARGET_NAME="TensorFrost" CONFIG_NAME="Debug-Visual Studio" RUN_PATH="$USER_HOME$/AppData/Local/Programs/Python/Python312/python.exe">
+  <configuration default="false" name="TensorFrost" type="CMakeRunConfiguration" factoryName="Application" PROGRAM_PARAMS="H:\TensorFrost\examples\debug.py" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" WORKING_DIR="file://$PROJECT_DIR$" PASS_PARENT_ENVS_2="true" PROJECT_NAME="TensorFrost" TARGET_NAME="TensorFrost" CONFIG_NAME="RelWithDebInfo-Visual Studio" RUN_PATH="$USER_HOME$/AppData/Local/Programs/Python/Python312/python.exe">
     <method v="2">
       <option name="com.jetbrains.cidr.execution.CidrBuildBeforeRunTaskProvider$BuildBeforeRunTask" enabled="true" />
     </method>

@@ -7,6 +7,7 @@
 
 #include "Backend/TensorMemory.h"
 #include "Tensor/Tensor.h"
+#include "Compiler/Implementations.h"
 
 namespace TensorFrost {
 
@@ -54,6 +55,8 @@ class Program {
 	string generated_code_;
 	string main_function_;
 	string program_name = "TensorProgram";
+
+	float last_execution_time = 0.0f;
 
 	function<main_func> execute_callback;
 

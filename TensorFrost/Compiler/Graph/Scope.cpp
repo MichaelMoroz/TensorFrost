@@ -65,6 +65,15 @@ KernelScope::KernelScope(Node* node,
 		return;
 	}
 
+	if(node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp) && !node->op->HasAllTypes(OpProp::Scatter)) {
+		if(scope_shape.dim == 0) {
+			//must be at 1d scalar to properly generate the kernel with a non-atomic write operation
+			//technically this is also applicable to scatter operations, but when making an atomic counter, it is sometimes nice for its shape to be implicitly
+			//determined by the shape of the neighboring tensors
+			scope_shape.ExpandDimensionsTo(1);
+		}
+	}
+
 	// find boundary nodes
 	bool identity = node->args.Count(ArgType::Index) == 0;
 
@@ -85,6 +94,8 @@ KernelScope::KernelScope(Node* node,
 	auto child_scopes = all_scopes.first;
 	bool host_only = all_scopes.second;
 
+	output_scopes.insert(child_scopes.begin(), child_scopes.end());
+
 	if(host_only) {
 		begin = nullptr;
 		end = nullptr;
@@ -93,8 +104,6 @@ KernelScope::KernelScope(Node* node,
 
 	int scope_count = (int)child_scopes.size();
 	if (scope_count == 0) return;
-
-	output_scopes.insert(child_scopes.begin(), child_scopes.end());
 
 	//if there is more than one child scope, then this node can not be in the scope
 	if (scope_count > 1) {
@@ -132,7 +141,8 @@ pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *r
 			if (merged->IsValid()) {
 				current_scope = merged;
 			} else {
-				if (current_scope->IsValid()) {
+				bool current_is_valid = current_scope->IsValid();
+				if (current_is_valid) {
 					scopes.insert(current_scope);
 				}
 				current_scope = node_scope;
@@ -141,7 +151,8 @@ pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *r
 			// add all child scopes
 			scopes.insert(child_scopes.begin(), child_scopes.end());
 			// add current scope
-			if (current_scope->IsValid()) {
+			bool current_is_valid = current_scope->IsValid();
+			if (current_is_valid) {
 				scopes.insert(current_scope);
 			}
 			// create a new empty scope
@@ -242,16 +253,16 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 			result.compatible = false;
 			if (throw_error) {
 				throw std::runtime_error("Shapes must have the same dimension for " +
-				                         a.name + " and " + b.name);
+										 a.name + " and " + b.name);
 			}
 			return result;
 		}
 	}
 
 	for (int i = 0; i < min_dim; i++) {
-		Node* a_node = a[a.dim - i - 1];
-		Node* b_node = b[b.dim - i - 1];
-		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		Node* a_node = a[i];
+		Node* b_node = b[i];
+		int broadcast_index = i;
 
 		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
 
@@ -276,11 +287,11 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 	//add the rest of the broadcast shape
 	for (int i = min_dim; i < result.broadcast_dim; i++) {
 		result.broadcast = true;
-		int broadcast_index = max(a.dim, b.dim) - i - 1;
+		int broadcast_index = i;
 		if (a.dim > b.dim) {
-			result.broadcast_shape.AddShape(broadcast_index, a[a.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, a[i]);
 		} else {
-			result.broadcast_shape.AddShape(broadcast_index, b[b.dim - i - 1]);
+			result.broadcast_shape.AddShape(broadcast_index, b[i]);
 		}
 	}
 

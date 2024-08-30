@@ -1,8 +1,8 @@
-# 🔢🥶 TensorFrost (v0.6.0 beta)
+# 🔢🥶 TensorFrost (v0.6.1 beta)
 [![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
 
 
-A statically compiled Python tensor library with autodifferentiation and bottom-up kernel fusion with a low-level IR.
+A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
 | Backend/OS | CPU | OpenGL | CUDA | Vulkan |
@@ -66,7 +66,7 @@ pip install tensorfrost
 
 ## From source
 
-You need to have CMake installed to build the library. 
+You need to have CMake installed to build the library.
 
 First clone the repository:
 ```bash
@@ -74,16 +74,51 @@ git clone --recurse-submodules https://github.com/MichaelMoroz/TensorFrost.git
 cd TensorFrost
 ```
 
-Then run cmake to build the library:
+Then run cmake to build the library.
+
 ```bash
 cmake -S . -B build && cmake --build build
 ```
+
+> [!TIP]
+> If you are using a Linux distribution that doesn't support installing packages through pip (e.g. Arch Linux), read **[Using a Virtual Environment](#using-a-virtual-environment)**.
 
 The cmake script will automatically install the compiled python module into your python environment.
 
 ### Building wheel packages (optional)
 
 You can either call `clean_rebuild.bat %PYTHON_VERSION%` to build the wheel packages for the specified python version (the version needs to be installed beforehand), or you can build them for all versions by calling `build_all_python_versions.bat`. The scripts will automatically build and install the library for each python version, and then build the wheel packages to the `PythonBuild/dist` folder.
+
+### Using a Virtual Environment
+
+Certain Linux distributions (e.g. Arch Linux) want you to use their package manager to manage system-wide Python packages instead of pip. TensorFrost uses pip to install itself once built, so before running CMake you will need to activate a Virtual Environment.
+
+1. From the TensorFrost directory, create a venv:
+
+    ```sh
+    python -m venv ./venv
+    ```
+
+2. Activate the venv:
+
+    ```sh
+    source venv/bin/activate
+    ```
+
+3. Install `jinja` (required for building)
+
+    ```sh
+    pip install jinja
+    ```
+
+4. Now, you can use CMake as usual.
+
+    ```bash
+    cmake -S . -B build && cmake --build build
+    ```
+
+> [!TIP]
+> The newly-created venv is treated like a fresh Python installation, so you may need to reinstall any needed packages such as `numpy`, `matplotlib`, and `tqdm` if you are trying out the examples. `pip` works fine once the venv is active (e.g. `pip install numpy`).
 
 ## Usage
 
@@ -256,7 +291,7 @@ def MatrixMultiplication():
     i, j, k = tf.indices([N, K, M])
     C = tf.sum(A[i, k] * B[k, j], axis=2) #by default axis is -1 (last axis)
 
-    return [C]
+    return C
 
 matmul = tf.compile(MatrixMultiplication)
 ```
@@ -275,7 +310,7 @@ def Broadcasting():
 
     C = A + B
 
-    return [C]
+    return C
 ```
 
 Here the `+` operation is used to add the two input tensors. The shapes of the input tensors are `[1, 3]` and `[3, 1]`, and the shape of the output tensor is `[3, 3]`. The `+` operation is broadcasted over the input tensors, and the result is a tensor with the shape `[3, 3]`.
@@ -291,7 +326,7 @@ def Reshape():
 
     B = tf.reshape(A, [3, 2])
 
-    return [B]
+    return B
 ```
 
 Here the `reshape` operation is used to change the shape of the input tensor from `[2, 3]` to `[3, 2]`.
@@ -307,7 +342,7 @@ def Transpose():
     B = tf.transpose(A) #shape is [3, 2]
     C = B.T #shape is [2, 3]
 
-    return [C]
+    return C
 ```
 
 ```python
@@ -316,7 +351,7 @@ def Unsqueeze():
 
     B = tf.unsqueeze(A, 1) #shape is [2, 1, 3]
 
-    return [B]
+    return B
 ```
 
 ### Matrix operations
@@ -332,14 +367,14 @@ def MatrixMultiplication():
 
     C = tf.matmul(A, B) #or A @ B
 
-    return [C]
+    return C
 
 matmul = tf.compile(MatrixMultiplication)
 
 A = tf.tensor(np.zeros([100, 100], dtype=np.float32))
 B = tf.tensor(np.zeros([100, 100], dtype=np.float32))
 
-C, = matmul(A, B)
+C = matmul(A, B)
 ```
 
 Here the `matmul` operation is used to multiply the input matrices `A` and `B`. The shapes of the input tensors are `[N, M]` and `[M, K]`, and the shape of the output tensor is `[N, K]`.
@@ -395,34 +430,34 @@ TensorFrost has simple bindings for the GLFW window library, and some ImGui bind
 
 ```python
 
-#at this moment you can only open one window
-tf.show_window(1280, 720, "a window")
+#creates a single global window (can only be one at the moment)
+tf.window.show(1280, 720, "a window")
 
-while not tf.window_should_close(): #window will close if you press the close button and this will return True
-    mx, my = tf.get_mouse_position()
-    wx, wy = tf.get_window_size()
+while not tf.window.should_close(): #window will close if you press the close button and this will return True
+    mx, my = tf.window.get_mouse_position()
+    wx, wy = tf.window.get_size()
 
     #simple input example
-    if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
-        tf.imgui_text("Mouse button 0 is pressed")
+    if tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0):
+        tf.imgui.text("Mouse button 0 is pressed")
 
-    if tf.is_key_pressed(tf.KEY_W):
-        tf.imgui_text("W is pressed")
+    if tf.window.is_key_pressed(tf.window.KEY_W):
+        tf.imgui.text("W is pressed")
 
     #ImGui example
-    tf.imgui_begin("an imgui window")
-    tf.imgui_text("some text")
-    value = tf.imgui_slider("slider", value, 0.0, 10.0)
-    if(tf.imgui_button("a button")):
+    tf.imgui.begin("an imgui window")
+    tf.imgui.text("some text")
+    value = tf.imgui.slider("slider", value, 0.0, 10.0)
+    if(tf.imgui.button("a button")):
         print("button pressed")
-    tf.imgui_end()
+    tf.imgui.end()
 
     #exectute a tensorfrost program that outputs a [-1, -1, 3] float32 tensor
-    img, = render_image(...)
+    img = render_image(...)
 
     #display the image (will be stretched to the window size with nearest neighbor interpolation)
-    tf.render_frame(img)
-
+    tf.window.render_frame(img)
+    
 ```
 
 ### Autodifferentiation
