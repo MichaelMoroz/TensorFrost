@@ -101,9 +101,9 @@ class PSI(tf.Module):
         self.probability = tf.Parameter([n_walkers], tf.float32, requires_grad = False)
 
         # Weights
-        self.feature_layer = tf.Parameter([self.atom_features, self.input_features], tf.float32, random_scale = 0.4)
+        self.feature_layer = tf.Parameter([self.atom_features, self.input_features], tf.float32, random_scale = 0.1)
         self.feature_layer_bias = tf.Parameter([self.atom_features], tf.float32, random_scale = 1.0)
-        self.feature_envelope_layer = tf.Parameter([self.atom_features], tf.float32, random_scale = 0.5, random_offset = 1.25)
+        self.feature_envelope_layer = tf.Parameter([self.atom_features], tf.float32, random_scale = 0.25, random_offset = 1.5)
 
         self.features_to_orbitals = tf.Parameter([self.atom_features, self.mid_n], tf.float32)
         self.orbi_layer1 = tf.Parameter([self.mid_n, self.mid_n], tf.float32)
