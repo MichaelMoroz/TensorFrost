@@ -17,14 +17,14 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = c2h5oh_molecule
+molecule = ch4_molecule
 
-lr0 = 0.001
+lr0 = 0.004
 lr1 = 0.0005
 reg0 = 0.01
-reg1 = 0.005
-clip0 = 0.3
-clip1 = 0.01
+reg1 = 0.00
+clip0 = 0.1
+clip1 = 0.005
 n_walkers = 1024
 opt_steps = 8000
 
@@ -49,10 +49,10 @@ def scheduler(step):
 metropolis_per_step = 12
 
 #how many metropolis steps to store in the history to render
-metropolis_history_length = 128
+metropolis_history_length = 32
 
 #what target fraction of the walkers to move in each step
-target_acceptance_rate = 0.4
+target_acceptance_rate = 0.25
 
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
@@ -67,7 +67,7 @@ average_count = 2048
 #finite difference step factor for computing the laplacian
 #(currently is modulated by the distance to the nearest atom)
 #(will be replaced by forward mode autodiff in the future)
-finitedifference_dx = 2.5e-2
+finitedifference_dx = 1.5e-2
 
 #get the molecule information
 molecule_info = molecule.get_summary()

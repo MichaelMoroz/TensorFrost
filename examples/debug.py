@@ -1,18 +1,120 @@
-import TensorFrost as tf
 import numpy as np
-import matplotlib.pyplot as plt
-import time
+import TensorFrost as tf
 
 tf.initialize(tf.cpu)
 
-def matmul():
+def modified_gram_schmidt(A):
+    A = A.astype(float)
+    m, n = A.shape
+    Q = np.zeros((m, n))
+    R = np.zeros((n, n))
+
+    for i in range(n-1):
+        R[i, i] = np.linalg.norm(A[:, i])
+        Q[:, i] = A[:, i] / R[i, i]
+        R[i, i+1:n] = np.dot(Q[:, i].T, A[:, i+1:n])
+        A[:, i+1:n] -= np.outer(Q[:, i], R[i, i+1:n])
+    R[n-1, n-1] = np.linalg.norm(A[:, n-1])
+    Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
+    return Q, R
+
+def qr_decomposition_tensorfrost(A):
+    m, n = A.shape
+    Q = tf.zeros([m, n])
+    R = tf.zeros([n, n])
+    j = tf.index(0, [m])
+
+    with tf.loop(n-1) as i:
+        R[i, i] = tf.norm(A[j, i])
+        Q[j, i] = A[j, i] / R[i, i]
+
+        p, k = tf.index_grid([0, i + 1], [m, n])
+        t, = tf.index_grid([i+1], [n])
+        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
+        A[p, k] -= Q[p, i] * R[i, k]
+
+    R[n-1, n-1] = tf.norm(A[j, n-1])
+    Q[j, n-1] = A[j, n-1] / R[n-1, n-1]
+    return Q, R
+
+def invert_triangular_tensorfrost(matrix, lower=True):
+    n, n = matrix.shape
+    inverted = tf.zeros([n, n])
+
+    if not lower: #transpose the matrix to make it lower triangular
+        matrix = matrix.T
+
+    with tf.loop(n) as i:
+        inverted[i, i] = 1.0 / matrix[i, i]
+        p, k = tf.indices([i, i])
+        t, = tf.indices([i])
+        inverted[i, t] = -tf.sum(matrix[i, p] * inverted[p, k], axis=0) / matrix[i, i]
+
+    if not lower: #transpose the matrix back
+        inverted = inverted.T
+
+    return inverted
+
+def InvertMatrix():
     A = tf.input([-1, -1], tf.float32)
-    N, M = A.shape
-    B = tf.input([-1,  M], tf.float32)
-    K = B.shape[1]
 
-    C = (tf.sin(A) @ tf.cos(B.T))**2.0
+    Q, R = qr_decomposition_tensorfrost(A)
+    R_inv = invert_triangular_tensorfrost(R, lower=False)
+    A_inv = R_inv @ Q.T
 
-    return C
+    return Q, R, R_inv, A_inv
 
-matmulprog = tf.compile(matmul)
+invert_matrix = tf.compile(InvertMatrix)
+
+#generate random matrix
+A = np.random.rand(5, 5)
+
+#compute QR decomposition
+Q, R = modified_gram_schmidt(A)
+
+#compute QR decomposition using TensorFrost
+Atf = tf.tensor(A)
+Qtf, Rtf, Rinvtf, Ainvtf = invert_matrix(Atf)
+Qnp = Qtf.numpy
+Rnp = Rtf.numpy
+Rinvtf = Rinvtf.numpy
+Ainvtf = Ainvtf.numpy
+
+#check if QR decomposition is correct
+print("QR decomposition is correct:", np.allclose(A, np.dot(Q, R)))
+print("QR decomposition using TensorFrost is correct:", np.allclose(A, np.dot(Qnp, Rnp)))
+
+#check error
+print("Error:", np.linalg.norm(A - np.dot(Q, R)))
+print("Error using TensorFrost:", np.linalg.norm(A - np.dot(Qnp, Rnp)))
+
+# #print Q and R
+# print("Q:\n", Qnp)
+# print("R:\n", Rnp)
+# print("A:\n", A)
+
+#invert upper triangular matrix
+Rinv = np.linalg.inv(R)
+
+#check if inversion is correct
+print("R inversion is correct:", np.allclose(Rinv, Rinvtf))
+
+#check error
+print("Error:", np.linalg.norm(Rinv - Rinvtf))
+
+# #print inverted matrix
+# print("Inverted matrix:\n", Rinv)
+# print("Inverted matrix using TensorFrost:\n", Rinv_tf)
+
+#invert matrix
+Ainv = np.linalg.inv(A)
+
+#check if inversion is correct
+print("Full inversion is correct:", np.allclose(Ainv, Ainvtf))
+
+#check error
+print("Error:", np.linalg.norm(Ainv - Ainvtf))
+
+# #print inverted matrix
+# print("Inverted matrix:\n", Ainv)
+# print("Inverted matrix using TensorFrost:\n", Ainv_tf)

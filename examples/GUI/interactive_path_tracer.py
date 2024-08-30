@@ -458,10 +458,10 @@ def render_image(img, depth, envmap, camera, prev_camera, frame_id, params):
     img, depth = raymarch(img, depth, envmap, camera_matrix_tf, prev_camera_matrix_tf, frame_id_tf, params_tf)
     return img, depth
 
-tf.show_window(W, H, "Path Tracer")
+tf.window.show(W, H, "Path Tracer")
 
 camera = Camera([0, -25, -7], axis_angle_quaternion([0, 0, 1], -np.pi/2))
-pmx, pmy = tf.get_mouse_position()
+pmx, pmy = tf.window.get_mouse_position()
 
 angular_speed = 0.005
 camera_speed = 0.1
@@ -485,51 +485,51 @@ bounces = 3
 prev_time = time.time()
 smooth_delta_time = 0.0
 
-while not tf.window_should_close():
-    mx, my = tf.get_mouse_position()
+while not tf.window.should_close():
+    mx, my = tf.window.get_mouse_position()
     cur_time = time.time()
 
     delta_time = cur_time - prev_time
     smooth_delta_time = 0.9 * smooth_delta_time + 0.1 * delta_time
 
-    if tf.is_mouse_button_pressed(tf.MOUSE_BUTTON_0):
+    if tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0):
         camera.rotate_axis(0, (mx - pmx) * angular_speed)
         camera.rotate_axis(1, (my - pmy) * angular_speed)
 
-    if tf.is_key_pressed(tf.KEY_W):
+    if tf.window.is_key_pressed(tf.window.KEY_W):
         camera.move_axis(2, camera_speed)
-    if tf.is_key_pressed(tf.KEY_S):
+    if tf.window.is_key_pressed(tf.window.KEY_S):
         camera.move_axis(2, -camera_speed)
 
-    if tf.is_key_pressed(tf.KEY_A):
+    if tf.window.is_key_pressed(tf.window.KEY_A):
         camera.move_axis(1, -camera_speed)
-    if tf.is_key_pressed(tf.KEY_D):
+    if tf.window.is_key_pressed(tf.window.KEY_D):
         camera.move_axis(1, camera_speed)
 
-    if tf.is_key_pressed(tf.KEY_Q):
+    if tf.window.is_key_pressed(tf.window.KEY_Q):
         camera.rotate_axis(2, angular_speed*2)
-    if tf.is_key_pressed(tf.KEY_E):
+    if tf.window.is_key_pressed(tf.window.KEY_E):
         camera.rotate_axis(2, -angular_speed*2)
 
-    tf.imgui_begin("Path tracer controls")
-    W, H = tf.get_window_size()
-    tf.imgui_text("Window size: {} x {}".format(W, H))
-    tf.imgui_text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
-    tf.imgui_text("FPS: {:.2f}".format(1.0 / np.maximum(smooth_delta_time, 1e-5)))
-    tf.imgui_text("Camera position: ({:.2f}, {:.2f}, {:.2f})".format(*camera.position))
-    tf.imgui_text("Camera quaternion: ({:.2f}, {:.2f}, {:.2f}, {:.2f})".format(*camera.quaternion))
-    fractal_angle = tf.imgui_slider("Fractal angle", fractal_angle, 0.0, np.pi/2)
-    fractal_scale = tf.imgui_slider("Fractal scale", fractal_scale, 0.0, 1.0)
-    direct_light = tf.imgui_slider("Direct light", direct_light, 0.0, 10.0)
-    indirect_light = tf.imgui_slider("Indirect light", indirect_light, 0.0, 10.0)
-    bounces = tf.imgui_slider("Bounces", bounces, 1, 10)
-    accum = tf.imgui_slider("Accumulation", accum, 0.0, 1.0)
-    tf.imgui_end()
+    tf.imgui.begin("Path tracer controls")
+    W, H = tf.window.get_size()
+    tf.imgui.text("Window size: {} x {}".format(W, H))
+    tf.imgui.text("Frame time: {:.2f} ms".format(smooth_delta_time * 1000))
+    tf.imgui.text("FPS: {:.2f}".format(1.0 / np.maximum(smooth_delta_time, 1e-5)))
+    tf.imgui.text("Camera position: ({:.2f}, {:.2f}, {:.2f})".format(*camera.position))
+    tf.imgui.text("Camera quaternion: ({:.2f}, {:.2f}, {:.2f}, {:.2f})".format(*camera.quaternion))
+    fractal_angle = tf.imgui.slider("Fractal angle", fractal_angle, 0.0, np.pi/2)
+    fractal_scale = tf.imgui.slider("Fractal scale", fractal_scale, 0.0, 1.0)
+    direct_light = tf.imgui.slider("Direct light", direct_light, 0.0, 10.0)
+    indirect_light = tf.imgui.slider("Indirect light", indirect_light, 0.0, 10.0)
+    bounces = tf.imgui.slider("Bounces", bounces, 1, 10)
+    accum = tf.imgui.slider("Accumulation", accum, 0.0, 1.0)
+    tf.imgui.end()
 
     cam_mat = camera.get_camera_matrix()
     params = np.array([direct_light, indirect_light, accum, fractal_angle, fractal_scale, bounces], dtype=np.float32)
     img, depth = render_image(img, depth, envmap, cam_mat, prev_cam_mat, frame_id, params)
-    tf.render_frame(img)
+    tf.window.render_frame(img)
     
     pmx, pmy = mx, my
     prev_cam_mat = cam_mat

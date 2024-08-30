@@ -90,7 +90,7 @@ def OptimizerStep():
     model, opt = GetModelOptimizer(is_compiler = True, learning_rate = learning_rate)
     opt.initialize_input()
 
-    #TODO: implement slicing instead of this crap
+    #TODO: implement slicing instead of this
     i, j = tf.indices([batch_size, X.shape[1]])
     Xbatch = X[i + offset, j]
     i, j = tf.indices([batch_size, Y.shape[1]])
