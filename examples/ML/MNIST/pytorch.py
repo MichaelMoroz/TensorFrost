@@ -32,7 +32,7 @@ train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
 
 # Define the model
 class DenseMNIST(nn.Module):
-    def __init__(self, input_size=28, in_channels=1, conv1_out=24, conv2_out=128, fc1_out=512, num_classes=10):
+    def __init__(self, input_size=28, in_channels=1, conv1_out=16, conv2_out=128, fc1_out=512, num_classes=10):
         super(DenseMNIST, self).__init__()
         
         self.input_size = input_size

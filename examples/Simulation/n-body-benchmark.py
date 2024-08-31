@@ -20,9 +20,9 @@ def n_body():
 
     dx = tf.unsqueeze(X, axis=1) - tf.unsqueeze(X, axis=0)
 
-    d2 = tf.unsqueeze(tf.sum(dx**2.0, axis=-1), axis=-1)
-    dist = tf.sqrt(d2 + 1e-4) # soft distance
-    Fg = -dx * 1.0 / (d2 + 1e-4) * 1.0 / dist
+    d2 = tf.unsqueeze(tf.sum(dx**2.0, axis=-1), axis=-1) + 1e-4
+    dist = tf.sqrt(d2)
+    Fg = -dx * 1.0 / (d2 * dist)
   
     Fi = tf.sum(Fg, axis=1)
 

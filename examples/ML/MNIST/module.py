@@ -29,8 +29,8 @@ class MNIST_net(tf.Module):
         self.res2 = (self.res1p - self.kernel_size + 1)
         self.res2p = self.res2 // 2
         self.kernels1 = 16
-        self.kernels2 = 64
-        self.layer1 = 256
+        self.kernels2 = 128
+        self.layer1 = 512
         self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * 1)))
         self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
         self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * self.kernels1)))
@@ -147,6 +147,9 @@ def test_accuracy(model, X, Y):
 curves = {'loss': [], 'avg_loss': [], 'accuracy': []}
 progress_bar = tqdm(range(epochs * iterations))
 avg_loss = 0.0
+
+time_start = time.time()
+
 for i in progress_bar:
     batch = i % iterations
     if(batch == 0):
@@ -168,9 +171,12 @@ for i in progress_bar:
 
     if(i == 0): tf.renderdoc_end_capture()
     
+time_end = time.time()
 
 test_accuracy_tf = test_accuracy(model, Xtest, Ytest)
 print("Final Tf test accuracy: ", test_accuracy_tf, "%")
+
+print("Iterations per second: ", epochs * iterations / (time_end - time_start))
 
 #accuracy_on_train = test_accuracy(model, Xtrain, data['train_y'])
 #print("Final Tf train accuracy: ", accuracy_on_train, "%")
