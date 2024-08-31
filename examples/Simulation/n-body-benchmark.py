@@ -20,7 +20,6 @@ def n_body():
 
     dx = tf.unsqueeze(X, axis=1) - tf.unsqueeze(X, axis=0)
 
-    # Compute the SPH forces
     d2 = tf.unsqueeze(tf.sum(dx**2.0, axis=-1), axis=-1)
     dist = tf.sqrt(d2 + 1e-4) # soft distance
     Fg = -dx * 1.0 / (d2 + 1e-4) * 1.0 / dist
@@ -69,7 +68,6 @@ def n_body_torch(X, V):
     N = X.shape[0]
     dx = X.unsqueeze(1) - X.unsqueeze(0)
     
-    # Compute the SPH forces
     d2 = torch.sum(dx**2.0, dim=-1).unsqueeze(-1)
     dist = torch.sqrt(d2 + 1e-4)  # soft distance
     Fg = -dx * 1.0 / (d2 + 1e-4) * 1.0 / dist
@@ -87,7 +85,6 @@ def n_body_jax(X, V):
     N = X.shape[0]
     dx = X.reshape(N, 1, 3) - X.reshape(1, N, 3)
     
-    # Compute the SPH forces
     d2 = jnp.sum(dx**2.0, axis=-1)[:, :, None]
     dist = jnp.sqrt(d2 + 1e-4)  # soft distance
     Fg = -dx * 1.0 / (d2 + 1e-4) * 1.0 / dist
