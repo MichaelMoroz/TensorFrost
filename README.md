@@ -10,44 +10,9 @@ Currently working platforms:
 | Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
 | Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   |
 
-Under the hood, TensorFrost objects are basically operations that have shape (which are not tensors yet!), some operations can have children operations like loop/if, the compilation process first tries to segment the IR into parts that can be broadcast into the same shape, these parts create proto-kernels, some proto-kernels can be children to loops and if's as well if the stuff under the loop cant be fused, like in the case of iterative algorithms (qr/fft/sorting/jacobi).
-These proto-kernels are optimized then to minimize the amount of links between them, if a computation is cheaper to do again rather than store/load from memory - then it does that.
-After minimizing links between protokernels, it creates actual tensors for inputs and outputs of these kernels, and replaces the links with load/store operations, and you get final list of kernel operations and memory allocations which is translated into C++ code and compiled into a shared library like  [here](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Algorithms/qr.ipynb):
 
-```c++
-std::tuple<TFTensor, TFTensor> QRDecomposition(TFContext tf, TFTensor A)
-{
-  int m = A.shape[0];
-  int n = A.shape[1];
-  tf.check_tensor(A, "A", {(uint)m, (uint)n}, TFType::Float);
-  TFTensor Q = tf.allocate("Q", {(uint)m, (uint)n}, TFType::Float);
-  tf.dispatch(0, {Q},  {}, {asuint(n), asuint(m)}, {(uint)m, (uint)n}, {16, 16});
-  TFTensor R = tf.allocate("R", {(uint)n, (uint)n}, TFType::Float);
-  tf.dispatch(1, {R},  {}, {asuint(n)}, {(uint)n, (uint)n}, {16, 16});
-  for (int i = 0; i < n - 1; i += 1)
-  {
-    int v8_0 = 1;
-    int v8_1 = 1;
-    tf.dispatch(2, {R},  {A}, {asuint(m), asuint(n), asuint(i)}, {(uint)1}, {1});
-    tf.dispatch(3, {Q},  {R, A}, {asuint(m), asuint(n), asuint(i)}, {(uint)m}, {256});
-    int v16_2 = n - (i + 1);
-    int v16_5 = n - (i + 1);
-    tf.dispatch(4, {R},  {Q, A}, {asuint(i), asuint(n), asuint(m)}, {(uint)v16_2}, {256});
-    tf.dispatch(5, {A},  {Q, R}, {asuint(i), asuint(n), asuint(m)}, {(uint)m, (uint)v16_2}, {16, 16});
-  }
-  int v24_0 = 1;
-  int v24_1 = 1;
-  tf.dispatch(6, {R},  {A}, {asuint(m), asuint(n)}, {(uint)1}, {1});
-  tf.dispatch(7, {Q},  {R, A}, {asuint(m), asuint(n)}, {(uint)m}, {256});
-  return {Q, R};
-}
-```
-
-One important distinction of TensorFrost compared to JAX is that it can compile programs that are shape agnostic (JAX cant have argument value dependent shapes!) , so it can be reused for any shaped input (however with same dimensionality though). 
-This is important if you want have the computation to be portable, and be possible to easily include it in a native application, or if you want to have a program that can be used for different shapes of data (like in the case of neural networks).
-
-In some sense, you could say that TensorFrost goes with a bottom up approach of kernel fusion, instead of trying to fuse already existing kernels (however that is also planned in the future for premade hand optimized kernels).
-
+For more detail about this project, please read my blog post!
+[Writing an optimizing tensor compiler from scratch](https://michaelmoroz.github.io/WritingAnOptimizingTensorCompilerFromScratch/)
 
 ## Examples
 
@@ -84,10 +49,6 @@ cmake -S . -B build && cmake --build build
 > If you are using a Linux distribution that doesn't support installing packages through pip (e.g. Arch Linux), read **[Using a Virtual Environment](#using-a-virtual-environment)**.
 
 The cmake script will automatically install the compiled python module into your python environment.
-
-### Building wheel packages (optional)
-
-You can either call `clean_rebuild.bat %PYTHON_VERSION%` to build the wheel packages for the specified python version (the version needs to be installed beforehand), or you can build them for all versions by calling `build_all_python_versions.bat`. The scripts will automatically build and install the library for each python version, and then build the wheel packages to the `PythonBuild/dist` folder.
 
 ### Using a Virtual Environment
 
@@ -177,7 +138,7 @@ def WaveEq():
     v_new = v + dt*laplacian
     u_new = u + dt*v_new
 
-    return [v_new, u_new]
+    return v_new, u_new
 
 wave_eq = tf.compile(WaveEq)
 ```
@@ -235,9 +196,9 @@ i,j = tf.indices([16, 16])
 C = B[i+8, j+8]
 ```
 
-Here we can see that the shape of the "computation" is not the same as the shape of the tensor, and one thread is spawned for each given index. This is the main idea of TensorFrost. Then all sequential computations of the same shape are fused into a single kernel, if they are not dependent on each other in a non-trivial way.
+Here we can see that the shape of the "computation" is not the same as the shape of the tensor, and one thread is spawned for each given index. Then all sequential computations of the same shape are fused into a single kernel, if their computaion is not dependent on each other.
 
-When doing out-of-bounds indexing, the index is currently clamped to the tensor shape. This is not ideal, but it is the simplest way to handle this. In the future there will be a way to specify the boundary conditions.
+When doing out-of-bounds indexing, the index is currently clamped to the tensor shape. This is required to avoid undefined behaviour, in the future I plan to give the user the option to specify the behaviour of out-of-bounds indexing.
 
 You can also use the index_grid operation which is similar to numpy's `np.meshgrid` function and provides a grid of indices for each dimension:
 
@@ -251,7 +212,35 @@ Which is equivalent to numpy's `np.meshgrid` function (only for ints with step 1
 p, k = np.meshgrid(np.arange(0, m), np.arange(i + 1, n))
 ```
 
-Slicing is still not implemented, as that would require better shape comparison for undefined shapes, otherwise you would get a lot of errors where there should not be any.
+Slicing is still not implemented, as that would require better shape comparison for undefined shapes, without it, you would get a lot of errors where there should not be any.
+
+### Currently supported operations
+
+All the default arithmetic operations are supported:
+
+`+`, `-`, `*`, `/`, `**`, `==`, `!=`, `>`, `<`, `>=`, `<=`, `&`, `|`, `~`, `neg`
+
+Note that the boolean operations `and`, `or`, `not` are not overloaded yet, and you should use `&`, `|`, `~` instead on boolean tensors. (Might be changed in the future)
+
+Also there are these provided functions: 
+
+`abs`, `sign`, `ceil`, `floor`, `round`, `frac`, `exp`, `exp2`, `log`, `log2`, `sqrt`, `rsqrt`, `rcp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `reversebits`, `pow`, `atan2`, `modf`, `step`, `clamp`, `lerp`, `fma`, `smoothstep`, `ternary`, `const`.
+
+Additionally you can use `uint`, `int`, `float`, `bool` to cast between types, and `asuint`, `asint`, `asfloat`, `asbool` to reinterpret the bits of the number.
+
+If needed, you can copy a value with the `copy` operation which is useful as you can not assign a tensor to another tensor directly.
+
+For random number generation you can either implement your own hashing function, or use the provided pcg32 hash.
+
+```python
+#generate a random number between 0 and 1
+value = tf.pcgf(seed)
+
+#generate a random uint32 number
+value = tf.pcg(seed)
+```
+
+TensorFrost does not have a built-in seed, so its similar to JAX where you need to provide your own seed. This is useful for reproducibility, as you can just provide the same seed to the program and get the same results.
 
 ### Scatter operations
 
@@ -326,6 +315,10 @@ def PrefixSum(A, axis = -1):
     full_scan = tf.merge_dim(group_scan, target_size = A.shape[axis], axis = axis + 1)
     return full_scan
 ```
+
+### Sorting operations
+
+Sort is not yet built-in the library, but you can use a custom implemented one from the [sorting test in examples folder](https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Algorithms/sorting_tests.py). There is a relatively optimized histogram radix sort as well as a simple bitonic sort.
 
 ### Broadcasting
 
@@ -465,62 +458,6 @@ def loop_body(k):
 
 tf.loop(0, 128, 1, loop_body)
 ```
-
-### GUI and visualization
-
-TensorFrost has simple bindings for the GLFW window library, and some ImGui bindings for GUI. You can render tensors as images (only [-1, -1, 3] float32 tensors for now) and display them in a window. You can also use ImGui to create simple GUIs for your programs. Do note that this only works in the OpenGL backend.
-
-```python
-
-#creates a single global window (can only be one at the moment)
-tf.window.show(1280, 720, "a window")
-
-while not tf.window.should_close(): #window will close if you press the close button and this will return True
-    mx, my = tf.window.get_mouse_position()
-    wx, wy = tf.window.get_size()
-
-    #simple input example
-    if tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0):
-        tf.imgui.text("Mouse button 0 is pressed")
-
-    if tf.window.is_key_pressed(tf.window.KEY_W):
-        tf.imgui.text("W is pressed")
-
-    #ImGui example
-    tf.imgui.begin("an imgui window")
-    tf.imgui.text("some text")
-    value = tf.imgui.slider("slider", value, 0.0, 10.0)
-    if(tf.imgui.button("a button")):
-        print("button pressed")
-    tf.imgui.end()
-
-    #exectute a tensorfrost program that outputs a [-1, -1, 3] float32 tensor
-    img = render_image(...)
-
-    #display the image (will be stretched to the window size with nearest neighbor interpolation)
-    tf.window.render_frame(img)
-    
-```
-
-Currently provided `window` functions are:
-- `show(width, height, title)` - creates a window
-- `should_close()` - returns True if the window should close
-- `get_mouse_position()` - returns the mouse position
-- `get_size()` - returns the window size
-- `is_mouse_button_pressed(button)` - returns True if the mouse button is pressed
-- `is_key_pressed(key)` - returns True if the key is pressed
-- `render_frame(tensor)` - renders the tensor as an image
-
-Currently provided `imgui` functions are:
-- `begin(name)` - begins an ImGui window
-- `end()` - ends an ImGui window
-- `text(text)` - displays text
-- `slider(name, value, min, max)` - displays a slider
-- `button(text)` - displays a button, returns True if the button is pressed
-- `checkbox(text, value)` - displays a checkbox
-- `plotlines(label, values, values_offset, overlay_text, scale_min, scale_max, graph_size, stride)` - displays a plot
-- `scale_all_sizes(scale)` - scales all ImGui sizes by a factor
-- `add_background_text(text, pos, color)` - adds background text at the specified position with the specified color
 
 ### Autodifferentiation
 
@@ -687,6 +624,62 @@ To debug the generated code you can either look at the generated code in the Tem
 
 > [!TIP]
 > You can print out tensors at compilation time in the main function by just doing `print(tensor)`. This will output its debug information, its shape, its data type, what operation it is, shape (inverted), its arguments, etc.
+
+### GUI and visualization
+
+TensorFrost has simple bindings for the GLFW window library, and some ImGui bindings for GUI. You can render tensors as images (only [-1, -1, 3] float32 tensors for now) and display them in a window. You can also use ImGui to create simple GUIs for your programs. Do note that this only works in the OpenGL backend.
+
+```python
+
+#creates a single global window (can only be one at the moment)
+tf.window.show(1280, 720, "a window")
+
+while not tf.window.should_close(): #window will close if you press the close button and this will return True
+    mx, my = tf.window.get_mouse_position()
+    wx, wy = tf.window.get_size()
+
+    #simple input example
+    if tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0):
+        tf.imgui.text("Mouse button 0 is pressed")
+
+    if tf.window.is_key_pressed(tf.window.KEY_W):
+        tf.imgui.text("W is pressed")
+
+    #ImGui example
+    tf.imgui.begin("an imgui window")
+    tf.imgui.text("some text")
+    value = tf.imgui.slider("slider", value, 0.0, 10.0)
+    if(tf.imgui.button("a button")):
+        print("button pressed")
+    tf.imgui.end()
+
+    #exectute a tensorfrost program that outputs a [-1, -1, 3] float32 tensor
+    img = render_image(...)
+
+    #display the image (will be stretched to the window size with nearest neighbor interpolation)
+    tf.window.render_frame(img)
+    
+```
+
+Currently provided `window` functions are:
+- `show(width, height, title)` - creates a window
+- `should_close()` - returns `True` if the window should close
+- `get_mouse_position()` - returns the mouse position
+- `get_size()` - returns the window size
+- `is_mouse_button_pressed(button)` - returns `True` if the mouse button is pressed
+- `is_key_pressed(key)` - returns `True` if the key is pressed
+- `render_frame(tensor)` - renders the tensor as an image
+
+Currently provided `imgui` functions are:
+- `begin(name)` - begins an ImGui window
+- `end()` - ends an ImGui window
+- `text(text)` - displays text
+- `slider(name, value, min, max)` - displays a slider
+- `button(text)` - displays a button, returns `True` if the button is pressed
+- `checkbox(text, value)` - displays a checkbox
+- `plotlines(label, values, values_offset, overlay_text, scale_min, scale_max, graph_size, stride)` - displays a plot
+- `scale_all_sizes(scale)` - scales all ImGui sizes by a factor
+- `add_background_text(text, pos, color)` - adds background text at the specified position with the specified color
 
 ### Usage tips
 

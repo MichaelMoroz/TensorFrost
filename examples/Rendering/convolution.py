@@ -8,8 +8,6 @@ import matplotlib.pyplot as plt
 tf.initialize(tf.cpu)
 
 #print out current folder
-
-
 input_img = np.array(plt.imread("examples/Rendering/test.png"), dtype=np.float32)
 print(input_img.shape)
 
