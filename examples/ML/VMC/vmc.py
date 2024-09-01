@@ -23,7 +23,7 @@ lr0 = 0.004
 lr1 = 0.0005
 reg0 = 0.01
 reg1 = 0.00
-clip0 = 0.1
+clip0 = 0.005
 clip1 = 0.005
 n_walkers = 1024
 opt_steps = 8000
@@ -57,12 +57,12 @@ target_acceptance_rate = 0.25
 #what fraction of the walkers [sorted by local energy] to ignore in the loss function
 #outliers on the tails of the distribution can cause the optimization to diverge due to numerical instability
 #but I found that sorting and ignoring a fixed fraction of the sorted walkers is simple and works well
-outlier_fraction = 0.2
+outlier_fraction = 0.15
 #range for clipping around the median of the local energy from ferminet/psiformer (in variance units)
-mad_range = 3.0
+mad_range = 5.0
 
 #how many previous steps to average the local energy statistics
-average_count = 2048
+average_count = 1024
 
 #finite difference step factor for computing the laplacian
 #(currently is modulated by the distance to the nearest atom)
@@ -73,7 +73,7 @@ finitedifference_dx = 1.5e-2
 molecule_info = molecule.get_summary()
 target_energy = molecule.target_energy
 atoms = molecule.get_atoms()
-feature_atom_id = molecule.get_orbitals(2, 2)
+feature_atom_id = molecule.get_orbitals(2, 3)
 print(feature_atom_id)
 atom_n = atoms.shape[0]
 electron_n = molecule.electron_count
@@ -88,8 +88,8 @@ class PSI(tf.Module):
         self.spin_down_n = electron_n - spin_up_n
         self.determinants = 1
         self.atom_features = feature_atom_id.shape[0]
-        self.mid_n = 24
-        self.corr_n = 16
+        self.mid_n = 64
+        self.corr_n = 32
         self.input_features = 8
 
         # Hyperparameters
@@ -269,7 +269,7 @@ class PSI(tf.Module):
 
         #compute distance to atoms for better numerical stability when computing the finite difference
         cd = self.min_distance_to_atoms(e_pos)
-        dx_estimate = tf.max(cd * self.finitedifference_dx(), 1e-4)
+        dx_estimate = tf.max(cd * self.finitedifference_dx(), 5e-3)
 
         #fd sampling (TODO: use forward mode autodiff)
         n_samples = self.electron_n * 3 * 2

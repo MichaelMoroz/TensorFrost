@@ -55,19 +55,24 @@ class MNIST_net(tf.Module):
     
     def forward(self, X):
         tf.region_begin('Forward')
+        tf.region_begin('Convolutions')
         X = tf.reshape(X, [X.shape[0], self.resolution, self.resolution, 1])
         X = self.max_pool2d(self.conv2d(X, self.conv1, self.conv1_bias))
         X = GELU(X)
         X = self.max_pool2d(self.conv2d(X, self.conv2, self.conv2_bias))
         X = GELU(X)
         X = tf.reshape(X, [X.shape[0], self.fc1.shape[0]])
+        tf.region_end('Convolutions') 
+        tf.region_begin('Dense')
         X = GELU(X @ self.fc1 + self.fc1_bias)
         X = X @ self.fc2 + self.fc2_bias
+        tf.region_end('Dense')
         tf.region_end('Forward')
         return X
 
     def loss(self, X, Y):
         Yhat = self.forward(X)
+        tf.region_begin('Backprop/Optimizer')
         loss = tf.mean(tf.sum(-Y * log_softmax(Yhat)))
         return loss
         
@@ -96,7 +101,11 @@ def OptimizerStep():
     i, j = tf.indices([batch_size, Y.shape[1]])
     Ybatch = Y[i + offset, j]
 
-    L = opt.step(Xbatch, Ybatch)
+    L = model.loss(Xbatch, Ybatch)
+
+    
+    opt.step(L)
+    tf.region_end('Backprop/Optimizer')
 
     params = opt.parameters()
     params.append(L)
@@ -150,6 +159,8 @@ avg_loss = 0.0
 
 time_start = time.time()
 
+tf.window.show(800, 600, "MNIST training")
+zero = tf.tensor(np.zeros((800, 600, 3), np.float32))
 for i in progress_bar:
     batch = i % iterations
     if(batch == 0):
@@ -170,6 +181,8 @@ for i in progress_bar:
     progress_bar.set_postfix(loss = avg_loss, accuracy = accuracy)
 
     if(i == 0): tf.renderdoc_end_capture()
+
+    tf.window.render_frame(zero)
     
 time_end = time.time()
 

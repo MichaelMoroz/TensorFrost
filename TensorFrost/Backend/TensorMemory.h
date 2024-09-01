@@ -10,6 +10,8 @@
 
 #include "../Tensor/Tensor.h"
 
+//#define DEBUG_DYNAMIC_ALLOCATION
+
 namespace TensorFrost {
 
 using namespace std;
@@ -92,7 +94,9 @@ size_t GetSize(const TFTensor* tensor);
 
 class TensorMemoryManager {
 private:
-	const int MAX_UNUSED_TIME = 512;
+	size_t tick = 0;
+	size_t allocation_count = 0;
+	const int MAX_UNUSED_TIME = 8196;
 	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
 	unordered_set<TFBuffer*> unused_buffers;
 

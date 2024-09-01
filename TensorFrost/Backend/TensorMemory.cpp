@@ -28,6 +28,7 @@ size_t GetSize(const TFTensor *tensor) {
 
 TFBuffer * TensorMemoryManager::AllocateBuffer(size_t size) {
     TFBuffer* buffer = CreateBuffer(size);
+    allocation_count++;
     //add the buffer to the list of allocated buffers
     allocated_buffers[size].insert(buffer);
     return buffer;
@@ -148,6 +149,16 @@ void TensorMemoryManager::UpdateTick() {
     for(auto& buffer: buffers_to_delete) {
         RemoveBuffer(buffer);
     }
+    tick++;
+
+#ifdef DEBUG_DYNAMIC_ALLOCATION
+    if(tick%2048 == 0) {
+        if(allocation_count> 0) {
+            cout << "Note: " << allocation_count << " allocations have been made" << endl;
+        }
+        allocation_count = 0;
+    }
+#endif
 }
 
 TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
@@ -156,7 +167,7 @@ TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {
     bool found = false;
     //find the smallest buffer that is larger than the requested size
     size_t min_size = size;
-    size_t max_size = 8 * size;
+    size_t max_size = 16 * size;
     //get iterator to the first buffer that is larger than the requested size
     auto it = allocated_buffers.lower_bound(min_size);
     //if no buffer is larger than the requested size, get the first buffer

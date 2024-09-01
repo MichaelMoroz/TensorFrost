@@ -58,7 +58,7 @@ In some sense, you could say that TensorFrost goes with a bottom up approach of 
 
 ## From PyPI
 
-Current version is [0.6.0](https://pypi.org/project/tensorfrost/)
+You can install the current version of the library from [PyPI](https://pypi.org/project/tensorfrost/):
 
 ```bash
 pip install tensorfrost
@@ -201,11 +201,9 @@ To get the result back into a numpy array, you can use the `numpy` property:
 Anp = A.numpy
 ```
 
-TensorFrost does not support JIT compilation (currently no plans either), so you must create the program before running it. Therefore the tensor operations must only be used inside a tensor program. Operations outside the function will throw an error, so if you want to do operations outside you must read the data into a numpy array first.
-
 ### Operations
 
-TensorFrost supports most of the basic numpy operations, including indexing, arithmetic, and broadcasting (only partially for now).
+TensorFrost supports most of the basic numpy operations, including indexing, arithmetic, and broadcasting.
 The core operation is the indexing operation, which is used to specify indices for accessing the tensor data. Depending on the dimensinality of the tensor there can be N indices. This operation is similar to numpy's `np.ogrid` and `np.mgrid` functions, but it is basically free due to fusion.
 
 ```python
@@ -253,12 +251,14 @@ Which is equivalent to numpy's `np.meshgrid` function (only for ints with step 1
 p, k = np.meshgrid(np.arange(0, m), np.arange(i + 1, n))
 ```
 
+Slicing is still not implemented, as that would require better shape comparison for undefined shapes, otherwise you would get a lot of errors where there should not be any.
+
 ### Scatter operations
 
-These operations allow implementing non-trivial reduction operations, including, for example, matrix multiplication:
+These operations allow implementing non-trivial reduction operations, and are basically equivalent to atomics in compute shaders. For example, here is a simple example of a scatter operation:
 
 ```python
-def MatrixMultiplication():
+def ScatterMatrixMultiplication():
     A = tf.input([-1, -1], tf.float32)
     N, M = A.shape
     B = tf.input([M, -1], tf.float32) #M must match
@@ -268,18 +268,18 @@ def MatrixMultiplication():
     i, j, k = tf.indices([N, K, M])
     tf.scatterAdd(C[i, j], A[i, k] * B[k, j])
 
-    return [C]
+    return C
 
-matmul = tf.compile(MatrixMultiplication)
+matmul = tf.compile(ScatterMatrixMultiplication)
 ```
 
 Here the 3D nature of the matrix multiplication is apparent. The scatter operation is used to accumulate the results of the row-column dot products into the elements of the resulting matrix.
 
-(This is not the most efficient way to implement matrix multiplication, but it is the simplest way to show how scatter operations work. In the future though, some dimensions will be converted into loop indices, and the scatter operation will be used to accumulate the results of the dot products into the resulting matrix.)
+The compiler will optimize the scatter operation into a loop in this particular case, so this will not be too slow, but you should prefer to just use `A @ B` for matrix multiplication.
 
 ### Reduction operations
 
-Reduction operations are used to reduce the tensor data along one (TODO more) dimension(s). For example, here is a simple example of a sum reduction:
+Reduction operations are used to reduce the tensor data along one dimension. For example, here is a simple example of a sum reduction:
 
 ```python
 def MatrixMultiplication():
@@ -298,6 +298,34 @@ matmul = tf.compile(MatrixMultiplication)
 
 Here the `sum` operation is used to sum the dot products of the rows and columns of the input matrices along the `k` axis.
 This is much more efficient than the scatter operation, and in fact this compiles to a single N*K kernel.
+
+The following reduction operations are supported: `sum`, `mean`, `max`, `min`, `all`, `any`, `prod` and `norm`
+
+In the future I plan to add support for multiple reduction axes.
+
+> [!TIP]
+> If the shape is specified explicitly, for reductions >= 1024 elements, the reduction will be split into stages and will have much better performance.
+
+### Scan operations
+
+Right now only `prefix_sum` is supported (numpy's `np.cumsum`).
+
+An automatic optimization pass that does staged prefix sum is planned for the future, but right now you can use:
+
+```python
+def PrefixSum(A, axis = -1):
+    axis = len(A.shape) + axis if axis < 0 else axis
+    group_size = 64
+    grouped = tf.split_dim(A, group_size, axis)
+    group_scan = tf.prefix_sum(tf.sum(grouped, axis = axis + 1), axis = axis)
+    ids = grouped.indices
+    gid, eid = ids[axis], ids[axis + 1]
+    ids = [ids[i] for i in range(len(ids)) if i != axis + 1]
+    ids[axis] = gid - 1
+    group_scan = tf.prefix_sum(grouped + tf.select((gid == 0) | (eid != 0), 0, group_scan[tuple(ids)]), axis = axis + 1)
+    full_scan = tf.merge_dim(group_scan, target_size = A.shape[axis], axis = axis + 1)
+    return full_scan
+```
 
 ### Broadcasting
 
@@ -354,6 +382,21 @@ def Unsqueeze():
     return B
 ```
 
+Additionally there are `merge_dim` and `split_dim` operations that can be used to merge or split dimensions of the tensor.
+
+```python
+A = tf.input([2, 3, 4], tf.float32)
+B = tf.merge_dim(A, axis = 1) #shape is [2, 12]
+```
+
+```python
+A = tf.input([2, 12], tf.float32)
+B = tf.split_dim(A, 4, axis = 1) #shapes are [2, 3, 4]
+```
+
+> [!TIP]
+> If you want the compiler to be able to merge kernels, you should use `merge_dim` and `split_dim` instead of `reshape`.
+
 ### Matrix operations
 
 Matrix operations are used to perform matrix operations on the tensor data. For example, here is a simple example of a matrix multiplication:
@@ -363,7 +406,6 @@ def MatrixMultiplication():
     A = tf.input([-1, -1], tf.float32)
     N, M = A.shape
     B = tf.input([M, -1], tf.float32) #M must match
-    K = B.shape[1]
 
     C = tf.matmul(A, B) #or A @ B
 
@@ -410,7 +452,7 @@ Just setting the tensor to a new value will actually create a new tensor on top 
 
 Loops and conditionals can be stacked and nested. Usually they are compiled into a single kernel with the scopes inside it, but they can be compiled into separate kernels if the data dependencies are not local (look at the QR decomposition example in the examples folder). Not all possible loop and conditional can be valid here, if the loop iteration count has a shape incompatible with the shapes of the tensors in the loop body, the program will not compile correctly.
 
-PS: You can also provide a function instead of using a context manager, but it is not recommended, as it is harder to read and understand.
+PS: You can also provide a function instead of using a context manager, but it is not recommended, as it is less readable.
 
 ```python
 def loop_body(k):
@@ -460,9 +502,29 @@ while not tf.window.should_close(): #window will close if you press the close bu
     
 ```
 
+Currently provided `window` functions are:
+- `show(width, height, title)` - creates a window
+- `should_close()` - returns True if the window should close
+- `get_mouse_position()` - returns the mouse position
+- `get_size()` - returns the window size
+- `is_mouse_button_pressed(button)` - returns True if the mouse button is pressed
+- `is_key_pressed(key)` - returns True if the key is pressed
+- `render_frame(tensor)` - renders the tensor as an image
+
+Currently provided `imgui` functions are:
+- `begin(name)` - begins an ImGui window
+- `end()` - ends an ImGui window
+- `text(text)` - displays text
+- `slider(name, value, min, max)` - displays a slider
+- `button(text)` - displays a button, returns True if the button is pressed
+- `checkbox(text, value)` - displays a checkbox
+- `plotlines(label, values, values_offset, overlay_text, scale_min, scale_max, graph_size, stride)` - displays a plot
+- `scale_all_sizes(scale)` - scales all ImGui sizes by a factor
+- `add_background_text(text, pos, color)` - adds background text at the specified position with the specified color
+
 ### Autodifferentiation
 
-Currently only backward mode autodifferentiation is supported, with the exception of scoped operations (loops, conditionals, etc.).
+Currently only backward mode autodifferentiation is supported, and can not properly be applied at control flow operations.
 
 ```python
 y_pred = x @ W + b
@@ -485,7 +547,7 @@ In this example, the `grad` function is used to compute the gradient of the pote
 
 Giving a custom gradient tensor is not supported yet, but it is planned for the future.
 
-Additionally you can either stop the gradient computation for some tensors by `tensor.detach_grad()`. In that case the autograd algorithm will stop at this tensor.
+You can also stop the gradient computation for some tensors by `tensor.detach_grad()`. In that case the autograd algorithm will stop at this tensor.
 
 Or if you want to force the gradient through a operation without applying the operation gradient you can do `tensor.pass_grad()`. This is useful for example when you want to optimize discrete parameters like a quantized weight.
 ### Modules 
@@ -513,9 +575,9 @@ class SmolNet(tf.Module):
 ```
 
 When initializing the module you can add 3 types of TensorFrost accessible parameters:
-- `tf.Parameter` - a tensor that will be passed to the TensorProgram as an argument, can be trained
-- `tf.ParameterArray` - a dynamic list of parameters, all of them will be passed to the TensorProgram as arguments, can be trained
-- `tf.Module` - another module, all of its parameters will be passed to the TensorProgram as arguments, can be trained
+- `tf.Parameter` - a tensor that will be passed to the TensorProgram as an argument
+- `tf.ParameterArray` - a dynamic list of parameters, all of them will be passed to the TensorProgram as arguments
+- `tf.Module` - another module, all of its parameters will be passed to the TensorProgram as arguments
 
 The shape argument of the parameter can be a list of integers, where -1 means that the shape is not specified yet, and will be inferred from the input tensor. If you need to compute an operation over several tensors of unspecified shape, you need to assert the shapes in the `assert_parameters` function.
 `random_scale` and `random_offset` are used to initialize the weights with random values, and are optional, by default the weights are initialized with Xavier initialization for normal random values.
@@ -593,6 +655,15 @@ loss = res[-1].numpy[0]
 
 Outputting the optimizer state is somewhat inconvenient at the moment, as you can only output a list of tensors from the compiled function, so you need to append the loss to the list of parameters and then extract it from the list afterwards. The optimizer state is not saved in the module, so you need to pass it as an argument to the compiled function, and then update the parameters of the module with the updated parameters from the optimizer.
 
+Optionally you can also enable regularization for the parameters of the module, by specifying the `l1` and `l2` regularization parameters in the `initialize_parameters` function. This will apply regularization to the parameters after the optimizer step, meaning the `adam` optimizer will behave like `adamw` optimizer.
+
+```py
+optimizer = tf.optimizers.adam(model_container, beta1 = 0.0, beta2 = 0.999, reg_type = tf.regularizers.l2, reg = 0.02, clip = 0.01)
+optimizer.set_clipping_type(tf.clipping.norm)
+```
+
+You can also specify the clipping type for the gradients, by default the value of `clip` is zero which turns it off. The clipping type can be `tf.clipping.norm` or `tf.clipping.clamp`.
+
 ### Debugging
 
 For debugging convenience there are 2 function types that you can call inside a tensor program:
@@ -611,6 +682,11 @@ tf.region_end('Region name')
 
 When debugging from RenderDoc (or any other OpenGL debugger), these functions will create a region in the RenderDoc capture, which can be useful for profiling and seeing what parts of the program are slow.
 The placement of these functions might not reflect their position in the code, as the code is heavily optimized and fused, so if you placed a region in the middle of a generated kernel, it will be placed at the beginning or end of the kernel. Placing them in a scoped operation might make the compilation fail or unfuse kernels, so be careful with that.
+
+To debug the generated code you can either look at the generated code in the Temp folder with `tf.cpu` backend enabled if you need kernel code. If you want to debug the GPU kernel code, you can use RenderDoc.
+
+> [!TIP]
+> You can print out tensors at compilation time in the main function by just doing `print(tensor)`. This will output its debug information, its shape, its data type, what operation it is, shape (inverted), its arguments, etc.
 
 ### Usage tips
 
@@ -669,10 +745,6 @@ Backends:
 - [ ] Vulkan
 - [ ] CUDA
 - [ ] WGPU (for web)
-
-(hopefully im not going to abandon this project before finishing lol)
-
-(upd 1 year in: I now know that it is impossible to finish such a project without spending like 10 years on it huh)
 
 ## Contributing
 Contributions are welcome! If you want to contribute, please open an issue first to discuss the changes you want to make.
