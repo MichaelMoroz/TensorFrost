@@ -9,7 +9,7 @@ setup(
     version='0.6.2',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
-    description="Tensor library with automatic kernel fusion",
+    description="A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more \"shader-like\" syntax.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/MichaelMoroz/TensorFrost",
