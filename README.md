@@ -16,12 +16,12 @@ For more detail about this project, please read my blog post!
 
 ## Examples
 
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/wave_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/sin_gordon.gif?raw=true" height="256px"></a>
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/fluid_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/fluid_sim.gif?raw=true" height="256px"></a>
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/GUI/buddhabrot.py"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/buddhabrot.gif?raw=true" height="256px"></a>
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/GUI/interactive_path_tracer.py"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/path_tracer.gif?raw=true" height="256px"></a>
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/n-body.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/n_body.gif?raw=true" height="256px"></a>
-<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/neural_embed.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/neural_embed.gif?raw=true" height="256px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/wave_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/sin_gordon.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/fluid_simulation.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/fluid_sim.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/GUI/buddhabrot.py"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/buddhabrot.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/GUI/interactive_path_tracer.py"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/path_tracer.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/n-body.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/n_body.gif?raw=true" height="192px"></a>
+<a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/neural_embed.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/neural_embed.gif?raw=true" height="192px"></a>
 
 
 ## Installation
