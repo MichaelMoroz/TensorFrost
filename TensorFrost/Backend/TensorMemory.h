@@ -10,7 +10,7 @@
 
 #include "../Tensor/Tensor.h"
 
-//#define DEBUG_DYNAMIC_ALLOCATION
+#define DEBUG_DYNAMIC_ALLOCATION
 
 namespace TensorFrost {
 
@@ -71,7 +71,8 @@ extern "C" {
 	typedef void main_func(TFTensor*, TFTensor*, TFRuntime);
 }
 
-class TFBufferTemplate : public TFBuffer {
+class TFBufferTemplate : public
+TFBuffer {
 public:
 	TFBufferTemplate(size_t size) : TFBuffer(size) {}
 
@@ -95,14 +96,19 @@ size_t GetSize(const TFTensor* tensor);
 class TensorMemoryManager {
 private:
 	size_t tick = 0;
-	size_t allocation_count = 0;
-	const int MAX_UNUSED_TIME = 8196;
+	size_t buffers_created = 0;
+	size_t buffers_removed = 0;
+	const size_t DEFAULT_MAX_UNUSED_TIME = 128;
+	const size_t MAX_POSSIBLE_UNUSED_TIME = 32768;
 	map<size_t, unordered_set<TFBuffer*>> allocated_buffers;
+	map<size_t, size_t> allocation_history; //stores the last tick when a buffer of a certain size was allocated
+	map<size_t, size_t> allocation_delay; //stores the time between the last 2 allocations of a buffer size
 	unordered_set<TFBuffer*> unused_buffers;
 
 	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
 	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);
 	void UpdateTick();
+	size_t GetDeallocationDelay(size_t size) const;
 
 	TFBuffer* AllocateBuffer(size_t size);
 	TFBuffer* TryAllocateBuffer(size_t size);

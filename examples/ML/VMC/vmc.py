@@ -88,8 +88,8 @@ class PSI(tf.Module):
         self.spin_down_n = electron_n - spin_up_n
         self.determinants = 1
         self.atom_features = feature_atom_id.shape[0]
-        self.mid_n = 64
-        self.corr_n = 32
+        self.mid_n = 24
+        self.corr_n = 12
         self.input_features = 8
 
         # Hyperparameters
@@ -648,21 +648,21 @@ while not window.should_close():
     frame += 1
     prev_time = cur_time
 
-#print walker position variance
-walkers = walkers_tf.numpy
-print("Walker position variance: ", np.var(walkers))
+# #print walker position variance
+# walkers = walkers_tf.numpy
+# print("Walker position variance: ", np.var(walkers))
 
-#print norm of the gradients
-momentum_grads = optimizer.m.items()
-for i, grad in momentum_grads:
-    print("Parameter ", i, " gradient norm: ", np.linalg.norm(grad.numpy))
+# #print norm of the gradients
+# momentum_grads = optimizer.m.items()
+# for i, grad in momentum_grads:
+#     print("Parameter ", i, " gradient norm: ", np.linalg.norm(grad.numpy))
 
-#print total trained parameter count (just count all elements in all gradients)
-total_param_count = 0
-for i, grad in momentum_grads:
-    total_param_count += grad.numpy.size
-print("Total parameter count: ", total_param_count)
+# #print total trained parameter count (just count all elements in all gradients)
+# total_param_count = 0
+# for i, grad in momentum_grads:
+#     total_param_count += grad.numpy.size
+# print("Total parameter count: ", total_param_count)
 
-print(wavefunction.feature_layer.numpy)
-print(wavefunction.feature_layer_bias.numpy)
-print(wavefunction.feature_envelope_layer.numpy)
+# print(wavefunction.feature_layer.numpy)
+# print(wavefunction.feature_layer_bias.numpy)
+# print(wavefunction.feature_envelope_layer.numpy)

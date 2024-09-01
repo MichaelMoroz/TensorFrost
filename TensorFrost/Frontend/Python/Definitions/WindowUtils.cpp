@@ -22,8 +22,11 @@ void WindowDefinitions(py::module& m) {
 	    "hide", []() { HideWindow(); }, "Hide the memory manager window");
 
 	window.def(
-	    "render_frame", [](const PyTensorMemory& t) { RenderFrame(*t.tensor_); },
+	    "render_frame", [](const PyTensorMemory& t) { RenderFrame(t.tensor_); },
 	    "Render a frame from the tensor memory");
+
+	window.def("render_frame", []() { RenderFrame(nullptr); },
+	    "Render an empty frame");
 
 	window.def(
 	    "should_close", []() { return WindowShouldClose(); },

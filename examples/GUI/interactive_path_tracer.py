@@ -7,8 +7,8 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 
 tf.initialize(tf.opengl)
 
-W = 2560
-H = 1361
+W = 1920
+H = 1080
 eps = 0.0001
 m_pow = 8.0
 max_depth = 1200.0

@@ -28,9 +28,16 @@ size_t GetSize(const TFTensor *tensor) {
 
 TFBuffer * TensorMemoryManager::AllocateBuffer(size_t size) {
     TFBuffer* buffer = CreateBuffer(size);
-    allocation_count++;
+    if(allocation_history.contains(size)) {
+        size_t old_delay = GetDeallocationDelay(size);
+        allocation_delay[size] = std::min(std::max(old_delay, tick - allocation_history[size]), MAX_POSSIBLE_UNUSED_TIME);
+    } else {
+        allocation_delay[size] = DEFAULT_MAX_UNUSED_TIME;
+    }
+    buffers_created++;
     //add the buffer to the list of allocated buffers
     allocated_buffers[size].insert(buffer);
+    allocation_history[size] = tick;
     return buffer;
 }
 
@@ -107,6 +114,7 @@ void TensorMemoryManager::RemoveBuffer(TFBuffer *buffer) {
     allocated_buffers[size].erase(buffer);
     unused_buffers.erase(buffer);
     DeleteBuffer(buffer);
+    buffers_removed++;
 }
 
 //#define READBACK_DEBUG
@@ -138,7 +146,8 @@ void TensorMemoryManager::UpdateTick() {
     unordered_set<TFBuffer*> buffers_to_delete;
 
     for(auto& buffer: unused_buffers) {
-        if(buffer->time_since_used > MAX_UNUSED_TIME) {
+        size_t buf_size = buffer->size;
+        if(buffer->time_since_used > GetDeallocationDelay(buf_size)) {
             buffers_to_delete.insert(buffer);
         } else {
             buffer->time_since_used++;
@@ -153,12 +162,21 @@ void TensorMemoryManager::UpdateTick() {
 
 #ifdef DEBUG_DYNAMIC_ALLOCATION
     if(tick%2048 == 0) {
-        if(allocation_count> 0) {
-            cout << "Note: " << allocation_count << " allocations have been made" << endl;
+        if(buffers_created> 0 || buffers_removed > 0) {
+            cout << "Note: " << buffers_created << " buffers created and " << buffers_removed << " buffers removed in the last 2048 ticks" << endl;
         }
-        allocation_count = 0;
+        buffers_created = 0;
+        buffers_removed = 0;
     }
 #endif
+}
+
+size_t TensorMemoryManager::GetDeallocationDelay(size_t buf_size) const {
+    if(allocation_delay.contains(buf_size)) {
+        return allocation_delay.at(buf_size);
+    }
+
+    return DEFAULT_MAX_UNUSED_TIME;
 }
 
 TFBuffer *TensorMemoryManager::TryAllocateBuffer(size_t size) {

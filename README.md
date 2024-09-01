@@ -666,8 +666,9 @@ while not tf.window.should_close(): #window will close if you press the close bu
     
 ```
 
-Currently provided `window` functions are:
+Currently provided `window` submodule functions are:
 - `show(width, height, title)` - creates a window
+- `hide()` - hides the window
 - `should_close()` - returns `True` if the window should close
 - `get_mouse_position()` - returns the mouse position
 - `get_size()` - returns the window size
@@ -675,7 +676,7 @@ Currently provided `window` functions are:
 - `is_key_pressed(key)` - returns `True` if the key is pressed
 - `render_frame(tensor)` - renders the tensor as an image
 
-Currently provided `imgui` functions are:
+Currently provided `imgui` submodule functions are:
 - `begin(name)` - begins an ImGui window
 - `end()` - ends an ImGui window
 - `text(text)` - displays text

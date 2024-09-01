@@ -248,43 +248,46 @@ void Finish() {
 	glFinish();
 }
 
-void RenderFrame(const TFTensor& tensor) {
+void RenderFrame(const TFTensor* tensor) {
 	if (global_window == nullptr) {
 		throw std::runtime_error("RenderFrame: OpenGL not initialized");
-	}
-
-	//check if tensor is 2d + 3 channels
-	if (tensor.dim != 3 || tensor.shape[2] != 3) {
-		throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
-	}
-
-	//check if tensor is float32 (TODO: use int8 instead)
-	if (tensor.type != TFType::Float) {
-		throw std::runtime_error("Window: Render tensor must be of type float32");
 	}
 
 	// Clear the screen
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 
-	GLuint ssbo = ((TFOpenGLBuffer*)tensor.buffer)->GetNative();
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
+	if(tensor != nullptr)
+	{
+		//check if tensor is 2d + 3 channels
+		if (tensor->dim != 3 || tensor->shape[2] != 3) {
+			throw std::runtime_error("Window: Render tensor must be of shape (height, width, 3)");
+		}
 
-	glUseProgram(quad_program);
+		//check if tensor is float32 (TODO: use int8 instead)
+		if (tensor->type != TFType::Float) {
+			throw std::runtime_error("Window: Render tensor must be of type float32");
+		}
 
-	// Set the uniforms
-	int offset = 0;
-	int width = (int)tensor.shape[1];
-	int height = (int)tensor.shape[0];
-	glUniform1i(glGetUniformLocation(quad_program, "offset"), offset);
-	glUniform1i(glGetUniformLocation(quad_program, "width"), width);
-	glUniform1i(glGetUniformLocation(quad_program, "height"), height);
+		GLuint ssbo = ((TFOpenGLBuffer*)tensor->buffer)->GetNative();
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssbo);
 
-	// Draw the quad
-	glDrawArrays(GL_TRIANGLES, 0, 6);
+		glUseProgram(quad_program);
 
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
-	glUseProgram(0);
+		// Set the uniforms
+		int offset = 0;
+		int width = (int)tensor->shape[1];
+		int height = (int)tensor->shape[0];
+		glUniform1i(glGetUniformLocation(quad_program, "offset"), offset);
+		glUniform1i(glGetUniformLocation(quad_program, "width"), width);
+		glUniform1i(glGetUniformLocation(quad_program, "height"), height);
+
+		// Draw the quad
+		glDrawArrays(GL_TRIANGLES, 0, 6);
+
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, 0);
+		glUseProgram(0);
+	}
 
 	ImguiRender();
 
