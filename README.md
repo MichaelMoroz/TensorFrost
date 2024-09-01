@@ -1,4 +1,4 @@
-# 🔢🥶 TensorFrost (v0.6.1 beta)
+# 🔢🥶 TensorFrost
 [![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
 
 
@@ -28,7 +28,7 @@ For more detail about this project, please read my blog post!
 
 ## From PyPI
 
-You can install the current version of the library from [PyPI](https://pypi.org/project/tensorfrost/):
+You can install the latest version of the library from [PyPI](https://pypi.org/project/tensorfrost/):
 
 ```bash
 pip install tensorfrost
@@ -359,7 +359,7 @@ Here the `reshape` operation is used to change the shape of the input tensor fro
 At the moment this is implemented in a very crude way, so doing this will always halt kernel fusion, so use it only when you are sure things are unfusable
 (usually at the beginning or end of the program).
 
-Alternatively you can also use `transpose` and `unsqueeze` operations to change the shape of the tensor, which are work fine with fusion.
+Additionally, you can also use `transpose`, `unsqueeze` and `squeeze` operations to change the shape of the tensor, which work fine with fusion.
 
 ```python
 def Transpose():
@@ -393,7 +393,7 @@ B = tf.split_dim(A, 4, axis = 1) #shapes are [2, 3, 4]
 ```
 
 > [!TIP]
-> If you want the compiler to be able to merge kernels, you should use `merge_dim` and `split_dim` instead of `reshape`.
+> If you want the compiler to be able to merge kernels with reshape, you should try using `merge_dim` and `split_dim` instead.
 
 ### Matrix operations
 
@@ -712,24 +712,28 @@ Core features:
 - [x] Basic kernel fusion and compilation
 - [x] Advanced built-in functions (random, special functions, etc.)
 - [x] Advanced operations (loops, conditionals, etc.)
+- [x] Kernel code and execution graph export and editing
 - [x] Backward mode autodifferentiation
+- [x] Module system
+- [x] Optimizer modules (SGD, Adam, RMSProp)
+- [x] GUI and visualization
+- [ ] Compiled `TensorProgram` export and import
 - [ ] Forward mode autodifferentiation
 - [ ] Gradients of control flow operations and gradients from gradients
-- [x] Kernel code and execution graph export and editing
 - [ ] Advanced data types and quantization
 - [ ] Compile from Python AST instead of tracing
-- [ ] Advanced IR optimizations
-- [ ] Kernel shape and cache optimization
+- [ ] Groupshared memory support
+- [ ] Automatic data caching and reuse
   
 Algorithm library:
 - [x] Scan, reduction, etc.
 - [x] Module system
 - [x] Optimizer modules (SGD, Adam, RMSProp)
-- [ ] Sorting algorithms
 - [x] Matrix operations (matrix multiplication, etc.)
-- [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.)
-- [ ] Fast Fourier Transform
-- [ ] High-level neural network layers (convolution, etc.)
+- [ ] Sorting algorithms (some examples already in the examples folder)
+- [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.) (some examples already in the examples folder)
+- [ ] Fast Fourier Transform (some examples already in the examples folder)
+- [ ] High-level neural network layers (convolution, etc.) (some examples already in the examples folder)
 
 Platforms:
 - [x] Windows
@@ -737,11 +741,11 @@ Platforms:
 - [ ] MacOS
 
 Backends:
-- [x] CPU (using user-provided compiler)
-- [x] OpenGL (most basic GPU backend, works meh)
-- [ ] ISPC (for better CPU utilization)
-- [ ] Vulkan
+- [x] CPU (C++ OpenMP backend)
+- [x] OpenGL (most basic GPU backend, has a lot of driver bugs)
 - [ ] CUDA
+- [ ] Vulkan
+- [ ] ISPC (for better CPU utilization)
 - [ ] WGPU (for web)
 
 ## Contributing
