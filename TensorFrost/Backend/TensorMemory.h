@@ -10,7 +10,7 @@
 
 #include "../Tensor/Tensor.h"
 
-#define DEBUG_DYNAMIC_ALLOCATION
+//#define DEBUG_DYNAMIC_ALLOCATION
 
 namespace TensorFrost {
 
