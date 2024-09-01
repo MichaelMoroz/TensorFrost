@@ -168,7 +168,6 @@ class PSI(tf.Module):
         tf.region_end('AtomFeatures')
 
         tf.region_begin('Orbitals')
-        atom_features = tf.reshape(atom_features, atom_features.shape) #force compiler to not fuse with previous operations (reshape is unfuzable)
         orbitals = atom_features @ self.features_to_orbitals 
         orbitals = orbitals * tf.tanh(self.orbi_layer1_bias + orbitals @ self.orbi_layer1)
 

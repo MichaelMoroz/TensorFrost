@@ -682,11 +682,12 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 			indices_b.push_back(indices_c[i]);
 		}
 
-		// load the value
-		Tensor* value = &(Tensor::Load(*a, indices_a, IndexingMode::Unsafe) *
-		                  Tensor::Load(*b, indices_b, IndexingMode::Unsafe));
+		Tensor& a_val = Tensor::Load(*a, indices_a, IndexingMode::Unsafe); a_val.node_->flags.set(NodeProp::NoLoadFusion); // disable load fusion for now
+		Tensor& b_val = Tensor::Load(*b, indices_b, IndexingMode::Unsafe); a_val.node_->flags.set(NodeProp::NoLoadFusion);
 
-		c->Set(*c + *value);
+		Tensor* prod = &(a_val * b_val);
+
+		c->Set(*c + *prod);
 	});
 
 	return c;

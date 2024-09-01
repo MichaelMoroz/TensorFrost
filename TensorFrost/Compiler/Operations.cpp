@@ -91,8 +91,8 @@ const vector<Operation> operations = {
     Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
 
     // Memory operations
-    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}), // TODO implement in graph
-    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}), // TODO implement in graph
+    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}),
+    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}),
     Operation("load", {"_f", "_u", "_i", "_b"}, 128, "",
               {OpProp::Load, OpProp::MemoryOp}),
     Operation("store", {"f_", "u_", "i_", "b_"}, 128, "",

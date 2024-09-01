@@ -18,6 +18,7 @@ enum class NodeProp {
 	KeepDims,
 	DetachGrad,
 	PassGrad,
+	NoLoadFusion,
 	Count,
 };
 

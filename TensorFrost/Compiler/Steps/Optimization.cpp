@@ -803,6 +803,8 @@ void IR::OptimizeKernelLoadOperations() {
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->name != "load") continue;
 
+			if (node->flags.has(NodeProp::NoLoadFusion)) continue;
+
 			//get memory input
 			Node* memory_input = node->args.Get(ArgType::Memory);
 
