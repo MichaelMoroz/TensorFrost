@@ -492,6 +492,39 @@ Giving a custom gradient tensor is not supported yet, but it is planned for the 
 You can also stop the gradient computation for some tensors by `tensor.detach_grad()`. In that case the autograd algorithm will stop at this tensor.
 
 Or if you want to force the gradient through a operation without applying the operation gradient you can do `tensor.pass_grad()`. This is useful for example when you want to optimize discrete parameters like a quantized weight.
+
+### Registering new operations
+
+You can register a new operation with a custom vector jacobian product (VJP) like this:
+
+```py
+def custom_op(inputs, tensor, axes):
+    return [tf.tanh(inputs[0])]
+
+def custom_op_vjp(inputs, gradient, tensor):
+    return [gradient * (1.0 - tensor * tensor)]
+
+tf.register_custom_operation("new_tanh", ["f_f"], custom_op, custom_op_vjp)
+```
+
+The first argument is the name of the operaiton. The second argument is the list of overloads, that are defined like "xyz_a", where xyz can be any of `f`, `b`, `u`, `i` for float, boolean, uint, and int types of the input arguments, and a is the output type. The third a fourth argument are the operation implementation and its VJP. This function is used at the "insert algorithmic primitives" stage. 
+
+The first function has arguments: list of input arguments, the original custom operation tensor, and the value passed as `axes` in the custom operation.
+The second function also has: list of input arguments, the gradient tensor, and the original custom operation tensor result. This function is used in the "autodiff" stage.
+
+The registered function can then be used like this:
+
+```py
+
+def ProgramTest():
+    A = tf.input([-1],tf.float32)
+    B = tf.custom("new_tanh", [A])
+    dB_dA = tf.grad(B, A)
+    return B, dB_dA
+```
+
+Registering custom functions can be useful when having a computation which can not be automatically differentiated, or if the automatically generated gradient is of poor quality.
+
 ### Modules 
 
 TensorFrost has a simple module system similar to PyTorch, where you can define a module with trainable parameters and a forward function that computes the output of the module as well as a loss function. 
