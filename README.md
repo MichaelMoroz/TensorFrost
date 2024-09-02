@@ -229,7 +229,7 @@ Note that the boolean operations `and`, `or`, `not` are not overloaded yet, and 
 
 Also there are these provided functions: 
 
-`abs`, `sign`, `ceil`, `floor`, `round`, `frac`, `exp`, `exp2`, `log`, `log2`, `sqrt`, `rsqrt`, `rcp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `reversebits`, `pow`, `atan2`, `modf`, `step`, `clamp`, `lerp`, `fma`, `smoothstep`, `ternary`, `const`.
+`abs`, `sign`, `ceil`, `floor`, `round`, `frac`, `exp`, `exp2`, `log`, `log2`, `sqrt`, `rsqrt`, `rcp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `reversebits`, `pow`, `atan2`, `modf`, `step`, `clamp`, `lerp`, `fma`, `smoothstep`, `select`, `const`.
 
 Additionally you can use `uint`, `int`, `float`, `bool` to cast between types, and `asuint`, `asint`, `asfloat`, `asbool` to reinterpret the bits of the number.
 
