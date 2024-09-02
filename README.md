@@ -486,8 +486,6 @@ force = - tf.grad(pot, dx)
 
 In this example, the `grad` function is used to compute the gradient of the potential with respect to the distance between two particles. The force is then computed as the negative gradient of the potential with respect to the distance.
 
-Giving a custom gradient tensor is not supported yet, but it is planned for the future.
-
 You can also stop the gradient computation for some tensors by `tensor.detach_grad()`. In that case the autograd algorithm will stop at this tensor.
 
 Or if you want to force the gradient through a operation without applying the operation gradient you can do `tensor.pass_grad()`. This is useful for example when you want to optimize discrete parameters like a quantized weight.
