@@ -291,7 +291,6 @@ matmul = tf.compile(MatrixMultiplication)
 ```
 
 Here the `sum` operation is used to sum the dot products of the rows and columns of the input matrices along the `k` axis.
-This is much more efficient than the scatter operation, and in fact this compiles to a single N*K kernel.
 
 The following reduction operations are supported: `sum`, `mean`, `max`, `min`, `all`, `any`, `prod` and `norm`
 
