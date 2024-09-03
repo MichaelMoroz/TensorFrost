@@ -1,25 +1,44 @@
-name: Upload to TestPyPI
+name: Upload to PyPI
 
 on:
-  workflow_dispatch:  # This allows manual triggering
-  release:
-    types: [created]  # You can adjust this to your needs
+  workflow_run:
+    workflows: ["Build Windows Wheels", "Build Manylinux Wheels"]
+    types:
+      - completed
 
 jobs:
   upload-to-pypi:
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
-    - name: Download Windows wheels
-      uses: actions/download-artifact@v2
+    - name: Download artifacts
+      uses: actions/github-script@v6
       with:
-        name: windows-wheels
-        path: ./dist/windows
+        script: |
+          var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+             owner: context.repo.owner,
+             repo: context.repo.repo,
+             run_id: ${{github.event.workflow_run.id }},
+          });
+          var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
+            return artifact.name == "windows-wheels" || artifact.name == "manylinux-wheels"
+          });
+          var downloadPromises = matchArtifact.map(async (artifact) => {
+            var download = await github.rest.actions.downloadArtifact({
+               owner: context.repo.owner,
+               repo: context.repo.repo,
+               artifact_id: artifact.id,
+               archive_format: 'zip',
+            });
+            var fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/' + artifact.name + '.zip', Buffer.from(download.data));
+          });
+          await Promise.all(downloadPromises);
 
-    - name: Download Manylinux wheels
-      uses: actions/download-artifact@v2
-      with:
-        name: manylinux-wheels
-        path: ./dist/manylinux
+    - name: Unzip artifacts
+      run: |
+        unzip -d windows-wheels windows-wheels.zip
+        unzip -d manylinux-wheels manylinux-wheels.zip
 
     - name: Install Twine
       run: pip install twine
@@ -29,4 +48,4 @@ jobs:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_REPO_TOKEN }}
       run: |
-        python -m twine upload --repository-url https://test.pypi.org/legacy/ ./dist/windows/*.whl ./dist/manylinux/*.whl --verbose --disable-progress-bar
+        python -m twine upload --repository-url https://test.pypi.org/legacy/ windows-wheels/*.whl manylinux-wheels/*.whl --verbose --disable-progress-bar
