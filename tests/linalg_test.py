@@ -4,7 +4,7 @@ import unittest
 
 tf.initialize(tf.cpu)
 
-def modified_gram_schmidt(A):
+def qr_decomposition_np(A):
     A = A.astype(float)
     m, n = A.shape
     Q = np.zeros((m, n))
@@ -18,6 +18,23 @@ def modified_gram_schmidt(A):
     R[n-1, n-1] = np.linalg.norm(A[:, n-1])
     Q[:, n-1] = A[:, n-1] / R[n-1, n-1]
     return Q, R
+
+def invert_triangular_np(matrix, lower=True):
+    n, n = matrix.shape
+    inverted = np.zeros((n, n))
+
+    if not lower: #transpose the matrix to make it lower triangular
+        matrix = matrix.T
+
+    inverted[0, 0] = 1.0 / matrix[0, 0]
+    for i in range(1, n):
+        inverted[i, i] = 1.0 / matrix[i, i]
+        inverted[i, :i] = -np.dot(matrix[i, :i], inverted[:i, :i]) / matrix[i, i]
+
+    if not lower: #transpose the matrix back
+        inverted = inverted.T
+
+    return inverted
 
 def qr_decomposition_tensorfrost(A):
     m, n = A.shape
@@ -72,7 +89,7 @@ class TestQRInversion(unittest.TestCase):
         #compile the program
         invert_matrix = tf.compile(InvertMatrix)
 
-        A = np.random.rand(5, 5)
+        A = np.random.rand(5, 5).astype(np.float32)
         Atf = tf.tensor(A)
         Qtf, Rtf, Rinvtf, Ainvtf = invert_matrix(Atf)
         Qnp = Qtf.numpy
@@ -80,11 +97,17 @@ class TestQRInversion(unittest.TestCase):
         Rinvtf = Rinvtf.numpy
         Ainvtf = Ainvtf.numpy
 
-        Q, R = modified_gram_schmidt(A)
-        Rinv = np.linalg.inv(R)
-        Ainv = np.linalg.inv(A)
+        Q, R = qr_decomposition_np(A)
+        Rinv = invert_triangular_np(R, lower=False)
+        Ainv = Rinv @ Q.T
 
-        self.assertTrue(np.allclose(np.dot(Q, R), np.dot(Qnp, Rnp)))
-        #inverse will be less accurate due to the nature of the algorithm
-        self.assertTrue(np.allclose(Ainv, Ainvtf, atol=1e-3))
-        self.assertTrue(np.allclose(Rinv, Rinvtf, atol=1e-3))
+        norm_error = np.linalg.norm(np.dot(Q, R) - np.dot(Qnp, Rnp))
+        print("QR decomposition error: ", norm_error)
+        self.assertTrue(norm_error < 1e-5)
+        norm_error = np.linalg.norm(Rinv - Rinvtf)
+        print("Triangular matrix inversion error: ", norm_error)
+        self.assertTrue(norm_error < 1e-5)
+        norm_error = np.linalg.norm(Ainv - Ainvtf)
+        print("Matrix inversion error: ", norm_error)
+        self.assertTrue(norm_error < 1e-5)
+
