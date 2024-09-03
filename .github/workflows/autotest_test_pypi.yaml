@@ -1,4 +1,4 @@
-name: Load from TestPyPI and test TensorFrost
+name: Load from TestPyPI and Test TensorFrost
 
 on:
   workflow_dispatch:
