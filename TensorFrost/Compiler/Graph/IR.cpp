@@ -68,6 +68,23 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 #define MAX_COMPILATION_ITERATIONS 32
 #define LOAD_FUSION
 
+void IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const function<void()>& expression, bool print, bool update_graph) {
+	RunCompilationPass(pass_name, [&]() {
+		auto current_state = GetApproximateStateHash();
+		bool converged = false;
+		for (int i = 0; i < max_iterations; i++) {
+			expression();
+			if (current_state == GetApproximateStateHash()) { // no changes
+				converged = true;
+				break;
+			}
+		}
+		if (!converged) {
+			throw std::runtime_error("Failed to converge on " + pass_name + ", exceeded maximum iterations");
+		}
+	}, print, update_graph);
+}
+
 void IR::CompileIR()
 {
 	// TODO (Moroz): Add auto tests into build system
@@ -85,14 +102,7 @@ void IR::CompileIR()
 	RunCompilationPass("OptimizeReductions", [&]() { OptimizeReductions(); }, true);
 	RunCompilationPass("InsertAlgorithmicPrimitives", [&]() { InsertAlgorithmicPrimitives(); }, true);
 
-	RunCompilationPass("RecursivelyInsertAlgorithmicPrimitives", [&]() {
-		for (int i = 0; i < MAX_COMPILATION_ITERATIONS; i++) {
-			InsertAlgorithmicPrimitives();
-			if(CountNodesOfType(OpProp::Algorithm) == 0) {
-				break;
-			}
-		}
-	});
+	RunIterativeCompilationPass("InsertAlgorithmicPrimitives", MAX_COMPILATION_ITERATIONS, [&]() { InsertAlgorithmicPrimitives(); }, true);
 
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
@@ -110,18 +120,11 @@ void IR::CompileIR()
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
 #ifdef LOAD_FUSION
-	RunCompilationPass("Iterative load fusion", [&]() {
-		auto current_state = GetApproximateStateHash();
-		for (int i = 0; i < MAX_COMPILATION_ITERATIONS; i++) {
-			RunCompilationPass("AddKernelGlobalLoadOperations", [&]() { AddKernelGlobalLoadOperations(); });
-			RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
-			RunCompilationPass("OptimizeKernelLoadOperations", [&]() { OptimizeKernelLoadOperations(); });
-			RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
-
-			if (current_state == GetApproximateStateHash()) { // no changes
-				break;
-			}
-		}
+	RunIterativeCompilationPass("Iterative load fusion", MAX_COMPILATION_ITERATIONS, [&]() {
+		RunCompilationPass("AddKernelGlobalLoadOperations", [&]() { AddKernelGlobalLoadOperations(); });
+		RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
+		RunCompilationPass("OptimizeKernelLoadOperations", [&]() { OptimizeKernelLoadOperations(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 	});
 #endif
 
@@ -131,7 +134,12 @@ void IR::CompileIR()
 	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
 	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
-	RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
+
+	//TODO: Add support for unrolling small constant kernel dimensions
+	//RunCompilationPass("UnrollOperations", [&]() { UnrollOperations(); });
+	//RunCompilationPass("SqueezeKernelShapes", [&]() { SqueezeKernelShapes(); });
+
+	RunCompilationPass("FinalizeKernelMemoryIndexing", [&]() { FinalizeKernelMemoryIndexing(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
 	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });

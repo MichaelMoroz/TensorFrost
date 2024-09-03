@@ -15,7 +15,7 @@ For more detail about this project, please read my blog post!
 [Writing an optimizing tensor compiler from scratch](https://michaelmoroz.github.io/WritingAnOptimizingTensorCompilerFromScratch/)
 
 
-> Disclaimer: The current version the library is still in early beta, and at this point I would strongly recommend not to use this for any serious projects. It is also very likely that there will be breaking updates in the future, as a lot of the code is not finalized.
+> Disclaimer: The current version of the library is still in early beta, and at this point I would strongly recommend not to use this for any serious projects. It is also very likely that there will be breaking updates in the future, as a lot of the code is not finalized.
 
 ## Examples
 

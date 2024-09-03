@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import time
 from tqdm import tqdm
+import unittest
 
 tf.initialize(tf.cpu)
 
@@ -189,19 +190,9 @@ for i, param in enumerate(model_torch.parameters()):
     params[i] = tf.tensor(params[i])
 tf_grads.update_parameters(params)
 
-
 #create random MNIST data
 ImSize = 28
 N = 64
-x = np.random.randn(N, ImSize**2).astype(np.float32)
-x_tf = tf.tensor(x)
-x_torch = torch.tensor(x)
-
-#random categorical data for 10 classes using numpy
-y = np.random.randint(0, 10, N).astype(np.int32)
-y = np.eye(10)[y]
-y_tf = tf.tensor(y)
-y_torch = torch.tensor(y)
 
 #compute tensorfrost gradients
 def grad_computer():
@@ -220,36 +211,69 @@ def grad_computer():
 
 grad_compute = tf.compile(grad_computer)
 
-#compute tensorfrost gradients
-all_params = grad_compute(tf_grads, x_tf, y_tf)
-tf_grads.update_parameters(all_params[:-2])
-loss_tf = all_params[-2]
-yhat_tf = all_params[-1]
-print("Tensorfrost loss: ", loss_tf.numpy)
 
-#compute pytorch gradients
-model_torch.zero_grad()
-loss_torch, yhat = model_torch.loss(x_torch, y_torch)
-loss_torch.backward()
-print("Pytorch loss: ", loss_torch.item())
+def test_autograd():
+    x = np.random.randn(N, ImSize**2).astype(np.float32)
+    x_tf = tf.tensor(x)
+    x_torch = torch.tensor(x)
 
-def ComputeRelativeError(a, b):
-    a = a.numpy
-    b = b.detach().numpy()
-    return np.mean(np.abs(a - b) / np.maximum(np.abs(a), np.abs(b)))
+    #random categorical data for 10 classes using numpy
+    y = np.random.randint(0, 10, N).astype(np.int32)
+    y = np.eye(10)[y]
+    y_tf = tf.tensor(y)
+    y_torch = torch.tensor(y)
 
-print("Yhat error: ", ComputeRelativeError(yhat_tf, yhat))
 
-#compare the gradients
-for i, param in enumerate(model_torch.parameters()):
-    print("Param ", i)
-    # print("Torhch grad: ")
-    # print(param.grad)
-    # print("Tensorfrost grad: ")
-    # print(tf_grads.grad[i].numpy)
-    # print("Torch param: ")
-    # print(param)
-    # print("Tensorfrost param: ")
-    # print(tf_grads.net.parameters()[i].numpy)
-    print("Gradient error: ", ComputeRelativeError(tf_grads.grad[i], param.grad))
-    print("Parameter error: ", ComputeRelativeError(tf_grads.net.parameters()[i], param))
+    # #compute tensorfrost gradients
+    # all_params = grad_compute(tf_grads, x_tf, y_tf)
+    # tf_grads.update_parameters(all_params[:-2])
+    # loss_tf = all_params[-2]
+    # yhat_tf = all_params[-1]
+    # print("Tensorfrost loss: ", loss_tf.numpy)
+
+    # #compute pytorch gradients
+    # model_torch.zero_grad()
+    # loss_torch, yhat = model_torch.loss(x_torch, y_torch)
+    # loss_torch.backward()
+    # print("Pytorch loss: ", loss_torch.item())
+
+    # def ComputeRelativeError(a, b):
+    #     a = a.numpy
+    #     b = b.detach().numpy()
+    #     return np.mean(np.abs(a - b) / np.maximum(np.abs(a), np.abs(b)))
+
+    # print("Yhat error: ", ComputeRelativeError(yhat_tf, yhat))
+
+    # #compare the gradients
+    # for i, param in enumerate(model_torch.parameters()):
+    #     print("Param ", i)
+    #     # print("Torhch grad: ")
+    #     # print(param.grad)
+    #     # print("Tensorfrost grad: ")
+    #     # print(tf_grads.grad[i].numpy)
+    #     # print("Torch param: ")
+    #     # print(param)
+    #     # print("Tensorfrost param: ")
+    #     # print(tf_grads.net.parameters()[i].numpy)
+    #     print("Gradient error: ", ComputeRelativeError(tf_grads.grad[i], param.grad))
+    #     print("Parameter error: ", ComputeRelativeError(tf_grads.net.parameters()[i], param))
+
+    all_params = grad_compute()
+    tf_grads.update_parameters(all_params[:-2])
+    loss_tf = all_params[-2]
+    yhat_tf = all_params[-1]
+
+    model_torch.zero_grad()
+    loss_torch, yhat = model_torch.loss(x_torch, y_torch)
+    loss_torch.backward()
+
+    assert np.abs(loss_tf.numpy - loss_torch.item()) < 1e-5
+    assert np.allclose(yhat_tf.numpy, yhat.detach().numpy(), atol=1e-5)
+
+    for i, param in enumerate(model_torch.parameters()):
+        assert np.allclose(tf_grads.grad[i].numpy, param.grad.detach().numpy(), atol=1e-5)
+        assert np.allclose(tf_grads.net.parameters()[i].numpy, param.detach().numpy(), atol=1e-5)
+
+if __name__ == '__main__':
+    test_case = unittest.FunctionTestCase(test_autograd)
+    unittest.main()

@@ -54,6 +54,7 @@ Tensor* ApplyUnaryOP(const Tensor* a, std::function<float(float)> opF32, std::fu
 #define ApplyUOP(v1, op) ApplyUnaryOP(v1, [](float a) { return op a; }, [](int a) { return op a; }, [](uint a) { return op a; })
 #define ApplyUFUNC(v1, func) ApplyUnaryOP(v1, [](float a) { return func(a); }, [](int a) { return func(a); }, [](uint a) { return func(a); }
 
+//TODO: replace with virtual machine evaluation
 void IR::OptimizeOperations()
 {
 	for (auto node = begin(); !node.end(); node.next()) {

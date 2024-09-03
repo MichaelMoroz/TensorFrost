@@ -90,6 +90,7 @@ typedef function<Tensors(map<int, const Tensor*> inputs, const Tensor* gradient,
 
 VJPGradientFunction GetVJPForOperation(string name);
 void RegisterVJP(string name, VJPGradientFunction vjp);
+bool HasDerivativeImplemented(string name);
 
 //TODO JVPGradientFunction for forward mode autodiff
 

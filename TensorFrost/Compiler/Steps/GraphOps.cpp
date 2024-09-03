@@ -1015,7 +1015,7 @@ void IR::ComputeAddress(Node* node, vector<Tensor*> indices)
 	node->args.AddArgument(ArgType::Index, 0, flat_index->node_);
 }
 
-void IR::FinalizeMemoryIndexing() {
+void IR::FinalizeKernelMemoryIndexing() {
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	vector<Tensor*> dispatch_checks;

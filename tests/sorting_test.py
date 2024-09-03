@@ -2,6 +2,7 @@
 import numpy as np
 import TensorFrost as tf
 import matplotlib.pyplot as plt
+import unittest
 
 tf.initialize(tf.opengl)
 
@@ -105,49 +106,39 @@ def Sort0():
     sorted_keys, sorted_values = RadixSort(keys, values)
     return sorted_keys, sorted_values
 
-sort_program0 = tf.compile(Sort0)
-
 def Sort1():
     keys = tf.input([-1], tf.int32)
     values = tf.input([-1], tf.int32)
     sorted_keys, sorted_values = BitonicSort(keys, values)
     return sorted_keys, sorted_values
 
-sort_program1 = tf.compile(Sort1)
+def test_sorting():
+    #compile the program
+    sort_program0 = tf.compile(Sort0)
+    sort_program1 = tf.compile(Sort1)
 
-# %%
-# Generate some random data to scan (ints between 0 and 10)
-N = 2**20
-MaxValue = 2**31 - 1
-keys = np.random.randint(0, MaxValue, N).astype(np.int32)
-values = np.random.randint(0, MaxValue, N).astype(np.int32)
+    # Generate some random data to scan (ints between 0 and 10)
+    N = 2**20
+    MaxValue = 2**31 - 1
+    keys = np.random.randint(0, MaxValue, N).astype(np.int32)
+    values = np.random.randint(0, MaxValue, N).astype(np.int32)
 
-tf.renderdoc_start_capture()
+    # do sort in TensorFrost
+    sorted_keys0, sorted_values0 = sort_program0(keys, values)
+    sorted_keys1, sorted_values1 = sort_program1(keys, values)
 
-# do sort in TensorFrost
-sorted_keys0, sorted_values0 = sort_program0(keys, values)
-sorted_keys1, sorted_values1 = sort_program1(keys, values)
+    # do argsort in numpy
+    sorted_indices = np.argsort(keys)
+    sorted_keys2 = keys[sorted_indices]
+    sorted_values2 = values[sorted_indices]
 
-tf.renderdoc_end_capture()
+    # check if the results are the same
+    error_radix = np.sum(np.abs(sorted_keys0.numpy - sorted_keys2))
+    error_bitonic = np.sum(np.abs(sorted_keys1.numpy - sorted_keys2))
+    assert error_radix == 0
+    assert error_bitonic == 0
 
-# do argsort in numpy
-sorted_indices = np.argsort(keys)
-sorted_keys2 = keys[sorted_indices]
-sorted_values2 = values[sorted_indices]
-
-# check if the results are the same
-error_radix = np.sum(np.abs(sorted_keys0.numpy - sorted_keys2))
-error_bitonic = np.sum(np.abs(sorted_keys1.numpy - sorted_keys2))
-print('Radix sort error:', error_radix)
-print('Bitonic sort error:', error_bitonic)
-
-# # plot the results
-# plt.figure()
-# plt.plot(sorted_keys0.numpy, label='Radix sort')
-# plt.plot(sorted_keys1.numpy, label='Bitonic sort')
-# plt.plot(sorted_keys2, label='Numpy argsort')
-# plt.legend()
-# plt.show()
-
-
+if __name__ == '__main__':
+    test_case = unittest.FunctionTestCase(test_sorting)
+    unittest.main()
 

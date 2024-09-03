@@ -193,6 +193,11 @@ public:
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void RunCompilationPass(string pass_name, const function<void()>& expression, bool print = false, bool update_graph = false);
+
+	void RunIterativeCompilationPass(string pass_name, int max_iterations, const function<void()> &expression,
+	                                 bool print = false,
+	                                 bool update_graph = false);
+
 	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
 	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
@@ -201,7 +206,7 @@ public:
 
 	void ComputeAddress(Node *node, vector<Tensor *> indices);
 
-	void FinalizeMemoryIndexing();
+	void FinalizeKernelMemoryIndexing();
 	void RemoveUnusedKernels();
 	void CompileIR();
 

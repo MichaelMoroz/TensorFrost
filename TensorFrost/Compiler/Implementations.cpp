@@ -284,6 +284,10 @@ void RegisterVJP(string name, VJPGradientFunction vjp) {
 	gradient_functions[name] = vjp;
 }
 
+bool HasDerivativeImplemented(string name) {
+	return gradient_functions.contains(name);
+}
+
 Tensor* ComputeReduction(const Tensor* array, int axis,
                          std::function<Tensor*(Tensor*, Tensor*)> reduction_op, string debug_name = "",
                          uint initial = 0,
@@ -408,16 +412,18 @@ Tensor* ComputeSum(const Tensor* array, int axis) {
 }
 
 Tensor* ComputeNorm(const Tensor* array, int axis) {
-	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis,
-		[](Tensor* a, Tensor* b) { return &(*a + *b); }, "norm", 0,
-		[](Tensor* a) { return &(*a * *a); })));
+	// return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis,
+	// 	[](Tensor* a, Tensor* b) { return &(*a + *b); }, "norm", 0,
+	// 	[](Tensor* a) { return &(*a * *a); })));
+	return &Tensor::sqrt(Tensor::Sum(*array * *array, axis));
 }
 
 Tensor* ComputeMean(const Tensor* array, int axis) {
-	Tensor* sum = ComputeSum(array, axis);
-	Tensors shape = array->GetShape();
-	axis = GetAxis((int)shape.size(), axis);
-	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
+	// Tensor* sum = ComputeSum(array, axis);
+	// Tensors shape = array->GetShape();
+	// axis = GetAxis((int)shape.size(), axis);
+	// return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
+	return &(Tensor::Sum(*array, axis) / Tensor::tofloat(*array->GetShape()[axis]));
 }
 
 uint GetInitialMax(TFType type) {
@@ -767,7 +773,6 @@ void RegisterImplementation(string name, ImplementationFunction impl) {
 	}
 	implementation_functions[name] = impl;
 }
-
 
 map<string, AlgorithmVJPGradientFunction> algorithm_vjps = {};
 
