@@ -24,7 +24,8 @@ class TensorProgram {
 	Program* program;
 	bool debug = false;
 	float compile_time = 0.0f;
-	float external_compile_time = 0.0f;
+	float host_compile_time = 0.0f;
+	float shader_compile_time = 0.0f;
 
 	explicit TensorProgram(EvaluateFunction evaluate, string name) : evaluate_callback(std::move(evaluate)) {
 		CreateProgram(name);

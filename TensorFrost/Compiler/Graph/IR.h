@@ -150,6 +150,9 @@ public:
 
 	void CheckIR(string name, bool check_clustering, bool check_kernels);
 	string PrintListing(map<Node*, string> node_debug) const;
+
+	string GetNodeListing(Node *node) const;
+
 	map<Node*, Node*> CopyNodes(set<Node*> nodes_to_copy,
 	                            unordered_map<Node*, Node*> argument_replacements,
 	                            unordered_map<int, Node*> indices,
@@ -167,7 +170,8 @@ public:
 	void OptimizeKernels();
 	void OptimizeHost();
 	void OptimizeOperations();
-	void OptimizeKernelLoadOperations();
+
+	bool OptimizeKernelLoadOperations();
 	void OptimizeReductions();
 
 	unordered_set<Node *> GetDependencies(unordered_set<Node *> nodes);
@@ -193,6 +197,11 @@ public:
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void RunCompilationPass(string pass_name, const function<void()>& expression, bool print = false, bool update_graph = false);
+
+	void RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()> &expression,
+	                                 bool print = false,
+	                                 bool update_graph = false);
+
 	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
 	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
@@ -241,7 +250,15 @@ public:
 		}
 
 		if(invalid_nodes.size() > 0) {
+#ifdef NDEBUG
+			std::string error = "Invalid graph: ";
+			for (auto [node, message] : invalid_nodes) {
+				error += GetNodeListing(node) + ": " + message + "\n";
+			}
+			throw std::runtime_error(error);
+#else
 			throw std::runtime_error("Invalid graph: " + PrintListing(invalid_nodes));
+#endif
 		}
 
 		// update outputs

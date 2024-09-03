@@ -205,10 +205,13 @@ const map<NodeProp, string> flag_names = {
     {NodeProp::KeepDims, "KeepDims"}, {NodeProp::IsStatic, "IsStatic"},
     {NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
     {NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
-    {NodeProp::InputShapeDim, "InputShapeDim"},
+    {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoLoadFusion, "NoLoadFusion"},
 };
 
 string NodeFlagsToString(NodeProp flags) {
+    if (!flag_names.contains(flags)) {
+        throw std::runtime_error("Flag name not defined");
+    }
     return flag_names.at(flags);
 }
 

@@ -31,18 +31,21 @@ void TensorProgram::CreateProgram(string name) {
 
 	GenerateCode(program);
 
-	//get current time
 	auto end = std::chrono::high_resolution_clock::now();
-	compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count() / 1000000.0f;
+	compile_time = std::chrono::duration<float, std::milli>(end - start).count();
 
 	if (current_backend != BackendType::CodeGen) // no need to compile if we are in codegen mode
 	{
+		auto start_time = chrono::high_resolution_clock::now();
 		CompileAndLoadKernelModule(program, program_id);
-		CompileKernels(program);
-	}
+		auto end_time = chrono::high_resolution_clock::now();
+		host_compile_time = chrono::duration<float, std::milli>(end_time - start_time).count();
 
-	auto external_end = std::chrono::high_resolution_clock::now();
-	external_compile_time = std::chrono::duration_cast<std::chrono::nanoseconds>(external_end - end).count() / 1000000.0f;
+		start_time = chrono::high_resolution_clock::now();
+		CompileKernels(program);
+		end_time = chrono::high_resolution_clock::now();
+		shader_compile_time = chrono::duration<float, std::milli>(end_time - start_time).count();
+	}
 }
 
 vector<TFTensor*> TensorProgram::Evaluate(
@@ -65,7 +68,10 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Host writes: " + to_string(ir.writebacks) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
-	properties += "  Steps time: " + to_string(external_compile_time) + " ms\n";
+	if(host_compile_time > 0.01f)
+		properties += "  Host Compile time: " + to_string(host_compile_time) + " ms\n";
+	if (shader_compile_time > 0.01f)
+		properties += "  Shader Compile time: " + to_string(shader_compile_time) + " ms\n";
 	return properties;
 }
 

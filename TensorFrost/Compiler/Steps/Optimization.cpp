@@ -787,7 +787,8 @@ void IR::OptimizeKernels() {
 #define MAX_LOAD_COPY 3000.0f
 #define MAX_LOAD_COPY_COUNT 2
 #define MAX_LOAD_SIZE_RATIO 0.5f
-void IR::OptimizeKernelLoadOperations() {
+
+bool IR::OptimizeKernelLoadOperations() {
 	ComputeNodeCost();
 
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -884,6 +885,8 @@ void IR::OptimizeKernelLoadOperations() {
 	}
 
 	UpdateGraph();
+
+	return !nodes_to_remove.empty();
 }
 
 

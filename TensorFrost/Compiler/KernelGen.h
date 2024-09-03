@@ -57,6 +57,8 @@ class Program {
 	string program_name = "TensorProgram";
 
 	float last_execution_time = 0.0f;
+	float shader_compile_time = 0.0f;
+	float host_compile_time = 0.0f;
 
 	function<main_func> execute_callback;
 

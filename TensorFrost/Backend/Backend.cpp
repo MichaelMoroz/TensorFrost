@@ -52,6 +52,7 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 }
 
 void CompileKernels(Program* program) {
+	auto start_time = chrono::high_resolution_clock::now();
 	for(auto& kernel : program->kernels_) {
 		switch (current_backend) {
 			case BackendType::CPU:
@@ -66,6 +67,9 @@ void CompileKernels(Program* program) {
 				throw std::runtime_error("Backend not implemented");
 		}
 	}
+	auto end_time = chrono::high_resolution_clock::now();
+	float milliseconds = chrono::duration<float, std::milli>(end_time - start_time).count();
+	program->shader_compile_time = milliseconds;
 }
 
 TFTensor Allocator(const char* name, const size_t* a, size_t dim, TFType type, void* data) {

@@ -216,7 +216,9 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 			((CpuKernelManager*)global_kernel_manager)
 			    ->AddKernelFunction(&kernel, kernel_callback);
 
+#ifndef NDEBUG
 			cout << "Loaded kernel: " << kernel.kernel_name_ << endl;
+#endif
 		}
 	}
 

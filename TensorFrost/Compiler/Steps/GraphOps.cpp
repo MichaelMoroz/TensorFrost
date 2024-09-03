@@ -396,6 +396,10 @@ string IR::PrintListing(map<Node*, string> node_debug) const {
 	return GetOperationListing(*this, false, node_debug) + "\n\n";
 }
 
+string IR::GetNodeListing(Node* node) const {
+	return GetNodeString(node);
+}
+
 /// <summary>
 /// Copy given nodes
 /// </summary>
