@@ -1,4 +1,4 @@
-name: Load from TestPyPI and Test TensorFrost
+name: Load from TestPyPI and run Autotests
 
 on:
   workflow_dispatch:

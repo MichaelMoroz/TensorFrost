@@ -1,4 +1,4 @@
-name: Build Manylinux Wheels
+name: Build Manylinux
 
 on:
   workflow_dispatch:

@@ -1,4 +1,4 @@
-name: Test TensorFrost
+name: Autotests
 
 on:
   workflow_dispatch:
