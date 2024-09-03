@@ -61,11 +61,7 @@ protected:
 	Kernel* kernel = nullptr;
 	IR* ir = nullptr;
 
-	CodeGenerator(IR* ir) : ir(ir) {
-		name_map_ = {
-			{"var", "var_"},
-		};
-	}
+	CodeGenerator(IR* ir) : ir(ir) {}
 
 	void GenerateKernelCode(Kernel *kernel_);
 	void GenerateCode(const Node* root);

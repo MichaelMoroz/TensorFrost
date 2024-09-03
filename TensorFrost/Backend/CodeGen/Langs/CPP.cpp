@@ -9,6 +9,7 @@ public:
 	CPPGenerator(IR* ir) : CodeGenerator(ir) {
 		name_map_ = {
 			{"sqrt", "sqrtf"},
+			{"var", "var_"},
 		};
 	}
 };
@@ -56,6 +57,11 @@ inline float asfloat(uint x)
 inline uint asuint(float x)
 {
 	return *(uint*)&x;
+}
+
+inline uint asuint(double x)
+{
+	return asuint((float)x);
 }
 
 inline uint asuint(int x)
