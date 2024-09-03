@@ -29,4 +29,4 @@ jobs:
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
       run: |
         REPO_URL="https://test.pypi.org/legacy/"
-        twine upload --repository-url $REPO_URL ${{ needs.download-artifacts.outputs.artifact-path }}/*.whl
+        twine upload --repository-url $REPO_URL --skip-existing wheels/* --verbose --disable-progress-bar
