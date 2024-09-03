@@ -9,7 +9,7 @@
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
-| Backend/OS | CPU | OpenGL | CUDA | Vulkan |
+| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan |
 |------------|-----|--------|------|--------|
 | Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
 | Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   |
