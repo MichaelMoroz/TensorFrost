@@ -2,10 +2,6 @@ name: Build Windows Wheels
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
 
 env:
   BUILD_TYPE: Release
