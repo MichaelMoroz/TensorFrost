@@ -29,7 +29,13 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip install -r requirements-test.txt
+          if [ -f requirements-test.txt ]; then
+            pip install -r requirements-test.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements file found. Skipping dependency installation."
+          fi
 
       - name: Make test script executable
         run: chmod +x run_tests.sh
