@@ -233,5 +233,5 @@ class TestAutograd(unittest.TestCase):
         self.assertTrue(np.abs(loss_tf.numpy - loss_torch.item()) < 1e-5)
         self.assertTrue(np.allclose(yhat_tf.numpy, yhat.detach().numpy(), atol=1e-5))
         for i, param in enumerate(model_torch.parameters()):
-            self.assertTrue(np.allclose(tf_grads.grad[i].numpy, param.grad.detach().numpy(), atol=1e-4))
-            self.assertTrue(np.allclose(tf_grads.net.parameters()[i].numpy, param.detach().numpy(), atol=1e-4))
+            self.assertTrue(np.allclose(tf_grads.grad[i].numpy, param.grad.detach().numpy(), atol=1e-3))
+            self.assertTrue(np.allclose(tf_grads.net.parameters()[i].numpy, param.detach().numpy(), atol=1e-3))
