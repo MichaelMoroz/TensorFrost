@@ -4,6 +4,7 @@
 [![TestPyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml)
 [![PyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml)
 [![Autotests Passing](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml)
+[![PyPI version](https://badge.fury.io/py/tensorfrost.svg)](https://badge.fury.io/py/tensorfrost)
 
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
@@ -28,7 +29,6 @@ For more detail about this project, please read my blog post!
 <a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/GUI/interactive_path_tracer.py"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Demos/path_tracer.gif?raw=true" height="192px"></a>
 <a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Simulation/n-body.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Demos/n_body.gif?raw=true" height="192px"></a>
 <a href="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Rendering/neural_embed.ipynb"><img src="https://github.com/MichaelMoroz/TensorFrost/blob/main/examples/Demos/neural_embed.gif?raw=true" height="192px"></a>
-
 
 ## Installation
 
@@ -665,6 +665,11 @@ To debug the generated code you can either look at the generated code in the Tem
 
 > [!TIP]
 > You can print out tensors at compilation time in the main function by just doing `print(tensor)`. This will output its debug information, its shape, its data type, what operation it is, shape (inverted), its arguments, etc.
+
+If you want to print out the tensor data at runtime, you can use the `tf.print_value(string, tensor_val)` function, which will print out the tensor data to the console, only if the value is scalar. 
+You can also have an assertion that will throw an error if the boolean scalar tensor value is false, with the `tf.assert_value(string, tensor_val)` function.
+
+```python
 
 ### GUI and visualization
 

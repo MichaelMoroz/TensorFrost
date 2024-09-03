@@ -194,7 +194,11 @@ protected:
 				expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
 				right = ";";
 			} else if(op->HasAllTypes(OpProp::Debug)) {
-				left = "tf." + op->code_ + "(\"" + node->debug_name + "\")";
+				left = "tf." + op->code_ + "(\"" + node->debug_name + "\"";
+				if (args.Has(ArgType::Input)) {
+					left += ", " + args.Name(ArgType::Input);
+				}
+				left += ")";
 				right = ";";
 			}
 		} else if (op->HasAllTypes(OpProp::MemoryOp)) {

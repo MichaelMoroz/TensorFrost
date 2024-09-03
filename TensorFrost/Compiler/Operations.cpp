@@ -33,11 +33,13 @@ const vector<Operation> operations = {
 	Operation("assert", {"_f", "_i", "_u", "_b"}, 0, "assert_tensor", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
 	Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("deallocate", {""}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
-    //Operation("local_memory", {"_f", "_i", "_u"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+	//Operation("group_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+	//Operation("local_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
 
 	Operation("region_begin", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
 	Operation("region_end", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
-	//Operation("print", {"f_", "i_", "u_", "b_"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
+	Operation("print_value", {"f_", "i_", "u_", "b_"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
+	Operation("assert_value", {"b_"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
 
     //Algorithms
     //Reduction
@@ -55,10 +57,7 @@ const vector<Operation> operations = {
     Operation("transpose", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
     Operation("dot", {"ff_f"}, 0, "", {OpProp::Algorithm}), // dot product of the last dimensions
     Operation("matmul", {"ff_f"}, 0, "", {OpProp::Algorithm}), // matrix multiplication of the last dimensions
- 	//Texture
-	//Operation("interp1d", {"f_f"}, 0, "", {OpProperty::Algorithm}),
-	//Operation("interp2d", {"f_f"}, 0, "", {OpProperty::Algorithm}),
-	//Operation("interp3d", {"f_f"}, 0, "", {OpProperty::Algorithm}),
+
 	//Other
 	Operation("dim_reverse", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	// Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
@@ -69,22 +68,6 @@ const vector<Operation> operations = {
 	// Operation("dim_pad", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
 	Operation("unsqueeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("squeeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
-
-    //Composite algorithms
- //    Operation("dim_sort", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("dim_argsort", {"f_i", "u_i", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
-	// Operation("dim_mean", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("dim_median", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("dim_norm", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("dim_var", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-
-	//linalg
-	//Operation("linalg_qr", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite, OpProp::Nondiff}),
-	// Operation("linalg_lu", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("linalg_svd", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("linalg_eig", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite}),
-	// Operation("linalg_inv", {"f_f", "u_u", "i_i"}, 0, "", {OpProp::Composite})
-
 
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),

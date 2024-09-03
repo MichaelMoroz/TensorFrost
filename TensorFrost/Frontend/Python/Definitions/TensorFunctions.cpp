@@ -314,6 +314,14 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensors shape_tensors = input_tensors[0]->GetShape();
 		return PT(Tensor::CustomOperation(name, input_tensors, shape_tensors));
 	}, py::arg("name"), py::arg("inputs"), "Run custom operation");
+
+	m.def("print_value", [](const std::string& name, const PyTensor& t) {
+		Tensor::PrintValue(name, T(t));
+	}, py::arg("name"), py::arg("t"), "Print the value of the tensor");
+
+	m.def("assert_value", [](const std::string& name, const PyTensor& t) {
+		Tensor::AssertValue(name, T(t));
+	}, py::arg("name"), py::arg("t"), "Assert the value of the tensor");
 }
 
 }  // namespace TensorFrost

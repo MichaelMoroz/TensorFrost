@@ -26,6 +26,7 @@ string GetCPPHeader() {
 #include <string>
 #include <tuple>
 #include <unordered_map>
+#include <iostream>
 
 typedef uint32_t uint;
 
@@ -339,6 +340,9 @@ public:
 	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group);
 	void region_begin(std::string name);
 	void region_end(std::string name);
+	template <typename T>
+	void print_value(std::string name, T value);
+	void assert_value(std::string name, bool condition);
 };
 )";
 
@@ -486,6 +490,19 @@ void TFContext::region_end(std::string name)
 		return;
 	}
 	runtime.region(name.c_str(), false, runtime.custom_data);
+}
+
+template <typename T>
+void TFContext::print_value(std::string name, T value)
+{
+	std::cout << name << ": " << value << std::endl;
+}
+
+void TFContext::assert_value(std::string name, bool condition)
+{
+	if(!condition) {
+		throw std::runtime_error("Assertion failed: " + name);
+	}
 }
 
 )";

@@ -1025,6 +1025,22 @@ public:
 		return index_grid;
 	}
 
+	static void PrintValue(std::string name, const Tensor& tensor) {
+		if (tensor.GetDimension() != 0) {
+			throw std::runtime_error("Cannot print a non-scalar value");
+		}
+		Tensor& output = Op("print_value", &tensor);
+		output.SetDebugName(name);
+	}
+
+	static void AssertValue(std::string name, const Tensor& tensor) {
+		if (tensor.GetDimension() != 0) {
+			throw std::runtime_error("Cannot assert a non-scalar value");
+		}
+		Tensor& output = Op("assert_value", &tensor);
+		output.SetDebugName(name);
+	}
+
 	void SetDebugName(const string& name) const;
 
 	static void BeginRegion(const string& name);
