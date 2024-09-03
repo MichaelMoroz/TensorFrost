@@ -1,8 +1,8 @@
-# Use the manylinux2014 image as a base
-FROM quay.io/pypa/manylinux2014_x86_64
+# Use the newer manylinux image as a base
+FROM quay.io/pypa/manylinux_2_28_x86_64
 
 # Set environment variables
-ENV PLAT manylinux2014_x86_64
+ENV PLAT manylinux_2_28_x86_64
 
 # Copy the project files into the container
 COPY . /io
