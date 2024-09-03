@@ -7,54 +7,77 @@ jobs:
   upload-to-pypi:
     runs-on: ubuntu-latest
     steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
     - name: Download artifacts
       uses: actions/github-script@v6
       with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
         script: |
           const fs = require('fs');
           
-          async function downloadArtifact(workflowName, artifactName) {
-            const allWorkflowRuns = await github.rest.actions.listWorkflowRuns({
+          async function findWorkflow(partialName) {
+            const workflows = await github.rest.actions.listRepoWorkflows({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: workflowName,
-              status: 'success'
             });
-            
-            if (allWorkflowRuns.data.total_count === 0) {
-              console.log(`No successful runs found for workflow: ${workflowName}`);
-              return false;
-            }
-            
-            const latestRun = allWorkflowRuns.data.workflow_runs[0];
-            
-            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              run_id: latestRun.id
-            });
-            
-            const matchingArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
-            
-            if (!matchingArtifact) {
-              console.log(`No artifact found with name: ${artifactName} in workflow: ${workflowName}`);
-              return false;
-            }
-            
-            const download = await github.rest.actions.downloadArtifact({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              artifact_id: matchingArtifact.id,
-              archive_format: 'zip',
-            });
-            
-            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/${artifactName}.zip`, Buffer.from(download.data));
-            console.log(`Successfully downloaded: ${artifactName}.zip`);
-            return true;
+            return workflows.data.workflows.find(w => w.name.includes(partialName));
           }
           
-          const windowsResult = await downloadArtifact("Build Windows Wheels", "windows-wheels");
-          const manylinuxResult = await downloadArtifact("Build Manylinux Wheels", "manylinux-wheels");
+          async function downloadArtifact(workflowPartialName, artifactName) {
+            try {
+              const workflow = await findWorkflow(workflowPartialName);
+              if (!workflow) {
+                console.log(`No workflow found containing: ${workflowPartialName}`);
+                return false;
+              }
+              
+              const allWorkflowRuns = await github.rest.actions.listWorkflowRuns({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: workflow.id,
+                status: 'success'
+              });
+              
+              if (allWorkflowRuns.data.total_count === 0) {
+                console.log(`No successful runs found for workflow: ${workflow.name}`);
+                return false;
+              }
+              
+              const latestRun = allWorkflowRuns.data.workflow_runs[0];
+              
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: latestRun.id
+              });
+              
+              const matchingArtifact = artifacts.data.artifacts.find((artifact) => artifact.name === artifactName);
+              
+              if (!matchingArtifact) {
+                console.log(`No artifact found with name: ${artifactName} in workflow: ${workflow.name}`);
+                return false;
+              }
+              
+              const download = await github.rest.actions.downloadArtifact({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                artifact_id: matchingArtifact.id,
+                archive_format: 'zip',
+              });
+              
+              fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/${artifactName}.zip`, Buffer.from(download.data));
+              console.log(`Successfully downloaded: ${artifactName}.zip`);
+              return true;
+            } catch (error) {
+              console.log(`Error downloading artifact: ${error.message}`);
+              return false;
+            }
+          }
+          
+          const windowsResult = await downloadArtifact("Windows", "windows-wheels");
+          const manylinuxResult = await downloadArtifact("Manylinux", "manylinux-wheels");
           
           if (!windowsResult && !manylinuxResult) {
             core.setFailed("Failed to download any artifacts. Please ensure that the build workflows have run successfully.");
