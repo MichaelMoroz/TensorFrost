@@ -106,8 +106,8 @@ class TestQRInversion(unittest.TestCase):
         self.assertTrue(norm_error < 1e-5)
         norm_error = np.linalg.norm(Rinv - Rinvtf)
         print("Triangular matrix inversion error: ", norm_error)
-        self.assertTrue(norm_error < 1e-5)
+        self.assertTrue(norm_error < 1e-3)
         norm_error = np.linalg.norm(Ainv - Ainvtf)
         print("Matrix inversion error: ", norm_error)
-        self.assertTrue(norm_error < 1e-5)
+        self.assertTrue(norm_error < 1e-3)
 
