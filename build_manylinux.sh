@@ -1,11 +1,6 @@
 #!/bin/bash
 set -e
-
-# Check if PYTHON_VERSION is set
-if [ -z "$PYTHON_VERSION" ]; then
-    echo "Error: PYTHON_VERSION environment variable is not set"
-    exit 1
-fi
+cd /io
 
 # Install necessary dependencies
 yum install -y epel-release kernel-headers wayland-devel libxkbcommon-devel \
@@ -15,22 +10,24 @@ yum install -y epel-release kernel-headers wayland-devel libxkbcommon-devel \
   libXcomposite-devel libwayland-client libevdev-devel kernel-devel libXrandr-devel \
   && yum clean all
 
-# Set up Python environment
-PYBIN="/opt/python/${PYTHON_VERSION}/bin"
-export PYTHON_ROOT=$(dirname $PYBIN)
-export PATH=$PYBIN:$PATH
-export PYTHON_EXECUTABLE=$PYBIN/python
+# Check if PYTHON_VERSION is set
+if [ -z "$PYTHON_VERSION" ]; then
+    echo "Error: PYTHON_VERSION environment variable is not set"
+    exit 1
+fi
 
-# Install Python dependencies
+export PYTHON_ROOT=/opt/python/$PYTHON_VERSION
+export PATH=$PYTHON_ROOT/bin:$PATH
+export PYTHON_EXECUTABLE=$PYTHON_ROOT/bin/python
+
 $PYTHON_EXECUTABLE -m pip install --upgrade pip -r requirements.txt cmake build auditwheel
 
-# Extract Python version
+# Extract Python version (e.g., 3.7, 3.8, etc.)
 PY_VERSION=$($PYTHON_EXECUTABLE -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 
 echo "Python version: $PY_VERSION"
 echo "Python executable: $PYTHON_EXECUTABLE"
 
-# Configure CMake
 $PYTHON_EXECUTABLE -m cmake \
   -DPython3_ROOT_DIR=$PYTHON_ROOT \
   -DPython3_EXECUTABLE=$PYTHON_EXECUTABLE \
@@ -42,14 +39,8 @@ $PYTHON_EXECUTABLE -m cmake \
   -DCMAKE_CXX_FLAGS="-D_POSIX_C_SOURCE=200809L -Wno-deprecated-declarations" \
   -S . -B build -DCMAKE_BUILD_TYPE=Release
 
-# Build the project with parallel jobs
-NPROC=$(nproc)
-$PYTHON_EXECUTABLE -m cmake --build build --config Release -j $NPROC
-
-# Build the wheel
+$PYTHON_EXECUTABLE -m cmake --build build --config Release
 $PYTHON_EXECUTABLE -m build -w ./PythonBuild
-
-# Repair the wheel with auditwheel
 for whl in PythonBuild/dist/*.whl; do
   auditwheel repair "$whl" -w ./wheelhouse/
 done
