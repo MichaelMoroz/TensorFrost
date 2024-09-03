@@ -1,0 +1,28 @@
+name: Upload to PyPI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  download-artifacts:
+    uses: ./.github/workflows/download_artifacts.yml
+    
+  upload-to-pypi:
+    needs: download-artifacts
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Download wheel artifacts
+      uses: actions/download-artifact@v2
+      with:
+        name: all-wheels
+        path: ./wheels
+        
+    - name: Install Twine
+      run: pip install twine
+
+    - name: Upload to PyPI
+      run: |
+        python -m twine upload -u __token__ -p ${{ secrets.PYPI_REPO_TOKEN }} wheels/* --skip-existing --verbose --disable-progress-bar
