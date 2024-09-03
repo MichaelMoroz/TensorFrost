@@ -17,7 +17,7 @@ jobs:
     - name: Download wheel artifacts
       uses: actions/download-artifact@v2
       with:
-        name: wheels
+        name: all-wheels
         path: ./wheels
         
     - name: Install Twine
