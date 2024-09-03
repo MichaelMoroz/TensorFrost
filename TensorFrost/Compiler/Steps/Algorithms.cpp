@@ -1,8 +1,7 @@
 #include "Compiler/KernelGen.h"
 
 namespace TensorFrost {
-
-void IR::InsertAlgorithmicPrimitives() {
+bool IR::InsertAlgorithmicPrimitives() {
 	// get all nodes for each type
 	vector<Node*> nodes = GetNodesOfType(OpProp::Algorithm);
 
@@ -48,6 +47,8 @@ void IR::InsertAlgorithmicPrimitives() {
 	}
 
 	UpdateGraph();
+
+	return nodes_to_remove.empty();
 }
 
 } // namespace TensorFrost

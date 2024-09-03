@@ -886,7 +886,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 	UpdateGraph();
 
-	return !nodes_to_remove.empty();
+	return nodes_to_remove.empty();
 }
 
 

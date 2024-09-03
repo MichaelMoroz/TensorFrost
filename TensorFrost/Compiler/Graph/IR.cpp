@@ -102,8 +102,7 @@ void IR::CompileIR()
 	RunCompilationPass("InsertAlgorithmicPrimitives", [&]() { InsertAlgorithmicPrimitives(); }, true);
 
 	RunIterativeCompilationPass("InsertAlgorithmicPrimitives", MAX_COMPILATION_ITERATIONS, [&]() {
-		InsertAlgorithmicPrimitives();
-		return CountNodesOfType(OpProp::Algorithm) == 0;
+		return InsertAlgorithmicPrimitives();
 	}, true);
 
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
@@ -125,9 +124,9 @@ void IR::CompileIR()
 	RunIterativeCompilationPass("Iterative load fusion", MAX_COMPILATION_ITERATIONS, [&]() {
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
-		bool changes = OptimizeKernelLoadOperations();
+		bool no_changes = OptimizeKernelLoadOperations();
 		RemoveUnusedOperations();
-		return !changes;
+		return no_changes;
 	});
 #endif
 

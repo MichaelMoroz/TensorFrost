@@ -177,7 +177,8 @@ public:
 	unordered_set<Node *> GetDependencies(unordered_set<Node *> nodes);
 
 	void RemoveUnusedOperations();
-	void InsertAlgorithmicPrimitives();
+
+	bool InsertAlgorithmicPrimitives();
 	void UnrollLoops(int max_iterations = 8);
 	void UnrollKernelDimensions();
 	void UnrollAtomicOperations();

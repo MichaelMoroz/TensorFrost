@@ -84,8 +84,7 @@ class TestQRInversion(unittest.TestCase):
         Rinv = np.linalg.inv(R)
         Ainv = np.linalg.inv(A)
 
-        self.assertTrue(np.allclose(A, np.dot(Q, R)))
-        self.assertTrue(np.allclose(A, np.dot(Qnp, Rnp)))
+        self.assertTrue(np.allclose(np.dot(Q, R), np.dot(Qnp, Rnp)))
         #inverse will be less accurate due to the nature of the algorithm
         self.assertTrue(np.allclose(Ainv, Ainvtf, atol=1e-3))
         self.assertTrue(np.allclose(Rinv, Rinvtf, atol=1e-3))
