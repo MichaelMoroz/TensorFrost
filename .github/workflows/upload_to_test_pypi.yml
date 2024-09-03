@@ -24,9 +24,6 @@ jobs:
       run: pip install twine
 
     - name: Upload to PyPI
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
       run: |
         REPO_URL="https://test.pypi.org/legacy/"
-        twine upload --repository-url $REPO_URL --skip-existing wheels/* --verbose --disable-progress-bar
+        twine upload --repository-url $REPO_URL --skip-existing wheels/* --verbose --disable-progress-bar -u __token__ -p ${{ secrets.TEST_PYPI_REPO_TOKEN }}
