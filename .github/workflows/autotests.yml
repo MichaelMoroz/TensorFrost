@@ -5,7 +5,7 @@ on:
 
 jobs:
   download-artifacts:
-    uses: ./.github/workflows/download-artifacts.yml
+    uses: ./.github/workflows/download_artifacts.yml
 
   test-tensorfrost:
     needs: download-artifacts
