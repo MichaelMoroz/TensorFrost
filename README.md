@@ -1,7 +1,9 @@
 # 🔢🥶 TensorFrost
-[![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
+[![Windows](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml)
+[![Manylinux](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml)
+[![TestPyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml)
+[![PyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml)
 [![Autotests Passing](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml)
-
 
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
