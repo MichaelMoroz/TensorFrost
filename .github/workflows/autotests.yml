@@ -1,34 +1,20 @@
-name: Build and Test TensorFrost
+name: Test TensorFrost
 
 on:
   workflow_dispatch:
 
 jobs:
+  download-artifacts:
+    uses: ./.github/workflows/download-artifacts.yml
+
   test-tensorfrost:
+    needs: download-artifacts
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ['cp37-cp37m', 'cp38-cp38', 'cp39-cp39', 'cp310-cp310', 'cp311-cp311', 'cp312-cp312']
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build TensorFrost with Docker
-        run: |
-          docker build -t tensorfrost-manylinux .
-          docker run --rm -e PYTHON_VERSION=${{ matrix.python-version }} -v $(pwd):/io tensorfrost-manylinux
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
@@ -41,9 +27,22 @@ jobs:
         run: |
           pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
-      - name: Install built TensorFrost wheel
+      - name: Download wheel artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: all-wheels
+          path: ./wheels
+
+      - name: Install TensorFrost
         run: |
-          pip install wheelhouse/*.whl
+          python_version=$(python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
+          wheel_file=$(ls ./wheels/TensorFrost-*-cp${python_version}*-manylinux*.whl)
+          if [ -f "$wheel_file" ]; then
+            pip install $wheel_file
+          else
+            echo "No matching wheel found for Python ${python_version}"
+            exit 1
+          fi
 
       - name: Install test dependencies
         run: |
