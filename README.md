@@ -1,5 +1,6 @@
 # 🔢🥶 TensorFrost
 [![PyPI Build and Deploy](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build-and-deploy-to-pypi.yml)
+[![Autotests Passing](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml)
 
 
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
