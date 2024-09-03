@@ -4,6 +4,14 @@ namespace TensorFrost {
 using namespace std;
 
 
+class CPPGenerator : public CodeGenerator {
+public:
+	CPPGenerator(IR* ir) : CodeGenerator(ir) {
+		name_map_ = {
+			{"sqrt", "sqrtf"},
+		};
+	}
+};
 
 string GetCPPHeader() {
 	string header = R"(
@@ -605,7 +613,7 @@ void GenerateCode(Program* program) {
 }
 void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
                   int input_count, int output_count) {
-	CodeGenerator generator = CodeGenerator(program->ir_);
+	CPPGenerator generator = CPPGenerator(program->ir_);
 	generator.custom_generated_code_ = dispatch_code;
 	generator.GenerateCode(program->ir_->root);
 
@@ -646,7 +654,7 @@ void GenerateMain(Program* program, map<Node*, string>& dispatch_code,
 }
 
 void GenerateCPPKernel(Program* program, Kernel* kernel) {
-	CodeGenerator generator = CodeGenerator(program->ir_);
+	CPPGenerator generator = CPPGenerator(program->ir_);
 	generator.GenerateKernelCode(kernel);
 	string kernel_code = generator.AssembleString();
 
