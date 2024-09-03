@@ -2,7 +2,7 @@ import numpy as np
 import TensorFrost as tf
 import unittest
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
 def modified_gram_schmidt(A):
     A = A.astype(float)

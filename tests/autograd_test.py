@@ -4,7 +4,7 @@ import torch
 import torch.nn.functional as F
 import unittest
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
 class ADGrad(tf.Module):
     def __init__(self, net: tf.Module):
