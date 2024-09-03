@@ -1,4 +1,4 @@
-name: Upload to PyPI
+name: Upload to TestPyPI
 
 on:
   workflow_run:
