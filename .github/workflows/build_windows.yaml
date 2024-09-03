@@ -1,0 +1,36 @@
+name: Build Windows Wheels
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12']
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+  
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5.1.1
+      with:
+        python-version: ${{ matrix.python-version }}
+  
+    - name: Build and Package
+      run: .\build_windows.ps1
+
+    - name: Upload wheels as artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: windows-wheels
+        path: PythonBuild/dist/*.whl
