@@ -14,10 +14,12 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install system dependencies
+      - name: Install system dependencies and update MESA
         run: |
+          sudo add-apt-repository ppa:kisak/kisak-mesa -y
           sudo apt-get update
-          sudo apt-get install -y libglfw3-dev libgl1-mesa-dev xvfb
+          sudo apt-get install -y libglfw3-dev xvfb
+          sudo apt-get upgrade -y
 
       - name: Install PyTorch
         run: |
