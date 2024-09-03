@@ -1,0 +1,45 @@
+name: Build and Test TensorFrost
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-tensorfrost:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglfw3-dev libgl1-mesa-dev xvfb
+
+      - name: Install PyTorch
+        run: |
+          pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Install TensorFrost
+        run: |
+          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ tensorfrost
+
+      - name: Install test dependencies
+        run: |
+          if [ -f requirements-test.txt ]; then
+            pip install -r requirements-test.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            echo "No requirements file found. Skipping dependency installation."
+          fi
+
+      - name: Make test script executable
+        run: chmod +x run_tests.sh
+
+      - name: Run tests with Xvfb
+        run: |
+          xvfb-run -a ./run_tests.sh
