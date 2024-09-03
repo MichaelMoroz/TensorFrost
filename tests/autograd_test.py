@@ -1,10 +1,7 @@
 import TensorFrost as tf
 import numpy as np
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import time
-from tqdm import tqdm
 import unittest
 
 tf.initialize(tf.opengl)

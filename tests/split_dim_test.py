@@ -1,6 +1,5 @@
 import numpy as np
 import TensorFrost as tf
-import matplotlib.pyplot as plt
 import unittest
 
 tf.initialize(tf.cpu)
