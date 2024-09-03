@@ -1,4 +1,4 @@
-name: Build and Test TensorFrost
+name: Load from TestPyPI and test TensorFrost
 
 on:
   workflow_dispatch:
