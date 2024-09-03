@@ -21,11 +21,7 @@ jobs:
     - name: Upload to PyPI
       env:
         TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_REPO_TOKEN }}
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
       run: |
-        if ls */*.whl 1> /dev/null 2>&1; then
-          python -m twine upload --repository-url https://test.pypi.org/legacy/ */*.whl --verbose --disable-progress-bar
-        else
-          echo "No wheel files found to upload"
-          exit 1
-        fi
+        REPO_URL="https://test.pypi.org/legacy/"
+        twine upload --repository-url $REPO_URL ${{ needs.download-artifacts.outputs.artifact-path }}/*.whl
