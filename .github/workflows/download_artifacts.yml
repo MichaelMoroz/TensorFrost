@@ -1,0 +1,81 @@
+name: Download Artifacts
+
+on:
+  workflow_call:
+    outputs:
+      artifact-path:
+        description: "Path to the downloaded artifacts"
+        value: ${{ jobs.download-artifacts.outputs.artifact-path }}
+
+jobs:
+  download-artifacts:
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-path: ${{ steps.set-path.outputs.path }}
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download artifacts
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          const fs = require('fs');
+          
+          async function findWorkflow(partialName) {
+            const workflows = await github.rest.actions.listRepoWorkflows({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            return workflows.data.workflows.find(w => w.name.includes(partialName));
+          }
+          
+          async function downloadArtifact(workflowPartialName, artifactName) {
+            const workflow = await findWorkflow(workflowPartialName);
+            if (!workflow) return false;
+            
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: workflow.id,
+              status: 'success'
+            });
+            
+            if (runs.data.total_count === 0) return false;
+            
+            const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runs.data.workflow_runs[0].id
+            });
+            
+            const matchingArtifact = artifacts.data.artifacts.find(a => a.name === artifactName);
+            if (!matchingArtifact) return false;
+            
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: matchingArtifact.id,
+              archive_format: 'zip',
+            });
+            
+            fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/${artifactName}.zip`, Buffer.from(download.data));
+            return true;
+          }
+          
+          await downloadArtifact("Windows", "windows-wheels");
+          await downloadArtifact("Manylinux", "manylinux-wheels");
+
+    - name: Unzip artifacts
+      run: |
+        mkdir -p ./wheels
+        for zip in *.zip; do
+          if [ -f "$zip" ]; then
+            unzip -d ./wheels "$zip"
+            echo "Unzipped $zip"
+          fi
+        done
+    
+    - name: Set artifact path
+      id: set-path
+      run: echo "path=./wheels" >> $GITHUB_OUTPUT
