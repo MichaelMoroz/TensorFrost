@@ -1,39 +1,36 @@
 name: Upload to TestPyPI
 
 on:
-  workflow_run:
-    workflows: ["Build Windows Wheels", "Build Manylinux Wheels"]
-    types:
-      - completed
+  workflow_dispatch:  # This allows only manual triggering
 
 jobs:
   upload-to-pypi:
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
     - name: Download artifacts
       uses: actions/github-script@v6
       with:
         script: |
-          var artifacts = await github.rest.actions.listWorkflowRunArtifacts({
-             owner: context.repo.owner,
-             repo: context.repo.repo,
-             run_id: ${{github.event.workflow_run.id }},
-          });
-          var matchArtifact = artifacts.data.artifacts.filter((artifact) => {
-            return artifact.name == "windows-wheels" || artifact.name == "manylinux-wheels"
-          });
-          var downloadPromises = matchArtifact.map(async (artifact) => {
-            var download = await github.rest.actions.downloadArtifact({
-               owner: context.repo.owner,
-               repo: context.repo.repo,
-               artifact_id: artifact.id,
-               archive_format: 'zip',
+          async function downloadArtifact(workflowName, artifactName) {
+            const allArtifacts = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
             });
-            var fs = require('fs');
-            fs.writeFileSync('${{github.workspace}}/' + artifact.name + '.zip', Buffer.from(download.data));
-          });
-          await Promise.all(downloadPromises);
+            const matchingArtifact = allArtifacts.data.artifacts.find((artifact) => {
+              return artifact.name == artifactName
+            });
+            const download = await github.rest.actions.downloadArtifact({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              artifact_id: matchingArtifact.id,
+              archive_format: 'zip',
+            });
+            const fs = require('fs');
+            fs.writeFileSync('${{github.workspace}}/' + artifactName + '.zip', Buffer.from(download.data));
+          }
+          await downloadArtifact("Build Windows Wheels", "windows-wheels");
+          await downloadArtifact("Build Manylinux Wheels", "manylinux-wheels");
 
     - name: Unzip artifacts
       run: |
