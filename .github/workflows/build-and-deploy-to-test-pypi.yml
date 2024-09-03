@@ -1,4 +1,4 @@
-name: Build and Deploy to PyPI
+name: Build and Deploy to Test PyPI
 
 on:
   workflow_dispatch:
