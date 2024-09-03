@@ -1,0 +1,32 @@
+name: Upload to TestPyPI
+
+on:
+  workflow_dispatch:  # This allows manual triggering
+  release:
+    types: [created]  # You can adjust this to your needs
+
+jobs:
+  upload-to-pypi:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Download Windows wheels
+      uses: actions/download-artifact@v2
+      with:
+        name: windows-wheels
+        path: ./dist/windows
+
+    - name: Download Manylinux wheels
+      uses: actions/download-artifact@v2
+      with:
+        name: manylinux-wheels
+        path: ./dist/manylinux
+
+    - name: Install Twine
+      run: pip install twine
+
+    - name: Upload to PyPI
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_REPO_TOKEN }}
+      run: |
+        python -m twine upload --repository-url https://test.pypi.org/legacy/ ./dist/windows/*.whl ./dist/manylinux/*.whl --verbose --disable-progress-bar
