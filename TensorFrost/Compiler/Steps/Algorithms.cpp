@@ -1,7 +1,7 @@
 #include "Compiler/KernelGen.h"
 
 namespace TensorFrost {
-bool IR::InsertAlgorithmicPrimitives() {
+bool IR::InsertAlgorithmicPrimitives(bool skip_differentiable) {
 	// get all nodes for each type
 	vector<Node*> nodes = GetNodesOfType(OpProp::Algorithm);
 
@@ -9,6 +9,9 @@ bool IR::InsertAlgorithmicPrimitives() {
 
 	// replace all nodes with the algorithmic primitive
 	for (auto node : nodes) {
+		if(HasDerivativeImplemented(node->name) && skip_differentiable) {
+			continue;
+		}
 		//compute the sum after the node
 		ExecuteExpressionAfter(node, [&]() {
 			//get the input tensor

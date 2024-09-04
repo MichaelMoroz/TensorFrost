@@ -63,8 +63,13 @@ public:
 		if(Contains(id)) {
 			return stored_gradients[arguments[id]];
 		} else {
-			Tensor* zero_grad = &Tensor::Constant(argument_inputs[id]->GetShape(), 0.0f);
-			stored_gradients[arguments[id]] = zero_grad;
+			IR* cur_ir = Tensor::GetEvaluationContext();
+			const Tensor* input = argument_inputs[id];
+			Tensor* zero_grad = nullptr;
+			cur_ir->ExecuteExpressionAfter(input->node_, [&]() {
+				zero_grad = &Tensor::Constant(argument_inputs[id]->GetShape(), 0.0f);
+				stored_gradients[arguments[id]] = zero_grad;
+			});
 			return zero_grad;
 		}
 	}
@@ -90,7 +95,7 @@ typedef function<Tensors(map<int, const Tensor*> inputs, const Tensor* gradient,
 
 VJPGradientFunction GetVJPForOperation(string name);
 void RegisterVJP(string name, VJPGradientFunction vjp);
-
+bool HasDerivativeImplemented(string name);
 //TODO JVPGradientFunction for forward mode autodiff
 
 typedef function<void(Tensors& output, map<int, const Tensor*> inputs, const Tensor* tensor, vector<int> axes)> ImplementationFunction;

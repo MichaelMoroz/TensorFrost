@@ -3,8 +3,9 @@
 [![Manylinux](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml)
 [![TestPyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_test_pypi.yml)
 [![PyPI](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/upload_to_pypi.yml)
-[![Autotests Passing](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml)
+[![Autotests](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/autotests.yml)
 [![PyPI version](https://badge.fury.io/py/tensorfrost.svg)](https://badge.fury.io/py/tensorfrost)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
@@ -19,7 +20,7 @@ For more detail about this project, please read my blog post!
 [Writing an optimizing tensor compiler from scratch](https://michaelmoroz.github.io/WritingAnOptimizingTensorCompilerFromScratch/)
 
 
-> The current version the library is still in early beta, and at this point I would strongly recommend not to use this for any serious projects. It is also very likely that there will be breaking updates in the future, as a lot of the code is not finalized.
+> The current version of the library is still in early beta, and at this point I would strongly recommend not to use this for any serious projects. It is also very likely that there will be breaking updates in the future, as a lot of the code is not finalized.
 
 ## Examples
 
@@ -108,6 +109,12 @@ tf.initialize(tf.cpu) # or tf.opengl
 ```
 
 TensorFrost will find any available MSVC(Windows) or GCC(Linux) compiler and use it to compile the main code and the kernels. In OpenGL mode the driver compiles the kernels. (TODO: compile the main code into python for faster compile times, MSVC is super slow, 1.5 seconds for a single function)
+
+>[!TIP]
+> If you are compiling a large program it is useful to change the compilation flags to just "" to avoid the long compile times. Especially a problem on Windows.
+> ```python
+> tf.initialize(tf.opengl, "")
+> ```
 
 You can have TensorFrost in code generation mode instead (you cant run tensor programs here), it is much faster, but you would need to use the code manually afterwards:
 

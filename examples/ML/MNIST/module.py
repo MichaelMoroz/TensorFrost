@@ -28,9 +28,9 @@ class MNIST_net(tf.Module):
         self.res1p = self.res1 // 2
         self.res2 = (self.res1p - self.kernel_size + 1)
         self.res2p = self.res2 // 2
-        self.kernels1 = 16
-        self.kernels2 = 128
-        self.layer1 = 512
+        self.kernels1 = 4
+        self.kernels2 = 16
+        self.layer1 = 64
         self.conv1 = tf.Parameter([self.kernels1, 1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * 1)))
         self.conv1_bias = tf.Parameter([self.kernels1], tf.float32, random_scale = 0.0)
         self.conv2 = tf.Parameter([self.kernels2, self.kernels1, self.kernel_size, self.kernel_size], tf.float32, random_scale = np.sqrt(0.1 / (self.kernel_size ** 2 * self.kernels1)))
@@ -159,8 +159,7 @@ avg_loss = 0.0
 
 time_start = time.time()
 
-tf.window.show(800, 600, "MNIST training")
-zero = tf.tensor(np.zeros((800, 600, 3), np.float32))
+#tf.window.show(800, 600, "MNIST training")
 for i in progress_bar:
     batch = i % iterations
     if(batch == 0):
@@ -182,7 +181,7 @@ for i in progress_bar:
 
     if(i == 0): tf.renderdoc_end_capture()
 
-    tf.window.render_frame(zero)
+    #tf.window.render_frame()
     
 time_end = time.time()
 

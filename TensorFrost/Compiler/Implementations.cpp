@@ -174,17 +174,6 @@ map<string, VJPGradientFunction> gradient_functions =
 	{"dim_sum", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		grads.Add(Tensor::Unsqueeze(grad, out.axis()));
 	}},
-	{"dim_mean", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		int axis = out.axis();
-		Tensors shape = in[0].GetShape();
-		Tensor& dim_size = Tensor::tofloat(*shape[axis]);
-		grads.Add(Tensor::Unsqueeze(grad, axis) / dim_size);
-	}},
-	{"dim_norm", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		//TODO: store axis from the right instead of the left
-		Tensor& unsq = Tensor::Unsqueeze(grad/out, out.axis());
-		grads.Add(unsq * in[0]);
-	}},
 	{"dim_max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		auto& out_unsq = Tensor::Unsqueeze(out, out.axis());
 		auto& grad_unsq = Tensor::Unsqueeze(grad, out.axis());
@@ -282,6 +271,10 @@ void RegisterVJP(string name, VJPGradientFunction vjp) {
 		throw std::runtime_error("VJP for operation " + name + " already registered");
 	}
 	gradient_functions[name] = vjp;
+}
+
+bool HasDerivativeImplemented(string name) {
+	return gradient_functions.contains(name);
 }
 
 Tensor* ComputeReduction(const Tensor* array, int axis,
@@ -408,16 +401,11 @@ Tensor* ComputeSum(const Tensor* array, int axis) {
 }
 
 Tensor* ComputeNorm(const Tensor* array, int axis) {
-	return &Tensor::sqrt(Tensor::tofloat(*ComputeReduction(array, axis,
-		[](Tensor* a, Tensor* b) { return &(*a + *b); }, "norm", 0,
-		[](Tensor* a) { return &(*a * *a); })));
+	return &Tensor::sqrt(Tensor::Sum(*array * *array, axis));
 }
 
 Tensor* ComputeMean(const Tensor* array, int axis) {
-	Tensor* sum = ComputeSum(array, axis);
-	Tensors shape = array->GetShape();
-	axis = GetAxis((int)shape.size(), axis);
-	return &(Tensor::tofloat(*sum) / Tensor::tofloat(*shape[axis]));
+	return &(Tensor::Sum(*array, axis) / Tensor::tofloat(*array->GetShape()[axis]));
 }
 
 uint GetInitialMax(TFType type) {

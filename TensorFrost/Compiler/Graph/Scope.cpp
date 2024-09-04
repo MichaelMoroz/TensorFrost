@@ -20,7 +20,11 @@ inline bool KernelScope::IsBoundary(const Node* input, const Node* output,
 		return arg_type == ArgType::Memory;
 	}
 
-	//if the input is a load
+	//if the input is a scatter, then this is a boundary
+	if (input_op->HasAnyType(OpProp::Scatter)) {
+		//but multiple scatters can be in the same kernel
+		return !(output_op->HasAnyType(OpProp::Scatter));
+	}
 
 	// shape should not be inside kernels
 	if (arg_type == ArgType::Shape) {

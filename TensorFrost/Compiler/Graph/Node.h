@@ -103,16 +103,18 @@ class Node {
 	Node* GetParent(string name);
 	Node* GetChild(string name);
 
-	//get the parent that has a common parent with another node
-	Node* GetCommonParent(Node* other);
+	//get the parent that has a common first parent with another node
+	Node* GetNodeWithCommonParent(Node* other);
 
 	Node* GetLastChild();
 
 	//checks if the other node has all parents as this node
-	bool HasCommonParents(Node* other) const;
+	bool HasCommonParents(Node* other, int max_depth = 128) const;
 
 	bool HasParent(string name);
 	bool HasChild(string name);
+
+	void ValidateParentShapes() const;
 
 	void SetMemoryType(NodeProp memory_type, int index = 0);
 	void CheckNode() const;
@@ -274,5 +276,6 @@ class NodeIterator {
 	bool operator!=(const Node* node) { return currentNode != node; }
 };
 
+std::string MakeNodeErrorMessage(std::string message, std::initializer_list<const Node*> nodes);
 
 } // namespace TensorFrost

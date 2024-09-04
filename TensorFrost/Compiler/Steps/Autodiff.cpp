@@ -41,7 +41,11 @@ void IR::ComputeAutodiff()
 		Node* last_loss_version = loss->GetLastVersion(gradient);
 
 		loss_nodes.insert(last_loss_version);
-		min_range[last_loss_version] = std::min(min_range[last_loss_version], wrt->index_);
+		if(!min_range.contains(last_loss_version)) {
+			min_range[last_loss_version] = wrt->index_;
+		} else {
+			min_range[last_loss_version] = std::min(min_range[last_loss_version], wrt->index_);
+		}
 		loss_wrt_grad[{last_loss_version, wrt}] = gradient;
 	}
 

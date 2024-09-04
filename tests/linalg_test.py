@@ -47,8 +47,8 @@ def qr_decomposition_tensorfrost(A):
         Q[j, i] = A[j, i] / R[i, i]
 
         p, k = tf.index_grid([0, i + 1], [m, n])
-        t, = tf.index_grid([i+1], [n])
-        R[i, t] = tf.sum(Q[p, i] * A[p, k], axis=0)
+        dot = tf.sum(Q[p, i] * A[p, k], axis=0)
+        R[i, dot.indices[0] + i + 1] = dot
         A[p, k] -= Q[p, i] * R[i, k]
 
     R[n-1, n-1] = tf.norm(A[j, n-1])

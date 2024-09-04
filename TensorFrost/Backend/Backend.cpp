@@ -23,7 +23,23 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 
 	if (!compilerOptions.empty()) {
 		kernelCompileOptions = compilerOptions;
+	} else if(backendType != BackendType::CPU) {
+		kernelCompileOptions = ""; //no need for cpu optimizations on other backends
+	} else {
+#ifdef _WIN32
+		kernelCompileOptions = "/O2 /fp:fast /openmp";
+#else
+		kernelCompileOptions = "-O3 -ffast-math -fopenmp";
+#endif
 	}
+
+#ifdef _DEBUG
+#ifdef _WIN32
+	kernelCompileOptions = "/Zi";
+#else
+	kernelCompileOptions = "-g";
+#endif
+#endif
 
 	current_backend = backendType;
 

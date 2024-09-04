@@ -178,7 +178,7 @@ public:
 
 	void RemoveUnusedOperations();
 
-	bool InsertAlgorithmicPrimitives();
+	bool InsertAlgorithmicPrimitives(bool skip_differentiable);
 	void UnrollLoops(int max_iterations = 8);
 	void UnrollKernelDimensions();
 	void UnrollAtomicOperations();
@@ -197,7 +197,7 @@ public:
 	void AddKernelGlobalStoreOperations();
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
-	void RunCompilationPass(string pass_name, const function<void()>& expression, bool print = false, bool update_graph = false);
+	void RunCompilationPass(string pass_name, const function<void()> &expression, bool print = false, bool update_graph = false);
 
 	void RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()> &expression,
 	                                 bool print = false,

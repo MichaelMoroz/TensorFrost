@@ -1,4 +1,5 @@
 #include "Tensor.h"
+#include "Backend/CodeGen/Generators.h"
 
 namespace TensorFrost {
 
@@ -25,6 +26,14 @@ int ReverseDim(int dim, size_t dims) {
 IR* Tensor::evaluation_context_ir_ = nullptr;
 
 Node::~Node() { delete tensor_; }
+
+std::string MakeNodeErrorMessage(std::string message, std::initializer_list<const Node*> nodes) {
+	message += "\n";
+	for (auto node : nodes) {
+		message += GetNodeString(node) + "\n";
+	}
+	return message;
+}
 
 vector<int> ShapeInfo::GetShape(int default_value) const {
 	vector<int> shape;

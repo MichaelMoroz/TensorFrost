@@ -80,7 +80,7 @@ Node * Node::GetChild(string name) {
     return nullptr;
 }
 
-Node * Node::GetCommonParent(Node *other) {
+Node * Node::GetNodeWithCommonParent(Node *other) {
     for (Node* cur_parent = this; cur_parent != nullptr; cur_parent = cur_parent->parent) {
         if (cur_parent->parent == other->parent) {
             return cur_parent;
@@ -109,8 +109,12 @@ Node* Node::GetLastChild() {
     return it.get();
 }
 
-bool Node::HasCommonParents(Node *other) const {
+bool Node::HasCommonParents(Node *other, int max_depth) const {
+    int depth = 0;
     for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+        if (depth++ > max_depth) {
+            break;
+        }
         if (!other->HasParent(cur_parent)) {
             return false;
         }
@@ -126,6 +130,19 @@ bool Node::HasChild(string name) {
     return GetChild(name) != nullptr;
 }
 
+void Node::ValidateParentShapes() const {
+    //compare the shape of this node with the shape of all its parents
+    ShapeInfo shape = ShapeInfo(this);
+    for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {
+        ShapeInfo parent_shape = ShapeInfo(cur_parent);
+        ShapeCompareResult result = CompareShape(parent_shape, shape); //must only be broadcastable
+        if (!result.compatible) {
+            throw std::runtime_error(MakeNodeErrorMessage("The node " + debug_name + " (" + name + ") has incompatible shapes with its parent " +
+                cur_parent->debug_name + " (" + cur_parent->name + ")", {this, cur_parent}));
+        }
+    }
+}
+
 void Node::SetMemoryType(NodeProp memory_type, int index) {
     flags.set(memory_type, index);
 }
@@ -139,6 +156,11 @@ void Node::CheckNode() const {
     // must have tensor
     if (tensor_ == nullptr && !flags.has(NodeProp::IsStatic)) {
         throw std::runtime_error("Tensor not found");
+    }
+
+    //validate the shape of the node if its not scalar
+    if (args.Count(ArgType::Shape) > 0) {
+        ValidateParentShapes();
     }
 }
 

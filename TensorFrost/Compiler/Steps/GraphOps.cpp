@@ -225,7 +225,7 @@ void IR::MoveShapeOutsideKernels() {
 			}
 		}
 
-		Node* common_parent = earliest_output->GetCommonParent(kernel);
+		Node* common_parent = earliest_output->GetNodeWithCommonParent(kernel);
 
 		// copy shape computation and put it before the earliest output (outside of the kernel if its inside)
 		CopyArguments(args_to_copy, common_parent);
@@ -682,7 +682,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			//get last modification of the memory
 			Node* last_mod = output->GetFinalVersion();
 			//get the parent of the last modification on the same level as the memory
-			Node* last_mod_parent = last_mod->GetCommonParent(output);
+			Node* last_mod_parent = last_mod->GetNodeWithCommonParent(output);
 
 			// add store node after the last modification on the same level as the memory
 			ExecuteExpressionAfter(last_mod_parent, [&]() {
@@ -757,7 +757,7 @@ void IR::AddMemoryDeallocation()
 		}
 
 		// need to add deallication in the same scope as the allocation
-		Node* deallocation_point = last_output->GetCommonParent(memory);
+		Node* deallocation_point = last_output->GetNodeWithCommonParent(memory);
 
 		// add deallocation node after the last time the memory is used
 		ExecuteExpressionAfter(deallocation_point, [&]() {

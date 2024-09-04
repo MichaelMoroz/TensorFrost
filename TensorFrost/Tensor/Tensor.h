@@ -235,6 +235,10 @@ public:
 		evaluation_context_ir_ = ir;
 	}
 
+	static IR* GetEvaluationContext() {
+		return evaluation_context_ir_;
+	}
+
 	string GetConstantString() const;
 
 	static Tensor& CustomOperation(const string & name, Tensors inputs, Tensors shape) {

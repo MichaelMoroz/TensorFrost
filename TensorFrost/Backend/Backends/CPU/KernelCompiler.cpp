@@ -11,25 +11,11 @@ bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
     std::string output;
 
 #if defined(_WIN32)
-    if (kernelCompileOptions.empty()) {
-#ifdef NDEBUG
-        kernelCompileOptions = "/O2 /fp:fast /openmp:experimental";
-#else
-        kernelCompileOptions = "/Zi";
-#endif
-    }
     ss << "powershell -command \"$VisualStudioPath = & \\\"${Env:ProgramFiles(x86)}\\Microsoft Visual Studio\\Installer\\vswhere.exe\\\" -latest -products * -property installationPath; & cmd.exe /C \\\"\"\\\"\\\"$VisualStudioPath\\VC\\Auxiliary\\Build\\vcvarsall.bat\\\"\\\" x64 && cl "
        << kernelCompileOptions << " /LD " << tempPath
        << sourcePath << " /Fe:" << dllName
        << "\"\"\\\"\"";
 #else
-    if (kernelCompileOptions.empty()) {
-#ifdef NDEBUG
-        kernelCompileOptions = "-O3 -ffast-math -fopenmp";
-#else
-        kernelCompileOptions = "-g";
-#endif
-    }
     ss << "g++ " << kernelCompileOptions << " -shared -fPIC " << tempPath
        << sourcePath << " -o " << dllName;
 #endif

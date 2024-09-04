@@ -94,15 +94,18 @@ void IR::CompileIR()
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 
+	RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PreAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+		return InsertAlgorithmicPrimitives(true);
+	}, true);
+
 	RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
 
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 	RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
 	RunCompilationPass("OptimizeReductions", [&]() { OptimizeReductions(); }, true);
-	RunCompilationPass("InsertAlgorithmicPrimitives", [&]() { InsertAlgorithmicPrimitives(); }, true);
 
-	RunIterativeCompilationPass("InsertAlgorithmicPrimitives", MAX_COMPILATION_ITERATIONS, [&]() {
-		return InsertAlgorithmicPrimitives();
+	RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PostAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+		return InsertAlgorithmicPrimitives(false);
 	}, true);
 
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
