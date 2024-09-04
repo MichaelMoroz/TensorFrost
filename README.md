@@ -10,10 +10,10 @@
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
-| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan |
-|------------|-----|--------|------|--------|
-| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   |
-| Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   |
+| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan | WGSL/WebGPU |
+|------------|-----|--------|------|--------|------------|
+| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
+| Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
 
 
 For more detail about this project, please read my blog post!
@@ -675,8 +675,6 @@ To debug the generated code you can either look at the generated code in the Tem
 
 If you want to print out the tensor data at runtime, you can use the `tf.print_value(string, tensor_val)` function, which will print out the tensor data to the console, only if the value is scalar. 
 You can also have an assertion that will throw an error if the boolean scalar tensor value is false, with the `tf.assert_value(string, tensor_val)` function.
-
-```python
 
 ### GUI and visualization
 
