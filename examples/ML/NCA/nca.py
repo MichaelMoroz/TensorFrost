@@ -16,11 +16,11 @@ tf.initialize(tf.opengl)
 #https://distill.pub/2020/growing-ca/
 
 CHANNEL_N = 16        # Number of CA state channels
-TARGET_PADDING = 16   # Number of pixels used to pad the target image border
+TARGET_PADDING = 4   # Number of pixels used to pad the target image border
 TARGET_SIZE = 40
-BATCH_SIZE = 16
+BATCH_SIZE = 4*4
 POOL_SIZE = 1024
-CELL_FIRE_RATE = 0.9
+CELL_FIRE_RATE = 0.5
 
 TARGET_EMOJI = "🦎"
 
@@ -46,15 +46,19 @@ class CAModel(tf.Module):
         super().__init__()
         self.channel_n = channel_n
         self.fire_rate = fire_rate
-        self.hidden_size = 32
+        self.hidden_size = 128
+
+        self.size = TARGET_SIZE + 2 * TARGET_PADDING
+        self.state = tf.Parameter([BATCH_SIZE, self.size, self.size, channel_n], tf.float32, optimize = False)
+        self.iters_before_reset = tf.Parameter([BATCH_SIZE], tf.int32, random_scale = 0.0)
 
         self.fc1 = tf.Parameter([channel_n * 3, self.hidden_size], tf.float32)
         self.fc1_bias = tf.Parameter([self.hidden_size], tf.float32, random_scale = 0.0)
         self.fc2 = tf.Parameter([self.hidden_size, channel_n], tf.float32, random_scale = 0.0)
         self.fc2_bias = tf.Parameter([channel_n], tf.float32, random_scale = 0.0)
 
-        self.sobel = tf.Parameter([3, 3], tf.float32, random_scale = 0.0, requires_grad = False)
-        self.seed = tf.Parameter([1], tf.uint32, random_scale = 0.0, requires_grad = False)
+        self.sobel = tf.Parameter([3, 3], tf.float32, random_scale = 0.0, optimize = False)
+        self.seed = tf.Parameter([1], tf.uint32, random_scale = 0.0, optimize = False)
 
     def assert_parameters(self):
         self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
@@ -86,7 +90,7 @@ class CAModel(tf.Module):
         activate = tf.float(self.max_neighbor_alpha(Xstate) > 0.1)
 
         mask = self.rand(Xstate.shape) < self.fire_rate
-        return (Xstate + tf.select(mask, dS, 0.0)) * activate
+        return tf.reshape((Xstate + tf.select(mask, dS, 0.0)) * activate, Xstate.shape)
     
     def iterate(self, Xstate, steps=1):
         for i in range(steps):
@@ -102,11 +106,10 @@ class CAModel(tf.Module):
             element_index = element_index * shape[i] + indices[i]
         return tf.pcgf(tf.uint(element_index) + self.seed)
 
-lr = 0.0005
-
 def get_model_optimizer():
     model = CAModel()
-    opt = tf.optimizers.adam(model, learning_rate = lr, clip = 0.1)
+    opt = tf.optimizers.adam(model, clip = 0.01)
+    opt.set_clipping_type(tf.clipping.norm)
     return model, opt
 
 def rand_range(lo, hi, seed):
@@ -149,17 +152,30 @@ def optimization_step():
     size = TARGET_SIZE + 2 * TARGET_PADDING
     image = tf.input([size, size, 4], tf.float32)
 
+    params = tf.input([-1], tf.float32)
+
+    max_steps = tf.int(params[0])
+    opt.learning_rate = params[1]
+
     #create corrupted image set
-    corrupted, target = create_corrupted_batch(image, 0)
+    corrupted, target = create_corrupted_batch(image, tf.int(model.seed[0]))
 
     #add hidden channels to the corrupted image
-    state = add_hidden_channels(corrupted, model.channel_n)
+    new_state = add_hidden_channels(corrupted, model.channel_n)
 
-    #run the model for 10 steps
-    state = model.iterate(state, 9)
+    restart = model.iters_before_reset <= 0
+    restart_seed = tf.pcg(model.seed[0] +tf.uint( restart.indices[0]))
+    model.iters_before_reset = tf.select(restart, tf.int(restart_seed % (tf.pcg(restart_seed) % tf.uint(max_steps))) + 1, model.iters_before_reset)
+
+    #initialize the state
+    restart_mask = tf.reshape(restart, [BATCH_SIZE, 1, 1, 1])
+    model.state = tf.select(restart_mask, new_state, model.state)
+
+    #run the model for a few steps
+    model.state = model.iterate(model.state, 24)
 
     #extract the output images
-    output = to_rgba(state)
+    output = to_rgba(model.state)
 
     #loss is the difference between the corrupted and target images
     L = tf.mean(tf.mean(tf.mean(tf.mean((output - target)**2.0))))
@@ -167,6 +183,8 @@ def optimization_step():
     opt.step(L)
 
     output_image = batch_to_img(output)
+
+    model.iters_before_reset = model.iters_before_reset - 1
 
     params = opt.parameters()
     params.append(L)
@@ -180,11 +198,6 @@ target = load_emoji(TARGET_EMOJI)
 
 #add padding to the target image
 target = np.pad(target, [(TARGET_PADDING, TARGET_PADDING), (TARGET_PADDING, TARGET_PADDING), (0, 0)], 'constant')
-
-#plot the target emoji
-print("Target shape:", target.shape)
-plt.imshow(target[:, :, 3])
-plt.show()
 
 #initialize the model
 model, opt = get_model_optimizer()
@@ -200,32 +213,15 @@ model.sobel = tf.tensor(sobel)
 #target image
 target_tf = tf.tensor(target)
 
-# #run a step of the optimization
-# outputs = train_step(opt, target_tf)
-# opt.update_parameters(outputs[:-2])
-# L = outputs[-2].numpy
-# output = outputs[-1].numpy
-
-# print("Loss:", L)
-
-#run the optimization for 1000 steps
-# progress_bar = tqdm(range(10))
-# for i in progress_bar:
-#     outputs = train_step(opt, target_tf)
-#     opt.update_parameters(outputs[:-2])
-#     L = outputs[-2].numpy
-#     progress_bar.set_postfix(loss = L)
-
-# #plot the output images
-# output = outputs[-1].numpy
-# plt.imshow(output[:, :, 3])
-# plt.show()
-
 ImageSize = 1080
 
 tf.window.show(ImageSize, ImageSize, "Neural Cellular Automata")
 
 prev_time = time.time()
+
+smoothed_loss = 0.0
+max_steps = 1
+lr = 0.01
 
 while not tf.window.should_close():
     cur_time = time.time() 
@@ -235,10 +231,13 @@ while not tf.window.should_close():
     delta_time = cur_time - prev_time
     tf.imgui.text("Frame time: %.3f ms" % (delta_time * 1000.0))
 
-    outputs = train_step(opt, target_tf)
+    outputs = train_step(opt, target_tf, np.array([max_steps, lr*0.1], np.float32))
     opt.update_parameters(outputs[:-2])
-    L = outputs[-2].numpy
-    tf.imgui.text("Loss: %.3f" % L)
+    L = outputs[-2].numpy[0]
+    smoothed_loss = 0.9 * smoothed_loss + 0.1 * L
+    tf.imgui.text("Loss: %.5f" % smoothed_loss)
+    max_steps = tf.imgui.slider("Max Steps", max_steps, 1, 100)
+    lr = tf.imgui.slider("Learning Rate", lr, 0.001, 0.01)
 
     tf.window.render_frame(outputs[-1])
 

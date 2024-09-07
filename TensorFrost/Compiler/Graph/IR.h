@@ -107,6 +107,9 @@ public:
     		throw std::runtime_error("Cursor cannot be set to null");
 		}
     }
+
+	void LimitKernelMemoryDependencies();
+
 	stack<Node*> scope_stack;
 
 	void EndScope() {

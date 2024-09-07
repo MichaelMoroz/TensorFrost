@@ -14,10 +14,10 @@ public:
     TFType dtype;
     float random_scale;
     float random_offset;
-    bool requires_grad;
+    bool optimize;
 
     Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
-        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), requires_grad(requires_grad) {}
+        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), optimize(requires_grad) {}
 
     bool CanBeInitialized() {
         for (int i = 0; i < shape.size(); i++) {
@@ -44,7 +44,7 @@ public:
     void setitem(size_t index, py::object value) {
         _parameters[index] = value;
         if (py::isinstance<Parameter>(value)) {
-            _requires_grad[index] = py::cast<Parameter&>(value).requires_grad;
+            _requires_grad[index] = py::cast<Parameter&>(value).optimize;
         }
     }
 
@@ -68,13 +68,13 @@ public:
 
     map<string, py::object> _attributes;
     map<string, AttributeType> _attribute_types;
-    map<string, bool> _requires_grad;
+    map<string, bool> _optimize;
     vector<string> _attribute_order;
-    bool requires_grad = true;
+    bool optimize = true;
 
     py::object tf;
 
-    Module(bool requires_grad = true) : requires_grad(requires_grad) {
+    Module(bool requires_grad = true) : optimize(requires_grad) {
         tf = py::module::import("TensorFrost");
     }
 
@@ -87,26 +87,30 @@ public:
 
     void setattr(const std::string& name, py::object value) {
         AttributeType type = AttributeType::None;
-        bool requires_grad = true;
+        bool optimize = true;
         if (py::isinstance<Parameter>(value)) {
             type = AttributeType::Parameter;
-            requires_grad = py::cast<Parameter&>(value).requires_grad;
+            optimize = py::cast<Parameter&>(value).optimize;
+            //if not float then can't optimize
+            if(py::cast<Parameter&>(value).dtype != TFType::Float) {
+                optimize = false;
+            }
         } else if (py::isinstance<ParameterArray>(value)) {
             type = AttributeType::ParameterArray;
         } else if (py::isinstance<Module>(value)) {
             type = AttributeType::Module;
-            requires_grad = py::cast<Module&>(value).requires_grad;
+            optimize = py::cast<Module&>(value).optimize;
         }
 
         bool already_exists = _attributes.contains(name);
         if(type == AttributeType::None && already_exists) {
             type = _attribute_types[name];
-            requires_grad = _requires_grad[name];
+            optimize = _optimize[name];
         }
 
         _attributes[name] = value;
         _attribute_types[name] = type;
-        _requires_grad[name] = requires_grad && this->requires_grad;
+        _optimize[name] = optimize && this->optimize;
         if (!already_exists) _attribute_order.push_back(name);
     }
 
@@ -115,10 +119,10 @@ public:
     }
 
     bool param_requires_grad(const std::string& name) {
-        if (_requires_grad.contains(name)) {
-            return _requires_grad[name];
+        if (_optimize.contains(name)) {
+            return _optimize[name];
         }
-        return requires_grad;
+        return optimize;
     }
 
     vector<pair<string, py::object>> get_attributes_of_type(AttributeType type) {

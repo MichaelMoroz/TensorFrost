@@ -56,6 +56,7 @@ class Node {
 	string debug_name;
 	string name;
 	float cost_ = -1.0f;
+	unordered_set<Node*> memory_deps;
 
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
 	const Operation* op;

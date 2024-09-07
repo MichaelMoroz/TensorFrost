@@ -1117,4 +1117,41 @@ void IR::TryReplaceModificationsWithVersions()
 	UpdateGraph();
 }
 
+#define MAX_MEMORY_DEPENDENCIES 8
+
+void IR::LimitKernelMemoryDependencies() {
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	for (auto kernel : kernels) {
+		unordered_set<Node*> kernel_deps;
+
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			//go over all inputs
+			unordered_set<Node*> node_deps;
+			for (auto& [id, from] : node->args.inputs_) {
+				if(id.first == ArgType::Shape) {
+					continue;
+				}
+				bool is_outside = !from->HasParent(kernel);
+				if (is_outside) {
+					node_deps.insert(from);
+				} else {
+					node_deps.insert(from->memory_deps.begin(), from->memory_deps.end());
+				}
+			}
+			node->memory_deps = node_deps;
+			kernel_deps.insert(node_deps.begin(), node_deps.end());
+		}
+
+		kernel->memory_deps = kernel_deps;
+
+		if(kernel_deps.size() <= MAX_MEMORY_DEPENDENCIES) continue;
+
+		//split the kernel into multiple kernels with a limited number of dependencies
+		//vector<unordered_set<Node*>> new_kernel_sets;
+
+		//TODO: implement this
+	}
+}
+
 } // namespace TensorFrost

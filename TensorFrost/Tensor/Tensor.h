@@ -467,6 +467,15 @@ public:
 		return output;
 	}
 
+	Tensors Indices() const {
+		int dims = GetDimension();
+		Tensors indices = Tensors();
+		for (int i = 0; i < dims; i++) {
+			indices.push_back(&Index(i));
+		}
+		return indices;
+	}
+
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
 	                     const Tensors& indices = Tensors(), bool unsafe = false);
 

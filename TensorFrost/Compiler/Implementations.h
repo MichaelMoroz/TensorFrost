@@ -50,7 +50,9 @@ public:
 		try {
 			Tensor& new_tensor = const_cast<Tensor&>(ReduceGradientToShape(tensor, *target));
 			if(Contains(type, index)) {
-				stored_gradients[arguments[id]] = &(*stored_gradients[arguments[id]] + new_tensor);
+				auto& old_tensor = *stored_gradients[arguments[id]];
+				auto& loaded = Tensor::Reshape(old_tensor, old_tensor.GetShape()); //TODO: temporary way to restrict fusion, remove after implementing split
+				stored_gradients[arguments[id]] = &(loaded + new_tensor);
 			} else {
 				stored_gradients[arguments[id]] = &new_tensor;
 			}
