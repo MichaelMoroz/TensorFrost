@@ -19,6 +19,7 @@ void TensorProgram::CreateProgram(string name) {
 	for (int i = 0; i < outputs.size(); i++) {
 		outputs[i]->SetMemoryType(NodeProp::OutputMemory, i);
 	}
+	ir.output_memory_count = (int)outputs.size();
 
 	if (outputs.size() == 0) {
 		throw std::runtime_error("TensorProgram does not do any computation: no outputs");

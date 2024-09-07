@@ -304,13 +304,15 @@ void IR::ComputeStatistics() {
 			if (is_input) {
 				input_memory_count++;
 			}
-			if (is_output) {
-				output_memory_count++;
-			}
 			if (!is_input && !is_output) {
 				temp_memory_count++;
 			}
 		}
+	}
+
+	//Check if output memory map has all the outputs
+	if (output_memory_map.size() != output_memory_count) {
+		throw std::runtime_error("Output memory map does not have all the outputs, some got lost");
 	}
 }
 
