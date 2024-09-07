@@ -10,8 +10,8 @@ void IR::RemoveNode(Node* node) {
             for (auto child = NodeIterator(node); !child.end(); child.next()) {
                 to_delete.push_back(*child);
             }
-            for (Node* child : to_delete) {
-                RemoveNode(child);
+            for (int i = (int)to_delete.size() - 1; i >= 0; i--) {
+                RemoveNode(to_delete[i]);
             }
         }
 
@@ -149,6 +149,8 @@ void IR::CompileIR()
 	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
 	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+
+	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
 	RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
 	RunCompilationPass("GetOutputList", [&]() { GetOutputList(); });
 	RunCompilationPass("ComputeStatistics", [&]() { ComputeStatistics(); });
