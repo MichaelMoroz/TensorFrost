@@ -16,13 +16,15 @@ tf.initialize(tf.opengl)
 #https://distill.pub/2020/growing-ca/
 
 CHANNEL_N = 16        # Number of CA state channels
-TARGET_PADDING = 4   # Number of pixels used to pad the target image border
+TARGET_PADDING = 8   # Number of pixels used to pad the target image border
 TARGET_SIZE = 40
 BATCH_SIZE = 3*3
 POOL_SIZE = 1024
 CELL_FIRE_RATE = 0.5
 
-TARGET_EMOJI = "🦎"
+INFERENCE_SIZE = 256
+
+TARGET_EMOJI = "🎄" #😀🦋🦎
 
 def load_image(url, max_size=TARGET_SIZE):
     r = requests.get(url)
@@ -44,6 +46,32 @@ def GELU(X):
 def LeakyReLU(X):
     return tf.select(X > 0.0, X, 0.01*X)
 
+
+#load the target emoji
+# target = load_emoji(TARGET_EMOJI)
+
+
+
+#load from png file
+target = PIL.Image.open("examples/ML/NCA/catthink.png")
+target = np.array(target)
+target = np.float32(target)/255.0
+target = target[..., :] * target[..., 3:4]
+
+#make sure the target image is of the right size
+if target.shape[0] != TARGET_SIZE or target.shape[1] != TARGET_SIZE:
+    raise ValueError("Target image size must be %d x %d" % (TARGET_SIZE, TARGET_SIZE))
+
+# #plot the target image
+# plt.imshow(target)
+# plt.axis('off')
+# plt.show()
+
+
+#flip the image on the y axis
+target = target[::-1, :]
+
+
 class CAModel(tf.Module):
     def __init__(self, channel_n=CHANNEL_N, fire_rate=CELL_FIRE_RATE):
         super().__init__()
@@ -51,8 +79,8 @@ class CAModel(tf.Module):
         self.fire_rate = fire_rate
         self.hidden_size = 128
 
-        self.size = TARGET_SIZE + 2 * TARGET_PADDING
-        self.pool = tf.Parameter([POOL_SIZE, self.size, self.size, channel_n], tf.float32, optimize = False)
+        train_size = TARGET_SIZE + 2 * TARGET_PADDING
+        self.pool = tf.Parameter([POOL_SIZE, train_size, train_size, channel_n], tf.float32, optimize = False)
 
         self.fc1 = tf.Parameter([channel_n * 3, self.hidden_size], tf.float32)
         self.fc1_bias = tf.Parameter([self.hidden_size], tf.float32, random_scale = 0.0)
@@ -81,7 +109,7 @@ class CAModel(tf.Module):
         dY = self.filter(Xstate, self.sobel.T)
         bi, i, j, ch = tf.indices([Xstate.shape[0], Xstate.shape[1], Xstate.shape[2], self.channel_n * 3])
         X = tf.select(ch < self.channel_n, Xstate[bi, i, j, ch], tf.select(ch < 2 * self.channel_n, dX[bi, i, j, ch - self.channel_n], dY[bi, i, j, ch - 2 * self.channel_n]))
-        X = LeakyReLU(X @ self.fc1 + self.fc1_bias)
+        X = GELU(X @ self.fc1 + self.fc1_bias)
         X = X @ self.fc2 + self.fc2_bias
         return tf.reshape(X, [Xstate.shape[0], Xstate.shape[1], Xstate.shape[2], self.channel_n])
     
@@ -89,12 +117,17 @@ class CAModel(tf.Module):
         dS = self.dState(Xstate)
 
         #if no active neighbors, dont activate
-        activate = tf.float(self.max_neighbor_alpha(Xstate) > 0.01)
+        activate = tf.float(self.max_neighbor_alpha(Xstate) > 0.1)
 
         Xshape = Xstate.shape
         mask = self.rand(Xshape) < self.fire_rate
-        noise = self.rand(Xshape) * 2.0 - 1.0
-        return tf.reshape(((Xstate + tf.select(mask, dS, 0.0)) + noise * 0.0005)* activate, Xstate.shape)
+        #noise = self.rand(Xshape) * 2.0 - 1.0
+
+        #boundary conditions
+        bi, wi, hi, ch = tf.indices([Xshape[0], Xshape[1], Xshape[2], 1])
+        bc = 1.0#tf.select((wi <= 1) | (wi >= Xshape[1] - 2) | (hi <= 1) | (hi >= Xshape[2] - 2), 0.0, 1.0)
+
+        return tf.reshape((Xstate + tf.select(mask, dS, 0.0)) * bc * activate, Xstate.shape)
     
     def rand(self, shape):
         self.seed = tf.pcg(self.seed)
@@ -120,7 +153,7 @@ def corruption_mask(shape, seed):
     seed = tf.int(tf.pcg(tf.uint(seed + bi)))
     posx = tf.float(shape[1]) * rand_range(0.25, 0.75, seed*3 + 123)
     posy = tf.float(shape[2]) * rand_range(0.25, 0.75, seed*3 + 456)
-    rad = rand_range(1.0, rand_range(1.0, 16.0, seed*38 + 51854), seed*3 + 789)
+    rad = rand_range(1.0, rand_range(1.0, 15.0, seed*38 + 51854), seed*3 + 789)
 
     xi = tf.float(wi)
     yi = tf.float(hi)
@@ -144,7 +177,43 @@ def batch_to_img(batch):
     grid_size = tf.int(tf.ceil(tf.sqrt(tf.float(batch.shape[0]))))
     wi, hi, ch = tf.indices([grid_size * batch.shape[1], grid_size * batch.shape[2], 3])
     bi = wi / batch.shape[1] + grid_size * (hi / batch.shape[2])
-    return tf.tanh(tf.abs(tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], ch], 1.0)))
+    color = tf.abs(tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], ch], 1.0))
+    alpha = tf.abs(tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], 3], 1.0))
+    res = 1.0 - alpha + color
+    #max_color = tf.max(tf.max(tf.max(res)))
+    return tf.tanh(res) / tf.tanh(1.0)
+
+def inference_step():
+    model = CAModel()
+    model.initialize_input()
+
+    input_state = tf.input([1, -1, -1, model.channel_n], tf.float32)
+
+    input_params = tf.input([-1], tf.float32)
+
+    mousex = tf.round(input_params[0] * tf.float(input_state.shape[1]))
+    mousey = tf.round(input_params[1] * tf.float(input_state.shape[2]))
+    press = input_params[2]
+    rad = input_params[3]
+    ch_offset = tf.int(input_params[4])
+
+    ch, wi, hi, ch = input_state.indices
+    dist = tf.sqrt((tf.float(wi) - mousex)**2.0 + (tf.float(hi) - mousey)**2.0)
+    mask = tf.select((dist < rad) & (press > 0.5), 0.0, 1.0)
+
+    seedstate = tf.select(press < -0.5, tf.select((dist < rad) & (ch == 3), 1.0, 0.0), 0.0)
+
+    input_state = input_state * mask + seedstate
+
+    #run the model for a few steps
+    input_state = model.step(input_state)
+
+    #extract the output images
+    output_image = batch_to_img(to_rgba(input_state, ch_offset))
+
+    return output_image, input_state, model.seed
+
+inference_step = tf.compile(inference_step)
 
 def optimization_step():
     model, opt = get_model_optimizer()
@@ -165,8 +234,8 @@ def optimization_step():
     target = get_target_batch(image)
     mask = corruption_mask(target.shape, tf.int(model.seed[0]))
 
-    iters_per_optimizer_step = 32
-    every_n = 4 #corrupt every n frames 
+    iters_per_optimizer_step = 24
+    every_n = 2 #corrupt every n frames 
 
     bi = tf.indices([BATCH_SIZE])[0]
     corruption_frame = tf.int(tf.pcg(model.seed[0] + tf.uint(bi + 5451))) % (every_n * iters_per_optimizer_step)
@@ -174,7 +243,8 @@ def optimization_step():
 
     #initialize the state
     bi, wi, hi, ch = tf.indices([BATCH_SIZE, size, size, model.channel_n])
-    state = model.pool[batch_ids[bi], wi, hi, ch]
+    is_center = (wi == size//2) & (hi == size//2) & (ch == 3)
+    state = tf.select(bi == 0, tf.select(is_center, 1.0, 0.0), model.pool[batch_ids[bi], wi, hi, ch]) #for the first batch sample, just use the initialization seed
 
     corruptor = tf.lerp(0.99, 1.01, model.rand(state.shape)) * mask
 
@@ -204,38 +274,6 @@ def optimization_step():
 
 train_step = tf.compile(optimization_step)
 
-def inference_step():
-    model = CAModel()
-    model.initialize_input()
-
-    input_state = tf.input([1, model.size, model.size, model.channel_n], tf.float32)
-
-    input_params = tf.input([-1], tf.float32)
-
-    mousex = input_params[0] * tf.float(model.size)
-    mousey = input_params[1] * tf.float(model.size)
-    press = input_params[2]
-    rad = input_params[3]
-    ch_offset = tf.int(input_params[4])
-
-    ch, wi, hi, ch = input_state.indices
-    dist = tf.sqrt((tf.float(wi) - mousex)**2.0 + (tf.float(hi) - mousey)**2.0)
-    mask = tf.select((dist < rad) & (press > 0.5), 0.0, 1.0)
-
-    input_state = input_state * mask
-
-    #run the model for a few steps
-    input_state = model.step(input_state)
-
-    #extract the output images
-    output_image = batch_to_img(to_rgba(input_state, ch_offset))
-
-    return output_image, input_state, model.seed
-
-inference_step = tf.compile(inference_step)
-
-#load the target emoji
-target = load_emoji(TARGET_EMOJI)
 
 #add padding to the target image
 target = np.pad(target, [(TARGET_PADDING, TARGET_PADDING), (TARGET_PADDING, TARGET_PADDING), (0, 0)], 'constant')
@@ -251,11 +289,19 @@ model.seed = tf.tensor(np.array([0], np.uint32))
 sobel = np.array([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]], np.float32)
 model.sobel = tf.tensor(sobel)
 
-#initialize the pool with the target image
-pool = np.repeat(target[np.newaxis, ...], POOL_SIZE, axis = 0)
-#pad to the channel size
-pool = np.pad(pool, [(0, 0), (0, 0), (0, 0), (0, model.channel_n - pool.shape[3])], 'constant')
-model.pool = tf.tensor(pool)
+def initialize_pool():
+    #initialize the pool with the target image
+    #pool = np.repeat(target[np.newaxis, ...], POOL_SIZE, axis = 0)
+
+    #initialize the pool with a white point at the center
+    pool = np.zeros([POOL_SIZE, target.shape[0], target.shape[1], model.channel_n], np.float32)
+    pool[:, pool.shape[1]//2, pool.shape[2]//2, 3:] = 1.0
+
+    #pad to the channel size
+    pool = np.pad(pool, [(0, 0), (0, 0), (0, 0), (0, model.channel_n - pool.shape[3])], 'constant')
+    return tf.tensor(pool)
+
+model.pool = initialize_pool()
 
 #target image
 target_tf = tf.tensor(target)
@@ -267,13 +313,18 @@ tf.window.show(ImageSize, ImageSize, "Neural Cellular Automata")
 prev_time = time.time()
 
 smoothed_loss = 0.0
-max_steps = 10
-lr = 0.02
+lr = 0.04
+step1 = 1000
+lr1 = 0.02
+step2 = 2000
+lr2 = 0.003
 
 iterations = 0
 
-input_state_np = target.reshape([1, target.shape[0], target.shape[1], target.shape[2]])
-input_state_np = input_state_np.astype(np.float32)
+#input_state_np = target.reshape([1, target.shape[0], target.shape[1], target.shape[2]])
+#input_state_np = input_state_np.astype(np.float32)
+input_state_np = np.zeros([1, INFERENCE_SIZE, INFERENCE_SIZE, model.channel_n], np.float32)
+input_state_np[0, INFERENCE_SIZE//2, INFERENCE_SIZE//2, 3:] = 1.0
 #pad channels with zeros
 input_state_np = np.pad(input_state_np, [(0, 0), (0, 0), (0, 0), (0, model.channel_n - input_state_np.shape[3])], 'constant')
 input_state = tf.tensor(input_state_np)
@@ -291,10 +342,16 @@ while not tf.window.should_close():
     delta_time = cur_time - prev_time
     tf.imgui.text("Frame time: %.3f ms" % (delta_time * 1000.0))
 
+    if iterations == step2:
+        lr = lr2
+
+    if iterations == step1:
+        lr = lr1
+
     if train:
         batch_ids = np.random.choice(POOL_SIZE, BATCH_SIZE, replace = False)
 
-        outputs = train_step(opt, target_tf, batch_ids, np.array([max_steps, lr*0.1, channel_offset], np.float32))
+        outputs = train_step(opt, target_tf, batch_ids, np.array([0, lr*0.1, channel_offset], np.float32))
         opt.update_parameters(outputs[:-2])
         L = outputs[-2].numpy[0]
         image = outputs[-1]
@@ -302,13 +359,14 @@ while not tf.window.should_close():
     else:
         mousex = 1 - my / wx
         mousey =     mx / wy
-        press = float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0))
+        right_mouse = float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0))
+        left_mouse = -float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_1))
+        press = right_mouse + left_mouse
         image, input_state, seed = inference_step(model, input_state, np.array([mousex, mousey, press, mouse_radius, channel_offset], np.float32))
         model.seed = seed
 
     tf.imgui.text("Loss: %.5f" % smoothed_loss)
     tf.imgui.text("Iterations: %d" % iterations)
-    max_steps = tf.imgui.slider("Max Steps", max_steps, 1, 100)
     lr = tf.imgui.slider("Learning Rate", lr, 0.0005, 0.1)
     mouse_radius = tf.imgui.slider("Mouse Radius", mouse_radius, 1.0, 10.0)
     channel_offset = tf.imgui.slider("Channel Offset (render)", channel_offset, 0, model.channel_n - 4)
@@ -316,6 +374,9 @@ while not tf.window.should_close():
 
     if tf.imgui.button("Reset Input State"):
         input_state = tf.tensor(input_state_np)
+
+    if tf.imgui.button("Reset Pool"):
+        model.pool = initialize_pool()
 
     tf.window.render_frame(image)
 
