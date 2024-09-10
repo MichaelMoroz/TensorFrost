@@ -93,12 +93,12 @@ class PSI(tf.Module):
         self.input_features = 8
 
         # Hyperparameters
-        self.params = tf.Parameter([-1], tf.float32, requires_grad = False)
-        self.step = tf.Parameter([1], tf.int32, requires_grad = False)
-        self.seed = tf.Parameter([1], tf.uint32, requires_grad = False)
-        self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, requires_grad = False)
-        self.feature_atom_id = tf.Parameter([self.atom_features], tf.int32, requires_grad = False)
-        self.probability = tf.Parameter([n_walkers], tf.float32, requires_grad = False)
+        self.params = tf.Parameter([-1], tf.float32, optimize = False)
+        self.step = tf.Parameter([1], tf.int32, optimize = False)
+        self.seed = tf.Parameter([1], tf.uint32, optimize = False)
+        self.atoms = tf.Parameter([self.atom_n, 4], tf.float32, optimize = False)
+        self.feature_atom_id = tf.Parameter([self.atom_features], tf.int32, optimize = False)
+        self.probability = tf.Parameter([n_walkers], tf.float32, optimize = False)
 
         # Weights
         self.feature_layer = tf.Parameter([self.atom_features, self.input_features], tf.float32, random_scale = 0.1)

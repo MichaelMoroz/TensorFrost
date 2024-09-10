@@ -4,11 +4,6 @@ namespace TensorFrost {
 
 void IR::RemoveNode(Node* node) {
     if (node->valid()) {
-    	// if this node is an input or output, this is an error
-    	if (node->flags.has(NodeProp::InputMemory) || node->flags.has(NodeProp::OutputMemory)) {
-			throw std::runtime_error("Cannot remove input or output node");
-		}
-
         // if child node exists, iterate through it and remove all children
         if (node->child) {
             vector<Node*> to_delete;

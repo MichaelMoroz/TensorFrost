@@ -20,11 +20,11 @@ TARGET_PADDING = 8   # Number of pixels used to pad the target image border
 TARGET_SIZE = 40
 BATCH_SIZE = 3*3
 POOL_SIZE = 1024
-CELL_FIRE_RATE = 0.5
+CELL_FIRE_RATE = 0.75
 
-INFERENCE_SIZE = 256
+INFERENCE_SIZE = 384
 
-TARGET_EMOJI = "🎄" #😀🦋🦎
+TARGET_EMOJI = "🦎" #😀🦋🦎🎄🍓
 
 def load_image(url, max_size=TARGET_SIZE):
     r = requests.get(url)
@@ -46,27 +46,20 @@ def GELU(X):
 def LeakyReLU(X):
     return tf.select(X > 0.0, X, 0.01*X)
 
-
 #load the target emoji
-# target = load_emoji(TARGET_EMOJI)
-
-
+#target = load_emoji(TARGET_EMOJI)
 
 #load from png file
-target = PIL.Image.open("examples/ML/NCA/catthink.png")
+target = PIL.Image.open("examples/Rendering/test.png")
+target.thumbnail((TARGET_SIZE, TARGET_SIZE), PIL.Image.LANCZOS)
 target = np.array(target)
 target = np.float32(target)/255.0
 target = target[..., :] * target[..., 3:4]
-
-#make sure the target image is of the right size
-if target.shape[0] != TARGET_SIZE or target.shape[1] != TARGET_SIZE:
-    raise ValueError("Target image size must be %d x %d" % (TARGET_SIZE, TARGET_SIZE))
 
 # #plot the target image
 # plt.imshow(target)
 # plt.axis('off')
 # plt.show()
-
 
 #flip the image on the y axis
 target = target[::-1, :]
@@ -120,7 +113,8 @@ class CAModel(tf.Module):
         activate = tf.float(self.max_neighbor_alpha(Xstate) > 0.1)
 
         Xshape = Xstate.shape
-        mask = self.rand(Xshape) < self.fire_rate
+        #mask = self.rand(Xshape) < self.fire_rate
+        mask = self.rand([Xshape[0], Xshape[1], Xshape[2], 1]) < self.fire_rate
         #noise = self.rand(Xshape) * 2.0 - 1.0
 
         #boundary conditions
@@ -177,11 +171,11 @@ def batch_to_img(batch):
     grid_size = tf.int(tf.ceil(tf.sqrt(tf.float(batch.shape[0]))))
     wi, hi, ch = tf.indices([grid_size * batch.shape[1], grid_size * batch.shape[2], 3])
     bi = wi / batch.shape[1] + grid_size * (hi / batch.shape[2])
-    color = tf.abs(tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], ch], 1.0))
-    alpha = tf.abs(tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], 3], 1.0))
-    res = 1.0 - alpha + color
+    color = tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], ch], 1.0)
+    alpha = tf.select(bi < batch.shape[0], batch[bi, wi % batch.shape[1], hi % batch.shape[2], 3], 1.0)
+    res = tf.abs(1.0 - alpha + color)
     #max_color = tf.max(tf.max(tf.max(res)))
-    return tf.tanh(res) / tf.tanh(1.0)
+    return res
 
 def inference_step():
     model = CAModel()
@@ -196,6 +190,8 @@ def inference_step():
     press = input_params[2]
     rad = input_params[3]
     ch_offset = tf.int(input_params[4])
+    model.fire_rate = input_params[5]
+    img_scale = input_params[6]
 
     ch, wi, hi, ch = input_state.indices
     dist = tf.sqrt((tf.float(wi) - mousex)**2.0 + (tf.float(hi) - mousey)**2.0)
@@ -209,7 +205,7 @@ def inference_step():
     input_state = model.step(input_state)
 
     #extract the output images
-    output_image = batch_to_img(to_rgba(input_state, ch_offset))
+    output_image = img_scale*batch_to_img(to_rgba(input_state, ch_offset))
 
     return output_image, input_state, model.seed
 
@@ -229,22 +225,30 @@ def optimization_step():
     max_steps = tf.int(params[0])
     opt.learning_rate = params[1]
     ch_offset = tf.int(params[2])
+    model.fire_rate = params[3]
+    img_scale = tf.float(params[4])
 
     #create corrupted image set
     target = get_target_batch(image)
     mask = corruption_mask(target.shape, tf.int(model.seed[0]))
 
-    iters_per_optimizer_step = 24
-    every_n = 2 #corrupt every n frames 
-
+    iters_per_optimizer_step = 25
+    corrupt_every_n = 2
+    
     bi = tf.indices([BATCH_SIZE])[0]
-    corruption_frame = tf.int(tf.pcg(model.seed[0] + tf.uint(bi + 5451))) % (every_n * iters_per_optimizer_step)
+    corruption_frame = tf.int(tf.pcg(model.seed[0] + tf.uint(bi + 5451))) % (corrupt_every_n * iters_per_optimizer_step)
     corruption_frame = tf.reshape(corruption_frame, [BATCH_SIZE, 1, 1, 1])
 
-    #initialize the state
     bi, wi, hi, ch = tf.indices([BATCH_SIZE, size, size, model.channel_n])
+    state = model.pool[batch_ids[bi], wi, hi, ch]
+
+    Lbatch = tf.mean(tf.mean(tf.mean((to_rgba(state) - target)**2.0)))
+    maxL = tf.max(Lbatch)
+
+    #restart the state with the largest loss
+    do_restart = Lbatch == maxL
     is_center = (wi == size//2) & (hi == size//2) & (ch == 3)
-    state = tf.select(bi == 0, tf.select(is_center, 1.0, 0.0), model.pool[batch_ids[bi], wi, hi, ch]) #for the first batch sample, just use the initialization seed
+    state = tf.select(do_restart[bi], tf.select(is_center, 1.0, 0.0), state) #initialize with the seed
 
     corruptor = tf.lerp(0.99, 1.01, model.rand(state.shape)) * mask
 
@@ -253,22 +257,19 @@ def optimization_step():
         state = model.step(state)
         state *= tf.select(i == corruption_frame, corruptor, 1.0)
 
-    #extract the output images
-    output = to_rgba(state)
-
     #loss is the difference between the corrupted and target images
     #reduction over one dimension at a time
-    L = tf.mean(tf.mean(tf.mean(tf.mean((output - target)**2.0))))
+    meanL = tf.mean(tf.mean(tf.mean(tf.mean((to_rgba(state) - target)**2.0))))
 
-    opt.step(L)
+    opt.step(meanL)
+    
+    output_image = img_scale*batch_to_img(to_rgba(state, ch_offset))
 
     #update the pool with the new state
     model.pool[batch_ids[bi], wi, hi, ch] = state
 
-    output_image = batch_to_img(to_rgba(state, ch_offset))
-
     params = opt.parameters()
-    params.append(L)
+    params.append(meanL)
     params.append(output_image)
     return params
 
@@ -313,11 +314,19 @@ tf.window.show(ImageSize, ImageSize, "Neural Cellular Automata")
 prev_time = time.time()
 
 smoothed_loss = 0.0
-lr = 0.04
-step1 = 1000
-lr1 = 0.02
-step2 = 2000
-lr2 = 0.003
+lrs = [0.05, 0.02, 0.01, 0.002]
+steps = [0, 1000, 2000, 3000]
+
+def schedule(iterations):
+    #piecewise linear learning rate schedule
+
+    #find the current segment
+    for i in range(len(steps) - 1):
+        if iterations >= steps[i] and iterations < steps[i + 1]:
+            t = (iterations - steps[i]) / (steps[i + 1] - steps[i])
+            return lrs[i] * (1.0 - t) + lrs[i + 1] * t
+    
+    return lrs[-1]
 
 iterations = 0
 
@@ -332,6 +341,8 @@ input_state = tf.tensor(input_state_np)
 train = True
 mouse_radius = 3.0
 channel_offset = 0
+firing_rate = CELL_FIRE_RATE
+image_scale = 1.0
 
 while not tf.window.should_close():
     cur_time = time.time() 
@@ -342,34 +353,37 @@ while not tf.window.should_close():
     delta_time = cur_time - prev_time
     tf.imgui.text("Frame time: %.3f ms" % (delta_time * 1000.0))
 
-    if iterations == step2:
-        lr = lr2
+    lr = schedule(iterations)
 
-    if iterations == step1:
-        lr = lr1
+    if(iterations == 4000):
+        firing_rate = 1.0
 
     if train:
         batch_ids = np.random.choice(POOL_SIZE, BATCH_SIZE, replace = False)
-
-        outputs = train_step(opt, target_tf, batch_ids, np.array([0, lr*0.1, channel_offset], np.float32))
+        outputs = train_step(opt, target_tf, batch_ids, np.array([0, lr*0.1, channel_offset, firing_rate, image_scale], np.float32))
         opt.update_parameters(outputs[:-2])
         L = outputs[-2].numpy[0]
         image = outputs[-1]
         smoothed_loss = 0.96 * smoothed_loss + 0.04 * L
     else:
-        mousex = 1 - my / wx
-        mousey =     mx / wy
+        mousex = 1 - my / max(0.1, wy)
+        mousey =     mx / max(0.1, wx)
         right_mouse = float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0))
         left_mouse = -float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_1))
         press = right_mouse + left_mouse
-        image, input_state, seed = inference_step(model, input_state, np.array([mousex, mousey, press, mouse_radius, channel_offset], np.float32))
+        image, input_state, seed = inference_step(model, input_state, np.array([mousex, mousey, press, mouse_radius, channel_offset, firing_rate, image_scale], np.float32))
         model.seed = seed
 
     tf.imgui.text("Loss: %.5f" % smoothed_loss)
     tf.imgui.text("Iterations: %d" % iterations)
-    lr = tf.imgui.slider("Learning Rate", lr, 0.0005, 0.1)
+    # lr = tf.imgui.slider("Learning Rate", lr, 0.0005, 0.1)
+    tf.imgui.text("Learning Rate: %.5f" % lr)
+
+
     mouse_radius = tf.imgui.slider("Mouse Radius", mouse_radius, 1.0, 10.0)
     channel_offset = tf.imgui.slider("Channel Offset (render)", channel_offset, 0, model.channel_n - 4)
+    firing_rate = tf.imgui.slider("Firing Rate", firing_rate, 0.0, 1.0)
+    image_scale = tf.imgui.slider("Image Scale", image_scale, 0.01, 2.0)
     train = tf.imgui.checkbox("Training", train)
 
     if tf.imgui.button("Reset Input State"):

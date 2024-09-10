@@ -42,7 +42,7 @@ def int2float(i):
 class Camera(tf.Module):
     def __init__(self, position = [0.0, 0.0, 0.0], quaternion = [1.0, 0.0, 0.0, 0.0], W = 512, H = 512, focal_length = 1.0, angular_speed = 0.005, rot_angular_speed = 0.5, camera_speed = 0.01):
         super().__init__()
-        self.camera = tf.Parameter([4, 3], tf.float32, requires_grad = False)
+        self.camera = tf.Parameter([4, 3], tf.float32, optimize = False)
         self.params = tf.Parameter([-1], tf.float32)
         self.position = np.array(position, dtype=np.float32)
         self.quaternion = np.array(quaternion, dtype=np.float32)
