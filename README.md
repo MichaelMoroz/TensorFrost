@@ -547,7 +547,7 @@ class SmolNet(tf.Module):
         #specify a custom random scale and offset for the weights when initializing
         self.W = tf.Parameter([16, -1], tf.float32, random_scale=0.01, random_offset=0.0)
         #dont compute gradients for the bias
-        self.b = tf.Parameter([-1], tf.float32, requires_grad=False)
+        self.b = tf.Parameter([-1], tf.float32, optimize=False)
         
     def assert_parameters(self):
         #makes sure that the compiler knows that b has shape compatible with W
@@ -568,7 +568,7 @@ When initializing the module you can add 3 types of TensorFrost accessible param
 
 The shape argument of the parameter can be a list of integers, where -1 means that the shape is not specified yet, and will be inferred from the input tensor. If you need to compute an operation over several tensors of unspecified shape, you need to assert the shapes in the `assert_parameters` function.
 `random_scale` and `random_offset` are used to initialize the weights with random values, and are optional, by default the weights are initialized with Xavier initialization for normal random values.
-`requires_grad` is used to specify if the parameter should be trained or not, by default all parameters are trainable. This argument does not stop you from computing `tf.grad` manually, it is just used to specify if the parameter should be updated by the optimizer module.
+`optimize` is used to specify if the parameter should be trained or not, by default all parameters are trainable. This argument does not stop you from computing `tf.grad` manually, it is just used to specify if the parameter should be updated by the optimizer module.
 
 By itself the module does not do anything, you need to do a second initialization step to either use it inside a TensorProgram, or initialize it as a container for the tensors outside of the program.
 
