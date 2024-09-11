@@ -69,7 +69,7 @@ model.seed = tf.tensor(np.array([0], np.uint32))
 
 #initialize the filters
 sobel = np.array([[-1, -2, -1], [0, 0, 0], [1, 2, 1]], np.float32)
-laplace = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]], np.float32)
+laplace = np.array([[1, 2, 1], [2, -12, 2], [1, 2, 1]], np.float32)
 filters = np.stack([sobel, sobel.T, laplace], axis = 0)
 model.filters = tf.tensor(filters)
 

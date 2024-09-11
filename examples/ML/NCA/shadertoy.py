@@ -1,7 +1,7 @@
 
 import TensorFrost as tf
 import numpy as np
-import time
+import re
 
 from nca import *
 
@@ -10,11 +10,6 @@ tf.initialize(tf.opengl)
 model = CAModel()
 
 load_model(model, "model.npz")
-
-import re
-
-def dump_data(dat):
-  return dat.numpy
 
 def print_vec4(ws):
   vec = "vec4(" + ",".join(["{0:.4g}".format(w) for w in ws]) + ")"
@@ -26,14 +21,11 @@ def print_mat4(ws):
   mat = re.sub(r"\b0\.", ".", mat)
   return mat
 
-def GELU(X):
-    return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
-
 def serialize_to_shadertoy(net):
-    layer1_w = dump_data(net.fc1).T
-    layer1_bias = dump_data(net.fc1_bias)
-    layer2_w = dump_data(net.fc2).T
-    layer2_bias = dump_data(net.fc2_bias)
+    layer1_w = net.fc1.numpy.T
+    layer1_bias = net.fc1_bias.numpy
+    layer2_w = net.fc2.numpy.T
+    layer2_bias = net.fc2_bias.numpy
 
     #activation = "GELU"
 
@@ -41,7 +33,7 @@ def serialize_to_shadertoy(net):
 
     activation = "LeakyReLU"
 
-    activation_func = "vec4 LeakyReLU(vec4 X) { return (X > 0.0) ? X : 0.01*X; } \n"
+    activation_func = "vec4 LeakyReLU(vec4 X) { return max(X, 0.01*X); } \n"
 
     line = "void NCA("
 
