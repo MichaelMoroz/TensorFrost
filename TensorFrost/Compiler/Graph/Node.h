@@ -19,6 +19,7 @@ enum class NodeProp {
 	DetachGrad,
 	PassGrad,
 	NoLoadFusion,
+	StopFusion,
 	Count,
 };
 

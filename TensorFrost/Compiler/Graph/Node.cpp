@@ -50,9 +50,10 @@ bool ArgumentManager::CannotCopyArgument(ArgID id) {
     bool shape_not_memory = shape && !to_memory;
     bool is_output = from->flags.has(NodeProp::OutputMemory);
     bool is_input = from->flags.has(NodeProp::InputMemory);
+    bool no_fusion = from->flags.has(NodeProp::StopFusion);
     return id.first == ArgType::Memory || shape_not_memory ||
            from->op->HasAllTypes(OpProp::Static) || from->op->HasAllTypes(OpProp::Memory) ||
-           from->flags.has(NodeProp::Modified) || is_output || is_input;
+           from->flags.has(NodeProp::Modified) || is_output || is_input || no_fusion;
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {
@@ -227,7 +228,7 @@ const map<NodeProp, string> flag_names = {
     {NodeProp::KeepDims, "KeepDims"}, {NodeProp::IsStatic, "IsStatic"},
     {NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
     {NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
-    {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoLoadFusion, "NoLoadFusion"},
+    {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}
 };
 
 string NodeFlagsToString(NodeProp flags) {

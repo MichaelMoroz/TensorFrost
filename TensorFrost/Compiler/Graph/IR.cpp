@@ -132,6 +132,7 @@ void IR::CompileIR()
 		return no_changes;
 	});
 #endif
+
 	RunCompilationPass("LimitMemoryDependencies", [&]() { LimitKernelMemoryDependencies(); });
 	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
 	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);

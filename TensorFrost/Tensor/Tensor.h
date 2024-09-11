@@ -255,6 +255,7 @@ public:
 	void SetType(TFType type) const;
 	void DetachGrad() const;
 	void PassGrad() const;
+	void StopFusion() const;
 
 	static Tensor* GetCopy(const Tensor& other, NodeArguments args);
 

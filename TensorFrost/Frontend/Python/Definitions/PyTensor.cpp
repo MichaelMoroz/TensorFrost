@@ -103,6 +103,11 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return t;
 	});
 
+	py_tensor.def("stop_fusion", [](const PyTensor& t) {
+		t.Get().StopFusion();
+		return t;
+	});
+
 	// operators
 	DefineOperators(py_tensor);
 

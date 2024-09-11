@@ -369,7 +369,6 @@ void IR::ComputeNodeCost()
 }
 map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 {
-	UpdateGraph();
 	map<Node*, ArgEdges> node_output;
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 		bool is_output = node->flags.has(NodeProp::OutputMemory);
@@ -636,6 +635,7 @@ void IR::AddMemoryOpIndices() {
 }
 
 void IR::AddKernelGlobalStoreOperations() {
+	UpdateGraph();
 	// get kernels
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
@@ -692,6 +692,7 @@ void IR::AddKernelGlobalStoreOperations() {
 				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, true);
 			});
 		}
+		UpdateGraph(kernel);
 	}
 
 	// replace all inputs pointing to memory nodes with the memory node

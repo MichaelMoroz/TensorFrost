@@ -8,7 +8,7 @@ BATCH_SIZE = 3*3
 POOL_SIZE = 1024
 CELL_FIRE_RATE = 0.75
 
-INFERENCE_SIZE = 384
+INFERENCE_SIZE = 128
 
 def GELU(X):
     return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
@@ -68,7 +68,7 @@ class CAModel(tf.Module):
 
         noise = 0.005*(2.0*self.rand(Xshape) - 1.0)
 
-        return tf.reshape(self.quantize((Xstate + tf.select(mask, dS, 0.0) + noise) * activate), Xstate.shape)
+        return self.quantize((Xstate + tf.select(mask, dS, 0.0) + noise) * activate).stop_fusion()
     
     def rand(self, shape):
         self.seed = tf.pcg(self.seed)
@@ -92,7 +92,7 @@ def corruption_mask(shape, seed):
     seed = tf.int(tf.pcg(tf.uint(seed + bi)))
     posx = tf.float(shape[1]) * rand_range(0.25, 0.75, seed*3 + 123)
     posy = tf.float(shape[2]) * rand_range(0.25, 0.75, seed*3 + 456)
-    rad = rand_range(1.0, rand_range(1.0, 15.0, seed*38 + 51854), seed*3 + 789)
+    rad = rand_range(1.0, rand_range(1.0, 20.0, seed*38 + 51854), seed*3 + 789)
 
     xi = tf.float(wi)
     yi = tf.float(hi)
@@ -114,7 +114,7 @@ def batch_to_img(batch):
     return res
 
 class CATrain(tf.Module):
-    def __init__(self, train_steps = 25, corrupt_every_n = 2):
+    def __init__(self, train_steps = 25, corrupt_every_n = 3):
         super().__init__()
         self.opt = tf.optimizers.adam(CAModel(), clip = 0.01)
         self.opt.set_clipping_type(tf.clipping.norm)
@@ -148,7 +148,7 @@ class CATrain(tf.Module):
         state = tf.select(do_restart[bi], tf.select(is_center, 1.0, 0.0), state) #initialize with the seed
 
         mask = corruption_mask(target.shape, tf.int(model.seed[0]))
-        corruptor = tf.lerp(0.99, 1.01, model.rand(state.shape)) * mask
+        corruptor = tf.lerp(0.95, 1.05, model.rand(state.shape)) * mask
 
         #run the model for a few steps
         for i in range(self.train_steps):

@@ -17,7 +17,7 @@ tf.initialize(tf.opengl)
 
 #https://distill.pub/2020/growing-ca/
 
-TARGET_EMOJI = "🦎" #😀🦋🦎🎄🍓
+TARGET_EMOJI = "😀" #😀🦋🦎🎄🍓
 
 def load_image(url, max_size=TARGET_SIZE):
     r = requests.get(url)
@@ -135,8 +135,8 @@ while not tf.window.should_close():
 
     lr = schedule(iterations)
 
-    if(iterations == 4000):
-        firing_rate = 1.0
+    #if(iterations == 4000):
+    #    firing_rate = 1.0
 
     if train:
         batch_ids = np.random.choice(POOL_SIZE, BATCH_SIZE, replace = False)

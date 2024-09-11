@@ -185,6 +185,10 @@ void Tensor::PassGrad() const {
 	node_->flags.set(NodeProp::PassGrad);
 }
 
+void Tensor::StopFusion() const {
+	node_->flags.set(NodeProp::StopFusion);
+}
+
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 	Tensor* copy = &CreateNode(other.node_->type, std::move(args), other.node_->name);
 	copy->node_->data = other.node_->data;
