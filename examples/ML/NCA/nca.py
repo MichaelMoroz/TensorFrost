@@ -13,6 +13,9 @@ INFERENCE_SIZE = 384
 def GELU(X):
     return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
 
+def LeakyReLU(X):
+    return tf.select(X > 0.0, X, 0.01*X)
+
 class CAModel(tf.Module):
     def __init__(self, channel_n=CHANNEL_N, fire_rate=CELL_FIRE_RATE):
         super().__init__()
@@ -32,7 +35,7 @@ class CAModel(tf.Module):
         self.fc2 = tf.assert_tensor(self.fc2, [self.fc1.shape[1], self.fc2.shape[1]], tf.float32)
 
     def filter(self, X, W):
-        bi, wi, hi, ch, fid, it = tf.indices([X.shape[0], X.shape[1], X.shape[2], X.shape[3], W.shape[0], 9])
+        bi, wi, hi, fid, ch, it = tf.indices([X.shape[0], X.shape[1], X.shape[2], W.shape[0], X.shape[3], 9])
         i, j = it % 3, it / 3
         conv = tf.sum(X[bi, wi + i - 1, hi + j - 1, ch] * W[fid, i, j])
         return conv
@@ -47,10 +50,13 @@ class CAModel(tf.Module):
         fX = tf.reshape(fX, [Xstate.shape[0], Xstate.shape[1], Xstate.shape[2], 3 * self.channel_n])
         bi, i, j, ch = tf.indices([Xstate.shape[0], Xstate.shape[1], Xstate.shape[2], self.channel_n * 4])
         X = tf.select(ch < self.channel_n, Xstate[bi, i, j, ch], fX[bi, i, j, ch - self.channel_n])
-        X = GELU(X @ self.fc1 + self.fc1_bias)
+        X = LeakyReLU(X @ self.fc1 + self.fc1_bias)
         X = X @ self.fc2 + self.fc2_bias
         return tf.reshape(X, [Xstate.shape[0], Xstate.shape[1], Xstate.shape[2], self.channel_n])
     
+    def quantize(self, Xstate):
+        return tf.round(tf.clamp(Xstate, -1.0, 1.0) * 255.0).pass_grad() / 255.0
+
     def step(self, Xstate):
         dS = self.dState(Xstate)
 
@@ -60,7 +66,9 @@ class CAModel(tf.Module):
         Xshape = Xstate.shape
         mask = self.rand([Xshape[0], Xshape[1], Xshape[2], 1]) < self.fire_rate
 
-        return tf.reshape(tf.clamp((Xstate + tf.select(mask, dS, 0.0)) * activate, -1.0, 1.0), Xstate.shape)
+        noise = 0.005*(2.0*self.rand(Xshape) - 1.0)
+
+        return tf.reshape(self.quantize((Xstate + tf.select(mask, dS, 0.0) + noise) * activate), Xstate.shape)
     
     def rand(self, shape):
         self.seed = tf.pcg(self.seed)
