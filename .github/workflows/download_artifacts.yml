@@ -43,17 +43,20 @@ jobs:
                 run_id: runs.data.workflow_runs[0].id
               });
             
-              const matchingArtifact = artifacts.data.artifacts.find(a => a.name === artifactName);
-              if (!matchingArtifact) return false;
+              const matchingArtifacts = artifacts.data.artifacts.filter(a => a.name.startsWith(artifactName));
+              if (matchingArtifacts.length === 0) return false;
             
-              const download = await github.rest.actions.downloadArtifact({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                artifact_id: matchingArtifact.id,
-                archive_format: 'zip',
-              });
+              for (const artifact of matchingArtifacts) {
+                const download = await github.rest.actions.downloadArtifact({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  artifact_id: artifact.id,
+                  archive_format: 'zip',
+                });
             
-              fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/${artifactName}.zip`, Buffer.from(download.data));
+                fs.writeFileSync(`${process.env.GITHUB_WORKSPACE}/${artifact.name}.zip`, Buffer.from(download.data));
+                console.log(`Downloaded ${artifact.name}.zip`);
+              }
               return true;
             }
             
@@ -71,7 +74,7 @@ jobs:
           done
 
       - name: Upload wheels as artifact
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: all-wheels
           path: ./wheels
