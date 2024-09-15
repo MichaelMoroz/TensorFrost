@@ -108,7 +108,7 @@ public:
 		}
     }
 
-	void LimitKernelMemoryDependencies();
+	bool LimitKernelMemoryDependencies();
 
 	stack<Node*> scope_stack;
 
@@ -202,7 +202,7 @@ public:
 	void AddMemoryDeallocation();
 	void RunCompilationPass(string pass_name, const function<void()> &expression, bool print = false, bool update_graph = false);
 
-	void RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()> &expression,
+	bool RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()> &expression,
 	                                 bool print = false,
 	                                 bool update_graph = false);
 
@@ -237,7 +237,6 @@ public:
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			node->args.ClearOutputs();
 		}
-
 
 		map<Node*, string> invalid_nodes;
 		// check if graph is valid

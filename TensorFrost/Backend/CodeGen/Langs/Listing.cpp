@@ -64,6 +64,10 @@ string GetNodeString(const Node* node) {
 		listing += "cost=" + to_string(node->cost_) + ", ";
 	}
 
+	if(node->memory_deps.size() > 0) {
+		listing += "memory_deps_count=" + to_string(node->memory_deps.size()) + ", ";
+	}
+
 	if(node->indexing_mode_ != IndexingMode::Clamp) {
 		listing += "indexing_mode=" + IndexingModeToString(node->indexing_mode_) + ", ";
 	}

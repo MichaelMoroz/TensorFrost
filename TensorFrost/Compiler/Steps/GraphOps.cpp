@@ -1120,11 +1120,15 @@ void IR::TryReplaceModificationsWithVersions()
 
 #define MAX_MEMORY_DEPENDENCIES 8
 
-void IR::LimitKernelMemoryDependencies() {
+bool IR::LimitKernelMemoryDependencies() {
+	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	int created_kernels = 0;
 
 	for (auto kernel : kernels) {
 		unordered_set<Node*> kernel_deps;
+		vector<Node*> potential_new_kernels = {};
 
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			//go over all inputs
@@ -1142,17 +1146,45 @@ void IR::LimitKernelMemoryDependencies() {
 			}
 			node->memory_deps = node_deps;
 			kernel_deps.insert(node_deps.begin(), node_deps.end());
+
+			if(node_deps.size() <= MAX_MEMORY_DEPENDENCIES && node_deps.size() > 2) {
+				// if((potential_new_kernel == nullptr) || (potential_new_kernel->memory_deps.size() < node_deps.size())) {
+				// 	potential_new_kernel = node.get();
+				// }
+				potential_new_kernels.push_back(node.get());
+			}
 		}
 
 		kernel->memory_deps = kernel_deps;
 
 		if(kernel_deps.size() <= MAX_MEMORY_DEPENDENCIES) continue;
 
-		//split the kernel into multiple kernels with a limited number of dependencies
-		//vector<unordered_set<Node*>> new_kernel_sets;
+		//get random node from the vector
+		Node* potential_new_kernel = nullptr;
+		if(potential_new_kernels.size() > 0) {
+			int index = rand() % potential_new_kernels.size();
+			potential_new_kernel = potential_new_kernels[index];
+		}
 
-		//TODO: implement this
+		if(potential_new_kernel == nullptr) {
+			throw std::runtime_error("LimitKernelMemoryDependencies: No potential new kernel for splitting found, compilation failed, too many dependencies");
+		}
+
+		//move the node with most dependencies to a new kernel
+		ExecuteExpressionBefore(kernel, [&]() {
+			auto new_kernel = Tensor::GetCopy(*kernel->GetTensor());
+			CopyArguments( potential_new_kernel->args.outputs_, new_kernel->node_->child);
+			created_kernels++;
+			//UpdateGraph(new_kernel->node_);
+		});
+
+		UpdateGraph();
+		//UpdateGraph(kernel);
 	}
+
+	UpdateGraph();
+
+	return created_kernels == 0;
 }
 
 } // namespace TensorFrost

@@ -837,8 +837,20 @@ public:
 	~Tensor() = default;
 
 	Tensor& operator-() const { return Op("neg", this); }
-	Tensor& operator!() const { return Op("not", this); }
-	Tensor& operator~() const { return Op("not", this); }
+	Tensor& operator!() const {
+		if(node_->type == TFType::Bool) {
+			return Op("notb", this);
+		} else {
+			return Op("not", this);
+		}
+	}
+	Tensor& operator~() const {
+		if(node_->type == TFType::Bool) {
+			return Op("notb", this);
+		} else {
+			return Op("not", this);
+		}
+	}
 
 	Tensor& operator+(const Tensor& other) const {
 		return Op("add", this, &other);

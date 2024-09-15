@@ -68,7 +68,8 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 #define MAX_COMPILATION_ITERATIONS 32
 #define LOAD_FUSION
 
-void IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()>& expression, bool print, bool update_graph) {
+bool IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()>& expression, bool print, bool update_graph) {
+	bool anything_happened = false;
 	RunCompilationPass(pass_name, [&]() {
 		bool converged = false;
 		for (int i = 0; i < max_iterations; i++) {
@@ -76,12 +77,15 @@ void IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const
 			if (finished) {
 				converged = true;
 				break;
+			} else {
+				anything_happened = true;
 			}
 		}
 		if (!converged) {
 			throw std::runtime_error("Failed to converge on " + pass_name + ", exceeded maximum iterations");
 		}
 	}, print, update_graph);
+	return anything_happened;
 }
 
 void IR::CompileIR()
@@ -128,14 +132,27 @@ void IR::CompileIR()
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
 		bool no_changes = OptimizeKernelLoadOperations();
-		RemoveUnusedOperations();
+		if(!no_changes) {
+			RemoveUnusedOperations();
+		}
 		return no_changes;
 	});
 #endif
 
-	RunCompilationPass("LimitMemoryDependencies", [&]() { LimitKernelMemoryDependencies(); });
+	bool has_splitting_happened = RunIterativeCompilationPass("Iterative kernel splitting", MAX_COMPILATION_ITERATIONS, [&]() {
+		bool no_changes = LimitKernelMemoryDependencies();
+		if(!no_changes) {
+			RemoveUnusedOperations();
+		}
+		return no_changes;
+	}, true);
+
+	if (has_splitting_happened) {
+		cout << "Warning: Splitting kernels due to some of them having more memory dependencies than supported. Might result in far more kernels than expected." << endl;
+	}
+
 	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
-	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
+	RunCompilationPass("AddKernelGlobalStoreOperations: RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
 	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
 	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
 	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });

@@ -8,7 +8,7 @@ BATCH_SIZE = 3*3
 POOL_SIZE = 1024
 CELL_FIRE_RATE = 0.75
 
-INFERENCE_SIZE = 128
+INFERENCE_SIZE = 256
 
 def GELU(X):
     return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))

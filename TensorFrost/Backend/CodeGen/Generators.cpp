@@ -22,9 +22,17 @@ void GenerateKernel(Program* program, Kernel* kernel) {
 	}
 }
 
-unordered_set<string> forbidden_names = {"unsigned", "input", "output", "max", "min", "exp", "sin", "cos", "if", "else", "while", "for", "switch", "case", "default", "break",
+unordered_set<string> forbidden_names = {
+	"unsigned", "input", "output", "max", "min", "exp", "sin", "cos", "if", "else", "while", "for", "switch", "case", "default", "break",
     "this",  "true", "false", "null", "new", "delete", "return", "continue", "goto", "try", "catch", "throw", 
-	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private"};
+	"const", "static", "extern", "inline", "virtual", "override", "final", "public", "protected", "private", "sample",
+	"texture", "sampler", "uniform", "varying", "attribute", "in", "out", "inout", "layout", "precision", "highp",
+	"mediump", "lowp", "noperspective", "flat", "smooth", "centroid", "patch", "sample", "subroutine", "common",
+	"partition", "active", "asm", "class", "union", "enum", "typedef", "template", "typename", "using", "namespace",
+	"friend", "sizeof", "alignof", "typeid", "dynamic_cast", "static_cast", "const_cast", "reinterpret_cast", "sizeof",
+	"alignof", "typeid", "noexcept", "throw", "try", "catch", "auto", "register", "explicit", "mutable", "thread_local",
+	"constexpr", "decltype", "noexcept", "nullptr", "alignas", "and", "and_eq", "bitand", "bitor", "compl", "not", "not_eq", "or"
+};
 
 bool IsForbiddenName(const string& name) {
 	return forbidden_names.contains(name);
