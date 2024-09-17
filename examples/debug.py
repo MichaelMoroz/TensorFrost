@@ -67,19 +67,27 @@ class TextureEmbedder(tf.Module):
         embed *= tf.smoothstep(1.5, 0.0, tf.abs(x - tf.float(i))) * tf.smoothstep(1.5, 0.0, tf.abs(y - tf.float(j)))
         return embed
 
-    def learned_interp(self, x, y, ch):
+    def learned_interp(self, x, y):
+        x = tf.repeat(tf.unsqueeze(x), 9)
+        y = y[x.indices[:-1]]
+        x = x.T
+        y = y.T
+
         i, j = tf.round(x), tf.round(y)
         ii, jj = tf.int(i), tf.int(j)
 
-        sample = 0.0
-        for xi in range(-1, 2):
-            for yi in range(-1, 2):
-                sample += self.neural_sample(ii+xi, jj+yi, x, y, ch)
+        ids = x.indices
+        ch = ids[-1]
+        it = ids[-2]
+        xi = it / 3
+        yi = it % 3
 
-        return sample
+        sample = self.neural_sample(ii+xi, jj+yi, x, y, ch)
+
+        return tf.sum(sample, axis = -2)
 
     def forward(self, x, y):
-        embed = self.learned_interp(x, y, x.indices[-1])
+        embed = self.learned_interp(x, y)
         embed = tf.sin(mul_bias(embed, self.fc1))
         embed = tf.sin(mul_bias(embed, self.fc2))
         return (mul_bias(embed, self.fc3))

@@ -216,6 +216,9 @@ void TensorFunctionsDefinition(py::module& m) {
 		const Tensor* target_size_ptr = target_size ? &T(*target_size) : nullptr;
 		return PT(Tensor::MergeDim(T(t), -axis-1, target_size_ptr));
 	}, py::arg("t"), py::arg("axis") = -1, py::arg("target_size") = nullptr);
+	m.def("repeat", [](const PyTensor& t, const PyTensor& repeats, const int axis) {
+		return PT(Tensor::Repeat(T(t), T(repeats), -axis-1));
+	}, py::arg("t"), py::arg("repeats"), py::arg("axis") = -1);
 
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), -axis-1)); },

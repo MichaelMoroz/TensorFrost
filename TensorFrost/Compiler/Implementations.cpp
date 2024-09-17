@@ -740,6 +740,23 @@ map<string, ImplementationFunction> implementation_functions =
 	{"dim_reverse", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(ReverseDim(inputs[0], axes[0])); }},
 	{"dim_split", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(SplitDim(inputs[0], tensor, axes[0], axes[1])); }},
 	{"dim_merge", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(MergeDim(inputs[0], tensor, axes[0])); }},
+	{"dim_repeat", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) {
+		int axis = axes[0];
+		const Tensor* input_tensor = inputs[0];
+		Tensors shape = input_tensor->GetShape();
+		Tensors new_shape = tensor->GetShape();
+		Tensors indices = Tensors();
+		for (int i = 0; i < (int)new_shape.size(); i++) {
+			if (i == axis) {
+				indices.push_back(&(Tensor::Index(new_shape, i) % *shape[i]));
+			} else {
+				indices.push_back(&Tensor::Index(new_shape, i));
+			}
+		}
+		Tensor* loaded = &Tensor::Load(*input_tensor, indices, IndexingMode::Unsafe);
+		loaded->SetDebugName("repeated");
+		outputs.push_back(loaded);
+	}},
 };
 
 ImplementationFunction GetImplementationForOperation(string name) {

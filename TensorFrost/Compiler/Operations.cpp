@@ -60,8 +60,7 @@ const vector<Operation> operations = {
 
 	//Other
 	Operation("dim_reverse", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
-	// Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
-	// Operation("tile_reduce", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
+	Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	// Operation("dim_concat", {"ff_f", "uu_u", "ii_i", "bb_b"}, 0, "", {OpProperty::Algorithm}),
 	Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("dim_merge", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),

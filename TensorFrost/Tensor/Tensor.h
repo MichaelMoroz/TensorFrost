@@ -583,6 +583,27 @@ public:
 		return output;
 	}
 
+	static Tensor& Repeat(const Tensor& tensor, const Tensor& repeats, int axis = 0) {
+		//check if repeats is a scalar
+		if (repeats.GetDimension() != 0) {
+			throw std::runtime_error("Repeats must be a scalar");
+		}
+		int dims = (int)tensor.GetDimension();
+		axis = GetAxis(dims, axis);
+		Tensors shape = tensor.GetShape();
+		Tensors new_shape = Tensors();
+		for (int i = 0; i < dims; i++) {
+			if (i == axis) {
+				new_shape.push_back(&(*shape[i] * repeats));
+			} else {
+				new_shape.push_back(shape[i]);
+			}
+		}
+		Tensor& output = OpShape("dim_repeat", new_shape, &tensor);
+		output.SetData(axis);
+		return output;
+	}
+
 	static Tensor& SplitDim(const Tensor& tensor, int split_size = 128, int axis = 0) {
 		ShapeInfo shapeinfo = tensor.GetShapeInfo();
 		int dims = shapeinfo.dim;

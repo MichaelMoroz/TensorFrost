@@ -14,14 +14,12 @@ model.initialize_parameters()
 
 load_model(model, "model.npz")
 
-ImageSize = 1024
-
-tf.window.show(ImageSize, ImageSize, "Neural Cellular Automata")
+tf.window.show(INFERENCE_SIZE_X*2, INFERENCE_SIZE_Y*2, "Neural Cellular Automata")
 
 prev_time = time.time()
 iterations = 0
 
-input_state_np = np.zeros([1, INFERENCE_SIZE, INFERENCE_SIZE, model.channel_n], np.float32)
+input_state_np = np.zeros([1, INFERENCE_SIZE_Y, INFERENCE_SIZE_X, model.channel_n], np.float32)
 #pad channels with zeros
 input_state_np = np.pad(input_state_np, [(0, 0), (0, 0), (0, 0), (0, model.channel_n - input_state_np.shape[3])], 'constant')
 input_state = tf.tensor(input_state_np)
