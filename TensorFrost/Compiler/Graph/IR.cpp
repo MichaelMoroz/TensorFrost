@@ -2,6 +2,9 @@
 
 namespace TensorFrost {
 
+int IR::max_kernel_memory_dependencies = 12;
+int IR::max_allowed_memory_dependencies = 12;
+
 void IR::RemoveNode(Node* node) {
     if (node->valid()) {
         // if child node exists, iterate through it and remove all children
@@ -27,7 +30,9 @@ void IR::RemoveNode(Node* node) {
     }
 }
 
+#ifdef _RELWITHDEBINFO
 //#define PROFILE_COMPILATION
+#endif
 
 void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
 	current_pass = pass_name;
@@ -126,6 +131,7 @@ void IR::CompileIR()
 	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(4); });
 	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
 
 #ifdef LOAD_FUSION
 	RunIterativeCompilationPass("Iterative load fusion", MAX_COMPILATION_ITERATIONS, [&]() {
@@ -139,17 +145,14 @@ void IR::CompileIR()
 	});
 #endif
 
-	bool has_splitting_happened = RunIterativeCompilationPass("Iterative kernel splitting", MAX_COMPILATION_ITERATIONS, [&]() {
-		bool no_changes = LimitKernelMemoryDependencies();
-		if(!no_changes) {
-			RemoveUnusedOperations();
-		}
-		return no_changes;
-	}, true);
-
-	if (has_splitting_happened) {
-		cout << "Warning: Splitting kernels due to some of them having more memory dependencies than supported. Might result in far more kernels than expected." << endl;
-	}
+	// RunCompilationPass("Reclusterize", [&]() {
+	// 	LimitKernelMemoryDependencies();
+	// 	AddKernelGlobalLoadOperations();
+	// 	AddMemoryOpIndices();
+	// 	RemoveUnusedOperations();
+	// }, true);
+	//
+	// RunCompilationPass("Reclusterize", [&]() { LimitKernelMemoryDependencies(); });
 
 	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
 	RunCompilationPass("AddKernelGlobalStoreOperations: RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
@@ -164,12 +167,13 @@ void IR::CompileIR()
 
 	RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
-	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
-	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+	//RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+	//RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
 	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
 	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
 	RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
+	RunCompilationPass("CheckFinalKernelShapes", [&]() { CheckKernelShapes(); });
 	RunCompilationPass("GetOutputList", [&]() { GetOutputList(); });
 	RunCompilationPass("ComputeStatistics", [&]() { ComputeStatistics(); });
 

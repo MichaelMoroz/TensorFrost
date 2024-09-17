@@ -39,9 +39,6 @@ while not tf.window.should_close():
     delta_time = cur_time - prev_time
     tf.imgui.text("Frame time: %.3f ms" % (delta_time * 1000.0))
 
-    if(iterations == 4000):
-        firing_rate = 1.0
-   
     mousex = 1 - my / max(0.1, wy)
     mousey =     mx / max(0.1, wx)
     right_mouse = float(tf.window.is_mouse_button_pressed(tf.window.MOUSE_BUTTON_0))

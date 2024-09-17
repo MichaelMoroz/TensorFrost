@@ -198,6 +198,9 @@ public:
 	void AddKernelGlobalLoadOperations();
 	void AddMemoryOpIndices();
 	void AddKernelGlobalStoreOperations();
+
+	unordered_set<Node*> ComputeKernelDependencies(Node* kernel);
+
 	void CheckKernelShapes();
 	void AddMemoryDeallocation();
 	void RunCompilationPass(string pass_name, const function<void()> &expression, bool print = false, bool update_graph = false);
@@ -365,6 +368,25 @@ public:
 		int node_count;
 	};
 	vector<PassStats> pass_stats;
+
+	void ReplaceArgs(ArgEdges& edges, map<Node*, Node*>& replacements) {
+		edgesToUpdate.insert(edgesToUpdate.end(), edges.begin(), edges.end());
+		replacementNodes.insert(replacements.begin(), replacements.end());
+	}
+
+	void RemoveNodes(vector<Node*>& nodes) {
+		removedNodes.insert(removedNodes.end(), nodes.begin(), nodes.end());
+	}
+
+	void ApplyChanges(bool update_graph = true, const Node *uroot = nullptr);
+	void ClearChanges();
+
+	ArgEdges edgesToUpdate{};
+	map<Node*, Node*> replacementNodes{};
+	vector<Node*> removedNodes{};
+
+	static int max_kernel_memory_dependencies;
+	static int max_allowed_memory_dependencies;
 };
 
 int GetAxis(int dims, int axis);

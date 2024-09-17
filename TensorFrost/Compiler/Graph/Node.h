@@ -109,6 +109,7 @@ class Node {
 	Node* GetNodeWithCommonParent(Node* other);
 
 	Node* GetLastChild();
+	vector<Node*> GetChildren();
 
 	//checks if the other node has all parents as this node
 	bool HasCommonParents(Node* other, int max_depth = 128) const;

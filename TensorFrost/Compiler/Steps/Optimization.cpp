@@ -263,6 +263,9 @@ void IR::UnrollLoops(int max_iterations)
 		vector<Node*> children = GetChildren(loop);
 
 		if (children.size() > MAX_UNROLL_NODES) {
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Loop has too many children to unroll" << endl;
+#endif
 			continue;
 		}
 
@@ -367,6 +370,9 @@ void IR::UnrollAtomicOperations() {
 
 		if (!supported_operation) {
 			EndScope();
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Unsupported atomic operation " << node->name << endl;
+#endif
 			continue;
 		}
 
@@ -439,6 +445,9 @@ void IR::OptimizeReductions() {
 		//try to get the constant value
 		int axis_value = tensor->TryGetConstant();
 		if (axis_value < 0) {
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Can not apply reduction optimization on non-constant axis" << endl;
+#endif
 			continue;
 		}
 		//if size of the axis is less than the minimum split size, then do not split
@@ -725,9 +734,8 @@ void IR::UnrollKernelDimensions() {
 		CopyArguments(args, to);
 	}
 
-	UpdateGraph();
+	ApplyChanges(true);
 }
-
 
 #define MAX_KERNEL_COPY_COST 16384.0f
 void IR::OptimizeKernels() {
@@ -752,7 +760,9 @@ void IR::OptimizeKernels() {
 					// check if input is cheap enough to copy
 					float input_cost = from->cost_;
 					if (input_cost == -1.0) {
-						//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+#ifdef _RELWITHDEBINFO
+						cout << current_pass << ": Warning: Could not determine cost of node " << from->name << endl;
+#endif
 						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
@@ -768,6 +778,8 @@ void IR::OptimizeKernels() {
 			}
 		}
 
+//		auto kernel_deps_old = ComputeKernelDependencies(kernel);
+
 		//go over kernel shape arguments
 		for (int i = 0; i < kernel->args.Count(ArgType::Shape); i++) {
 			Node* shape_node = kernel->args.Get(ArgType::Shape, i);
@@ -777,10 +789,25 @@ void IR::OptimizeKernels() {
 			}
 		}
 
-		// copy the nodes that are outside the kernel inside
+		//copy the nodes that are outside the kernel inside
 		CopyArguments(args_to_copy, kernel->child);
-		// copy shape arguments before the kernel
+
+		//UpdateGraph(kernel);
+
+//		auto kernel_deps = ComputeKernelDependencies(kernel);
+
+// 		//if more than allowed then do not apply changes
+// 		if (kernel_deps.size() > max_kernel_memory_dependencies && kernel_deps_old.size() < kernel_deps.size() && !must_copy_all) {
+// 			ClearChanges();
+// #ifdef _RELWITHDEBINFO
+// 			std::cout << current_pass << ": Warning: Discarding kernel optimization changes for kernel " << kernel->name << " with " << kernel_deps.size() << " dependencies while before it had " << kernel_deps_old.size() << " dependencies" << endl;
+// #endif
+// 		}
+
+		//copy shape arguments before the kernel
 		CopyArguments(shape_args_to_copy, kernel);
+
+		ApplyChanges(false);
 	}
 }
 
@@ -794,6 +821,8 @@ bool IR::OptimizeKernelLoadOperations() {
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	unordered_set<Node*> nodes_to_remove;
+
+	size_t loads_fused = 0;
 
 	for (auto kernel : kernels) {
 		ShapeInfo kernel_shape = ShapeInfo(kernel);
@@ -838,6 +867,10 @@ bool IR::OptimizeKernelLoadOperations() {
 			}
 		}
 
+		if (loads_to_copy.empty()) continue;
+
+		//auto kernel_deps_old = ComputeKernelDependencies(kernel);
+
 		for (auto load : loads_to_copy) {
 			//get the load
 			Node* memory_input = load.first;
@@ -870,15 +903,29 @@ bool IR::OptimizeKernelLoadOperations() {
 			//copy over the information from the original load node
 			copied_load->CopyMetadata(load_node);
 
-			//go over all outputs of the load node and replace them with the copied nodes
-			for (auto [edge, to] : load_node->args.outputs_) {
-				auto& [id, from] = edge;
-				to->args.UpdateArgument(id, copied_load);
-			}
+			map<Node*, Node*> replacements; replacements[load_node] = copied_load;
 
-			//remove the load node since it is not needed anymore
-			nodes_to_remove.insert(load_node);
+			ReplaceArgs(load_node->args.outputs_, replacements);
 		}
+
+		//UpdateGraph(kernel);
+
+		//auto kernel_deps = ComputeKernelDependencies(kernel);
+
+// 		//if more than allowed then do not apply changes
+// 		if (kernel_deps.size() > max_kernel_memory_dependencies && kernel_deps_old.size() < kernel_deps.size()) {
+// 			ClearChanges();
+// #ifdef _RELWITHDEBINFO
+// 			std::cout << current_pass << ": Warning: Discarding kernel load fusion changes for kernel " << kernel->name << " with " << kernel_deps.size() << " dependencies, before it had " << kernel_deps_old.size() << " dependencies" << endl;
+// #endif
+// 			continue;
+// 		}
+
+		// //remove the load node since it is not needed anymore
+		// for (auto load : loads_to_copy) {
+		// nodes_to_remove.insert(load_node);
+		loads_fused += loads_to_copy.size();
+		ApplyChanges(false);
 	}
 
 	// remove the load nodes
@@ -888,7 +935,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 	UpdateGraph();
 
-	return nodes_to_remove.empty();
+	return loads_fused == 0;
 }
 
 
@@ -928,6 +975,7 @@ void IR::OptimizeHost() {
 		}
 
 		CopyArguments(args_to_copy, node.get());
+		ApplyChanges(false);
 	}
 }
 

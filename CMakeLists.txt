@@ -8,6 +8,10 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_COMPILE_WARNING_AS_ERROR ON)
 
+if(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  add_compile_definitions(_RELWITHDEBINFO)
+endif()
+
 # Set the output directory for the .pyd file for all configurations and types
 foreach(TYPE ARCHIVE LIBRARY RUNTIME PDB)
   foreach(CONFIG RELEASE DEBUG RELWITHDEBINFO MINSIZEREL)

@@ -110,6 +110,14 @@ Node* Node::GetLastChild() {
     return it.get();
 }
 
+vector<Node *> Node::GetChildren() {
+    vector<Node*> children;
+    for(NodeIterator it = NodeIterator(this); !it.end(); it.go_to_next()) {
+        children.push_back(it.get());
+    }
+    return children;
+}
+
 bool Node::HasCommonParents(Node *other, int max_depth) const {
     int depth = 0;
     for (Node* cur_parent = parent; cur_parent != nullptr; cur_parent = cur_parent->parent) {

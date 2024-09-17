@@ -3,32 +3,114 @@
 
 namespace TensorFrost {
 
+void KernelScope::CreateKernel() {
+	//create kernel node
+	Tensor& tensor = Tensor::Kernel(scope_shape.GetTensors());
+	Node* kernel_node = tensor.node_;
+	// make the scope nodes children of the kernel node
+	kernel_node->child = begin;
+	kernel_node->next = end->next;
+	begin->parent = kernel_node;
+	begin->prev = nullptr;
+	end->next->prev = kernel_node;
+	end->next = nullptr;
+}
+
+void KernelScope::ComputeMemoryDependencies() {
+	memory_dependencies.clear();
+	for(auto node = NodeIterator(begin, begin->parent); node->index_<=end->index_ && !node.end(); node.next()) {
+		for(auto& [arg, from] : node->args.inputs_) {
+			//skip shape arguments
+			if(arg.first == ArgType::Shape || from->name == "const") {
+				continue;
+			}
+			//if the input is outside of the scope, then add it to the memory dependencies
+			if(from->index_ < begin->index_) {
+				memory_dependencies.insert(from);
+			}
+		}
+		//go over outputs and check if they are used outside of the scope
+		for(auto& [arg, to] : node->args.outputs_) {
+			//skip shape arguments
+			if(arg.first.first == ArgType::Shape || node->name == "const") {
+				continue;
+			}
+			//if the output is outside of the scope, then this node as a memory dependency (as a writer)
+			if(to->index_ > end->index_) {
+				memory_dependencies.insert(*node);
+			}
+		}
+	}
+#ifdef _RELWITHDEBINFO
+	if(memory_dependencies.size() > max_memory_dependencies) {
+	//	cout << "Warning: Potential kernel with " << memory_dependencies.size() << " memory dependencies" << endl;
+	}
+#endif
+}
+
 void IR::SeparateOperationsIntoKernels() {
 
-	pair<unordered_set<KernelScope*>, bool> kernel_scopes;
+	unordered_set<KernelScope*> kernel_scopes;
 	ExecuteExpressionFirstChild(root, [&]() {
-		kernel_scopes = KernelScope::ComputeScopes(root);
+		kernel_scopes = KernelScope::ComputeScopes(root, max_kernel_memory_dependencies).first;
 	});
 
 	// create kernel nodes for all kernel scopes
-	for (auto scope : kernel_scopes.first) {
-		// create kernel node before the scope
+	for (auto scope : kernel_scopes) {
+		// create kernel before the scope
 		ExecuteExpressionBefore(scope->begin, [&]() {
-			//create kernel node
-			Tensor& tensor = Tensor::Kernel(scope->scope_shape.GetTensors());
-			 Node* kernel_node = tensor.node_;
-			 // make the scope nodes children of the kernel node
-			 kernel_node->child = scope->begin;
-			 kernel_node->next = scope->end->next;
-			 scope->begin->parent = kernel_node;
-			 scope->begin->prev = nullptr;
-			 scope->end->next->prev = kernel_node;
-			 scope->end->next = nullptr;
+			scope->CreateKernel();
 		});
+#ifdef _RELWITHDEBINFO
+		if (scope->boundary_nodes.size() > max_kernel_memory_dependencies) {
+			cout << current_pass << ": Warning: Kernel created with " << scope->boundary_nodes.size() << " boundary nodes" << endl;
+		}
+#endif
 	}
 
 	UpdateGraph();
 }
+
+
+unordered_set<Node*> IR::ComputeKernelDependencies(Node* kernel) {
+	unordered_set<Node*> kernel_deps;
+
+	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+		//go over all inputs
+		unordered_set<Node*> node_deps;
+		for (auto& [id, from] : node->args.inputs_) {
+			if(id.first == ArgType::Shape) {
+				continue;
+			}
+			bool is_outside = !from->HasParent(kernel);
+			if (is_outside) {
+				//check if its not scalar
+				if(from->args.Count(ArgType::Shape) == 0) {
+					continue;
+				}
+				node_deps.insert(from);
+			} else {
+				node_deps.insert(from->memory_deps.begin(), from->memory_deps.end());
+			}
+		}
+		//go over all outputs and add this node as a dependency if those outputs are outside the kernel
+		//this means the kernel must also write to an output
+		for (auto [edge, to] : node->args.outputs_) {
+			if(edge.first.first == ArgType::Shape) {
+				continue;
+			}
+			if (!to->HasParent(kernel)) {
+				node_deps.insert(node.get());
+			}
+		}
+		node->memory_deps = node_deps;
+		kernel_deps.insert(node_deps.begin(), node_deps.end());
+	}
+
+	kernel->memory_deps = kernel_deps;
+	return kernel_deps;
+}
+
 
 // check if all child nodes in a kernel have compatible shape to the kernel
 void IR::CheckKernelShapes() {
@@ -42,11 +124,71 @@ void IR::CheckKernelShapes() {
 			// check if the node has a shape argument
 			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
 		}
+
+#ifdef _RELWITHDEBINFO
+		auto deps = ComputeKernelDependencies(kernel);
+		if(deps.size() > max_kernel_memory_dependencies) {
+			cout << current_pass << ": Warning: Kernel " << kernel->debug_index << " has " << deps.size() << " dependencies" << endl;
+		}
+#endif
 	}
+
 
 	UpdateGraph();
 }
 
+bool IR::LimitKernelMemoryDependencies() {
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	int created_kernels = 0;
+
+	for (auto kernel : kernels) {
+		unordered_set<Node*> kernel_deps = ComputeKernelDependencies(kernel);
+
+		if(kernel_deps.size() <= max_allowed_memory_dependencies) continue;
+
+		//throw std::runtime_error("Kernel " + to_string(kernel->index_) + " has too many memory dependencies (" + to_string(kernel_deps.size()) + " > " + to_string(max_kernel_memory_dependencies) + ")");
+
+		//reclusterize the kernel
+		unordered_set<KernelScope*> kernel_scopes;
+		ExecuteExpressionFirstChild(kernel, [&]() {
+			kernel_scopes = KernelScope::ComputeScopes(kernel, max_kernel_memory_dependencies).first;
+		});
+
+
+		//move the child nodes outside of the kernel
+		vector<Node*> children = kernel->GetChildren();
+		Node* first_child = kernel->child;
+		Node* last_child = children.back();
+		Node* _next = kernel->next;
+
+
+		kernel->next = first_child;
+		first_child->prev = kernel;
+		last_child->next = _next;
+		_next->prev = last_child;
+
+		kernel->child = nullptr;
+		for (auto child : children) {
+			child->parent = kernel->parent;
+		}
+
+		for (auto scope : kernel_scopes) {
+			// create kernel before the scope
+			ExecuteExpressionBefore(scope->begin, [&]() {
+				scope->CreateKernel();
+			});
+			created_kernels++;
+		}
+
+		UpdateGraph();
+	}
+
+	UpdateGraph();
+
+	return created_kernels == 0;
+}
 
 void IR::CheckIR(string name, bool check_clustering, bool check_kernels) {
 #ifdef NDEBUG
@@ -135,11 +277,14 @@ map<Node*, Node*> IR::CopyComputation(
 	// do a depth first search to copy all the nodes required for the targets
 	// (only if in the same kernel)
 	set<Node*> nodes_to_copy;
+	bool valid = true;
 	std::function<void(Node*)> dfs = [&](Node* node) {
 		if (nodes_to_copy.contains(node)) return;
 		nodes_to_copy.insert(node);
 		for (auto& [arg, from] : node->args.inputs_) {
-			if (node->args.CannotCopyArgument(arg)) continue;
+			if (node->args.CannotCopyArgument(arg)) {
+				continue;
+			}
 			dfs(from);
 		}
 	};
@@ -148,12 +293,13 @@ map<Node*, Node*> IR::CopyComputation(
 		dfs(target);
 	}
 
+
 	return CopyNodes(nodes_to_copy, {}, indices, targets, true);
 }
 
-map<Node*, Node*> IR::CopyNodesWithIndex(unordered_set<Node*> nodes_to_copy,
-                                         unordered_map<int, Node*> indices,
-                                         Node* cursor) {
+map<Node*, Node*> IR::CopyNodesWithIndex(unordered_set<Node *> nodes_to_copy,
+                                         unordered_map<int, Node *> indices,
+                                         Node *cursor) {
 	// copy all the nodes at the beginning of the kernel
 	map<Node*, Node*> copied_node_map;
 	if(cursor == nullptr) {
@@ -178,15 +324,7 @@ void IR::CopyArguments(ArgEdges args_to_copy, Node* cursor)
 	unordered_map<int, Node*> indices;
 	copied_node_map = CopyNodesWithIndex(nodes_to_copy, indices, cursor);
 
-	// replace all the arguments that use the copied nodes
-	for (auto& [arg, out] : args_to_copy) {
-		Node* from = arg.second;
-		if (!copied_node_map.contains(from)) {
-			throw std::runtime_error("Optimize Kernels: Copy Fail");
-		}
-		Node* to = copied_node_map[from];
-		out->args.UpdateArgument(arg.first, to);
-	}
+	ReplaceArgs(args_to_copy, copied_node_map);
 }
 
 void IR::MoveShapeOutsideKernels() {
@@ -229,7 +367,7 @@ void IR::MoveShapeOutsideKernels() {
 
 		// copy shape computation and put it before the earliest output (outside of the kernel if its inside)
 		CopyArguments(args_to_copy, common_parent);
-		UpdateGraph();
+		ApplyChanges(true);
 	}
 }
 
@@ -311,8 +449,10 @@ void IR::ComputeStatistics() {
 	}
 
 	//Check if output memory map has all the outputs
-	if (output_memory_map.size() != output_memory_count) {
+	if (output_memory_map.size() < output_memory_count) {
 		throw std::runtime_error("Output memory map does not have all the outputs, some got lost");
+	} else if (output_memory_map.size() > output_memory_count) {
+		throw std::runtime_error("Output memory map has more outputs than expected");
 	}
 }
 
@@ -367,6 +507,7 @@ void IR::ComputeNodeCost()
 		node->cost_ = input_cost;
 	}
 }
+
 map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 {
 	map<Node*, ArgEdges> node_output;
@@ -1118,73 +1259,32 @@ void IR::TryReplaceModificationsWithVersions()
 	UpdateGraph();
 }
 
-#define MAX_MEMORY_DEPENDENCIES 8
-
-bool IR::LimitKernelMemoryDependencies() {
-	UpdateGraph();
-	vector<Node*> kernels = GetNodesOfType("kernel");
-
-	int created_kernels = 0;
-
-	for (auto kernel : kernels) {
-		unordered_set<Node*> kernel_deps;
-		vector<Node*> potential_new_kernels = {};
-
-		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			//go over all inputs
-			unordered_set<Node*> node_deps;
-			for (auto& [id, from] : node->args.inputs_) {
-				if(id.first == ArgType::Shape) {
-					continue;
-				}
-				bool is_outside = !from->HasParent(kernel);
-				if (is_outside) {
-					node_deps.insert(from);
-				} else {
-					node_deps.insert(from->memory_deps.begin(), from->memory_deps.end());
-				}
-			}
-			node->memory_deps = node_deps;
-			kernel_deps.insert(node_deps.begin(), node_deps.end());
-
-			if(node_deps.size() <= MAX_MEMORY_DEPENDENCIES && node_deps.size() > 2) {
-				// if((potential_new_kernel == nullptr) || (potential_new_kernel->memory_deps.size() < node_deps.size())) {
-				// 	potential_new_kernel = node.get();
-				// }
-				potential_new_kernels.push_back(node.get());
-			}
+void IR::ApplyChanges(bool update_graph, const Node* uroot) {
+	for (auto& [arg, out] : edgesToUpdate) {
+		Node* from = arg.second;
+		if (!replacementNodes.contains(from)) {
+			throw std::runtime_error("No replacement node found for node " + from->name);
 		}
-
-		kernel->memory_deps = kernel_deps;
-
-		if(kernel_deps.size() <= MAX_MEMORY_DEPENDENCIES) continue;
-
-		//get random node from the vector
-		Node* potential_new_kernel = nullptr;
-		if(potential_new_kernels.size() > 0) {
-			int index = rand() % potential_new_kernels.size();
-			potential_new_kernel = potential_new_kernels[index];
-		}
-
-		if(potential_new_kernel == nullptr) {
-			throw std::runtime_error("LimitKernelMemoryDependencies: No potential new kernel for splitting found, compilation failed, too many dependencies");
-		}
-
-		//move the node with most dependencies to a new kernel
-		ExecuteExpressionBefore(kernel, [&]() {
-			auto new_kernel = Tensor::GetCopy(*kernel->GetTensor());
-			CopyArguments( potential_new_kernel->args.outputs_, new_kernel->node_->child);
-			created_kernels++;
-			//UpdateGraph(new_kernel->node_);
-		});
-
-		UpdateGraph();
-		//UpdateGraph(kernel);
+		Node* to = replacementNodes[from];
+		out->args.UpdateArgument(arg.first, to);
 	}
 
-	UpdateGraph();
+	// remove all nodes that are not used
+	for (auto* node : removedNodes) {
+		RemoveNode(node);
+	}
 
-	return created_kernels == 0;
+	if (update_graph) {
+		UpdateGraph(uroot);
+	}
+
+	ClearChanges();
+}
+
+void IR::ClearChanges() {
+	edgesToUpdate.clear();
+	removedNodes.clear();
+	replacementNodes.clear();
 }
 
 } // namespace TensorFrost

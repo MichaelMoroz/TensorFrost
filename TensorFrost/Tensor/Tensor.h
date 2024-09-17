@@ -191,6 +191,12 @@ public:
 			}
 		}
 
+		//if no indices or inputs exist, use memory shape
+		if (indices.empty() && tensors.empty())
+		{
+			shape_arguments = memory->node_->args.GetArguments(ArgType::Shape);
+		}
+
 		AddArguments(arguments, shape_arguments);
 
 		if (op == "load") output_type = memory->GetType();

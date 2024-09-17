@@ -47,6 +47,10 @@ bool KernelScope::IsValid() const {
 	// begin must be before or at the same index as end
 	if (begin->index_ > end->index_) return false;
 
+	if (memory_dependencies.size() > max_memory_dependencies) {
+		return false;
+	}
+
 	// check if the boundary nodes are not in the scope
 	for (Node* boundary_node : boundary_nodes) {
 		if (boundary_node->index_ >= begin->index_ &&
@@ -59,7 +63,7 @@ bool KernelScope::IsValid() const {
 }
 
 KernelScope::KernelScope(Node* node,
-                         unordered_set<KernelScope*>& output_scopes) : begin(node), end(node) {
+                         unordered_set<KernelScope*>& output_scopes, int max_deps) : begin(node), end(node), max_memory_dependencies(max_deps) {
 	scope_shape = ShapeInfo(node);
 
 	// if host only, then this can not be a valid kernel scope
@@ -94,7 +98,7 @@ KernelScope::KernelScope(Node* node,
 		}
 	}
 
-	pair<unordered_set<KernelScope*>, bool> all_scopes = ComputeScopes(node);
+	pair<unordered_set<KernelScope*>, bool> all_scopes = ComputeScopes(node, max_deps);
 	auto child_scopes = all_scopes.first;
 	bool host_only = all_scopes.second;
 
@@ -131,15 +135,16 @@ KernelScope::KernelScope(Node* node,
 		end = nullptr;
 	}
 
+	ComputeMemoryDependencies();
 }
 
-pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *root) {
+pair<std::unordered_set<KernelScope *>, bool> KernelScope::ComputeScopes(Node *root, int max_deps) {
 	std::unordered_set<KernelScope*> scopes;
 	KernelScope* current_scope = new KernelScope();
 	bool host_only = false;
 	for (auto node = NodeIterator(root); !node.end(); node.go_to_next()) {
 		std::unordered_set<KernelScope*> child_scopes;
-		KernelScope* node_scope = new KernelScope(node.get(), child_scopes);
+		KernelScope* node_scope = new KernelScope(node.get(), child_scopes, max_deps);
 		if (node_scope->IsValid()) {  // can be merged
 			KernelScope* merged = KernelScope::Merge(current_scope, node_scope);
 			if (merged->IsValid()) {
@@ -187,14 +192,14 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 
 	if (!result.compatible) return new KernelScope();
 
-	KernelScope* new_scope = new KernelScope(a->begin, b->end, result.broadcast_shape, a->boundary_nodes);
+	KernelScope* new_scope = new KernelScope(a->begin, b->end, result.broadcast_shape, a->boundary_nodes, max(a->max_memory_dependencies, b->max_memory_dependencies));
 	new_scope->AddBoundaryNodes(b->boundary_nodes);
+	new_scope->ComputeMemoryDependencies();
 
 	if (!new_scope->IsValid()) return new KernelScope();
 
 	return new_scope;
 }
-
 
 //if shape nodes are compatible, then return the broadcast shape, if not return nullptr
 ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match) {
