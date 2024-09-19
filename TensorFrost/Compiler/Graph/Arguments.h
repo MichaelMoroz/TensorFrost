@@ -92,14 +92,10 @@ public:
 	}
 
 	unordered_map<ArgID, Node*, HashArgID> Inputs() const {
-		//give copy of inputs
-		return unordered_map<ArgID, Node*, HashArgID>(inputs_.begin(), inputs_.end());
 		return inputs_;
 	}
 
 	ArgEdges Outputs() const {
-		//give copy of outputs
-		return ArgEdges(outputs_.begin(), outputs_.end());
 		return outputs_;
 	}
 

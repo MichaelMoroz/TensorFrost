@@ -183,7 +183,6 @@ public:
 
 	bool InsertAlgorithmicPrimitives(bool skip_differentiable);
 	void UnrollLoops(int max_iterations = 8);
-	void UnrollKernelDimensions();
 	void UnrollAtomicOperations();
 	void TryReplaceModificationsWithVersions();
 	void ComputeAutodiff();
@@ -262,12 +261,7 @@ public:
 
 		UpdateIndex();
 
-
-		// update edges
-		// for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
-		// 	node->args.ClearOutputs();
-		// }
-
+#ifdef _DEBUG
 		map<Node*, string> invalid_nodes;
 		// check if graph is valid
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
@@ -294,13 +288,7 @@ public:
 #endif
 		}
 
-		// update outputs
-		// vector<Node*> outputs;
-		// for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
-		// 	for (auto& [id, from] : node->args.Inputs()) {
-		// 		from->args.AddOutput(id, node.get());
-		// 	}
-		// }
+#endif
 
 		//update modified flags
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {

@@ -40,8 +40,6 @@ bool IR::InsertAlgorithmicPrimitives(bool skip_differentiable) {
 
 		//mark the node for removal
 		nodes_to_remove.insert(node);
-
-		UpdateGraph();
 	}
 
 	// remove all nodes that are not used

@@ -52,6 +52,7 @@ void KernelScope::ComputeMemoryDependencies() {
 void IR::SeparateOperationsIntoKernels() {
 
 	unordered_set<KernelScope*> kernel_scopes;
+
 	ExecuteExpressionFirstChild(root, [&]() {
 		kernel_scopes = KernelScope::ComputeScopes(root, max_kernel_memory_dependencies).first;
 	});
@@ -371,7 +372,7 @@ void IR::MoveShapeOutsideKernels() {
 
 		// copy shape computation and put it before the earliest output (outside of the kernel if its inside)
 		CopyArguments(args_to_copy, common_parent);
-		ApplyChanges(true);
+		ApplyChanges(false);
 	}
 }
 
@@ -837,7 +838,6 @@ void IR::AddKernelGlobalStoreOperations() {
 				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, true);
 			});
 		}
-		UpdateGraph(kernel);
 	}
 
 	// replace all inputs pointing to memory nodes with the memory node
@@ -1024,14 +1024,10 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 		}
 	}
 
-	UpdateGraph(kernel);
-
 	// remove all dim nodes
 	for (auto* node : nodes_to_remove) {
 		RemoveNode(node);
 	}
-
-	UpdateGraph(kernel);
 }
 
 void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)

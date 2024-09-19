@@ -120,8 +120,6 @@ void IR::ComputeAutodiff()
 			Node* computed_grad = node_to_grad[wrt_grad.first.second]->node_;
 			grad_to_computed_grad[grad] = computed_grad;
 		}
-
-		UpdateGraph();
 	}
 
 	unordered_set<Node*> nodes_to_remove;
@@ -133,7 +131,6 @@ void IR::ComputeAutodiff()
 
 		//mark the node for removal
 		nodes_to_remove.insert(gradient);
-		UpdateGraph();
 	}
 
 	for (auto* node : nodes_to_remove) {

@@ -49,7 +49,7 @@ void IR::RemoveNode(Node* node) {
 }
 
 #ifdef _RELWITHDEBINFO
-//#define PROFILE_COMPILATION
+#define PROFILE_COMPILATION
 #endif
 
 void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
