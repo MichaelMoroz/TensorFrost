@@ -31,7 +31,7 @@ Program* GenerateProgram(IR* ir)
 			}
 
 			// get all input arguments
-			for (auto [id, from] : node->args.inputs_) {
+			for (auto [id, from] : node->args.Inputs()) {
 				if (id.first == ArgType::Input)
 				{
 					bool from_outside_kernel = !from->HasParent(kernel);

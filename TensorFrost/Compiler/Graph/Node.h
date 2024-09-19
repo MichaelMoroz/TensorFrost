@@ -51,14 +51,16 @@ using NodeProps = FlagSet<NodeProp, (int)NodeProp::Count>;
 class Node {
 	static int global_index;
  public:
-	int index_ = -1;
 	int debug_index = -1;
+	string name;
 	string var_name = "";
 	string debug_name;
-	string name;
+	int index_ = -1;
 	float cost_ = -1.0f;
 	unordered_set<Node*> memory_deps;
 
+	//Edge *prev, *next;
+	//
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
 	const Operation* op;
 	NodeProps flags;
@@ -86,7 +88,7 @@ class Node {
 	void UpdateEdges();
 
 	//initialize and create next/child placeholders
-    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type, bool set_static = false);
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type,  unordered_set<Node*>& existing_nodes, bool set_static = false);
 
 	void CopyProperties(Node* other);
 	void CopyMetadata(Node* other);

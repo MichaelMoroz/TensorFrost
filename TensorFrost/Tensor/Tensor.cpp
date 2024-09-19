@@ -74,12 +74,16 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 	inputs_[id] = node;
 	argument_types_[id] = node->type;
 	argument_counts_[id.first]++;
+	//add this node as an output of the argument
+	node->args.AddOutput(id, node_);
 }
 
 void ArgumentManager::Remove(ArgID id) {
 	if(inputs_.find(id) == inputs_.end()) {
 		throw std::runtime_error("Cannot remove argument that does not exist");
 	}
+	//remove this node as an output of the argument
+	inputs_[id]->args.RemoveOutput(id, node_);
 	inputs_.erase(id);
 	argument_types_.erase(id);
 	argument_counts_[id.first]--;
@@ -198,7 +202,7 @@ Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 
 Tensor* Tensor::GetCopy(const Tensor& other) {
 	NodeArguments new_args;
-	for (auto& [id, from] : other.node_->args.inputs_) {
+	for (auto& [id, from] : other.node_->args.Inputs()) {
 		new_args[id] = from;
 	}
 	return GetCopy(other, new_args);

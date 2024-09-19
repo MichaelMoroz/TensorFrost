@@ -4,7 +4,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetNodeString(const Node* node) {
+string GetNodeString(const Node* node, bool verbose) {
 	string listing = "";
 	if (node->type != TFType::None) {
 		listing += DataTypeToString(node->type) + " ";
@@ -35,6 +35,14 @@ string GetNodeString(const Node* node) {
 	listing += ArgTypePrint("memory", ArgType::Memory);
 	listing += ArgTypePrint("inputs", ArgType::Input);
 	listing += ArgTypePrint("indices", ArgType::Index);
+
+	if(node->args.Outputs().size() > 0) {
+		listing += "outputs=[";
+		for(auto [in, out]: node->args.Outputs()) {
+			listing += GetNodeName(out, false) + ", ";
+		}
+		listing += "], ";
+	}
 
 	if (!node->data.empty()) {
 		listing += "data=[";
@@ -73,6 +81,15 @@ string GetNodeString(const Node* node) {
 	}
 
 	listing += ArgTypePrint("shape", ArgType::Shape);
+
+#ifdef _DEBUG
+	if (verbose) {
+		listing += "index=" + to_string(node->index_) + ", ";
+		listing += "debug_index=" + to_string(node->debug_index) + ", ";
+		listing += "debug_name=" + node->debug_name + ", ";
+		listing += "created_in=" + node->created_in + ", ";
+	}
+#endif
 
 	listing += ")";
 
@@ -120,7 +137,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		}
 		prev_depth = depth;
 
-		listing += GetNodeString(*node);
+		listing += GetNodeString(*node, true);
 		listing += "\n";
 	}
 

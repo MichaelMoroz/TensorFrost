@@ -30,7 +30,7 @@ public:
         root = new Node();
 		root->index_ = 0;
 		root->name = "root";
-        root->initialize(nullptr, {}, "host", TFType::None, true);
+        root->initialize(nullptr, {}, "host", TFType::None, existing_nodes, true);
         cursor = NodeIterator(root);
     }
 
@@ -59,10 +59,10 @@ public:
 				cursor->parent->child = newNode;
             cursor->prev = newNode;
 			newNode->next = *cursor;
-            newNode->initialize(tensor, std::move(args), std::move(name), type);
+            newNode->initialize(tensor, std::move(args), std::move(name), type, existing_nodes);
         } else {
         	newNode = cursor.get();
-            cursor->initialize(tensor, std::move(args), std::move(name), type);
+            cursor->initialize(tensor, std::move(args), std::move(name), type, existing_nodes);
 			cursor.go_to_next();
         }
 
@@ -227,6 +227,32 @@ public:
 			node->UpdateEdges();
 			node->index_ = index++;
 		}
+
+		index++; //add root node
+
+		if (index != existing_nodes.size()) {
+			unordered_set<Node*> found_nodes;
+			found_nodes.insert(root);
+			for (auto node = begin(); !node.end(); node.next()) {
+				found_nodes.insert(*node);
+			}
+
+			unordered_set<Node*> missing_nodes;
+			for (auto node : existing_nodes) {
+				if (found_nodes.find(node) == found_nodes.end()) {
+					missing_nodes.insert(node);
+				}
+			}
+
+			string missing_nodes_str = "";
+			for (auto node : missing_nodes) {
+				missing_nodes_str += GetNodeListing(node) + "\n";
+			}
+
+			missing_nodes_str += "\n" + PrintListing({});
+
+			throw std::runtime_error("\n Some nodes got lost during indexing. Expected " + to_string(existing_nodes.size()) + " but got " + to_string(index) + ". Likely invalid graph. Missing nodes:\n" + missing_nodes_str);
+		}
 	}
 
 	void UpdateGraph(const Node* uroot = nullptr) {
@@ -236,16 +262,17 @@ public:
 
 		UpdateIndex();
 
+
 		// update edges
-		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
-			node->args.ClearOutputs();
-		}
+		// for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
+		// 	node->args.ClearOutputs();
+		// }
 
 		map<Node*, string> invalid_nodes;
 		// check if graph is valid
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			// if there are null inputs throw an error
-			for (auto& [id, n] : (*node)->args.inputs_) {
+			for (auto& [id, n] : (*node)->args.Inputs()) {
 				if (n == nullptr) {
 					throw std::runtime_error("Null input found in node " + (*node)->var_name + ". Likely an icorrectly deleted node.");
 				} else if (n->index_ > (*node)->index_) { //if input node is after current node, throw an error
@@ -268,18 +295,18 @@ public:
 		}
 
 		// update outputs
-		vector<Node*> outputs;
-		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
-			for (auto& [id, from] : node->args.inputs_) {
-				from->args.AddOutput(id, node.get());
-			}
-		}
+		// vector<Node*> outputs;
+		// for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
+		// 	for (auto& [id, from] : node->args.Inputs()) {
+		// 		from->args.AddOutput(id, node.get());
+		// 	}
+		// }
 
 		//update modified flags
 		for (auto node = NodeIterator(uroot); !node.end(); node.next()) {
 			node->flags.remove(NodeProp::Modified);
 			//go over all outputs and check if they are modifiers
-			for (auto [edge, to] : node->args.outputs_) {
+			for (auto [edge, to] : node->args.Outputs()) {
 				auto& [id, from] = edge;
 				if (to->op->HasAllTypes(OpProp::Modifier)) {
 					bool is_memory = false;
@@ -360,7 +387,7 @@ public:
 	unordered_map<int, Node*> input_memory_map;
 	unordered_map<int, Node*> output_memory_map;
 
-	string current_pass;
+	string current_pass = "Tracing initial graph";
 
 	struct PassStats {
 		string pass_name;
@@ -369,12 +396,12 @@ public:
 	};
 	vector<PassStats> pass_stats;
 
-	void ReplaceArgs(ArgEdges& edges, map<Node*, Node*>& replacements) {
-		edgesToUpdate.insert(edgesToUpdate.end(), edges.begin(), edges.end());
+	void ReplaceArgs(const ArgEdges& edges, const map<Node*, Node*>& replacements) {
+		edgesToUpdate.insert(edges.begin(), edges.end());
 		replacementNodes.insert(replacements.begin(), replacements.end());
 	}
 
-	void RemoveNodes(vector<Node*>& nodes) {
+	void RemoveNodes(const vector<Node*>& nodes) {
 		removedNodes.insert(removedNodes.end(), nodes.begin(), nodes.end());
 	}
 
@@ -384,6 +411,7 @@ public:
 	ArgEdges edgesToUpdate{};
 	map<Node*, Node*> replacementNodes{};
 	vector<Node*> removedNodes{};
+	unordered_set<Node*> existing_nodes{};
 
 	static int max_kernel_memory_dependencies;
 	static int max_allowed_memory_dependencies;

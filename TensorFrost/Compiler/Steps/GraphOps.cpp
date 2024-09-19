@@ -7,19 +7,20 @@ void KernelScope::CreateKernel() {
 	//create kernel node
 	Tensor& tensor = Tensor::Kernel(scope_shape.GetTensors());
 	Node* kernel_node = tensor.node_;
-	// make the scope nodes children of the kernel node
+	Node* old_child = kernel_node->child;
 	kernel_node->child = begin;
 	kernel_node->next = end->next;
 	begin->parent = kernel_node;
 	begin->prev = nullptr;
 	end->next->prev = kernel_node;
-	end->next = nullptr;
+	end->next = old_child;
+	old_child->prev = end;
 }
 
 void KernelScope::ComputeMemoryDependencies() {
 	memory_dependencies.clear();
 	for(auto node = NodeIterator(begin, begin->parent); node->index_<=end->index_ && !node.end(); node.next()) {
-		for(auto& [arg, from] : node->args.inputs_) {
+		for(auto& [arg, from] : node->args.Inputs()) {
 			//skip shape arguments
 			if(arg.first == ArgType::Shape || from->name == "const") {
 				continue;
@@ -30,7 +31,7 @@ void KernelScope::ComputeMemoryDependencies() {
 			}
 		}
 		//go over outputs and check if they are used outside of the scope
-		for(auto& [arg, to] : node->args.outputs_) {
+		for(auto& [arg, to] : node->args.Outputs()) {
 			//skip shape arguments
 			if(arg.first.first == ArgType::Shape || node->name == "const") {
 				continue;
@@ -78,7 +79,7 @@ unordered_set<Node*> IR::ComputeKernelDependencies(Node* kernel) {
 	for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 		//go over all inputs
 		unordered_set<Node*> node_deps;
-		for (auto& [id, from] : node->args.inputs_) {
+		for (auto& [id, from] : node->args.Inputs()) {
 			if(id.first == ArgType::Shape) {
 				continue;
 			}
@@ -95,7 +96,7 @@ unordered_set<Node*> IR::ComputeKernelDependencies(Node* kernel) {
 		}
 		//go over all outputs and add this node as a dependency if those outputs are outside the kernel
 		//this means the kernel must also write to an output
-		for (auto [edge, to] : node->args.outputs_) {
+		for (auto [edge, to] : node->args.Outputs()) {
 			if(edge.first.first == ArgType::Shape) {
 				continue;
 			}
@@ -207,7 +208,7 @@ void IR::CheckIR(string name, bool check_clustering, bool check_kernels) {
 
 
 		// go over all inputs
-		for (auto& [id, input] : node->args.inputs_) {
+		for (auto& [id, input] : node->args.Inputs()) {
 			Node* to = node.get();
 
 			// check if inputs are before the node
@@ -240,7 +241,7 @@ void IR::ReorderOperations() {
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
-			for (auto& [id, from] : node->args.inputs_) {
+			for (auto& [id, from] : node->args.Inputs()) {
 				bool outside_kernel = !from->HasParent(kernel);
 				if (outside_kernel && !node->args.CannotMoveArgument(id)) {
 					// if this node is a set and its input is outside of the cluser ->
@@ -281,7 +282,7 @@ map<Node*, Node*> IR::CopyComputation(
 	std::function<void(Node*)> dfs = [&](Node* node) {
 		if (nodes_to_copy.contains(node)) return;
 		nodes_to_copy.insert(node);
-		for (auto& [arg, from] : node->args.inputs_) {
+		for (auto& [arg, from] : node->args.Inputs()) {
 			if (node->args.CannotCopyArgument(arg)) {
 				continue;
 			}
@@ -328,14 +329,17 @@ void IR::CopyArguments(ArgEdges args_to_copy, Node* cursor)
 }
 
 void IR::MoveShapeOutsideKernels() {
+	UpdateGraph();
 	// find all nodes that are used as shapes and are inside kernels
 	map<Node*, Node*> nodes_to_copy;
 	for (auto node = begin(); !node.end(); node.next()) {
 		Node* kernel = node->GetParent("kernel");
-		if (kernel == *node) continue;
+		if (kernel == *node) { //if returns itself, then no kernel parent found
+			continue;
+		}
 
 		// go over all outputs arguments
-		for (auto [edge, to] : node->args.outputs_) {
+		for (auto [edge, to] : node->args.Outputs()) {
 			auto& [id, from] = edge;
 			if (id.first != ArgType::Shape) {
 				continue;
@@ -350,10 +354,10 @@ void IR::MoveShapeOutsideKernels() {
 		ArgEdges args_to_copy;
 		int earliest_output_index = INT_MAX;
 		Node* earliest_output = nullptr;
-		for (auto [edge, to] : node->args.outputs_) {
+		for (auto [edge, to] : node->args.Outputs()) {
 			auto& [id, from] = edge;
 			if (id.first == ArgType::Shape) {
-				args_to_copy.push_back(ArgEdge(Arg(id, node), to));
+				args_to_copy.insert(ArgEdge(Arg(id, node), to));
 
 				//get the earliest output
 				if (to->index_ < earliest_output_index) { //wat
@@ -393,7 +397,7 @@ void IR::GetInputList() {
 			input_memory_map[input_index] = *node;
 			node->flags.set(NodeProp::InputMemory, input_index);
 			//if any of the inputs are "input_shape" then we need to add the input index to them
-			for (auto& [arg, from] : node->args.inputs_) {
+			for (auto& [arg, from] : node->args.Inputs()) {
 				if (arg.first == ArgType::Shape && from->name == "input_shape") {
 					if(!from->flags.has(NodeProp::InputShapeMemory)) { //ONLY FIRST TIME
 						from->flags.set(NodeProp::InputShapeMemory, input_index);
@@ -469,12 +473,12 @@ unordered_set<Node*> IR::GetDependencies(unordered_set<Node*> nodes) {
 		dependencies.insert(node);
 
 		//all inputs of this node are used
-		for (auto& [arg, from] : node->args.inputs_) {
+		for (auto& [arg, from] : node->args.Inputs()) {
 			dfs(from);
 		}
 
 		//if the node is a memory node or used as memory, then all outputs are used
-		for (auto [edge, to] : node->args.outputs_) {
+		for (auto [edge, to] : node->args.Outputs()) {
 			auto& [id, from] = edge;
 			if (to->args.IsChangingInput(id)) {
 				dfs(to);
@@ -494,7 +498,7 @@ void IR::ComputeNodeCost()
 	for (auto node = begin(); !node.end(); node.next()) {
 		bool is_memory = node->op->HasAllTypes(OpProp::Memory);
 		unordered_map<Node*, float> input_costs;
-		for (auto& [id, from] : node->args.inputs_) {
+		for (auto& [id, from] : node->args.Inputs()) {
 			if (id.first != ArgType::Memory &&
 			    (id.first != ArgType::Shape && !is_memory)) {
 				input_costs[from] = from->cost_;
@@ -515,13 +519,13 @@ map<Node *, ArgEdges> IR::GetKernelOutputs(Node *kernel)
 		bool is_output = node->flags.has(NodeProp::OutputMemory);
 		ArgEdges outputs = ArgEdges();
 
-		for (auto [edge, to] : node->args.outputs_) {
+		for (auto [edge, to] : node->args.Outputs()) {
 			auto& [id, from] = edge;
 			if (to == nullptr) continue;
 			// if is a shape or memory argument, then skip (shape is loaded on CPU)
 			if (id.first == ArgType::Shape) continue;
 			if (!to->HasParent(kernel)) {
-				outputs.emplace_back(Arg(id, *node), to);
+				outputs.emplace(Arg(id, *node), to);
 				is_output = true;
 			}
 		}
@@ -539,7 +543,7 @@ string IR::PrintListing(map<Node*, string> node_debug) const {
 }
 
 string IR::GetNodeListing(Node* node) const {
-	return GetNodeString(node);
+	return GetNodeString(node, true);
 }
 
 /// <summary>
@@ -608,7 +612,7 @@ map<Node*, Node*> IR::CopyNodes(
 		if (no_index) {
 			// create new arguments
 			NodeArguments new_args;
-			for (auto& [arg, from]: node->args.inputs_) {
+			for (auto& [arg, from]: node->args.Inputs()) {
 				auto& [type, index] = arg;
 				if (can_change_shape && type == ArgType::Shape) {
 					continue;
@@ -665,7 +669,7 @@ map<Node*, Node*> IR::CopyNodes(
 
 
 void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
-	for (auto& [arg, input_node] : node->args.inputs_) {
+	for (auto& [arg, input_node] : node->args.Inputs()) {
 		if (arg.first == ArgType::Memory || arg.first == ArgType::Shape)
 			continue;
 
@@ -692,7 +696,7 @@ void IR::AddKernelGlobalLoadOperations() {
 		unordered_set<Node*> nodes_to_load;
 		unordered_map<Node*, ArgEdges> load_arguments;
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			for (auto& [arg, input_node] : node->args.inputs_) {
+			for (auto& [arg, input_node] : node->args.Inputs()) {
 				if (arg.first == ArgType::Memory || arg.first == ArgType::Shape)
 					continue;
 
@@ -702,7 +706,7 @@ void IR::AddKernelGlobalLoadOperations() {
 
 				if (is_memory || (is_in_a_kernel && is_outside)) {
 					nodes_to_load.insert(input_node);
-					load_arguments[input_node].push_back(ArgEdge(Arg(arg, input_node), node.get()));
+					load_arguments[input_node].insert(ArgEdge(Arg(arg, input_node), node.get()));
 				}
 			}
 		}
@@ -840,7 +844,7 @@ void IR::AddKernelGlobalStoreOperations() {
 	for (auto node = begin(); !node.end(); node.next()) {
 		bool is_memory = node->op->HasAllTypes(OpProp::Memory);
 
-		for (auto& [id, from] : node->args.inputs_) {
+		for (auto& [id, from] : node->args.Inputs()) {
 			if (id.first == ArgType::Memory ||
 			    (id.first  == ArgType::Shape && !is_memory))
 				continue;
@@ -881,7 +885,7 @@ void IR::AddMemoryDeallocation()
 				return;
 			}
 
-			for (auto [edge, to] : node->args.outputs_) {
+			for (auto [edge, to] : node->args.Outputs()) {
 				auto& [id, from] = edge;
 				if (to->op->HasAllTypes(OpProp::MemoryReuse)) {
 					dfs(to);
@@ -1001,7 +1005,7 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 		else
 		{
 			//go over node inputs and replace dim nodes with index nodes
-			for (auto& [id, from] : node->args.inputs_) {
+			for (auto& [id, from] : node->args.Inputs()) {
 				if (from->name == "dim_id") {
 					int dim = from->data[0];
 					Node* index_node = nullptr;

@@ -63,13 +63,17 @@ bool ArgumentManager::IsChangingInput(ArgID arg) {
 
 void ArgumentManager::UpdateArgument(ArgID id, Node *node) {
     if(node == nullptr) {
-        throw std::runtime_error("Node is null");
+        throw std::runtime_error("ArgumentManager: Node is null");
     }
     if(!Has(id)) {
-        throw std::runtime_error("No argument to update");
+        throw std::runtime_error("ArgumentManager: Argument " + TypeToString(id.first) + ":" + std::to_string(id.second) + " with node " + node->name + " does not exist");
     }
-    inputs_[id] = node;
-    argument_types_[id] = node->type;
+    // inputs_[id]->args.RemoveOutput(id, node_);
+    // inputs_[id] = node;
+    // argument_types_[id] = node->type;
+    // node->args.AddOutput(id, node_);
+    Remove(id);
+    AddArgument(id, node);
 }
 
 Node * Node::GetChild(string name) {
@@ -179,7 +183,7 @@ Node * Node::GetLastVersion(Node *latest_node) {
     int last_index = -1;
     Node* loop_node = latest_node->GetParent("loop");
     bool has_loop = loop_node != latest_node;
-    for (auto [edge, to] : args.outputs_) {
+    for (auto [edge, to] : args.Outputs()) {
         auto& [id, from] = edge;
         bool is_memory = false;
         if (id.first != ArgType::Memory) {
@@ -211,7 +215,7 @@ Node * Node::GetLastVersion(Node *latest_node) {
 Node * Node::GetFinalVersion() {
     Node* final_version = this;
     int last_index = -1;
-    for (auto [edge, to] : args.outputs_) {
+    for (auto [edge, to] : args.Outputs()) {
         auto& [id, from] = edge;
         bool is_memory = false;
         if (id.first != ArgType::Memory) {
@@ -267,7 +271,7 @@ string IndexingModeToString(IndexingMode mode) {
     return indexing_mode_names.at(mode);
 }
 
-void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_name, TFType new_type, bool set_static) {
+void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_name, TFType new_type, unordered_set<Node*>& existing_nodes, bool set_static) {
     if(valid()) {
         throw runtime_error("Node already initialized");
     }
@@ -277,11 +281,12 @@ void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_nam
     tensor_ = tensor;
     type = new_type;
     args.AddArguments(std::move(new_args));
-    args.UpdateOutputs();
+    //args.UpdateOutputs();
     flags.set(NodeProp::IsStatic, set_static);
     name = std::move(new_name);
     op = FindOperation(name);
     CheckNode();
+    existing_nodes.insert(this);
 }
 
 void Node::CopyProperties(Node *other) {
@@ -324,25 +329,24 @@ bool Node::HasParent(Node *node) const {
 }
 
 void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_modified, bool copy_metadata) {
-    ArgEdges remaining_outputs;
-    for (auto [edge, to] : args.outputs_) {
-        auto& [id, from] = edge;
-        if (to->index_ >= min_index) {
-            if(make_modified) {
-                replacement->flags.set(NodeProp::Modified);
+    try {
+        for (auto [edge, to] : args.Outputs()) {
+            auto& [id, from] = edge;
+            if (to->index_ >= min_index) {
+                if(make_modified) {
+                    replacement->flags.set(NodeProp::Modified);
+                }
+                to->args.UpdateArgument(id, replacement);
+                //replacement->args.AddOutput(id, to);
             }
-            to->args.UpdateArgument(id, replacement);
-            replacement->args.AddOutput(id, to);
-        } else {
-            remaining_outputs.push_back({edge, to});
         }
-    }
 
-    this->args.outputs_ = remaining_outputs;
-
-    if(copy_metadata) {
-        replacement->CopyMetadata(this);
-        this->flags.clear();
+        if(copy_metadata) {
+            replacement->CopyMetadata(this);
+            this->flags.clear();
+        }
+    } catch (const std::exception& e) {
+        throw std::runtime_error(MakeNodeErrorMessage("Failed to replace node with another node: " + std::string(e.what()), {this, replacement}));
     }
 }
 

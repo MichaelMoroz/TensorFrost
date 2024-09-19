@@ -90,7 +90,7 @@ void IR::ComputeAutodiff()
 				ComputeNodeGradients(node, node_to_grad[node], grads);
 
 				//store the computed gradients
-				for (auto& [id, input]: node->args.inputs_) {
+				for (auto& [id, input]: node->args.Inputs()) {
 					if(!grads.Contains(id)) {
 						continue;
 					}

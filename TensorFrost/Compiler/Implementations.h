@@ -29,7 +29,7 @@ public:
 
 	NodeGrads(Node* node, map<Node*, const Tensor*> input_grads) {
 		try {
-			for(auto& [id, input] : node->args.inputs_) {
+			for(auto& [id, input] : node->args.Inputs()) {
 				if (id.first == ArgType::Index || id.first == ArgType::Shape) {
 					continue;
 				}

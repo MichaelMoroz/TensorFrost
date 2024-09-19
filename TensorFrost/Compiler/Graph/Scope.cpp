@@ -85,7 +85,7 @@ KernelScope::KernelScope(Node* node,
 	// find boundary nodes
 	bool identity = node->args.Count(ArgType::Index) == 0;
 
-	for (auto& input : node->args.inputs_) {
+	for (auto& input : node->args.Inputs()) {
 		// get latest input version
 		Node* latest = input.second->GetLastVersion(node);
 		// check if input is the boundary of this kernel

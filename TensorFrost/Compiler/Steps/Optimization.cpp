@@ -211,7 +211,7 @@ void IR::RemoveUnusedKernels()
 				memory_modifiers++;
 			}
 			//if any output is outside the kernel, then the kernel is needed
-			for (auto [edge, to] : node->args.outputs_) {
+			for (auto [edge, to] : node->args.Outputs()) {
 				auto& [id, from] = edge;
 				if (!to->HasParent(kernel)) {
 					memory_modifiers++;
@@ -710,10 +710,10 @@ void IR::UnrollKernelDimensions() {
 							NodeArguments store_indices = store_op->node_->args.GetArguments(ArgType::Index);
 							for (auto& [id, from] : store_indices) {
 								if (true) {
-									args_to_copy.push_back(ArgEdge(Arg(id, from), old_value->node_));
-									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
+									args_to_copy.insert(ArgEdge(Arg(id, from), old_value->node_));
+									args_to_copy.insert(ArgEdge(Arg(id, from), store_op->node_));
 								} else {
-									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
+									args_to_copy.insert(ArgEdge(Arg(id, from), store_op->node_));
 								}
 							}
 						}
@@ -751,7 +751,7 @@ void IR::OptimizeKernels() {
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
-			for (auto& [arg, from]: node->args.inputs_) {
+			for (auto& [arg, from]: node->args.Inputs()) {
 				bool inside_kernel = from->HasParent(kernel);
 				bool from_in_kernel = from->HasParent("kernel");
 
@@ -766,14 +766,14 @@ void IR::OptimizeKernels() {
 						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
-					bool has_only_one_output = from->args.outputs_.size() == 1;
+					bool has_only_one_output = from->args.Outputs().size() == 1;
 					if (cheap_enough || has_only_one_output) {
-						args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+						args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 					}
 				}
 				//shape arguments can not be inside kernels
 				if (from_in_kernel && arg.first == ArgType::Shape) {
-					shape_args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+					shape_args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 				}
 			}
 		}
@@ -785,7 +785,7 @@ void IR::OptimizeKernels() {
 			Node* shape_node = kernel->args.Get(ArgType::Shape, i);
 			bool from_in_kernel =shape_node->HasParent("kernel");
 			if (from_in_kernel) {
-				shape_args_to_copy.push_back(ArgEdge(Arg(ArgID(ArgType::Shape, i), shape_node), kernel));
+				shape_args_to_copy.insert(ArgEdge(Arg(ArgID(ArgType::Shape, i), shape_node), kernel));
 			}
 		}
 
@@ -852,7 +852,7 @@ bool IR::OptimizeKernelLoadOperations() {
 			float memory_size = ShapeInfo::GetSizeEstimate(memory_shape);
 			float size_ratio = kernel_size / memory_size;
 
-			int output_count = (int)memory_input->args.outputs_.size();
+			int output_count = (int)memory_input->args.Outputs().size();
 			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
 			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
 			                          (size_ratio <= MAX_LOAD_SIZE_RATIO) || memory_size == 1.0f;
@@ -878,7 +878,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 			//get the indices
 			unordered_map<int, Node*> indices;
-			for (auto& [arg, from] : load_node->args.inputs_) {
+			for (auto& [arg, from] : load_node->args.Inputs()) {
 				if (arg.first == ArgType::Index) {
 					indices[arg.second] = from;
 				}
@@ -905,7 +905,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 			map<Node*, Node*> replacements; replacements[load_node] = copied_load;
 
-			ReplaceArgs(load_node->args.outputs_, replacements);
+			ReplaceArgs(load_node->args.Outputs(), replacements);
 		}
 
 		//UpdateGraph(kernel);
@@ -953,7 +953,7 @@ void IR::OptimizeHost() {
 
 		ArgEdges args_to_copy;
 		// go over all inputs
-		for (auto& [arg, from] : node->args.inputs_) {
+		for (auto& [arg, from] : node->args.Inputs()) {
 			bool inside_kernel = from->HasParent("kernel");
 
 			if (inside_kernel && !node->args.CannotCopyArgument(arg)) {
@@ -964,10 +964,10 @@ void IR::OptimizeHost() {
 					continue;
 				}
 				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
-				bool has_only_one_output = from->args.outputs_.size() == 1;
+				bool has_only_one_output = from->args.Outputs().size() == 1;
 
 				if (cheap_enough || has_only_one_output) {
-					args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+					args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 				} else {
 					throw std::runtime_error("Host optimization: Copy cost too high for node " + node->name + " with cost " + to_string(input_cost));
 				}
