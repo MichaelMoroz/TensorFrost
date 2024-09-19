@@ -2,6 +2,7 @@
 
 #include "Compiler/Operations.h"
 #include "Utility/Utility.h"
+#include <set>
 
 namespace TensorFrost {
 
@@ -33,28 +34,11 @@ struct HashArgID {
 	}
 };
 
-struct HashArgEdge {
-	size_t operator()(const ArgEdge& edge) const {
-		return HashArgID()(edge.first.first) + std::hash<Node*>()(edge.first.second) + std::hash<Node*>()(edge.second);
-	}
-};
-
 //set of edges
-using ArgEdges = unordered_set<ArgEdge, HashArgEdge>;
+using ArgEdges = set<ArgEdge>;
 
 #define MAX_ARGS_PER_TYPE 8
 #define MAX_ARGS ((int)ArgType::Count * MAX_ARGS_PER_TYPE)
-
-class Edge {
-	Node* from;
-	Node* to;
-
-	Edge(Node* from, Node* to) : from(from), to(to) {
-		//from->AddOutput(to);
-		//to->AddInput(from);
-
-	}
-};
 
 class ArgumentManager {
 	Node* node_;

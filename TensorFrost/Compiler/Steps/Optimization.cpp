@@ -527,8 +527,6 @@ void IR::OptimizeKernels() {
 		//copy the nodes that are outside the kernel inside
 		CopyArguments(args_to_copy, kernel->child);
 
-		//UpdateGraph(kernel);
-
 //		auto kernel_deps = ComputeKernelDependencies(kernel);
 
 // 		//if more than allowed then do not apply changes
@@ -643,8 +641,6 @@ bool IR::OptimizeKernelLoadOperations() {
 			ReplaceArgs(load_node->args.Outputs(), replacements);
 		}
 
-		//UpdateGraph(kernel);
-
 		//auto kernel_deps = ComputeKernelDependencies(kernel);
 
 // 		//if more than allowed then do not apply changes
@@ -656,9 +652,11 @@ bool IR::OptimizeKernelLoadOperations() {
 // 			continue;
 // 		}
 
-		// //remove the load node since it is not needed anymore
-		// for (auto load : loads_to_copy) {
-		// nodes_to_remove.insert(load_node);
+		//remove the load node since it is not needed anymore
+		for (auto load : loads_to_copy) {
+			nodes_to_remove.insert(load.second);
+		}
+
 		loads_fused += loads_to_copy.size();
 		ApplyChanges(false);
 	}

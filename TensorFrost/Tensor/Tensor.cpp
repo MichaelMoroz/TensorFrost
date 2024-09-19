@@ -90,10 +90,10 @@ void ArgumentManager::Remove(ArgID id) {
 }
 
 void ArgumentManager::RemoveArguments(ArgType arg) {
-	unordered_set<ArgID, HashArgID> to_remove;
+	vector<ArgID> to_remove;
 	for (auto& [id, node] : inputs_) {
 		if (id.first == arg) {
-			to_remove.insert(id);
+			to_remove.push_back(id);
 		}
 	}
 	for (auto& id : to_remove) {

@@ -189,9 +189,6 @@ public:
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 
-	//TODO: Implement
-	//uint64_t ComputeHash();
-
 	map<Node *, ArgEdges> GetKernelOutputs(Node *kernel);
 	void AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices);
 	void AddKernelGlobalLoadOperations();
