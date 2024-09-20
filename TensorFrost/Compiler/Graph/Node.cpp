@@ -240,7 +240,8 @@ const map<NodeProp, string> flag_names = {
     {NodeProp::KeepDims, "KeepDims"}, {NodeProp::IsStatic, "IsStatic"},
     {NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
     {NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
-    {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}
+    {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoCopyFusion, "NoCopyFusion"},
+    {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}
 };
 
 string NodeFlagsToString(NodeProp flags) {

@@ -2,8 +2,8 @@
 
 namespace TensorFrost {
 
-int IR::max_kernel_memory_dependencies = 128;
-int IR::max_allowed_memory_dependencies = 128;
+int IR::max_kernel_memory_dependencies = 12;
+int IR::max_allowed_memory_dependencies = 12;
 
 void IR::RemoveNode(Node* node) {
     if (node->valid()) {

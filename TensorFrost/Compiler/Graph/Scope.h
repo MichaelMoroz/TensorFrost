@@ -133,16 +133,14 @@ class KernelScope {
 	Node* end = nullptr;
 	ShapeInfo scope_shape;
 	unordered_set<Node*> boundary_nodes;
-	unordered_set<Node*> memory_dependencies;
-	int max_memory_dependencies;
 
 	static bool IsBoundary(const Node* input, const Node* output, ArgType arg_type, bool is_identity);
 
-	KernelScope() : begin(nullptr), end(nullptr), max_memory_dependencies(0) {}
-	KernelScope(Node* node, unordered_set<KernelScope*>& output_scopes, int max_deps);
+	KernelScope() : begin(nullptr), end(nullptr) {}
+	KernelScope(Node* node, unordered_set<KernelScope*>& output_scopes);
 
-	KernelScope(Node* begin, Node* end, ShapeInfo shape, unordered_set<Node*> boundary_nodes, int max_boundary_nodes)
-	    : begin(begin), end(end), scope_shape(shape), boundary_nodes(boundary_nodes), max_memory_dependencies(max_boundary_nodes) {}
+	KernelScope(Node* begin, Node* end, ShapeInfo shape, unordered_set<Node*> boundary_nodes)
+	    : begin(begin), end(end), scope_shape(shape), boundary_nodes(boundary_nodes) {}
 
 	void CopyProperties(KernelScope* other) {
 		begin = other->begin;
@@ -153,11 +151,9 @@ class KernelScope {
 
 	bool IsValid() const;
 
-	static pair<std::unordered_set<KernelScope *>, bool> ComputeScopes(Node *root, int max_deps);
+	static pair<std::unordered_set<KernelScope *>, bool> ComputeScopes(Node *root);
 
 	static KernelScope* Merge(KernelScope* a, KernelScope* b);
-
-	void ComputeMemoryDependencies();
 
 	void CreateKernel();
 

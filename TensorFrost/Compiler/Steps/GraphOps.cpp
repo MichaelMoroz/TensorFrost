@@ -17,44 +17,12 @@ void KernelScope::CreateKernel() {
 	old_child->prev = end;
 }
 
-void KernelScope::ComputeMemoryDependencies() {
-	memory_dependencies.clear();
-	for(auto node = NodeIterator(begin, begin->parent); node->index_<=end->index_ && !node.end(); node.next()) {
-		for(auto& [arg, from] : node->args.Inputs()) {
-			//skip shape arguments
-			if(arg.first == ArgType::Shape || from->name == "const") {
-				continue;
-			}
-			//if the input is outside of the scope, then add it to the memory dependencies
-			if(from->index_ < begin->index_) {
-				memory_dependencies.insert(from);
-			}
-		}
-		//go over outputs and check if they are used outside of the scope
-		for(auto& [arg, to] : node->args.Outputs()) {
-			//skip shape arguments
-			if(arg.first.first == ArgType::Shape || node->name == "const") {
-				continue;
-			}
-			//if the output is outside of the scope, then this node as a memory dependency (as a writer)
-			if(to->index_ > end->index_) {
-				memory_dependencies.insert(*node);
-			}
-		}
-	}
-#ifdef _RELWITHDEBINFO
-	if(memory_dependencies.size() > max_memory_dependencies) {
-	//	cout << "Warning: Potential kernel with " << memory_dependencies.size() << " memory dependencies" << endl;
-	}
-#endif
-}
-
 void IR::SeparateOperationsIntoKernels() {
 
 	unordered_set<KernelScope*> kernel_scopes;
 
 	ExecuteExpressionFirstChild(root, [&]() {
-		kernel_scopes = KernelScope::ComputeScopes(root, max_kernel_memory_dependencies).first;
+		kernel_scopes = KernelScope::ComputeScopes(root).first;
 	});
 
 	// create kernel nodes for all kernel scopes
@@ -155,7 +123,7 @@ bool IR::LimitKernelMemoryDependencies() {
 		//reclusterize the kernel
 		unordered_set<KernelScope*> kernel_scopes;
 		ExecuteExpressionFirstChild(kernel, [&]() {
-			kernel_scopes = KernelScope::ComputeScopes(kernel, max_kernel_memory_dependencies).first;
+			kernel_scopes = KernelScope::ComputeScopes(kernel).first;
 		});
 
 
@@ -510,6 +478,20 @@ void IR::ComputeNodeCost()
 			input_cost += abs(input.second);
 		}
 		node->cost_ = input_cost;
+
+		//go over outputs and check if it has any load operations
+		bool is_used_as_memory = false;
+		for (auto [edge, to] : node->args.Outputs()) {
+			auto& [id, from] = edge;
+			if(to->op->HasAllTypes(OpProp::MemoryOp)) {
+				is_used_as_memory = true;
+				break;
+			}
+		}
+
+		if(is_used_as_memory) {
+			node->flags.set(NodeProp::NoCopyFusion);
+		}
 	}
 }
 

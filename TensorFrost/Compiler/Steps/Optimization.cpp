@@ -490,6 +490,8 @@ void IR::OptimizeKernels() {
 				bool inside_kernel = from->HasParent(kernel);
 				bool from_in_kernel = from->HasParent("kernel");
 
+				if(from->flags.has(NodeProp::NoCopyFusion)) continue;
+
 				if (!inside_kernel && !node->args.CannotCopyArgument(arg))
 				{
 					// check if input is cheap enough to copy
