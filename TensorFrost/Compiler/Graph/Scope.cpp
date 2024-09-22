@@ -126,9 +126,6 @@ KernelScope::KernelScope(Node* node,
 		scope_shape = result.broadcast_shape;
 	} else {
 		throw std::runtime_error("Something went wrong");
-		// this node cant be in the scope if it has incompatible shapes
-		begin = nullptr;
-		end = nullptr;
 	}
 }
 

@@ -489,7 +489,7 @@ void IR::ComputeNodeCost()
 			}
 		}
 
-		if(is_used_as_memory) {
+		if(is_used_as_memory && input_cost > 128.0) {
 			node->flags.set(NodeProp::NoCopyFusion);
 		}
 	}
