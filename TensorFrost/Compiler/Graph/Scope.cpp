@@ -179,9 +179,9 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 	if (a->end->next != b->begin)
 		throw std::runtime_error("Trying to merge non-adjacent kernel scopes");
 
-	ShapeCompareResult result = CompareShape(a->scope_shape, b->scope_shape, true);
+	ShapeCompareResult result = CompareShape(a->scope_shape, b->scope_shape);
 
-	if (!result.compatible) return new KernelScope();
+	if (!result.exactly_compatible) return new KernelScope();
 
 	KernelScope* new_scope = new KernelScope(a->begin, b->end, result.broadcast_shape, a->boundary_nodes);
 	new_scope->AddBoundaryNodes(b->boundary_nodes);
@@ -192,78 +192,86 @@ KernelScope* KernelScope::Merge(KernelScope* a, KernelScope* b) {
 }
 
 //if shape nodes are compatible, then return the broadcast shape, if not return nullptr
-ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match) {
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node) {
 	ShapeDimCompareResult result;
+	result.compatible = false;
 	result.broadcast = false;
+	result.exactly_compatible = true;
+	result.unroll_compatible = true;
 	result.a_dim = -1;
 	result.b_dim = -1;
+	result.unroll_dim = nullptr;
+	result.broadcast_dim = nullptr;
+
 	if (a_node->name == "const") result.a_dim = a_node->data[0];
 	if (b_node->name == "const") result.b_dim = b_node->data[0];
 
 	// if one of the nodes is a constant = 1, then it is a broadcast
-	if ((result.a_dim == 1 || result.b_dim == 1) && !(result.a_dim == 1 && result.b_dim == 1) && !exact_match) {
+	if ((result.a_dim == 1 || result.b_dim == 1) && !(result.a_dim == 1 && result.b_dim == 1)) {
 		result.compatible = true;
 		result.broadcast = true;
+		result.exactly_compatible = false;
+
 		if (result.a_dim == 1) {
+			result.unroll_dim = a_node;
 			result.broadcast_dim = b_node;
-			return result;
 		} else {
+			result.unroll_dim = b_node;
 			result.broadcast_dim = a_node;
-			return result;
 		}
 	}
 
-	// if a and b are constants, then compare their values
-	if (result.a_dim != -1 && result.b_dim != -1) {
-		if (result.a_dim != result.b_dim) {
-			result.compatible = false;
-			return result;
-		} else {
-			result.compatible = true;
-			result.broadcast_dim = a_node;
-			return result;
+	if(!result.compatible) {
+		// if a and b are constants, then compare their values
+		if (result.a_dim != -1 && result.b_dim != -1) {
+			result.compatible = result.a_dim == result.b_dim;
 		}
 	}
 
-	// otherwise, if a and b are not the same node then they are not the same
-	// shape (possibly)
-	if (a_node != b_node) {
-		result.compatible = false;
-		return result;
+	if(!result.compatible) {
+		// otherwise, if a and b are not the same node then they are not the same
+		// shape (possibly)
+		result.compatible = a_node == b_node;
 	}
 
-	result.compatible = true;
-	result.broadcast_dim = a_node;
+	if(result.unroll_dim == nullptr) {
+		result.unroll_dim = a_node;
+	}
+
+	if(result.broadcast_dim == nullptr) {
+		result.broadcast_dim = a_node;
+	}
+
+	if(result.broadcast) {
+		if(result.a_dim > MAX_DIM_UNROLL || result.b_dim > MAX_DIM_UNROLL) {
+			result.unroll_compatible = false;
+		}
+	}
+
+	result.exactly_compatible = result.compatible && result.exactly_compatible;
+	result.unroll_compatible = result.compatible && result.unroll_compatible;
 	return result;
 }
 
-ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bool throw_error) {
+ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool throw_error) {
 	ShapeCompareResult result;
 	result.compatible = true;
+	result.exactly_compatible = true;
+	result.unroll_compatible = true;
 	result.broadcast = false;
 	result.a_dim = a.dim;
 	result.b_dim = b.dim;
 	result.broadcast_dim = max(a.dim, b.dim);
+	ShapeInfo& max_dim_shape = a.dim > b.dim ? a : b;
 
 	int min_dim = min(a.dim, b.dim);
-
-	if (exact_match && min_dim > 0) {
-		if (a.dim != b.dim) {
-			result.compatible = false;
-			if (throw_error) {
-				throw std::runtime_error("Shapes must have the same dimension for " +
-										 a.name + " and " + b.name);
-			}
-			return result;
-		}
-	}
 
 	for (int i = 0; i < min_dim; i++) {
 		Node* a_node = a[i];
 		Node* b_node = b[i];
 		int broadcast_index = i;
 
-		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node, exact_match);
+		ShapeDimCompareResult res = CompareShapeDim(a_node, b_node);
 
 		if(!res.compatible) {
 			result.compatible = false;
@@ -273,38 +281,44 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool exact_match, bo
 				}
 				throw std::runtime_error("Shapes are potentially not compatible for nodes: " + a.name + " and " + b.name + " at index " + to_string(i));
 			}
-			return result;
+			break;
 		}
 
 		if(res.broadcast) {
 			result.broadcast = true;
 		}
 
+		result.unroll_compatible = result.unroll_compatible && res.unroll_compatible;
+		result.exactly_compatible = result.exactly_compatible && res.exactly_compatible;
 		result.broadcast_shape.AddShape(broadcast_index, res.broadcast_dim);
+		result.unroll_shape.AddShape(broadcast_index, res.unroll_dim);
 	}
 
 	//add the rest of the broadcast shape
-	for (int i = min_dim; i < result.broadcast_dim; i++) {
-		result.broadcast = true;
-		int broadcast_index = i;
-		if (a.dim > b.dim) {
-			result.broadcast_shape.AddShape(broadcast_index, a[i]);
-		} else {
-			result.broadcast_shape.AddShape(broadcast_index, b[i]);
+	if(result.compatible) {
+		for (int i = min_dim; i < result.broadcast_dim; i++) {
+			result.broadcast = true;
+			result.broadcast_shape.AddShape(i, max_dim_shape[i]);
+			result.unroll_shape.AddShape(i, max_dim_shape[i]);
 		}
 	}
 
-	if (result.broadcast_shape.dim != result.broadcast_dim) {
+	if((result.broadcast && min_dim > 0) || !result.compatible) {
+		result.exactly_compatible = false;
+		result.unroll_compatible = false;
+	}
+
+	if (result.compatible && result.broadcast_shape.dim != result.broadcast_dim) {
 		throw std::runtime_error("Internal Error: Broadcast shape does not match the broadcast dim");
 	}
 
 	return result;
 }
 
-ShapeCompareResult CompareShape(const Node* a, const Node* b, bool exact_match, bool throw_error) {
+ShapeCompareResult CompareShape(const Node* a, const Node* b, bool throw_error) {
 	ShapeInfo a_info = ShapeInfo(a);
 	ShapeInfo b_info = ShapeInfo(b);
-	return CompareShape(a_info, b_info, exact_match, throw_error);
+	return CompareShape(a_info, b_info, throw_error);
 }
 
 }  // namespace TensorFrost

@@ -92,7 +92,7 @@ void IR::CheckKernelShapes() {
 	for (auto kernel : kernels) {
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// check if the node has a shape argument
-			ShapeCompareResult result = CompareShape(kernel, node.get(), false, true);
+			ShapeCompareResult result = CompareShape(kernel, node.get(), true);
 		}
 
 #ifdef _RELWITHDEBINFO

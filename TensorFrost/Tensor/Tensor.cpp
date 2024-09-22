@@ -140,7 +140,7 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 		//check if shapes are compatible and get the final broadcasted shape
 		for (int i = 0; i < tensors.size(); i++) {
 			ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
-			auto result = CompareShape(shape_info, shape_info2, false, true);
+			auto result = CompareShape(shape_info, shape_info2, true);
 			shape_info = result.broadcast_shape;
 		}
 	}

@@ -61,7 +61,7 @@ class Tensor {
 	}
 
 	static bool AssertTensorShape(const Tensor* a, const Tensor* b, bool throw_error = true) {
-		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
+		return CompareShape(a->node_, b->node_, throw_error).compatible;
 	}
 
 	static tuple<const Operation*, TFType, ShapeInfo> GetOperation(const string& name,
