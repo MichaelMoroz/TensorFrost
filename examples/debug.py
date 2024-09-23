@@ -4,16 +4,18 @@ import TensorFrost as tf
 tf.initialize(tf.opengl)
 
 def Test():
-    A = tf.input([-1], tf.float32)
-    i, = A.indices
+    A = tf.input([-1, 3], tf.float32)
 
-    for j in range(16):
-        A = A + tf.sin(A[i - 1] + A[i + 1])
+    with tf.kernel([A.shape[0], 3]) as (i, _):
+        print(i)
+        i, j = tf.indices([A.shape[0], 3])
+        print(i)
+        A[i, j] = A[i, j] + 1.0
 
     return A
 
 test = tf.compile(Test)
 
-A = np.array([1, 2, 3, 4, 6], dtype=np.float32)
+A = np.random.rand(10, 3).astype(np.float32)
 
 restf = test(A)

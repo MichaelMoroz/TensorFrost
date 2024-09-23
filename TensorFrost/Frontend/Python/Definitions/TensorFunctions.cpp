@@ -308,7 +308,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("custom", [](const std::string& name, py::list inputs, py::list shape) {
 		Tensors input_tensors = TensorsFromList(inputs);
-		Tensors shape_tensors = TensorsFromList(shape);
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
 		return PT(Tensor::CustomOperation(name, input_tensors, shape_tensors));
 	}, py::arg("name"), py::arg("inputs"), py::arg("shape"), "Run custom operation");
 
