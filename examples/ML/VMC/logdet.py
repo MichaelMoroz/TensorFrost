@@ -57,13 +57,23 @@ def invert_matrix(matrix):
     tf.region_end("invert_matrix")
     return R_inv @ Q.T
 
+def logsumsign(R):
+    bi, = tf.indices([R.shape[0]])
+    prod = tf.const(0.0)
+    sign = tf.const(1.0)
+    with tf.loop(R.shape[1]) as i:
+        value = R[bi, i, i]
+        prod.val += safe_log(tf.abs(value))
+        sign.val *= tf.sign(value)
+    return prod, sign
+
 def logdet(matrix):
     tf.region_begin("logdet")
     Q, R = qr_decomposition_batched_tensorfrost(matrix)
-    bi, i = tf.indices([matrix.shape[0], matrix.shape[1]])
-    Rdiag = safe_log(tf.abs(R[bi, i, i]))
+    abslogdet, sign = logsumsign(R)
+    packed = packfloatsign(abslogdet, sign)
     tf.region_end("logdet")
-    return tf.sum(Rdiag)
+    return packed
 
 def logdet_op(inputs, tensor, axes):
     return [logdet(inputs[0])]

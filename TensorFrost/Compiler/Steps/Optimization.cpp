@@ -244,6 +244,7 @@ void IR::UnrollLoops(int max_iterations)
 		bool is_const = isConstant(inputs[0]) && isConstant(inputs[1]) && isConstant(inputs[2]);
 
 		bool has_other_loops = loop->HasChild("loop") || loop->HasParent("loop");
+		bool has_child_kernel = loop->HasChild("kernel");
 
 		if (!is_const || has_other_loops) {
 			continue;

@@ -54,6 +54,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });
 	m.def("bool", [](const PyTensor& t) { return PT(Tensor::tobool(T(t))); });
 
+	m.def("asfloat", [](const PyTensor& t) { return PT(Tensor::asfloat(T(t))); });
+	m.def("asuint", [](const PyTensor& t) { return PT(Tensor::asuint(T(t))); });
+	m.def("asint", [](const PyTensor& t) { return PT(Tensor::asint(T(t))); });
+
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);
