@@ -108,30 +108,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("zeros", [](py::list shape, TFType type) {
-		switch (type)
-		{
-			case TFType::Float:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
-			case TFType::Uint:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0u));
-			case TFType::Int:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0));
-			default:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
-		}
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
-	m.def("zeros", [](std::vector<int> shape, TFType type) {
-		switch (type)
-		{
-			case TFType::Float:
-				return PT(Tensor::Constant(Reverse(shape), 0.0f));
-			case TFType::Uint:
-				return PT(Tensor::Constant(Reverse(shape), 0u));
-			case TFType::Int:
-				return PT(Tensor::Constant(Reverse(shape), 0));
-			default:
-				return PT(Tensor::Constant(Reverse(shape), 0.0f));
-		}
+		return PT(Tensor::Constant(0u, Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("const", [](float value, py::list shape) {

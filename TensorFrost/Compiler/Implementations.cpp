@@ -211,41 +211,29 @@ map<string, VJPGradientFunction> gradient_functions =
 		//derivative of load is scatter gradient to the load memory addresses
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& curGrad = *grads.GetGrad(ArgType::Memory, 0);
 		const Tensor& is_out_of_bounds = *IsOutOfBounds(in.GetTensor(ArgType::Memory), tensor_indices);
 		const Tensor& grad_out_of_bounds = Tensor::select(is_out_of_bounds, Tensor::Constant(0.0f), grad);
-		Tensor::ScatterAdd(curGrad, grad_out_of_bounds, tensor_indices);
+		Tensor::ScatterAdd(curGrad, grad_out_of_bounds, tensor_indices, out.node_->indexing_mode_);
 	}},
 	{"store", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of store is load gradient at the store memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, out.node_->indexing_mode_));
 	}},
 	{"InterlockedAdd", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of scatter_add is load gradient at the scatter memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, out.node_->indexing_mode_));
 	}},
 	{"set", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of set is the gradient of the setted value to the input
@@ -389,7 +377,7 @@ Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*
 		// load the value
 		Tensor* value = &Tensor::Load(*array, load_index, IndexingMode::Unsafe);
 		reduced->Set(*scan_op(reduced, value));
-		Tensor::Store(*scan_result, *reduced, load_index, true);
+		Tensor::Store(*scan_result, *reduced, load_index, IndexingMode::Unsafe);
 	});
 
 	return scan_result;
@@ -741,19 +729,14 @@ map<string, ImplementationFunction> implementation_functions =
 	{"dim_split", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(SplitDim(inputs[0], tensor, axes[0], axes[1])); }},
 	{"dim_merge", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(MergeDim(inputs[0], tensor, axes[0])); }},
 	{"dim_repeat", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) {
-		int axis = axes[0];
 		const Tensor* input_tensor = inputs[0];
 		Tensors shape = input_tensor->GetShape();
 		Tensors new_shape = tensor->GetShape();
 		Tensors indices = Tensors();
 		for (int i = 0; i < (int)new_shape.size(); i++) {
-			if (i == axis) {
-				indices.push_back(&(Tensor::Index(new_shape, i) % *shape[i]));
-			} else {
-				indices.push_back(&Tensor::Index(new_shape, i));
-			}
+			indices.push_back(&Tensor::Index(new_shape, i));
 		}
-		Tensor* loaded = &Tensor::Load(*input_tensor, indices, IndexingMode::Unsafe);
+		Tensor* loaded = &Tensor::Load(*input_tensor, indices, IndexingMode::Repeat);
 		loaded->SetDebugName("repeated");
 		outputs.push_back(loaded);
 	}},

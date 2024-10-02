@@ -34,8 +34,7 @@ enum class MemoryType {
 enum class IndexingMode {
 	Unsafe,
 	Clamp,
-	Repeat,
-	Mirror
+	Repeat
 };
 
 struct TFTypeDesc {

@@ -245,9 +245,9 @@ Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices, IndexingMode 
 }
 
 Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
-                      const Tensors& indices, bool unsafe) {
+                      const Tensors& indices, IndexingMode mode) {
 	Tensor& out = MemoryOp("store", &tensor, indices, &value);
-	if (unsafe) out.node_->indexing_mode_ = IndexingMode::Unsafe;
+	out.node_->indexing_mode_ = mode;
 	return out;
 }
 

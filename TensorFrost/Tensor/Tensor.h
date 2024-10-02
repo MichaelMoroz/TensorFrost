@@ -334,6 +334,13 @@ public:
 		output.SetData(value);
 		return output;
 	}
+	static Tensor& Constant(uint value, const Tensors& shape, TFType type) {
+		NodeArguments arguments = NodeArguments();
+		AddArguments(arguments, shape, ArgType::Shape);
+		Tensor& output = Static("const", arguments, type);
+		output.SetData(value);
+		return output;
+	}
 
 	static Tensor& Constant(const Tensors& shape, float value) {
 		NodeArguments arguments = NodeArguments();
@@ -484,7 +491,7 @@ public:
 	}
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
-	                     const Tensors& indices = Tensors(), bool unsafe = false);
+	                     const Tensors& indices = Tensors(), IndexingMode mode = IndexingMode::Clamp);
 
 	void Set(const Tensor& value) const  {
 		//check if memory and value shapes are compatible
@@ -498,38 +505,45 @@ public:
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
 		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
 	static Tensor& ScatterAddPrev(const Tensor& tensor, const Tensor& value,
-		const Tensors& indices) {
-		return MemoryOp("InterlockedAdd_Prev", &tensor, indices, &value);
+		const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedAdd_Prev", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
+		return a;
 	}
 
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedMax", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedMax", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterMin(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedMin", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedMin", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterOr(const Tensor& tensor, const Tensor& value,
-	                      const Tensors& indices) {
-		MemoryOp("InterlockedOr", &tensor, indices, &value);
+	                      const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedOr", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterAnd(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedAnd", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedAnd", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedXor", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedXor", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static int GetAxis(int dims, int axis) {
@@ -586,7 +600,7 @@ public:
 	static Tensor& Repeat(const Tensor& tensor, const Tensor& repeats, int axis = 0) {
 		//check if repeats is a scalar
 		if (repeats.GetDimension() != 0) {
-			throw std::runtime_error("Repeats must be a scalar");
+			throw std::runtime_error("Repeats argument must be a scalar");
 		}
 		int dims = (int)tensor.GetDimension();
 		axis = GetAxis(dims, axis);

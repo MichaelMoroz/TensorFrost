@@ -817,7 +817,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			// add store node after the last modification on the same level as the memory
 			ExecuteExpressionAfter(last_mod_parent, [&]() {
 				// add store node after this node
-				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, true);
+				Tensor* store = &Tensor::Store(*mem->GetTensor(), *output->GetTensor(), {}, IndexingMode::Unsafe);
 			});
 		}
 	}
@@ -947,6 +947,7 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 	function<Tensor*(int)> get_index = [&](int dim) {
 		int idxdim = memory_dim - dim - 1;
 		Tensor* out;
+		const Tensor& shape = *get_shape(dim);
 		if (idx.find(idxdim) != idx.end()) {
 			out = const_cast<Tensor*>(idx[idxdim]);
 		} else {
@@ -958,7 +959,9 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 			case IndexingMode::Clamp:
 				return &Tensor::clamp(
 				    *out, TensorFrost::Tensor::Constant(0),
-				    *get_shape(dim) - TensorFrost::Tensor::Constant(1));
+				    shape - TensorFrost::Tensor::Constant(1));
+			case IndexingMode::Repeat:
+				return &(*out - (*out / shape) * shape);
 			case IndexingMode::Unsafe:
 				return out;
 			default: //TODO (Moroz): add other modes

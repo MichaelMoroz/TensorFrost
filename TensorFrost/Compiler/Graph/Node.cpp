@@ -264,8 +264,7 @@ void Node::UpdateEdges() {
 }
 
 const map<IndexingMode, string> indexing_mode_names = {
-    {IndexingMode::Clamp, "Clamp"}, {IndexingMode::Repeat, "Repeat"},
-    {IndexingMode::Mirror, "Mirror"}, {IndexingMode::Unsafe, "Unsafe"}
+    {IndexingMode::Clamp, "Clamp"}, {IndexingMode::Repeat, "Repeat"},{IndexingMode::Unsafe, "Unsafe"}
 };
 
 string IndexingModeToString(IndexingMode mode) {
