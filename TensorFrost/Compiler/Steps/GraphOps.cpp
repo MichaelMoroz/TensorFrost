@@ -119,40 +119,6 @@ bool IR::LimitKernelMemoryDependencies() {
 		if(kernel_deps.size() <= max_allowed_memory_dependencies) continue;
 
 		//throw std::runtime_error("Kernel " + to_string(kernel->index_) + " has too many memory dependencies (" + to_string(kernel_deps.size()) + " > " + to_string(max_kernel_memory_dependencies) + ")");
-
-		//reclusterize the kernel
-		unordered_set<KernelScope*> kernel_scopes;
-		ExecuteExpressionFirstChild(kernel, [&]() {
-			kernel_scopes = KernelScope::ComputeScopes(kernel).first;
-		});
-
-
-		//move the child nodes outside of the kernel
-		vector<Node*> children = kernel->GetChildren();
-		Node* first_child = kernel->child;
-		Node* last_child = children.back();
-		Node* _next = kernel->next;
-
-
-		kernel->next = first_child;
-		first_child->prev = kernel;
-		last_child->next = _next;
-		_next->prev = last_child;
-
-		kernel->child = nullptr;
-		for (auto child : children) {
-			child->parent = kernel->parent;
-		}
-
-		for (auto scope : kernel_scopes) {
-			// create kernel before the scope
-			ExecuteExpressionBefore(scope->begin, [&]() {
-				scope->CreateKernel();
-			});
-			created_kernels++;
-		}
-
-		UpdateGraph();
 	}
 
 	UpdateGraph();
@@ -652,7 +618,7 @@ map<Node*, Node*> IR::CopyNodes(
 
 
 void IR::AddNodeLoadOperations(Node* node, Node* kernel, Tensors indices) {
-	for (auto& [arg, input_node] : node->args.Inputs()) {
+	for (auto& [arg, input_node] : node->args.InputsCopy()) {
 		if (arg.first == ArgType::Memory || arg.first == ArgType::Shape)
 			continue;
 
@@ -826,7 +792,7 @@ void IR::AddKernelGlobalStoreOperations() {
 	for (auto node = begin(); !node.end(); node.next()) {
 		bool is_memory = node->op->HasAllTypes(OpProp::Memory);
 
-		for (auto& [id, from] : node->args.Inputs()) {
+		for (auto& [id, from] : node->args.InputsCopy()) {
 			if (id.first == ArgType::Memory ||
 			    (id.first  == ArgType::Shape && !is_memory))
 				continue;
@@ -990,7 +956,7 @@ void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
 		else
 		{
 			//go over node inputs and replace dim nodes with index nodes
-			for (auto& [id, from] : node->args.Inputs()) {
+			for (auto& [id, from] : node->args.InputsCopy()) {
 				if (from->name == "dim_id") {
 					int dim = from->data[0];
 					Node* index_node = nullptr;

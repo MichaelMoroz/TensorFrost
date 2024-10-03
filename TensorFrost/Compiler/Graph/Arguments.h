@@ -30,7 +30,7 @@ using ArgEdge = pair<Arg, Node*>;
 
 struct HashArgID {
 	size_t operator()(const ArgID& id) const {
-		return (int)id.first + id.second * (int)ArgType::Count;
+		return (size_t)id.first + id.second * (size_t)ArgType::Count;
 	}
 };
 
@@ -75,12 +75,24 @@ public:
 		add_parenthesis = add;
 	}
 
-	unordered_map<ArgID, Node*, HashArgID> Inputs() const {
+	const unordered_map<ArgID, Node*, HashArgID>& Inputs() const {
 		return inputs_;
 	}
 
-	ArgEdges Outputs() const {
+	const ArgEdges& Outputs() const {
 		return outputs_;
+	}
+
+	unordered_map<ArgID, Node*, HashArgID> InputsCopy() const {
+		return inputs_;
+	}
+
+	ArgEdges OutputsCopy() const {
+		return outputs_;
+	}
+
+	size_t OutputCount() const {
+		return outputs_.size();
 	}
 
 	void AddArgument(ArgID id, Node *node);

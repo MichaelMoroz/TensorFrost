@@ -36,7 +36,7 @@ string GetNodeString(const Node* node, bool verbose) {
 	listing += ArgTypePrint("inputs", ArgType::Input);
 	listing += ArgTypePrint("indices", ArgType::Index);
 
-	if(node->args.Outputs().size() > 0) {
+	if(node->args.OutputCount() > 0) {
 		listing += "outputs=[";
 		for(auto [in, out]: node->args.Outputs()) {
 			listing += GetNodeName(out, false) + ", ";

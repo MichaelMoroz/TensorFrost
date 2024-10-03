@@ -331,14 +331,13 @@ bool Node::HasParent(Node *node) const {
 
 void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_modified, bool copy_metadata) {
     try {
-        for (auto [edge, to] : args.Outputs()) {
+        for (auto [edge, to] : args.OutputsCopy()) {
             auto& [id, from] = edge;
             if (to->index_ >= min_index) {
                 if(make_modified) {
                     replacement->flags.set(NodeProp::Modified);
                 }
                 to->args.UpdateArgument(id, replacement);
-                //replacement->args.AddOutput(id, to);
             }
         }
 

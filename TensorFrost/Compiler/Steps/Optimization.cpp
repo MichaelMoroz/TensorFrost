@@ -473,7 +473,7 @@ void IR::OptimizeReductions() {
 	UpdateGraph();
 }
 
-#define MAX_KERNEL_COPY_COST 1000000.0f
+#define MAX_KERNEL_COPY_COST 50000.0f
 bool IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");
@@ -505,7 +505,7 @@ bool IR::OptimizeKernels() {
 						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
-					bool has_only_one_output = from->args.Outputs().size() == 1;
+					bool has_only_one_output = from->args.OutputCount() == 1;
 					if (cheap_enough || has_only_one_output) {
 						args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 					}
@@ -594,7 +594,7 @@ bool IR::OptimizeKernelLoadOperations() {
 			float memory_size = ShapeInfo::GetSizeEstimate(memory_shape);
 			float size_ratio = kernel_size / memory_size;
 
-			int output_count = (int)memory_input->args.Outputs().size();
+			int output_count = (int)memory_input->args.OutputCount();
 			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
 			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
 			                          (size_ratio <= MAX_LOAD_SIZE_RATIO) || memory_size == 1.0f;
@@ -706,7 +706,7 @@ void IR::OptimizeHost() {
 					continue;
 				}
 				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
-				bool has_only_one_output = from->args.Outputs().size() == 1;
+				bool has_only_one_output = from->args.OutputCount() == 1;
 
 				if (cheap_enough || has_only_one_output) {
 					args_to_copy.insert(ArgEdge(Arg(arg, from), *node));

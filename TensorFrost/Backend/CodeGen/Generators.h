@@ -96,7 +96,7 @@ protected:
 					expr = node->GetTensor()->GetConstantString();
 				}
 				bool has_name = node->debug_name != "";
-				bool has_single_output = (node->args.Outputs().size() == 1) || is_constant || is_variable;
+				bool has_single_output = (node->args.OutputCount() == 1) || is_constant || is_variable;
 				bool modified = node->flags.has(NodeProp::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;

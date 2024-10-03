@@ -14,7 +14,7 @@ void IR::RemoveNode(Node* node) {
     	}
 
     	//remove all inputs
-    	auto inputs = node->args.Inputs();
+    	auto inputs = node->args.InputsCopy();
     	for (auto& [id, input_node] : inputs) {
     		node->args.Remove(id);
     	}
@@ -168,14 +168,10 @@ void IR::CompileIR()
 	});
 #endif
 
-	// RunCompilationPass("Reclusterize", [&]() {
-	// 	LimitKernelMemoryDependencies();
-	// 	AddKernelGlobalLoadOperations();
-	// 	AddMemoryOpIndices();
-	// 	RemoveUnusedOperations();
-	// }, true);
-	//
-	// RunCompilationPass("Reclusterize", [&]() { LimitKernelMemoryDependencies(); });
+	RunCompilationPass("Reclusterize", [&]() {
+		LimitKernelMemoryDependencies();
+	}, true);
+
 	RunCompilationPass("FinilizeKernels", [&]() {
 		RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
 		RunCompilationPass("AddKernelGlobalStoreOperations: RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
