@@ -170,7 +170,7 @@ public:
 	                          unordered_map<int, Node*> indices, Node* cursor = nullptr);
 	void ReorderOperations();
 	void MoveShapeOutsideKernels();
-	void OptimizeKernels();
+	bool OptimizeKernels();
 	void OptimizeHost();
 	void OptimizeOperations();
 

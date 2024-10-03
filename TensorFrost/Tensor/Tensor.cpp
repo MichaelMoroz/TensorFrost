@@ -102,10 +102,10 @@ void ArgumentManager::RemoveArguments(ArgType arg) {
 }
 
 vector<const Tensor *> ArgumentManager::GetTensorVector(ArgType type) const  {
-	vector<const Tensor*> tensors;
+	vector<const Tensor*> tensors = vector<const Tensor*>(Count(type));
 	for (auto& [id, node] : inputs_) {
 		if (id.first == type) {
-			tensors.push_back(node->GetTensor());
+			tensors[id.second] = node->tensor_;
 		}
 	}
 	return tensors;

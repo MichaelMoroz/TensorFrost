@@ -483,7 +483,7 @@ void IR::ComputeNodeCost()
 		bool is_used_as_memory = false;
 		for (auto [edge, to] : node->args.Outputs()) {
 			auto& [id, from] = edge;
-			if(to->op->HasAllTypes(OpProp::MemoryOp)) {
+			if(id.first == ArgType::Memory) {
 				is_used_as_memory = true;
 				break;
 			}

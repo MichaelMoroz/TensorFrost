@@ -68,6 +68,8 @@ const vector<Operation> operations = {
 	Operation("unsqueeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("squeeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 
+	Operation("smoothstep", {"fff_f"}, 10, "", {OpProp::Algorithm}),
+
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
     Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
@@ -168,7 +170,6 @@ const vector<Operation> operations = {
     Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
-    Operation("smoothstep", {"fff_f"}, 10),
     Operation("ternary", {"bff_f", "buu_u", "bii_i", "bbb_b"}, 4, "", {}, OpClass::TernaryOperator),
     Operation("const", {"_f", "_u", "_i", "_b"}, 0, "", {OpProp::Nondiff}, OpClass::Constant),
 };

@@ -473,12 +473,13 @@ void IR::OptimizeReductions() {
 	UpdateGraph();
 }
 
-#define MAX_KERNEL_COPY_COST 16384.0f
-void IR::OptimizeKernels() {
+#define MAX_KERNEL_COPY_COST 1000000.0f
+bool IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	ComputeNodeCost();
 
+	bool changed = false;
 	// go over each kernel and copy computations outside the kernel if they are
 	// cheap enough
 	for (auto kernel : kernels) {
@@ -542,9 +543,14 @@ void IR::OptimizeKernels() {
 
 		//copy shape arguments before the kernel
 		CopyArguments(shape_args_to_copy, kernel);
+		if (!args_to_copy.empty()) {
+			changed = true;
+		}
 
 		ApplyChanges(false);
 	}
+
+	return !changed;
 }
 
 #define MAX_LOAD_COPY 3000.0f

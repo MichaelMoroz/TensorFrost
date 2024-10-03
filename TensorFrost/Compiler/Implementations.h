@@ -51,7 +51,7 @@ public:
 			Tensor& new_tensor = const_cast<Tensor&>(ReduceGradientToShape(tensor, *target));
 			if(Contains(type, index)) {
 				auto& old_tensor = *stored_gradients[arguments[id]];
-				old_tensor.StopFusion();
+				old_tensor.node_->flags.set(NodeProp::NoLoadFusion);
 				auto& loaded = old_tensor; //TODO: temporary way to restrict fusion, remove after implementing split
 				stored_gradients[arguments[id]] = &(loaded + new_tensor);
 			} else {

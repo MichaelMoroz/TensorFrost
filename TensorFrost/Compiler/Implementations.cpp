@@ -125,31 +125,6 @@ map<string, VJPGradientFunction> gradient_functions =
 	}},
 	{"ternary", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
 	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
-	{"smoothstep", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		//smoothstep equation:
-		//t = (x - e0) / (e1 - e0)
-		//tc = clamp(t, 0.0, 1.0);
-		//r = tc * tc * (3 - 2 * tc);
-		//derivative of smoothstep:
-		//dr/dx = dr/dtc * dtc/dt * dt/dx
-		//dr/dtc = 6 * tc * (tc - 1)
-		//dtc/dt = select((t < e0) || (t > e1), 0.0, 1.0)
-		//dt/dx = 1 / (e1 - e0)
-		//dt/dedge0 = (x - e1) / (e1 - e0)^2
-		//dt/dedge1 = (e0 - x) / (e1 - e0)^2
-		const Tensor& e0 = in[0];
-		const Tensor& e1 = in[1];
-		const Tensor& x = in[2];
-		const Tensor& t = (x - e0) / (e1 - e0);
-		const Tensor& tc = Tensor::clamp(t, Tensor::Constant(0.0f), Tensor::Constant(1.0f));
-		const Tensor& dr_dtc = Tensor::Constant(6.0f) * tc * (tc - Tensor::Constant(1.0f));
-		const Tensor& dtc_dt = Tensor::select((t < e0) || (t > e1), Tensor::Constant(0.0f), Tensor::Constant(1.0f));
-		const Tensor& grad_dt = grad * dr_dtc * dtc_dt;
-		const Tensor& dt_dx = Tensor::Constant(1.0f) / (e1 - e0);
-		const Tensor& dt_de0 = (x - e1) * (dt_dx * dt_dx);
-		const Tensor& dt_de1 = (e0 - x) * (dt_dx * dt_dx);
-		grads.Add( grad_dt * dt_de0, grad_dt * dt_de1, grad_dt * dt_dx);
-	}},
 	{"step", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::Constant(0.0f)); }},
 	{"modf", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad, Tensor::Constant(0.0f)); }},
 	{"fma", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(in[1] * grad, in[0] * grad, grad); }},
@@ -739,6 +714,15 @@ map<string, ImplementationFunction> implementation_functions =
 		Tensor* loaded = &Tensor::Load(*input_tensor, indices, IndexingMode::Repeat);
 		loaded->SetDebugName("repeated");
 		outputs.push_back(loaded);
+	}},
+	{"smoothstep", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) {
+		const Tensor& x = *inputs[2];
+		const Tensor& edge0 = *inputs[0];
+		const Tensor& edge1 = *inputs[1];
+		Tensor& x1 = (x - edge0) / (edge1 - edge0);
+		Tensor& t = Tensor::clamp(x1, Tensor::Constant(0.0f), Tensor::Constant(1.0f));
+		Tensor& result = t * t * (Tensor::Constant(3.0f) - Tensor::Constant(2.0f) * t);
+		outputs.push_back(&result);
 	}},
 };
 

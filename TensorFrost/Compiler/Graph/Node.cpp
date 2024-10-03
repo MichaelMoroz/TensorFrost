@@ -51,9 +51,10 @@ bool ArgumentManager::CannotCopyArgument(ArgID id) {
     bool is_output = from->flags.has(NodeProp::OutputMemory);
     bool is_input = from->flags.has(NodeProp::InputMemory);
     bool no_fusion = from->flags.has(NodeProp::StopFusion);
-    return id.first == ArgType::Memory || shape_not_memory ||
+    bool cannot_copy = id.first == ArgType::Memory || shape_not_memory ||
            from->op->HasAllTypes(OpProp::Static) || from->op->HasAllTypes(OpProp::Memory) ||
            from->flags.has(NodeProp::Modified) || is_output || is_input || no_fusion;
+    return cannot_copy;
 }
 
 bool ArgumentManager::IsChangingInput(ArgID arg) {

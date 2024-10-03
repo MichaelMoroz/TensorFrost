@@ -118,6 +118,7 @@ void IR::CompileIR()
 	RunCompilationPass("InitialCompilation", [&]() {
 		RunCompilationPass("GetInputList", [&]() { GetInputList(); });
 		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 		RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); }, true);
 		RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
@@ -189,8 +190,9 @@ void IR::CompileIR()
 
 		RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
-		//RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
-		//RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+		RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+		RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
 		RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
