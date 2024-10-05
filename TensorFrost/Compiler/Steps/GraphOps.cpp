@@ -115,8 +115,10 @@ bool IR::LimitKernelMemoryDependencies() {
 
 	for (auto kernel : kernels) {
 		unordered_set<Node*> kernel_deps = ComputeKernelDependencies(kernel);
+	}
 
-		if(kernel_deps.size() <= max_allowed_memory_dependencies) continue;
+	for (auto kernel : kernels) {
+		if(kernel->memory_deps.size() <= max_allowed_memory_dependencies) continue;
 
 		//throw std::runtime_error("Kernel " + to_string(kernel->index_) + " has too many memory dependencies (" + to_string(kernel_deps.size()) + " > " + to_string(max_kernel_memory_dependencies) + ")");
 	}

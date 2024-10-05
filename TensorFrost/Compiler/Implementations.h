@@ -10,6 +10,7 @@ int GetGradAxis(const Tensor& out, const Tensor& grad);
 
 class NodeGrads
 {
+	bool stop_fusion = false;
 	unordered_map<Node*, const Tensor*> stored_gradients;
 	unordered_map<ArgID, Node*, HashArgID> arguments;
 	unordered_map<ArgID, const Tensor*, HashArgID> argument_inputs;
@@ -51,7 +52,7 @@ public:
 			Tensor& new_tensor = const_cast<Tensor&>(ReduceGradientToShape(tensor, *target));
 			if(Contains(type, index)) {
 				auto& old_tensor = *stored_gradients[arguments[id]];
-				old_tensor.StopFusion();
+				if(stop_fusion) old_tensor.StopFusion();
 				auto& loaded = old_tensor; //TODO: temporary way to restrict fusion, remove after implementing split
 				stored_gradients[arguments[id]] = &(loaded + new_tensor);
 			} else {

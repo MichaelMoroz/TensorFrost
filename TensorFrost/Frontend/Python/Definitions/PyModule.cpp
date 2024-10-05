@@ -2,6 +2,7 @@
 #include <vector>
 
 #include <Frontend/Python/PyModule.h>
+#include <Frontend/Python/PyTensorMemory.h>
 
 namespace TensorFrost {
 
@@ -88,7 +89,20 @@ public:
             if (!py::cast<bool>(requires_grads[i])) {
                 continue;
             }
-            Parameter new_param = Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
+            Parameter* new_param;
+            if (py::isinstance<Parameter>(param)) {
+                new_param = new Parameter(py::cast<Parameter&>(param).shape, TFType::Float, false);
+            } else if (py::isinstance<PyTensorMemory>(param)) {
+                PyTensorMemory& tensor = py::cast<PyTensorMemory&>(param);
+                vector<size_t> shape = tensor.Shape();
+                vector<int> shape_int;
+                for (size_t i = 0; i < shape.size(); i++) {
+                    shape_int.push_back((int)shape[i]);
+                }
+                new_param = new Parameter(shape_int, tensor.tensor_->type, false);
+            } else {
+                throw std::runtime_error("Unsupported parameter type");
+            }
             py::cast<ParameterArray&>(getattr(name)).setitem(i, py::cast(new_param));
         }
     }
@@ -114,7 +128,6 @@ public:
 
         return tf.attr("sqrt")(sum);
     }
-
 
     void assertParameterArray(const string& name, py::list& net_params, py::list& requires_grads) {
         if (hasattr(name)) {

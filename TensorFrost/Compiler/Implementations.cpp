@@ -109,7 +109,7 @@ map<string, VJPGradientFunction> gradient_functions =
 	{"floor", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
 	{"ceil", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
 	{"round", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"frac", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"frac", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad); }},
 	{"atan2", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] / (in[0] * in[0] + in[1] * in[1]), -grad * in[0] / (in[0] * in[0] + in[1] * in[1])); }},
 	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
 	{"max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},

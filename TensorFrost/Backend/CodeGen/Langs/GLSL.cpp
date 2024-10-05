@@ -11,7 +11,8 @@ class GLSLGenerator : public CodeGenerator {
 			{"modf", "mod"},
 			{"atan2", "atan"},
 			{"lerp", "mix"},
-			{"reversebits", "bitfieldReverse"}
+			{"reversebits", "bitfieldReverse"},
+			{"frac", "fract"}
 		};
 	}
 

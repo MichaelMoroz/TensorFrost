@@ -30,12 +30,8 @@ void TensorMemoryDefinition(py::module& m,
 
 	// properties
 	py_tensor_mem.def_property_readonly("shape", [](const PyTensorMemory& t) {
-		vector<size_t> shape = GetShape(t.tensor_);
-		py::tuple shape_tuple(shape.size());
-		for (size_t i = 0; i < shape.size(); i++) {
-			shape_tuple[i] = shape[i];
-		}
-		return shape_tuple;
+		vector<size_t> shape = t.Shape();
+		return py::cast(shape);
 	});
 
 	py_tensor_mem.def_property_readonly("type", [](const PyTensorMemory& t) {
