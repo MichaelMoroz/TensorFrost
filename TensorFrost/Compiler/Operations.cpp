@@ -34,7 +34,7 @@ const vector<Operation> operations = {
 	Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("deallocate", {""}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
 	//Operation("group_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
-	//Operation("local_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+	Operation("local_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::LocalMemory, OpProp::Special, OpProp::KernelOnly}), // TODO implement in graph
 
 	Operation("region_begin", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
 	Operation("region_end", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
@@ -75,8 +75,8 @@ const vector<Operation> operations = {
     Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
 
     // Memory operations
-    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}),
-    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}),
+    Operation("local_load", {"_f", "_u", "_i", "_b"}, 8, "", {OpProp::Load, OpProp::KernelOnly, OpProp::MemoryOp, OpProp::LocalMemoryOp}),
+    Operation("local_store", {"f_", "u_", "i_", "b_"}, 8, "", {OpProp::Store, OpProp::Modifier, OpProp::KernelOnly, OpProp::MemoryOp, OpProp::LocalMemoryOp}),
     Operation("load", {"_f", "_u", "_i", "_b"}, 128, "",
               {OpProp::Load, OpProp::MemoryOp}),
     Operation("store", {"f_", "u_", "i_", "b_"}, 128, "",

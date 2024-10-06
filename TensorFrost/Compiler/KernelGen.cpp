@@ -20,6 +20,9 @@ Program* GenerateProgram(IR* ir)
 
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
+				//if the memory is inside of this kernel - skip node
+				if (node->op->HasAllTypes(OpProp::LocalMemoryOp)) { continue; }
+
 				// get the memory node
 				const Tensor* memory = node->args.GetTensor(ArgType::Memory);
 

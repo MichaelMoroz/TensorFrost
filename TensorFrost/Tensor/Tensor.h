@@ -404,6 +404,12 @@ public:
 		return Memory(GetShapeTensors(shape), type);
 	}
 
+	static Tensor& LocalMemory(const int size, const TFType type) {
+		Tensor& output = Static("local_memory", type);
+		output.SetData(size);
+		return output;
+	}
+
 	static Tensors GetInputShapeTensors(Tensors shape);
 
 	static Tensor& Input(const TFType type = TFType::Float) {
@@ -502,6 +508,16 @@ public:
 		MemoryOp("set", this, {}, &value);
 		//update the shape of the tensor
 		SetShape(shape_result.broadcast_shape.GetTensors());
+	}
+
+	static Tensor& LocalStore(const Tensor& tensor, const Tensor& index, const Tensor& value) {
+		Tensor& out = MemoryOp("local_store", &tensor, {&index}, &value);
+		return out;
+	}
+
+	static Tensor& LocalLoad(const Tensor& tensor, const Tensor& index) {
+		Tensor& out = MemoryOp("local_load", &tensor, {&index});
+		return out;
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,

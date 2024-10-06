@@ -363,6 +363,9 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			}
 			left += ")";
 			right = ";";
+		} else if(op->HasAllTypes(OpProp::LocalMemory)) {
+			left = type_names[output_type] + " " + name + "[" + to_string(node->data[0]) + "]";
+			right = ";";
 		}
 	} else if (op->HasAllTypes(OpProp::MemoryOp)) {
 		string address;
@@ -374,17 +377,18 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				address = args.Name(ArgType::Index);
 			}
 
-			string memory_expression = args.Name(ArgType::Memory) + "_mem[" + address + "]";
+			string global_memory_expression = args.Name(ArgType::Memory) + "_mem[" + address + "]";
+			string local_memory_expression = args.Name(ArgType::Memory) + "[" + address + "]";
 			if (op->name_ == "load") {
 				string output_type_name = type_names[output_type];
 				left += output_type_name + " " + name + " = ";
 				expression +=
 				    (output_type == Uint)
-				        ? memory_expression
-				        : TypeReinterpret(output_type_name, memory_expression);
+				        ? global_memory_expression
+				        : TypeReinterpret(output_type_name, global_memory_expression);
 				right += ";";
 			} else if (op->name_ == "store") {
-				expression += memory_expression + " = ";
+				expression += global_memory_expression + " = ";
 				expression +=
 				    (output_type == Uint)
 				        ? args.Name(ArgType::Input)
@@ -399,6 +403,15 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				expression += GenerateAtomicOp(op->name_, input_type_name,
 				                               output_type_name, address,
 				                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
+				right += ";";
+			} else if (op->name_ == "local_store") {
+				expression += local_memory_expression + " = ";
+				expression += args.Name(ArgType::Input);
+				right += ";";
+			} else if (op->name_ == "local_load") {
+				string output_type_name = type_names[output_type];
+				left += output_type_name + " " + name + " = ";
+				expression += local_memory_expression;
 				right += ";";
 			}
 		} else {

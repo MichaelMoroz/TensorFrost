@@ -1145,6 +1145,7 @@ void IR::FinalizeMemoryIndexing() {
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
+				if(node->op->HasAllTypes(OpProp::LocalMemoryOp)) continue;
 				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), indices); });
 			}
 		}
