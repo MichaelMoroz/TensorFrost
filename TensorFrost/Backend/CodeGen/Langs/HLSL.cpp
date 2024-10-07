@@ -88,6 +88,11 @@ string HLSLBufferDeclaration(const string& name, const string& type_name, const 
 	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
 }
 
+string HLSLGroupBufferDeclaration(const string& name, const string& type_name, const size_t size) {
+	string decl = "groupshared " + type_name + " " + name + "[" + to_string(size) + "];\n";
+	return decl;
+}
+
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_header_ = GetHLSLHeader(kernel);
 
@@ -100,7 +105,11 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 		group_size.push_back(1);
 	}
 
-	string main_function = "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
+	string main_function = "";
+
+	main_function += GetGroupBufferDeclarations(kernel, HLSLGroupBufferDeclaration) + "\n";
+
+	main_function += "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
 
 	main_function += R"(
 void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)

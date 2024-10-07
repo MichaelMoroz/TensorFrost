@@ -5,6 +5,14 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+
+#if __has_include(<format>)
+	#include <format>
+	#define HAS_FORMAT 1
+#else
+	#define HAS_FORMAT 0
+#endif
+
 #include "Compiler/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Backend/Backend.h"
@@ -16,6 +24,7 @@ string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
 string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
+string GetGroupBufferDeclarations(Kernel* kernel, function<string(const string &, const string &, int)> get_shared_name);
 string GetCPPHeader();
 string GetCPPImplementation();
 string GetHLSLHeader(Kernel* kernel);

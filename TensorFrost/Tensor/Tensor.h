@@ -410,6 +410,12 @@ public:
 		return output;
 	}
 
+	static Tensor& GroupMemory(const int size, const TFType type) {
+		Tensor& output = Static("group_memory", type);
+		output.SetData(size);
+		return output;
+	}
+
 	static Tensors GetInputShapeTensors(Tensors shape);
 
 	static Tensor& Input(const TFType type = TFType::Float) {

@@ -15,10 +15,15 @@ Program* GenerateProgram(IR* ir)
 		// get the kernel type
 		map<Node*, size_t> variables;
 		map<Node*, bool> read_write;
+		set<Node*> group_memory;
 		NodeArguments shape = kernel->args.GetArguments(ArgType::Shape);
 		size_t variable_index = 0;
 
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			if(node->name == "group_memory") {
+				group_memory.insert(*node);
+				continue;
+			}
 			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
 				//if the memory is inside of this kernel - skip node
 				if (node->op->HasAllTypes(OpProp::LocalMemoryOp)) { continue; }
@@ -58,7 +63,7 @@ Program* GenerateProgram(IR* ir)
 		}
 
 		// add the kernel to the program
-		program->AddKernel(kernel, variables, read_write_memory, read_only_memory, shape);
+		program->AddKernel(kernel, variables, read_write_memory, read_only_memory, group_memory, shape);
 	}
 
 	return program;

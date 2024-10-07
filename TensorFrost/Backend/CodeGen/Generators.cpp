@@ -98,6 +98,20 @@ string GetBufferDeclarations(Kernel *kernel, function<string(const string &, con
 	for (auto& decl : buffer_declarations) {
 		final_source += decl;
 	}
+
+	return final_source;
+}
+
+string GetGroupBufferDeclarations(Kernel *kernel, function<string(const string &, const string &, int)> get_shared_name) {
+	string final_source;
+
+	// add group memory declarations
+	for (auto& mem : kernel->group_memory) {
+		string name = mem->var_name;
+		string type_name = type_names[mem->type];
+		final_source += get_shared_name(name, type_name, mem->data[0]);
+	}
+
 	return final_source;
 }
 
@@ -129,14 +143,15 @@ string GetNodeName(const Node* node,  bool compact) {
 	return name;
 }
 
-//std::string format_float(float x) {
-//	std::string s = std::format("{}", x);
-//	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
-//		s += '.';
-//	}
-//	return s + 'f';
-//}
-
+#ifdef HAS_FORMAT
+string format_float(double x) {
+	std::string s = std::format("{}", x);
+	if (s.find('.') == std::string::npos && s.find('e') == std::string::npos) {
+		s += '.';
+	}
+	return s + 'f';
+}
+#else
 string format_float(double value) {
 	std::ostringstream out;
 
@@ -188,6 +203,7 @@ string format_float(double value) {
 	
 	return str + 'f';
 }
+#endif
 
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
@@ -363,9 +379,13 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			}
 			left += ")";
 			right = ";";
-		} else if(op->HasAllTypes(OpProp::LocalMemory)) {
+		} else if(op->name_ == "local_memory") {
 			left = type_names[output_type] + " " + name + "[" + to_string(node->data[0]) + "]";
 			right = ";";
+		} else if(op->name_ == "group_memory") {
+			left = "";
+			//just leave as comment, actual declaration is done outside of the main body of the kernel
+			right = "//" + type_names[output_type] + " " + name + "[" + to_string(node->data[0]) + "]";
 		}
 	} else if (op->HasAllTypes(OpProp::MemoryOp)) {
 		string address;

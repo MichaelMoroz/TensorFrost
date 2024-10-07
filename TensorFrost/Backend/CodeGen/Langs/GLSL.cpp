@@ -56,7 +56,7 @@ class GLSLGenerator : public CodeGenerator {
 
 string GetGLSLHeader(Kernel* kernel) {
 	string header = R"(
-#version 460
+#version 430
 
 uint pcg(uint v) {
   uint state = v * 747796405u + 2891336453u;
@@ -139,6 +139,11 @@ float atomicAdd_)" + name + R"((int index, float val) {
 	return decl;
 }
 
+string GLSLGroupBufferDeclaration(const string& name, const string& type_name, const size_t size) {
+	string decl = "shared " + type_name + " " + name + "[" + to_string(size) + "];\n";
+	return decl;
+}
+
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_header_ = GetGLSLHeader(kernel);
 
@@ -146,13 +151,17 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	buffers += "layout(std140) uniform UBOBlock {\n  UBO var;\n};\n\n";
 	kernel->generated_bindings_ = buffers;
 
+	string main_code = "";
+
+	main_code += GetGroupBufferDeclarations(kernel, GLSLGroupBufferDeclaration) + "\n";
+
 	vector<int> group_size = kernel->root->group_size;
 	//pad with 1s
 	while (group_size.size() < 3) {
 		group_size.push_back(1);
 	}
 
-	string main_code = "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
+	main_code += "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
 
 
 	main_code += R"(
