@@ -94,6 +94,11 @@ void IR::OptimizeOperations()
 					// compute result
 					result = ApplyOP(inputs[0], inputs[1], -);
 				}
+
+				//if both are the same node, then replace with zero
+				if (inputs[0]->node_ == inputs[1]->node_) {
+					result = &Tensor::Constant(0u, inputs[0]->node_->type);
+				}
 			} else if (op == "mul") {
 				// if any are zero, replace with zero
 				if (isConstantAndEqualTo(inputs[0], 0.0F) ||

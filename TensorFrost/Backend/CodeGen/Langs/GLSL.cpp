@@ -12,7 +12,8 @@ class GLSLGenerator : public CodeGenerator {
 			{"atan2", "atan"},
 			{"lerp", "mix"},
 			{"reversebits", "bitfieldReverse"},
-			{"frac", "fract"}
+			{"frac", "fract"},
+			{"group_barrier", "groupMemoryBarrier"}
 		};
 	}
 

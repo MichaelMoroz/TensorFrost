@@ -25,7 +25,7 @@ const vector<Operation> operations = {
     Operation("break", {""}, 0, "break", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("continue", {""}, 0, "continue", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("discard", {""}, 0, "discard", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword), //discard current thread
-    //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
+    Operation("group_barrier", {""}, 256, "", {OpProp::Static, OpProp::KernelOnly}),
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),

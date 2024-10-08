@@ -113,6 +113,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("group_buffer", [](int size, TFType type) {
 		return PT(Tensor::GroupMemory(size, type));
 	}, py::arg("size"), py::arg("type") = TFType::Float);
+	m.def("group_barrier", []() {
+		Tensor::GroupBarrier();
+	});
+
 	m.def("local_load", [](const PyTensor& t, const PyTensor& index) {
 		return PT(Tensor::LocalLoad(T(t), T(index)));
 	}, py::arg("t"), py::arg("index"));

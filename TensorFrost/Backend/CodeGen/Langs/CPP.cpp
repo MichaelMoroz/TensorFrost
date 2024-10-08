@@ -251,6 +251,8 @@ inline void InterlockedMax(float* memory, int address, float value)
 	}
 }
 
+inline void group_barrier() {} //NOOP, TODO: implement properly
+
 inline uint pcg(uint v)
 {
 	uint state = v * 747796405u + 2891336453u;

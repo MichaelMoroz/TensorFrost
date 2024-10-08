@@ -8,6 +8,7 @@ class HLSLGenerator : public CodeGenerator {
 	HLSLGenerator(IR* ir) : CodeGenerator(ir) {
 		name_map_ = {
 			{"var", "var."},
+			{"group_barrier", "GroupMemoryBarrierWithGroupSync"}
 		};
 	}
 

@@ -110,6 +110,8 @@ public:
 
 	bool LimitKernelMemoryDependencies();
 
+	void UnrollOperations();
+
 	stack<Node*> scope_stack;
 
 	void EndScope() {

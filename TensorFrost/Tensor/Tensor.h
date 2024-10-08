@@ -416,6 +416,10 @@ public:
 		return output;
 	}
 
+	static void GroupBarrier() {
+		Op("group_barrier");
+	}
+
 	static Tensors GetInputShapeTensors(Tensors shape);
 
 	static Tensor& Input(const TFType type = TFType::Float) {

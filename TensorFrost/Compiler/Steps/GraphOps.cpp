@@ -128,6 +128,107 @@ bool IR::LimitKernelMemoryDependencies() {
 	return created_kernels == 0;
 }
 
+void IR::UnrollOperations() {
+	UpdateGraph();
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	Tensor* const_one;
+	Tensor* const_zero;
+
+	ExecuteExpressionFirstChild(root, [&]() {
+		const_one = &Tensor::Constant(1, TFType::Int);
+		const_zero = &Tensor::Constant(0, TFType::Int);
+	});
+
+	vector<pair<Node*, Node*>> nodes_to_store;
+	for (auto kernel : kernels) {
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			if(node->name == "dim_id" || node->name == "const") {
+				continue;
+			}
+			// check if the node has a shape argument
+			ShapeCompareResult result = CompareShape(kernel, node.get(), true);
+			if (!result.exactly_compatible) {
+				if(!result.unroll_compatible) continue;
+				ShapeInfo unroll_shape = node->tensor_->GetShapeInfo();
+				vector<int> dims = unroll_shape.GetShape();
+				vector<pair<int, int>> unrolled_dims;
+				for (int broadcast_dim: result.broadcast_dims) {
+					unrolled_dims.push_back({dims[broadcast_dim], broadcast_dim});
+				}
+				int unrolled_size = 1;
+				for (int i = 0; i < unrolled_dims.size(); i++) {
+					unrolled_size *= unrolled_dims[i].first;
+				}
+				cout << "Unrolling node " << node->name << " in kernel " << kernel->name << endl;
+
+				ExecuteExpressionBefore(*node, [&] {
+					//create local memory with size = to size difference
+					Tensor* local_memory = nullptr;
+					if(node->type != TFType::None) {
+						 local_memory = &Tensor::LocalMemory(unrolled_size, node->type);
+					}
+
+					//create loops for each broadcasted dimension
+					Node* last_loop = nullptr;
+					map<int, Node*> loop_indices;
+					for (int i = 0; i < unrolled_dims.size(); i++) {
+						Tensor* const_loop_size = &Tensor::Constant(unrolled_dims[i].first, TFType::Int);
+						if(last_loop == nullptr) {
+							last_loop = Tensor::Loop(*const_zero, *const_loop_size, *const_one).node_;
+						} else {
+							ExecuteExpressionFirstChild(last_loop, [&] {
+								last_loop = Tensor::Loop(*const_zero, *const_loop_size, *const_one).node_;
+							});
+						}
+						loop_indices[unrolled_dims[i].second] = last_loop;
+					}
+
+					//go over inputs of the node and replace them with the loop indices if they are dim_id's of the right dimensions
+					//if the input is a local memory, then load the value from the memory
+					for (auto& [id, from] : node->args.InputsCopy()) {
+						if(from->name == "dim_id") {
+							int dim = from->data[0];
+							if(result.broadcast_dims.contains(dim)) {
+								//replace the input with the loop index
+								Node* loop_index = loop_indices[dim];
+								node->args.UpdateArgument(id, loop_index);
+							}
+						} else if(from->op->HasAllTypes(OpProp::LocalMemory)){
+							ExecuteExpressionLastChild(last_loop, [&] {
+								//load the value from the memory
+								//TODO compute proper index
+								Tensor* load_value = &Tensor::LocalLoad(*from->tensor_, *const_zero);
+								node->args.UpdateArgument(id, load_value->node_);
+							});
+						}
+					}
+
+					//move this node inside the loop
+					MoveNodeTo(last_loop->GetLastChild(), node.get());
+
+					if(local_memory != nullptr) {
+						//replace all outputs of the node with the local memory
+						node->ReplaceThisWithGivenNode(local_memory->node_);
+						nodes_to_store.push_back({local_memory->node_, node.get()});
+					}
+
+					//TODO special handling of global mem load operations
+				});
+
+			}
+		}
+	}
+
+	UpdateGraph();
+
+	for (auto [local_memory, node] : nodes_to_store) {
+		ExecuteExpressionAfter(node, [&] {
+			Tensor* store_value = &Tensor::LocalStore(*local_memory->tensor_, *const_zero, *node->tensor_);
+		});
+	}
+}
+
 void IR::CheckIR(string name, bool check_clustering, bool check_kernels) {
 #ifdef NDEBUG
 	return;

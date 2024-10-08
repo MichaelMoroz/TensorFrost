@@ -105,6 +105,7 @@ struct ShapeCompareResult {
 	bool exactly_compatible;
 	ShapeInfo broadcast_shape;
 	ShapeInfo unroll_shape;
+	set<int> broadcast_dims;
 	bool broadcast;
 	int broadcast_dim;
 	int a_dim;

@@ -286,6 +286,7 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool throw_error) {
 
 		if(res.broadcast) {
 			result.broadcast = true;
+			result.broadcast_dims.insert(broadcast_index);
 		}
 
 		result.unroll_compatible = result.unroll_compatible && res.unroll_compatible;
@@ -300,12 +301,12 @@ ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b, bool throw_error) {
 			result.broadcast = true;
 			result.broadcast_shape.AddShape(i, max_dim_shape[i]);
 			result.unroll_shape.AddShape(i, max_dim_shape[i]);
+			result.broadcast_dims.insert(i);
 		}
 	}
 
 	if((result.broadcast && min_dim > 0) || !result.compatible) {
 		result.exactly_compatible = false;
-		result.unroll_compatible = false;
 	}
 
 	if (result.compatible && result.broadcast_shape.dim != result.broadcast_dim) {
