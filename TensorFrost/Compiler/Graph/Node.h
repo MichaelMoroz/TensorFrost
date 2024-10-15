@@ -21,6 +21,8 @@ enum class NodeProp {
 	NoLoadFusion,
 	NoCopyFusion,
 	StopFusion,
+	HintMaxValue,
+	HintMinValue,
 	Count,
 };
 

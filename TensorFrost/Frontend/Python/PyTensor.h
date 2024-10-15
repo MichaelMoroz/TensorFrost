@@ -76,7 +76,7 @@ class PyTensor {
 		} else {
 			auto tensors = std::get<Tensors>(entered);
 			//convert to py::tuple of PyTensor*
-			return PyTensorsToTupleVariant(PyTensorsFromTensors(tensors));
+			return PyTensorsToTupleVariant(PyTensorsFromTensors(Reverse(tensors)));
 		}
 	}
 

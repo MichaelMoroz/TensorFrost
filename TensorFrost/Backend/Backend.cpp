@@ -89,8 +89,16 @@ void CompileKernels(Program* program) {
 }
 
 TFTensor Allocator(const char* name, const size_t* a, size_t dim, TFType type, void* data) {
-	vector<size_t> shape(a, a + dim);
-	return *global_memory_manager->AllocateTensor(shape, type, name);
+	try {
+		vector<size_t> shape(a, a + dim);
+		return *global_memory_manager->AllocateTensor(shape, type, name);
+	} catch (const std::exception& e) {
+		size_t size = 1;
+		for (size_t i = 0; i < dim; i++) {
+			size *= a[i];
+		}
+		throw std::runtime_error("Error allocating tensor " + string(name) + ": " + e.what() + ", requested size: " + to_string(size));
+	}
 }
 
 void Deallocator(TFTensor a, void* data) {
@@ -150,8 +158,11 @@ vector<TFTensor*> ExecuteProgram(
 #ifdef PROFILE_EXECUTION
 	auto start = chrono::high_resolution_clock::now();
 #endif
-
-	program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, Region, nullptr});
+	try {
+		program->execute_callback(in, out, {Allocator, Deallocator, Readback, Writeback, Dispatch, Region, nullptr});
+	} catch (const std::exception& e) {
+		throw std::runtime_error("Error executing program " + program->program_name + ": " + e.what());
+	}
 
 #ifdef PROFILE_EXECUTION
 	Finish();

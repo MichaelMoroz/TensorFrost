@@ -193,6 +193,21 @@ void Tensor::StopFusion() const {
 	node_->flags.set(NodeProp::StopFusion);
 }
 
+void Tensor::HintRange(float min, float max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)AsUint(min));
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)AsUint(max));
+}
+
+void Tensor::HintRange(int min, int max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)min);
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)max);
+}
+
+void Tensor::HintRange(uint min, uint max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)min);
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)max);
+}
+
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 	Tensor* copy = &CreateNode(other.node_->type, std::move(args), other.node_->name);
 	copy->node_->data = other.node_->data;
@@ -224,7 +239,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
 			//make sure its reversed on the backend
-			mem.node_->flags.set(NodeProp::InputShapeDim, (int)shape.size() - dim - 1);
+			mem.node_->flags.set(NodeProp::InputShapeDim, (int64_t)(shape.size() - dim - 1));
 			result.push_back(&mem);
 		}
 		else

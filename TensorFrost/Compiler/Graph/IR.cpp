@@ -181,7 +181,7 @@ void IR::CompileIR()
 		RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
 
 		//TODO: Add support for unrolling small constant kernel dimensions
-		RunCompilationPass("UnrollOperations", [&]() { UnrollOperations(); }, true);
+		//RunCompilationPass("UnrollOperations", [&]() { UnrollOperations(); }, true);
 		//RunCompilationPass("SqueezeKernelShapes", [&]() { SqueezeKernelShapes(); });
 
 		RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });

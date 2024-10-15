@@ -366,7 +366,7 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			right = ";";
 		} else if (op->name_ == "input_shape") {
 			left = "int " + node->var_name + " = ";
-			expression = ir->input_memory_map[node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShapeDim)) + "]";
+			expression = ir->input_memory_map[(int)node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string((int)node->flags.get(NodeProp::InputShapeDim)) + "]";
 			right = ";";
 		} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
 			left = "TFTensor " + node->var_name + " = ";

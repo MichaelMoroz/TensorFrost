@@ -108,6 +108,14 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return t;
 	});
 
+	py_tensor.def("hint_range", [](const PyTensor& t, py::object min, py::object max) {
+		if(t.Get().node_->type == TFType::Float) {
+			t.Get().HintRange(py::cast<float>(min), py::cast<float>(max));
+		} else {
+			t.Get().HintRange(py::cast<int>(min), py::cast<int>(max));
+		}
+	}, py::arg("min"), py::arg("max"));
+
 	// operators
 	DefineOperators(py_tensor);
 

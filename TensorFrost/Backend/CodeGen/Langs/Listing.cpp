@@ -58,7 +58,7 @@ string GetNodeString(const Node* node, bool verbose) {
 		auto flags = node->flags.get_data();
 		for(auto flad_data : flags) {
 			NodeProp flag = flad_data.first;
-			int data = flad_data.second;
+			int64_t data = flad_data.second;
 			listing += NodeFlagsToString(flag);
 			if(data >= 0) {
 				listing += "(" + to_string(data) + ")";

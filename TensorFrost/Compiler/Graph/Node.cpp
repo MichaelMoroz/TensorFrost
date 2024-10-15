@@ -158,7 +158,7 @@ void Node::ValidateParentShapes() const {
 }
 
 void Node::SetMemoryType(NodeProp memory_type, int index) {
-    flags.set(memory_type, index);
+    flags.set(memory_type, (int64_t)index);
 }
 
 void Node::CheckNode() const {
@@ -242,7 +242,8 @@ const map<NodeProp, string> flag_names = {
     {NodeProp::OutputMemory, "OutputMemory"}, {NodeProp::InputMemory, "InputMemory"},
     {NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
     {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoCopyFusion, "NoCopyFusion"},
-    {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}
+    {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}, {NodeProp::HintMaxValue, "HintMaxValue"},
+    {NodeProp::HintMinValue, "HintMinValue"}
 };
 
 string NodeFlagsToString(NodeProp flags) {

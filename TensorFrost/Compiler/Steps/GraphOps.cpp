@@ -433,12 +433,12 @@ void IR::GetInputList() {
 			int input_index = input_memory_index++;
 			// add shapes to the memory inputs
 			input_memory_map[input_index] = *node;
-			node->flags.set(NodeProp::InputMemory, input_index);
+			node->flags.set(NodeProp::InputMemory, (int64_t)input_index);
 			//if any of the inputs are "input_shape" then we need to add the input index to them
 			for (auto& [arg, from] : node->args.Inputs()) {
 				if (arg.first == ArgType::Shape && from->name == "input_shape") {
 					if(!from->flags.has(NodeProp::InputShapeMemory)) { //ONLY FIRST TIME
-						from->flags.set(NodeProp::InputShapeMemory, input_index);
+						from->flags.set(NodeProp::InputShapeMemory, (int64_t)input_index);
 					}
 				}
 			}
@@ -459,7 +459,7 @@ void IR::GetOutputList() {
 				                                                        // memory nodes
 				                                                        // at this point
 			}
-			output_memory_map[node->flags.get(NodeProp::OutputMemory)] = *node;
+			output_memory_map[(int)node->flags.get(NodeProp::OutputMemory)] = *node;
 		}
 		if (node->op->HasAllTypes(OpProp::Modifier, OpProp::MemoryOp)) {
 			if (!node->HasParent("kernel")) {

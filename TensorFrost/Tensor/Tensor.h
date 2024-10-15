@@ -262,6 +262,9 @@ public:
 	void DetachGrad() const;
 	void PassGrad() const;
 	void StopFusion() const;
+	void HintRange(float min, float max) const;
+	void HintRange(int min, int max) const;
+	void HintRange(uint min, uint max) const;
 
 	static Tensor* GetCopy(const Tensor& other, NodeArguments args);
 
