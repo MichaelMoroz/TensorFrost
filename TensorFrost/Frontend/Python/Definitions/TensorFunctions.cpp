@@ -117,13 +117,6 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::GroupBarrier();
 	});
 
-	m.def("local_load", [](const PyTensor& t, const PyTensor& index) {
-		return PT(Tensor::LocalLoad(T(t), T(index)));
-	}, py::arg("t"), py::arg("index"));
-	m.def("local_store", [](const PyTensor& t, const PyTensor& index, const PyTensor& value) {
-		return PT(Tensor::LocalStore(T(t), T(index), T(value)));
-	}, py::arg("t"), py::arg("index"), py::arg("value"));
-
 	m.def("zeros", [](py::list shape, TFType type) {
 		return PT(Tensor::Constant(0u, Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);

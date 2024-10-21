@@ -175,6 +175,7 @@ public:
 	bool OptimizeKernels();
 	void OptimizeHost();
 	void OptimizeOperations();
+	void OptimizeHostValuesWithHints();
 
 	bool OptimizeKernelLoadOperations();
 	void OptimizeReductions();

@@ -397,22 +397,26 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				address = args.Name(ArgType::Index);
 			}
 
-			string global_memory_expression = args.Name(ArgType::Memory) + "_mem[" + address + "]";
-			string local_memory_expression = args.Name(ArgType::Memory) + "[" + address + "]";
+			bool is_local = node->flags.has(NodeProp::LocalMemoryOp);
+			string memory_name = args.Name(ArgType::Memory) + (is_local ? "" : "_mem");
+			string memory_expression = memory_name + "[" + address + "]";
+			TFType memory_type = is_local ? node->type : Uint;
+			string memory_type_name = type_names[memory_type];
+
 			if (op->name_ == "load") {
 				string output_type_name = type_names[output_type];
 				left += output_type_name + " " + name + " = ";
 				expression +=
-				    (output_type == Uint)
-				        ? global_memory_expression
-				        : TypeReinterpret(output_type_name, global_memory_expression);
+				    (output_type == memory_type)
+				        ? memory_expression
+				        : TypeReinterpret(output_type_name, memory_expression);
 				right += ";";
 			} else if (op->name_ == "store") {
-				expression += global_memory_expression + " = ";
+				expression += memory_expression + " = ";
 				expression +=
-				    (output_type == Uint)
+				    (output_type == memory_type)
 				        ? args.Name(ArgType::Input)
-				        : TypeReinterpret("uint", args.Name(ArgType::Input));
+				        : TypeReinterpret(memory_type_name, args.Name(ArgType::Input));
 				right += ";";
 			} else if (op->HasAllTypes(OpProp::Scatter)) {
 				if (output_type != None) {
@@ -422,16 +426,7 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				string input_type_name = type_names[args.Type(ArgType::Input)];
 				expression += GenerateAtomicOp(op->name_, input_type_name,
 				                               output_type_name, address,
-				                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
-				right += ";";
-			} else if (op->name_ == "local_store") {
-				expression += local_memory_expression + " = ";
-				expression += args.Name(ArgType::Input);
-				right += ";";
-			} else if (op->name_ == "local_load") {
-				string output_type_name = type_names[output_type];
-				left += output_type_name + " " + name + " = ";
-				expression += local_memory_expression;
+				                               args.Name(ArgType::Input), name, memory_name);
 				right += ";";
 			}
 		} else {

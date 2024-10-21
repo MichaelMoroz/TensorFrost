@@ -75,8 +75,6 @@ const vector<Operation> operations = {
     Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
 
     // Memory operations
-    Operation("local_load", {"_f", "_u", "_i", "_b"}, 8, "", {OpProp::Load, OpProp::KernelOnly, OpProp::MemoryOp, OpProp::LocalMemoryOp}),
-    Operation("local_store", {"f_", "u_", "i_", "b_"}, 8, "", {OpProp::Store, OpProp::Modifier, OpProp::KernelOnly, OpProp::MemoryOp, OpProp::LocalMemoryOp}),
     Operation("load", {"_f", "_u", "_i", "_b"}, 128, "",
               {OpProp::Load, OpProp::MemoryOp}),
     Operation("store", {"f_", "u_", "i_", "b_"}, 128, "",

@@ -128,6 +128,16 @@ void WindowDefinitions(py::module& m) {
 		ImGuiAddBackgroundText(text, ImVec2(pos[0].cast<float>(), pos[1].cast<float>()), ImVec4(color[0].cast<float>(), color[1].cast<float>(), color[2].cast<float>(), color[3].cast<float>()));
 	}, py::arg("text"), py::arg("pos"), py::arg("color"));
 
+	imgui.def("color_picker3", [](string text, py::array_t<float> color) {
+		ImGuiColorPicker3(text, color.mutable_data());
+		return color;
+	}, py::arg("text"), py::arg("color"));
+
+	imgui.def("color_picker4", [](string text, py::array_t<float> color) {
+		ImGuiColorPicker4(text, color.mutable_data());
+		return color;
+	}, py::arg("text"), py::arg("color"));
+
 	//renderdoc
 	m.def("renderdoc_start_capture", []() { StartRenderDocCapture(); },
 	      "Start a RenderDoc capture");

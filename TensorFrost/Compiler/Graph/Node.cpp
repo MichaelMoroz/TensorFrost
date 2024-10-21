@@ -243,7 +243,7 @@ const map<NodeProp, string> flag_names = {
     {NodeProp::InputMemoryList, "InputMemoryList"}, {NodeProp::InputShapeMemory, "InputShapeMemory"},
     {NodeProp::InputShapeDim, "InputShapeDim"}, {NodeProp::NoCopyFusion, "NoCopyFusion"},
     {NodeProp::NoLoadFusion, "NoLoadFusion"}, {NodeProp::StopFusion, "StopFusion"}, {NodeProp::HintMaxValue, "HintMaxValue"},
-    {NodeProp::HintMinValue, "HintMinValue"}
+    {NodeProp::HintMinValue, "HintMinValue"}, {NodeProp::LocalMemoryOp, "LocalMemoryOp"}
 };
 
 string NodeFlagsToString(NodeProp flags) {
@@ -330,10 +330,13 @@ bool Node::HasParent(Node *node) const {
     return false;
 }
 
-void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_modified, bool copy_metadata) {
+void Node::ReplaceThisWithGivenNode(Node *replacement, int min_index, bool make_modified, bool copy_metadata, set<string> nodes_to_modify) {
     try {
         for (auto [edge, to] : args.OutputsCopy()) {
             auto& [id, from] = edge;
+            if(nodes_to_modify.size() > 0 && !nodes_to_modify.contains(to->name)) {
+                continue;
+            }
             if (to->index_ >= min_index) {
                 if(make_modified) {
                     replacement->flags.set(NodeProp::Modified);

@@ -23,19 +23,19 @@ class HLSLGenerator : public CodeGenerator {
 		if (op == "InterlockedAdd") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+				return "InterlockedAddF("+memory_name+", " + address + ", " + input + ")";
 			}
-			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ")";
+			return "InterlockedAdd("+memory_name+"[" + address + "], " + input + ")";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+				return "InterlockedAddF("+memory_name+", " + address + ", " + input + ")";
 			}
-			additional_lines.push_back("InterlockedAdd("+memory_name+"_mem[" + address + "], " +
+			additional_lines.push_back("InterlockedAdd("+memory_name+"[" + address + "], " +
 									   input + ", " + output + ");");
 			return "0";
 		} else {
-			return op + "("+memory_name+"_mem[" + address + "], " + input + ")";
+			return op + "("+memory_name+"[" + address + "], " + input + ")";
 		}
 	}
 };

@@ -198,7 +198,7 @@ void IR::UnrollOperations() {
 							ExecuteExpressionLastChild(last_loop, [&] {
 								//load the value from the memory
 								//TODO compute proper index
-								Tensor* load_value = &Tensor::LocalLoad(*from->tensor_, *const_zero);
+								Tensor* load_value = &Tensor::Load(*from->tensor_, {const_zero});
 								node->args.UpdateArgument(id, load_value->node_);
 							});
 						}
@@ -224,7 +224,7 @@ void IR::UnrollOperations() {
 
 	for (auto [local_memory, node] : nodes_to_store) {
 		ExecuteExpressionAfter(node, [&] {
-			Tensor* store_value = &Tensor::LocalStore(*local_memory->tensor_, *const_zero, *node->tensor_);
+			Tensor* store_value = &Tensor::Store(*local_memory->tensor_, *node->tensor_, {const_zero});
 		});
 	}
 }
@@ -1146,27 +1146,29 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 	ExecuteExpressionFirstChild(kernel_, [&]() {
 		block_index = &kernel_->GetTensor()->BlockIndex();
 
-		switch (dims)
-		{
-			case 1:
-				kernel_->group_size = {256};
-				break;
-			case 2:
-				kernel_->group_size = {16, 16};
-				break;
-			case 3:
-				kernel_->group_size = {8, 8, 8};
-				break;
-			default:
-				kernel_->group_size = {8, 8, 8};
-		}
+		if(kernel_->group_size.size() == 0) { //if group size is not set, then set it to default
+			switch (dims)
+			{
+				case 1:
+					kernel_->group_size = {256};
+					break;
+				case 2:
+					kernel_->group_size = {16, 16};
+					break;
+				case 3:
+					kernel_->group_size = {8, 8, 8};
+					break;
+				default:
+					kernel_->group_size = {8, 8, 8};
+			}
 
-		//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
-		int group_dim = (int)kernel_->group_size.size();
-		for (int i = 0; i < group_dim; i++) {
-			int shape = kernel_shape[i]->TryGetConstant();
-			if (shape > 0) {
-				kernel_->group_size[i] = min(kernel_->group_size[i], shape);
+			//if the dimensions are known, then use the minimum of the group size and the shape to avoid useless computation
+			int group_dim = (int)kernel_->group_size.size();
+			for (int i = 0; i < group_dim; i++) {
+				int shape = kernel_shape[i]->TryGetConstant();
+				if (shape > 0) {
+					kernel_->group_size[i] = min(kernel_->group_size[i], shape);
+				}
 			}
 		}
 
@@ -1212,7 +1214,7 @@ void IR::ComputeAddress(Node* node, vector<Tensor*> indices)
 
 	// remove the index node edges
 	node->args.RemoveArguments(ArgType::Index);
-
+ 
 	// add the flat index node edge
 	node->args.AddArgument(ArgType::Index, 0, flat_index->node_);
 }
@@ -1246,7 +1248,9 @@ void IR::FinalizeMemoryIndexing() {
 		// go over all nodes that take an index as input (e.g. load, store, atomic)
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
-				if(node->op->HasAllTypes(OpProp::LocalMemoryOp)) continue;
+				if (node->flags.has(NodeProp::LocalMemoryOp)) {
+					continue;
+				}
 				ExecuteExpressionBefore(*node, [&]() { ComputeAddress(node.get(), indices); });
 			}
 		}

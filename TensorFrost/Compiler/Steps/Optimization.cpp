@@ -171,6 +171,35 @@ void IR::OptimizeOperations()
 	}
 }
 
+void IR::OptimizeHostValuesWithHints()
+{
+	for (auto node = begin(); !node.end(); node.next()) {
+		//if node inside kernel - skip
+		if(node->HasParent("kernel")) continue;
+
+		ExecuteExpressionAfter(*node, [&]() {
+			const Tensor* result = nullptr;
+
+			//if node has a max value hint, then replace it with it
+			if(node->flags.has(NodeProp::HintMaxValue)) {
+				int64_t max_value = node->flags.get(NodeProp::HintMaxValue);
+				result = &Tensor::Constant((uint)max_value, node->type);
+			}
+
+			if (result != nullptr)
+			{
+				for (auto [edge, to] : node->args.OutputsCopy()) {
+					auto& [id, from] = edge;
+					//if(to->HasParent("kernel")) continue; #TODO (Moroz): check if this is needed
+					to->args.UpdateArgument(id, result->node_);
+				}
+			}
+		});
+	}
+
+	UpdateGraph();
+}
+
 void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> used_nodes;
 	//mark all output nodes as used

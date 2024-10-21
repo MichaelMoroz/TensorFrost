@@ -123,6 +123,9 @@ protected:
 	}
 
 	void RegenerateNodeName(Node* node) {
+		if(node->op->HasAllTypes(OpProp::LocalMemory)) {
+			return;
+		}
 		string debug = node->debug_name;
 		if (debug.empty()) {
 			debug = "v" + node->name;//return;
@@ -178,7 +181,7 @@ protected:
 	                                const string& output_type_name,
 	                                const string& address, const string& input, const string& output, const string& memory_name)
 	{
-		return op + "((" + input_type_name + "*)"+memory_name+"_mem" + ", " + address + ", " + input + ")";
+		return op + "((" + input_type_name + "*)" + memory_name + ", " + address + ", " + input + ")";
 	}
 
 	string GetName(const string& name) {

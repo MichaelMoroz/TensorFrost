@@ -97,11 +97,11 @@ void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor) {
 
 	//kernel scope
 	m.def("kernel", 
-	[](py::list shape) {
+	[](py::list shape, vector<int> group_size) {
 		Tensors shape_tensors = Reverse(TensorsFromList(shape));
-		Tensor& kernel = Tensor::Kernel(shape_tensors);
+		Tensor& kernel = Tensor::Kernel(shape_tensors, group_size);
 		return PT(kernel);
-	});
+	}, py::arg("shape"), py::arg("group_size") = vector<int>());
 }
 
 }  // namespace TensorFrost

@@ -26,7 +26,9 @@ Program* GenerateProgram(IR* ir)
 			}
 			if (node->op->HasAllTypes(OpProp::MemoryOp)) {
 				//if the memory is inside of this kernel - skip node
-				if (node->op->HasAllTypes(OpProp::LocalMemoryOp)) { continue; }
+				if (node->flags.has(NodeProp::LocalMemoryOp)) {
+					continue;
+				}
 
 				// get the memory node
 				const Tensor* memory = node->args.GetTensor(ArgType::Memory);

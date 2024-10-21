@@ -189,11 +189,12 @@ void IR::CompileIR()
 		RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
 		RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
 		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("OptimizeHostValuesWithHints", [&]() { OptimizeHostValuesWithHints(); });
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
 		RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
 		RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
-		RunCompilationPass("CheckFinalKernelShapes", [&]() { CheckKernelShapes(); });
+		//RunCompilationPass("CheckFinalKernelShapes", [&]() { CheckKernelShapes(); });
 	}, true);
 
 	RunCompilationPass("GetOutputList", [&]() { GetOutputList(); });

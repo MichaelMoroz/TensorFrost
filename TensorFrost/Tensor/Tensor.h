@@ -158,6 +158,23 @@ public:
 			throw std::runtime_error("Tensor indices must be integers");
 		}
 
+		//check if memory op is local
+		bool is_local = false;
+		if(memory->node_->op->HasAllTypes(OpProp::LocalMemory)) {
+			is_local = true;
+		}
+
+		//if local, can only have 1 index
+		if(is_local && indices.size() > 1) {
+			throw std::runtime_error("Local memory operations can only have 1 index");
+		}
+
+		//if global, can only have up to memory dimension indices
+		size_t memory_dim = memory->GetDimension();
+		if(!is_local && indices.size() > memory_dim) {
+			throw std::runtime_error("Too many indices for memory operation, memory has " + std::to_string(memory_dim) + " dimensions, while " + std::to_string(indices.size()) + " indices were provided");
+		}
+
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -201,7 +218,9 @@ public:
 
 		if (op == "load") output_type = memory->GetType();
 
-		return CreateNode(output_type, arguments, op);
+		Tensor& output = CreateNode(output_type, arguments, op);
+		if(is_local) output.node_->flags.set(NodeProp::LocalMemoryOp);
+		return output;
 	}
 
 	static Tensor& Static(string op, const NodeArguments& shape,
@@ -521,16 +540,6 @@ public:
 		MemoryOp("set", this, {}, &value);
 		//update the shape of the tensor
 		SetShape(shape_result.broadcast_shape.GetTensors());
-	}
-
-	static Tensor& LocalStore(const Tensor& tensor, const Tensor& index, const Tensor& value) {
-		Tensor& out = MemoryOp("local_store", &tensor, {&index}, &value);
-		return out;
-	}
-
-	static Tensor& LocalLoad(const Tensor& tensor, const Tensor& index) {
-		Tensor& out = MemoryOp("local_load", &tensor, {&index});
-		return out;
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
@@ -863,7 +872,7 @@ public:
 		If(!condition, false_body);
 	}
 
-	static Tensor& Kernel(const Tensors shape) {
+	static Tensor& Kernel(const Tensors shape, vector<int> group_size = {}) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, TFType::None);
 		evaluation_context_ir_->ExecuteExpressionFirstChild(kernel.node_, [&]() {
@@ -871,10 +880,11 @@ public:
 				kernel.enter_tensors.push_back(&Index(shape, i)); //thread indices
 			}
 		});
+		kernel.node_->group_size = group_size;
 		return kernel;
 	}
 
-	static Tensor& Kernel(const Tensors shape, const std::function<void(Tensors)>& body) {
+	static Tensor& Kernel(const Tensors shape, const std::function<void(Tensors)>& body, vector<int> group_size = {}) {
 		// create the kernel
 		Tensor& kernel = Kernel(shape);
 
@@ -883,6 +893,7 @@ public:
 			body(kernel.enter_tensors);
 		});
 
+		kernel.node_->group_size = group_size;
 		return kernel;
 	}
 

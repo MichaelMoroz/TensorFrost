@@ -23,6 +23,7 @@ enum class NodeProp {
 	StopFusion,
 	HintMaxValue,
 	HintMinValue,
+	LocalMemoryOp,
 	Count,
 };
 
@@ -104,7 +105,7 @@ class Node {
 	/// </summary>
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
-	void ReplaceThisWithGivenNode(Node* replacement, int min_index = -1, bool make_modified = false, bool copy_metadata = true);
+	void ReplaceThisWithGivenNode(Node* replacement, int min_index = -1, bool make_modified = false, bool copy_metadata = true, set<string> nodes_to_modify = {});
 
 	Node* GetParent(string name);
 	Node* GetChild(string name);
@@ -157,7 +158,6 @@ class NodeIterator {
 		  currentParent(const_cast<Node*>(node_root)) {}
 
 	Node* operator*() const { return currentNode; }
-
 	void update_current_node(Node* new_node) {
 		currentNode = new_node;
 #ifndef NDEBUG

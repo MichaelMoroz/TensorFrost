@@ -13,7 +13,7 @@ class GLSLGenerator : public CodeGenerator {
 			{"lerp", "mix"},
 			{"reversebits", "bitfieldReverse"},
 			{"frac", "fract"},
-			{"group_barrier", "groupMemoryBarrier"}
+			{"group_barrier", "barrier"}
 		};
 	}
 
@@ -29,23 +29,23 @@ class GLSLGenerator : public CodeGenerator {
 			{
 				return "atomicAdd_"+memory_name+"(" + address + ", " + input + ")";
 			}
-			return "atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAdd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
 				return  output_type_name + "(atomicAdd_"+memory_name+"(" + address + ", " + input +"))";
 			}
-			return output_type_name + "(atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + ")))";
+			return output_type_name + "(atomicAdd("+memory_name+"[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
-			return "atomicMin("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMin("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedMax") {
-			return "atomicMax("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMax("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAnd") {
-			return "atomicAnd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAnd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedOr") {
-			return "atomicOr("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicOr("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedXor") {
-			return "atomicXor("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicXor("+memory_name+"[" + address + "], uint(" + input + "))";
 		}
 		else
 		{
