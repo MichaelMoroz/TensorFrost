@@ -23,12 +23,12 @@ void ComputeNodeGradients(Node* value, const Tensor* grad, NodeGrads& grads)
 	}
 }
 
-void IR::ComputeAutodiff()
+bool IR::ComputeAutodiff()
 {
 	vector<Node*> gradients = GetNodesOfType(OpProp::Gradient);
 
 	if(gradients.empty()) {
-		return;
+		return true;
 	}
 
 	set<Node*> loss_nodes;
@@ -138,6 +138,8 @@ void IR::ComputeAutodiff()
 	}
 
 	UpdateGraph();
+
+	return false;
 }
 
 } // namespace TensorFrost

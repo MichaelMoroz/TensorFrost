@@ -347,6 +347,8 @@ void IR::UnrollAtomicOperations() {
 
 	vector<Node*> nodes_to_remove;
 	for (auto node: atomics) {
+		if(node->flags.has(NodeProp::LocalMemoryOp)) continue;
+
 		std::set<int> unused_dimensions;
 		Node* next_node = node->next;
 		int dim = node->args.Count(ArgType::Shape);

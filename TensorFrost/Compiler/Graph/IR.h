@@ -188,7 +188,7 @@ public:
 	void UnrollLoops(int max_iterations = 8);
 	void UnrollAtomicOperations();
 	void TryReplaceModificationsWithVersions();
-	void ComputeAutodiff();
+	bool ComputeAutodiff();
 	void SeparateOperationsIntoKernels();
 	void ComputeNodeCost();
 

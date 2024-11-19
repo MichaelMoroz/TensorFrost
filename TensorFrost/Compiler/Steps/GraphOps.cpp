@@ -1023,6 +1023,11 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 			throw std::runtime_error("Finalize memory indexing: node index not found for dimension " + to_string(idxdim) + " in memory node with dimensions " + to_string(memory_dim));
 		}
 
+		//if index is uint then cast it to int
+		if (out->node_->type == Uint) {
+			out = &Tensor::toint(*out);
+		}
+
 		switch (mode)
 		{
 			case IndexingMode::Clamp:
@@ -1214,7 +1219,7 @@ void IR::ComputeAddress(Node* node, vector<Tensor*> indices)
 
 	// remove the index node edges
 	node->args.RemoveArguments(ArgType::Index);
- 
+
 	// add the flat index node edge
 	node->args.AddArgument(ArgType::Index, 0, flat_index->node_);
 }

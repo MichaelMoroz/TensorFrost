@@ -63,6 +63,7 @@ class Line {
 class CodeGenerator {
 protected:
 	unordered_map<string, string> name_map_;
+	set<string> used_names_;
  public:
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
@@ -124,6 +125,7 @@ protected:
 
 	void RegenerateNodeName(Node* node) {
 		if(node->op->HasAllTypes(OpProp::LocalMemory)) {
+			used_names_.insert(node->var_name);
 			return;
 		}
 		string debug = node->debug_name;
@@ -140,7 +142,9 @@ protected:
 		} else {
 			name_count[debug] = 1;
 		}
-
+		if (used_names_.contains(debug)) {
+			debug = debug + "_";
+		}
 		node->var_name = debug;
 	}
 

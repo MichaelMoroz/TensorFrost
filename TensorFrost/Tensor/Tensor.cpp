@@ -152,7 +152,7 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 
 bool Tensor::CheckIndices(const Tensors &indices) {
 	for (const Tensor* index : indices) {
-		if (index->node_->type != TFType::Int) {
+		if (index->node_->type != TFType::Int && index->node_->type != TFType::Uint) {
 			return false;
 		}
 	}

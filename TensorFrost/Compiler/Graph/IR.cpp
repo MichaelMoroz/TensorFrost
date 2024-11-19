@@ -127,7 +127,9 @@ void IR::CompileIR()
 			return InsertAlgorithmicPrimitives(true);
 		}, true);
 
-		RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
+		RunIterativeCompilationPass("ComputeAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+			return ComputeAutodiff();
+		});
 
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 		RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
