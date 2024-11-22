@@ -61,6 +61,7 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 	try {
 		expression();
 	} catch (const std::exception& e) {
+		CheckIR(pass_name, false, false);
 		throw std::runtime_error("Error in compilation pass " + pass_name + ": " + e.what());
 	}
 
@@ -147,6 +148,7 @@ void IR::CompileIR()
 	RunCompilationPass("KernelGeneration", [&]() {
 		RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); }, true);
 		RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
+
 		RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
 		RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
 		RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
@@ -156,6 +158,8 @@ void IR::CompileIR()
 		RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 		RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
+
+		RunCompilationPass("UpdateKernelShapes", [&]() { UpdateKernelShapes(); });
 	}, true);
 
 #ifdef LOAD_FUSION

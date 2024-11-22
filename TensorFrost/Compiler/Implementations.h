@@ -10,7 +10,7 @@ int GetGradAxis(const Tensor& out, const Tensor& grad);
 
 class NodeGrads
 {
-	bool stop_fusion = false;
+	bool stop_fusion = true;
 	unordered_map<Node*, const Tensor*> stored_gradients;
 	unordered_map<ArgID, Node*, HashArgID> arguments;
 	unordered_map<ArgID, const Tensor*, HashArgID> argument_inputs;

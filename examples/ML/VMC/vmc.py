@@ -17,7 +17,7 @@ tf.initialize(tf.opengl)
 
 register_logdet()
 
-molecule = c2h4_molecule
+molecule = ch4_molecule
 
 lr0 = 0.004
 lr1 = 0.0005
@@ -297,32 +297,32 @@ class PSI(tf.Module):
     
     def electron_potential(self, e_pos):
         b, = tf.indices([e_pos.shape[0]])
-        V = tf.const(0.0)
+        Ve = tf.const(0.0)
 
         #compute the nuclei potential sum for each electron*nuclei
         with tf.loop(self.electron_n) as electron:
             with tf.loop(self.atom_n) as n:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - self.atoms[n, 0]) + sqr(e_pos[b, electron, 1] - self.atoms[n, 1]) + sqr(e_pos[b, electron, 2] - self.atoms[n, 2]))
-                V.val -= self.atoms[n, 3] / tf.max(r, self.eps)
+                Ve.val -= self.atoms[n, 3] / tf.max(r, self.eps)
 
         #compute the electron-electron potential sum
         with tf.loop(self.electron_n) as electron:
             with tf.loop(electron + 1, self.electron_n) as f:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - e_pos[b, f, 0]) + sqr(e_pos[b, electron, 1] - e_pos[b, f, 1]) + sqr(e_pos[b, electron, 2] - e_pos[b, f, 2]))
-                V.val += 1.0 / tf.max(r, self.eps)
+                Ve.val += 1.0 / tf.max(r, self.eps)
 
-        return V
+        return Ve
 
     def nuclei_potential(self):
-        V = tf.const(0.0)
+        Vn = tf.const(0.0)
 
         #compute the potential between nuclei
         with tf.loop(self.atom_n) as n:
             with tf.loop(n + 1, self.atom_n) as m:
                 r = tf.sqrt(sqr(self.atoms[n, 0] - self.atoms[m, 0]) + sqr(self.atoms[n, 1] - self.atoms[m, 1]) + sqr(self.atoms[n, 2] - self.atoms[m, 2]))
-                V.val += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
+                Vn.val += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
 
-        return V
+        return Vn
     
     #average distance to atoms weighted by the atom weights
     def min_distance_to_atoms(self, e_pos):

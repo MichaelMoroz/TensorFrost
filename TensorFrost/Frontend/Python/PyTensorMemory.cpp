@@ -27,6 +27,20 @@ PyTensorMemory::PyTensorMemory(py::array arr) {
             convert = [](char* ptr) { return static_cast<uint32_t>(*reinterpret_cast<int32_t*>(ptr)); };
             type = TFType::Int;
             break;
+    		case 'q': // int64 (convert to int32 before casting)
+    				convert = [](char* ptr) {
+    						int32_t val = (int32_t)*reinterpret_cast<int64_t*>(ptr);
+    						return *reinterpret_cast<uint32_t*>(&val);
+    				};
+    				type = TFType::Int;
+    				break;
+    	  case 'Q': // uint64 (convert to uint32 before casting)
+    					convert = [](char* ptr) {
+    						uint32_t val = (uint32_t)*reinterpret_cast<uint64_t*>(ptr);
+    						return val;
+    				};
+    				type = TFType::Uint;
+    				break;
         case 'L': // uint32
         case 'I': // uint32
             convert = [](char* ptr) { return *reinterpret_cast<uint32_t*>(ptr); };

@@ -201,6 +201,7 @@ public:
 	unordered_set<Node*> ComputeKernelDependencies(Node* kernel);
 
 	void CheckKernelShapes();
+	void UpdateKernelShapes();
 	void AddMemoryDeallocation();
 	void RunCompilationPass(string pass_name, const function<void()> &expression, bool print = false, bool update_graph = false);
 

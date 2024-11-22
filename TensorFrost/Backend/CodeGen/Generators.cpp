@@ -426,7 +426,7 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				string input_type_name = type_names[args.Type(ArgType::Input)];
 				expression += GenerateAtomicOp(op->name_, input_type_name,
 				                               output_type_name, address,
-				                               args.Name(ArgType::Input), name, memory_name);
+				                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
 				right += ";";
 			}
 		} else {

@@ -107,6 +107,24 @@ void IR::CheckKernelShapes() {
 	UpdateGraph();
 }
 
+void IR::UpdateKernelShapes() {
+	// get kernels
+	vector<Node*> kernels = GetNodesOfType("kernel");
+
+	// go over all outputs of each kernel and create memory nodes to store the
+	// output
+	for (auto kernel : kernels) {
+		NodeArguments kernel_shape = kernel->args.GetArguments(ArgType::Shape);
+		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
+			//set the shape of all nodes in the kernel to the kernel shape
+			node->args.RemoveArguments(ArgType::Shape);
+			node->args.AddArguments(kernel_shape);
+		}
+	}
+
+	UpdateGraph();
+}
+
 bool IR::LimitKernelMemoryDependencies() {
 	UpdateGraph();
 	vector<Node*> kernels = GetNodesOfType("kernel");
