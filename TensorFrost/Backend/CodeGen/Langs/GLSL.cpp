@@ -29,7 +29,7 @@ class GLSLGenerator : public CodeGenerator {
 			{
 				return "atomicAdd_"+memory_name+"(" + address + ", " + input + ")";
 			}
-			return "atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAdd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
@@ -37,15 +37,15 @@ class GLSLGenerator : public CodeGenerator {
 			}
 			return output_type_name + "(atomicAdd("+memory_name+"[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
-			return "atomicMin("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMin("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedMax") {
-			return "atomicMax("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMax("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAnd") {
-			return "atomicAnd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAnd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedOr") {
-			return "atomicOr("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicOr("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedXor") {
-			return "atomicXor("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicXor("+memory_name+"[" + address + "], uint(" + input + "))";
 		}
 		else
 		{
@@ -120,7 +120,7 @@ string GLSLBufferDeclaration(const string& name, const string& type_name, const 
 	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
 	//add atomic functions
 	decl += R"(
-float atomicAdd_)" + name + R"((int index, float val) {
+float atomicAdd_)" + name + R"(_mem(int index, float val) {
 	uint uval = floatBitsToUint(val);
 	uint tmp0 = 0;
 	uint tmp1 = 0;
