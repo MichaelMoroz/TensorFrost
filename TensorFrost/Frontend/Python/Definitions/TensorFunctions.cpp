@@ -194,9 +194,10 @@ void TensorFunctionsDefinition(py::module& m) {
 		return indices;
 	});
 
-	m.def("reshape", [](const PyTensor& t, py::list shape) {
-		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape))));
-	});
+	m.def("reshape", [](const PyTensor& t, py::list shape, TFType type) {
+		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape)), type));
+	}, py::arg("t"), py::arg("shape"), py::arg("type") = TFType::None);
+
 	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
 		return PT(Tensor::Assert(T(t), Reverse(TensorsFromList(target_shape)), target_type));
 	});

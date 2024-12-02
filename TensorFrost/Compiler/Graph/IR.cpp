@@ -159,7 +159,7 @@ void IR::CompileIR()
 		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 		RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
 
-		RunCompilationPass("UpdateKernelShapes", [&]() { UpdateKernelShapes(); });
+		RunCompilationPass("UpdateKernelShapes", [&]() { UpdateKernelShapes(); }, true);
 	}, true);
 
 #ifdef LOAD_FUSION

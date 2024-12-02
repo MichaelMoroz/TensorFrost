@@ -804,7 +804,7 @@ public:
 		return output;
 	}
 
-	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
+	static Tensor& Reshape(const Tensor &tensor, const Tensors &shape, TFType type = TFType::None);
 	static Tensor& Assert(const Tensor& tensor, const Tensors& shape, TFType type = TFType::Float);
 
 	Tensors enter_tensors = Tensors();

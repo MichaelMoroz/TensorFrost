@@ -305,10 +305,14 @@ bool Tensor::AreTensorsEqual(const Tensor &a, const Tensor &b) {
 	return false;
 }
 
-Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
+Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape, TFType type) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
-	out.node_->type = tensor.node_->type;
+	if(type != TFType::None) {
+		out.node_->type = type;
+	} else {
+		out.node_->type = tensor.node_->type;
+	}
 	return out;
 }
 
