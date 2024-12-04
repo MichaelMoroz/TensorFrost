@@ -75,7 +75,8 @@ class Node {
 	vector<int> group_size; //kernel properties
 
 #ifndef NDEBUG
-	string created_in;
+	string created_in_pass;
+	string created_in_function;
 #endif
 
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {

@@ -482,6 +482,7 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	}
 
 	Tensor& loaded = Tensor::Load(*array, perm_indices, IndexingMode::Unsafe);
+	loaded.SetShape(perm_shape); //in case perm indices has no shape info (0 dim unsqueeze)
 	loaded.SetDebugName("transposed");
 	return &loaded;
 }

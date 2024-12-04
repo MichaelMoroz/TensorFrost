@@ -25,7 +25,16 @@ bool IR::InsertAlgorithmicPrimitives(bool skip_differentiable) {
 
 			Tensors results;
 			ImplementationFunction func = GetImplementationForOperation(node->name);
+
+#ifndef NDEBUG
+			current_function = node->name;
+#endif
+
 			func(results, inputs, node->GetTensor(), axes);
+
+#ifndef NDEBUG
+			current_function = "None";
+#endif
 
 			const Tensor* result = results[0];
 

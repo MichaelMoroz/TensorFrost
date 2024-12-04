@@ -87,7 +87,8 @@ string GetNodeString(const Node* node, bool verbose) {
 		listing += "index=" + to_string(node->index_) + ", ";
 		listing += "debug_index=" + to_string(node->debug_index) + ", ";
 		listing += "debug_name=" + node->debug_name + ", ";
-		listing += "created_in=" + node->created_in + ", ";
+		listing += "created_in=" + node->created_in_pass + ", ";
+		listing += "created_in_func=" + node->created_in_function + ", ";
 	}
 #endif
 

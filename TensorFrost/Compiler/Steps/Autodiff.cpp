@@ -87,7 +87,16 @@ bool IR::ComputeAutodiff()
 				node_to_grad[node] = &ReduceGradientToShape(*node_to_grad[node], *node->GetTensor());
 
 				NodeGrads grads = NodeGrads(node, node_to_grad);
+
+			#ifndef NDEBUG
+				current_function = node->name + "_grad";
+			#endif
+
 				ComputeNodeGradients(node, node_to_grad[node], grads);
+
+			#ifndef NDEBUG
+				current_function = "None";
+			#endif
 
 				//store the computed gradients
 				for (auto& [id, input]: node->args.Inputs()) {

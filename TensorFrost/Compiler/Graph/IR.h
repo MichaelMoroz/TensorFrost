@@ -67,7 +67,8 @@ public:
         }
 
 #ifndef NDEBUG
-		newNode->created_in = current_pass;
+		newNode->created_in_pass = current_pass;
+		newNode->created_in_function = current_function;
 #endif
 
 		return newNode;
@@ -377,6 +378,7 @@ public:
 	unordered_map<int, Node*> output_memory_map;
 
 	string current_pass = "Tracing initial graph";
+	string current_function = "None";
 
 	struct PassStats {
 		string pass_name;
