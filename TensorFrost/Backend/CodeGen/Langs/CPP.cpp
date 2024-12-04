@@ -251,6 +251,8 @@ inline void InterlockedMax(float* memory, int address, float value)
 	}
 }
 
+inline void group_barrier() {} //NOOP, TODO: implement properly
+
 inline uint pcg(uint v)
 {
 	uint state = v * 747796405u + 2891336453u;
@@ -696,10 +698,14 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";
 	}
 
-	const int block_size = 4;
 	loop += "  #pragma omp parallel for\n";
 	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
 	loop += "  {\n";
+
+	loop += GetGroupBufferDeclarations(kernel, [](const string& name, const string& type_name, size_t size) {
+		return "    " + type_name + " " + name + "[" + to_string(size) + "];\n";
+	});
+
 	for (int d = 0; d < kernel->root->group_size.size(); d++) {
 		int dim = (int)kernel->root->group_size.size() - d - 1;
 		loop += "    for (int block_thread_id" + to_string(dim) +

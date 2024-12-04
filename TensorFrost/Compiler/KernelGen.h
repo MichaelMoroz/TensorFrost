@@ -14,15 +14,13 @@ namespace TensorFrost {
 uint GetInitialMax(TFType type);
 uint GetInitialMin(TFType type);
 
-bool IsBoundary(const Node* input, const Node* output, int arg_index,
-                ArgType arg_type);
-
 class Kernel {
  public:
 	Node* root;
 	map<Node*, size_t> variables;
 	map<Node*, size_t> read_write_memory;
 	map<Node*, size_t> read_only_memory;
+	set<Node*> group_memory;
 	NodeArguments shape;
 
 	size_t kernel_id_;
@@ -64,11 +62,11 @@ class Program {
 
 	explicit Program(IR* ir) : ir_(ir) {}
 
-	void AddKernel(Node* kernel_node, map<Node*, size_t> variables, map<Node*, size_t> read_write, map<Node*, size_t> read_only,
+	void AddKernel(Node* kernel_node, map<Node*, size_t> variables, map<Node*, size_t> read_write, map<Node*, size_t> read_only, set<Node*> group_memory,
 	               NodeArguments shape)
 	{
 		kernels_.push_back(
-		    {kernel_node, std::move(variables), std::move(read_write), std::move(read_only), std::move(shape)});
+		    {kernel_node, std::move(variables), std::move(read_write), std::move(read_only), std::move(group_memory), std::move(shape)});
 	}
 };
 

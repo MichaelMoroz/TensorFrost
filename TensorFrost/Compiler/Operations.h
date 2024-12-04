@@ -53,8 +53,10 @@ enum class OpProp {
 	Scatter,
 	Special,
 	Memory,
+	LocalMemory,
 	CantSubstitute,
 	MemoryOp,
+	LocalMemoryOp,
 	Static, //can not be removed or copied
 	HostOnly,
 	KernelOnly,

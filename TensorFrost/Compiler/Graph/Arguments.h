@@ -2,6 +2,7 @@
 
 #include "Compiler/Operations.h"
 #include "Utility/Utility.h"
+#include <set>
 
 namespace TensorFrost {
 
@@ -26,30 +27,43 @@ using NodeArguments = map<ArgID, Node*>;
 using Arg = pair<ArgID, Node*>;
 //argument type and input/output node - edge of the graph
 using ArgEdge = pair<Arg, Node*>;
-//vector of edges
-using ArgEdges = vector<ArgEdge>;
 
 struct HashArgID {
 	size_t operator()(const ArgID& id) const {
-		return (int)id.first + id.second * (int)ArgType::Count;
+		return (size_t)id.first + id.second * (size_t)ArgType::Count;
 	}
 };
+
+//set of edges
+using ArgEdges = set<ArgEdge>;
 
 #define MAX_ARGS_PER_TYPE 8
 #define MAX_ARGS ((int)ArgType::Count * MAX_ARGS_PER_TYPE)
 
 class ArgumentManager {
-private:
 	Node* node_;
 	bool add_parenthesis = false;
 	unordered_map<ArgID, TFType, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
 	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
-public:
 	unordered_map<ArgID, Node*, HashArgID> inputs_;
 	ArgEdges outputs_;
 
+	void AddOutput(ArgID id, Node* node) {
+		outputs_.insert({{id, node_}, node});
+	}
+
+	void RemoveOutput(ArgID id, Node* node) {
+		if (!outputs_.contains({{id, node_}, node})) {
+			throw std::runtime_error("Output does not exist");
+		}
+		outputs_.erase({{id, node_}, node});
+	}
+
+	void UpdateOutputs();
+	void ClearOutputs();
+public:
 	ArgumentManager(Node* node) {
 		if (node == nullptr) {
 			throw std::runtime_error("Node is null");
@@ -61,12 +75,25 @@ public:
 		add_parenthesis = add;
 	}
 
-	void AddOutput(ArgID id, Node* node) {
-		outputs_.push_back({{id, node_}, node});
+	const unordered_map<ArgID, Node*, HashArgID>& Inputs() const {
+		return inputs_;
 	}
 
-	void UpdateOutputs();
-	void ClearOutputs();
+	const ArgEdges& Outputs() const {
+		return outputs_;
+	}
+
+	unordered_map<ArgID, Node*, HashArgID> InputsCopy() const {
+		return inputs_;
+	}
+
+	ArgEdges OutputsCopy() const {
+		return outputs_;
+	}
+
+	size_t OutputCount() const {
+		return outputs_.size();
+	}
 
 	void AddArgument(ArgID id, Node *node);
 	void AddArgument(ArgType type, int index, Node *node) {

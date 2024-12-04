@@ -4,6 +4,8 @@
 #include "Utility/Utility.h"
 #include "Node.h"
 
+#define MAX_DIM_UNROLL 4
+
 namespace TensorFrost {
 
 using Tensors = vector<const Tensor*>;
@@ -32,6 +34,7 @@ class ShapeInfo {
 
 	Node* operator[](int index) const {
 		return shape[index].first;
+
 	}
 
 	void AddShape(int index, Node* node) {
@@ -98,7 +101,11 @@ class ShapeInfo {
 
 struct ShapeCompareResult {
 	bool compatible;
+	bool unroll_compatible;
+	bool exactly_compatible;
 	ShapeInfo broadcast_shape;
+	ShapeInfo unroll_shape;
+	set<int> broadcast_dims;
 	bool broadcast;
 	int broadcast_dim;
 	int a_dim;
@@ -108,21 +115,22 @@ struct ShapeCompareResult {
 
 struct ShapeDimCompareResult {
 	bool compatible;
+	bool unroll_compatible;
+	bool exactly_compatible;
 	Node* broadcast_dim;
+	Node* unroll_dim;
 	bool broadcast;
 	int a_dim;
 	int b_dim;
 };
 
 ShapeCompareResult CompareShape(const Node* a, const Node* b,
-                                bool exact_match = false,
                                 bool throw_error = false);
 
 ShapeCompareResult CompareShape(ShapeInfo& a, ShapeInfo& b,
-                                bool exact_match = false,
                                 bool throw_error = false);
 
-ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node, bool exact_match = false);
+ShapeDimCompareResult CompareShapeDim(Node* a_node, Node* b_node);
 
 /// <summary>
 /// Class to select kernel scopes from the IR graph given the constraints and the root node
@@ -154,6 +162,8 @@ class KernelScope {
 	static pair<std::unordered_set<KernelScope *>, bool> ComputeScopes(Node *root);
 
 	static KernelScope* Merge(KernelScope* a, KernelScope* b);
+
+	void CreateKernel();
 
 	void AddBoundaryNodes(unordered_set<Node*> new_boundary_nodes) {
 		boundary_nodes.insert(new_boundary_nodes.begin(), new_boundary_nodes.end());

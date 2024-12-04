@@ -341,7 +341,7 @@ void ImGuiSlider(std::string text, int* value, int min, int max) {
 }
 
 void ImGuiSlider(std::string text, float* value, float min, float max) {
-	ImGui::SliderFloat(text.c_str(), value, min, max);
+	ImGui::SliderFloat(text.c_str(), value, min, max, "%.5f");
 }
 
 bool ImGuiButton(std::string text) {
@@ -365,6 +365,14 @@ void ImGuiScaleAllSizes(float scale) {
 void ImGuiAddBackgroundText(const std::string &text, const ImVec2 &pos, const ImVec4 &color) {
 	ImDrawList* draw_list = ImGui::GetBackgroundDrawList();
 	draw_list->AddText(pos, ImGui::GetColorU32(color), text.c_str());
+}
+
+void ImGuiColorPicker3(const std::string &text, float *color) {
+	ImGui::ColorPicker3(text.c_str(), color);
+}
+
+void ImGuiColorPicker4(const std::string &text, float *color) {
+	ImGui::ColorPicker4(text.c_str(), color);
 }
 
 void StartDebugRegion(const std::string& name) {

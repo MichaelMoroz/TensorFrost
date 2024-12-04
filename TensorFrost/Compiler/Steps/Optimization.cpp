@@ -94,6 +94,11 @@ void IR::OptimizeOperations()
 					// compute result
 					result = ApplyOP(inputs[0], inputs[1], -);
 				}
+
+				//if both are the same node, then replace with zero
+				if (inputs[0]->node_ == inputs[1]->node_) {
+					result = &Tensor::Constant(0u, inputs[0]->node_->type);
+				}
 			} else if (op == "mul") {
 				// if any are zero, replace with zero
 				if (isConstantAndEqualTo(inputs[0], 0.0F) ||
@@ -166,6 +171,35 @@ void IR::OptimizeOperations()
 	}
 }
 
+void IR::OptimizeHostValuesWithHints()
+{
+	for (auto node = begin(); !node.end(); node.next()) {
+		//if node inside kernel - skip
+		if(node->HasParent("kernel")) continue;
+
+		ExecuteExpressionAfter(*node, [&]() {
+			const Tensor* result = nullptr;
+
+			//if node has a max value hint, then replace it with it
+			if(node->flags.has(NodeProp::HintMaxValue)) {
+				int64_t max_value = node->flags.get(NodeProp::HintMaxValue);
+				result = &Tensor::Constant((uint)max_value, node->type);
+			}
+
+			if (result != nullptr)
+			{
+				for (auto [edge, to] : node->args.OutputsCopy()) {
+					auto& [id, from] = edge;
+					//if(to->HasParent("kernel")) continue; #TODO (Moroz): check if this is needed
+					to->args.UpdateArgument(id, result->node_);
+				}
+			}
+		});
+	}
+
+	UpdateGraph();
+}
+
 void IR::RemoveUnusedOperations() {
 	unordered_set<Node*> used_nodes;
 	//mark all output nodes as used
@@ -211,7 +245,7 @@ void IR::RemoveUnusedKernels()
 				memory_modifiers++;
 			}
 			//if any output is outside the kernel, then the kernel is needed
-			for (auto [edge, to] : node->args.outputs_) {
+			for (auto [edge, to] : node->args.Outputs()) {
 				auto& [id, from] = edge;
 				if (!to->HasParent(kernel)) {
 					memory_modifiers++;
@@ -244,6 +278,7 @@ void IR::UnrollLoops(int max_iterations)
 		bool is_const = isConstant(inputs[0]) && isConstant(inputs[1]) && isConstant(inputs[2]);
 
 		bool has_other_loops = loop->HasChild("loop") || loop->HasParent("loop");
+		bool has_child_kernel = loop->HasChild("kernel");
 
 		if (!is_const || has_other_loops) {
 			continue;
@@ -263,6 +298,9 @@ void IR::UnrollLoops(int max_iterations)
 		vector<Node*> children = GetChildren(loop);
 
 		if (children.size() > MAX_UNROLL_NODES) {
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Loop has too many children to unroll" << endl;
+#endif
 			continue;
 		}
 
@@ -309,6 +347,8 @@ void IR::UnrollAtomicOperations() {
 
 	vector<Node*> nodes_to_remove;
 	for (auto node: atomics) {
+		if(node->flags.has(NodeProp::LocalMemoryOp)) continue;
+
 		std::set<int> unused_dimensions;
 		Node* next_node = node->next;
 		int dim = node->args.Count(ArgType::Shape);
@@ -367,6 +407,9 @@ void IR::UnrollAtomicOperations() {
 
 		if (!supported_operation) {
 			EndScope();
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Unsupported atomic operation " << node->name << endl;
+#endif
 			continue;
 		}
 
@@ -439,6 +482,9 @@ void IR::OptimizeReductions() {
 		//try to get the constant value
 		int axis_value = tensor->TryGetConstant();
 		if (axis_value < 0) {
+#ifdef _RELWITHDEBINFO
+			cout << current_pass << ": Warning: Can not apply reduction optimization on non-constant axis" << endl;
+#endif
 			continue;
 		}
 		//if size of the axis is less than the minimum split size, then do not split
@@ -463,278 +509,13 @@ void IR::OptimizeReductions() {
 	UpdateGraph();
 }
 
-void IR::UnrollKernelDimensions() {
-	vector<Node*> kernels = GetNodesOfType("kernel");
-
-	vector<Node*> nodes_to_remove;
-	vector<pair<ArgEdges, Node*>> nodes_to_copy;
-	for (auto kernel : kernels) {
-		std::set<int> unused_dimensions;
-		int dim = kernel->args.Count(ArgType::Shape);
-		for (int i = 0; i < dim; i++) {
-			unused_dimensions.insert(i);
-		}
-
-		bool can_unroll = true;
-		bool has_atomics = false;
-		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
-			//if there are any nodes that have children, then we can not unroll
-			if (node->child->valid()) {
-				can_unroll = false;
-				break;
-			}
-
-			//get all atomic scatter nodes
-			if (node->op->HasAllTypes(OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier)) {
-				has_atomics = true;
-				//get the indices of the scatter operation
-				NodeArguments indices = node->args.GetArguments(ArgType::Index);
-				//get dependencies of all indices
-				unordered_set<Node*> index_nodes;
-				for (auto& [id, index] : indices) {
-					index_nodes.insert(index);
-				}
-				unordered_set<Node*> dependencies = GetDependencies(index_nodes);
-				//if any of the dependencies are a dim_id node, then its dimension(data[0]) is used
-				for (auto dep : dependencies) {
-					if (dep->name == "dim_id") {
-						unused_dimensions.erase(dep->data[0]);
-					}
-				}
-			}
-		}
-
-		int unused_count = (int)unused_dimensions.size();
-
-		if (!can_unroll || unused_count == 0 || !has_atomics) {
-			continue;
-		}
-
-		////modify the kernel to remove the unused dimensions
-		struct KernelData {
-			set<int> unused_dims;
-			Tensors shape;
-			Tensor* kernel;
-			Tensor* loop;
-			unordered_map<int, Node*> old_dim_to_node;
-			unordered_map<Node*, Tensor*> scatter_to_accumulator;
-			unordered_map<Node*, Tensor*> scatter_to_value;
-			unordered_map<int, int> old_to_new;
-		};
-
-		auto old_shape = kernel->args.GetTensors(ArgType::Shape);
-
-		auto create_new_shape = [&](KernelData& data) {
-			for (int i = 0; i < dim; i++) {
-				if (!data.unused_dims.contains(i)) {
-					data.shape.push_back(old_shape[i]);
-					data.old_to_new[i] = (int)data.shape.size() - 1;
-				}
-			}
-		};
-
-		vector<int> unused_dims_vec(unused_dimensions.begin(), unused_dimensions.end());
-		std::reverse(unused_dims_vec.begin(), unused_dims_vec.end());
-		KernelData* kernels = new KernelData[unused_count];
-		vector<Node*> atomics_to_replace;
-		ExecuteExpressionAfter(kernel, [&]() {
-			for(int k = 0; k < unused_count; k++) {
-				int cur_dim = unused_dims_vec[k];
-				set<int> cur_unused_dimensions;
-				for(int i = 0; i <= k; i++) {
-					cur_unused_dimensions.insert(unused_dims_vec[i]);
-				}
-				kernels[k] = KernelData();
-				kernels[k].unused_dims = cur_unused_dimensions;
-
-				create_new_shape(kernels[k]);
-
-				kernels[k].kernel = &Tensor::Kernel(kernels[k].shape);
-
-				ExecuteExpressionLastChild(kernels[0].kernel->node_, [&]() {
-					for (int i = 0; i < dim; i++) {
-						if (!cur_unused_dimensions.contains(i)) {
-							kernels[k].old_dim_to_node[i] = Tensor::Index(kernels[k].shape, kernels[k].old_to_new[i]).node_;
-						}
-					}
-				});
-
-				ExecuteExpressionLastChild(kernels[k].kernel->node_, [&]() {
-					const Tensor* loop_shape = kernel->args.Get(ArgType::Shape, cur_dim)->GetTensor();
-					kernels[k].loop = &Tensor::Loop(Tensor::Constant(0), *loop_shape, Tensor::Constant(1));
-					kernels[k].loop->SetDebugName("dim_" + to_string(cur_dim));
-					kernels[k].old_dim_to_node[cur_dim] = kernels[k].loop->node_;
-				});
-
-				if(k == 0) {
-					vector<Node*> old_kernel_nodes = GetChildren(kernel);
-					kernels[k].loop->node_->child = kernel->child;
-					for (auto node : old_kernel_nodes) {
-						node->parent = kernels[k].loop->node_;
-						//update shape arguments
-						node->args.RemoveArguments(ArgType::Shape);
-						for(int i = 0; i < kernels[0].shape.size(); i++) {
-							node->args.AddArgument(ArgType::Shape, i, kernels[0].shape[i]->node_);
-						}
-						if (node->op->HasAllTypes(OpProp::Scatter, OpProp::MemoryOp, OpProp::Modifier)) {
-							atomics_to_replace.push_back(node);
-							nodes_to_remove.push_back(node);
-						}
-					}
-
-					kernel->child = nullptr;
-					nodes_to_remove.push_back(kernel);
-
-					UpdateGraph();
-
-					//replace all old dim_id nodes with the loop index / new dim_id nodes
-					for (auto node = NodeIterator(kernels[k].loop->node_); !node.end(); node.next()) {
-						if (node->name == "dim_id") {
-							int dim = node->data[0];
-							if(kernels[k].old_dim_to_node.contains(dim)) {
-								node->ReplaceThisWithGivenNode(kernels[k].old_dim_to_node[dim]);
-							} else {
-								throw std::runtime_error("Could not find new dim_id node for dimension " + to_string(dim) + " when optimizing kernel by unrolling dimensions");
-							}
-							nodes_to_remove.push_back(node.get());
-						}
-					}
-				}
-
-				//create temporary accumulator nodes for the scatter operations
-				ExecuteExpressionFirstChild(kernels[k].kernel->node_, [&]() {
-					for (auto node : atomics_to_replace) {
-						Node* scatter_memory = node->args.Get(ArgType::Memory);
-						Tensor* new_accumulator = nullptr;
-						if(node->name == "InterlockedAdd") {
-							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
-						} else if (node->name == "InterlockedMin") {
-							new_accumulator = &Tensor::Constant(GetInitialMin(node->type), scatter_memory->type);
-						} else if (node->name == "InterlockedMax") {
-							new_accumulator = &Tensor::Constant(GetInitialMax(node->type), scatter_memory->type);
-						} else if (node->name == "InterlockedAnd") {
-							new_accumulator = &Tensor::Constant(0xFFFFFFFF, scatter_memory->type);
-						} else if (node->name == "InterlockedOr") {
-							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
-						} else if (node->name == "InterlockedXor") {
-							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
-						} else {
-							new_accumulator = &Tensor::Constant(0, scatter_memory->type);
-						}
-						new_accumulator->node_->debug_name = scatter_memory->debug_name;
-						kernels[k].scatter_to_accumulator[node] = new_accumulator;
-						Tensor* value;
-						if(k == 0) {
-							const Tensor* old_value = node->args.Get(ArgType::Input, 0)->GetTensor();
-							value = const_cast<Tensor*>(old_value);
-						} else {
-							value = kernels[k-1].scatter_to_accumulator[node];
-						}
-						kernels[k].scatter_to_value[node] = value;
-					}
-				});
-
-				//make temporary accumulators for the scatter operations
-				ExecuteExpressionLastChild(kernels[k].loop->node_, [&]() {
-					for (auto& [scatter, accumulator] : kernels[k].scatter_to_accumulator) {
-						Tensor* value = kernels[k].scatter_to_value[scatter];
-
-						if(k > 0) { //load the value from the memory if not first reduction kernel
-							value = &Tensor::Load(*value, {});
-							//add loop index to the indices
-							for(auto [old_, index_] : kernels[k].old_dim_to_node) {
-								value->node_->args.AddArgument(ArgType::Index, kernels[k-1].old_to_new[old_], index_);
-							}
-						}
-
-						if(scatter->name == "InterlockedAdd") {
-							accumulator->Set(*accumulator + *value);
-						} else if (scatter->name == "InterlockedMin") {
-							accumulator->Set(Tensor::min(*accumulator, *value));
-						} else if (scatter->name == "InterlockedMax") {
-							accumulator->Set(Tensor::max(*accumulator, *value));
-						} else if (scatter->name == "InterlockedAnd") {
-							accumulator->Set(*accumulator & *value);
-						} else if (scatter->name == "InterlockedOr") {
-							accumulator->Set(*accumulator | *value);
-						} else if (scatter->name == "InterlockedXor") {
-							accumulator->Set(*accumulator ^ *value);
-						} else {
-							throw std::runtime_error("Unknown scatter operation " + scatter->name);
-						}
-					}
-				});
-
-
-				if(k == unused_count - 1) {
-					//accumulate the temporary accumulators into the actual memory
-					ArgEdges args_to_copy;
-					ExecuteExpressionLastChild(kernels[k].kernel->node_, [&]() {
-						for (auto& [scatter, accumulator] : kernels[k].scatter_to_accumulator) {
-							//get the memory to scatter to
-							const Tensor* memory = scatter->args.Get(ArgType::Memory)->GetTensor();
-							Tensors indices = scatter->args.GetTensorVector(ArgType::Index);
-							Tensor* store_op = nullptr;
-							Tensor* old_value = nullptr;
-							if(true) { //TODO (Moroz): check if indexes are one-to-one, otherwise must use atomic operations
-								old_value = &Tensor::Load(*memory, indices);
-								Tensor* new_value = nullptr;
-								if(scatter->name == "InterlockedAdd") {
-									new_value = &(*old_value + *accumulator);
-								} else if (scatter->name == "InterlockedMin") {
-									new_value = &Tensor::min(*old_value, *accumulator);
-								} else if (scatter->name == "InterlockedMax") {
-									new_value = &Tensor::max(*old_value, *accumulator);
-								} else if (scatter->name == "InterlockedAnd") {
-									new_value = &(*old_value & *accumulator);
-								} else if (scatter->name == "InterlockedOr") {
-									new_value = &(*old_value | *accumulator);
-								} else if (scatter->name == "InterlockedXor") {
-									new_value = &(*old_value ^ *accumulator);
-								} else {
-									throw std::runtime_error("Unknown scatter operation " + scatter->name);
-								}
-								store_op = &Tensor::Store(*memory, *new_value, indices);
-							} else { //still use atomic operations
-								store_op = &Tensor::MemoryOp(scatter->name, memory, indices, accumulator);
-							}
-							NodeArguments store_indices = store_op->node_->args.GetArguments(ArgType::Index);
-							for (auto& [id, from] : store_indices) {
-								if (true) {
-									args_to_copy.push_back(ArgEdge(Arg(id, from), old_value->node_));
-									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
-								} else {
-									args_to_copy.push_back(ArgEdge(Arg(id, from), store_op->node_));
-								}
-							}
-						}
-					});
-					nodes_to_copy.push_back({args_to_copy, kernels[k].loop->node_->next});
-				}
-			}
-		});
-	}
-
-	for (auto node : nodes_to_remove) {
-		RemoveNode(node);
-	}
-
-	UpdateGraph();
-
-	for (auto& [args, to] : nodes_to_copy) {
-		CopyArguments(args, to);
-	}
-
-	UpdateGraph();
-}
-
-
-#define MAX_KERNEL_COPY_COST 16384.0f
-void IR::OptimizeKernels() {
+#define MAX_KERNEL_COPY_COST 50000.0f
+bool IR::OptimizeKernels() {
 	// get kernel data
 	vector<Node*> kernels = GetNodesOfType("kernel");
 	ComputeNodeCost();
 
+	bool changed = false;
 	// go over each kernel and copy computations outside the kernel if they are
 	// cheap enough
 	for (auto kernel : kernels) {
@@ -743,45 +524,69 @@ void IR::OptimizeKernels() {
 		// go over all nodes in the kernel and check if their inputs can be copied
 		for (auto node = NodeIterator(kernel); !node.end(); node.next()) {
 			// go over all inputs
-			for (auto& [arg, from]: node->args.inputs_) {
+			for (auto& [arg, from]: node->args.Inputs()) {
 				bool inside_kernel = from->HasParent(kernel);
 				bool from_in_kernel = from->HasParent("kernel");
+
+				if(from->flags.has(NodeProp::NoCopyFusion)) continue;
 
 				if (!inside_kernel && !node->args.CannotCopyArgument(arg))
 				{
 					// check if input is cheap enough to copy
 					float input_cost = from->cost_;
 					if (input_cost == -1.0) {
-						//throw std::runtime_error("Cost has not been computed for node " + input.from_->get()->var_name);
+#ifdef _RELWITHDEBINFO
+						cout << current_pass << ": Warning: Could not determine cost of node " << from->name << endl;
+#endif
 						continue;
 					}
 					bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_KERNEL_COPY_COST;
-					bool has_only_one_output = from->args.outputs_.size() == 1;
+					bool has_only_one_output = from->args.OutputCount() == 1;
 					if (cheap_enough || has_only_one_output) {
-						args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+						args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 					}
 				}
 				//shape arguments can not be inside kernels
 				if (from_in_kernel && arg.first == ArgType::Shape) {
-					shape_args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+					shape_args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 				}
 			}
 		}
+
+//		auto kernel_deps_old = ComputeKernelDependencies(kernel);
 
 		//go over kernel shape arguments
 		for (int i = 0; i < kernel->args.Count(ArgType::Shape); i++) {
 			Node* shape_node = kernel->args.Get(ArgType::Shape, i);
 			bool from_in_kernel =shape_node->HasParent("kernel");
 			if (from_in_kernel) {
-				shape_args_to_copy.push_back(ArgEdge(Arg(ArgID(ArgType::Shape, i), shape_node), kernel));
+				shape_args_to_copy.insert(ArgEdge(Arg(ArgID(ArgType::Shape, i), shape_node), kernel));
 			}
 		}
 
-		// copy the nodes that are outside the kernel inside
+		//copy the nodes that are outside the kernel inside
 		CopyArguments(args_to_copy, kernel->child);
-		// copy shape arguments before the kernel
+
+//		auto kernel_deps = ComputeKernelDependencies(kernel);
+
+// 		//if more than allowed then do not apply changes
+// 		if (kernel_deps.size() > max_kernel_memory_dependencies && kernel_deps_old.size() < kernel_deps.size() && !must_copy_all) {
+// 			ClearChanges();
+// #ifdef _RELWITHDEBINFO
+// 			std::cout << current_pass << ": Warning: Discarding kernel optimization changes for kernel " << kernel->name << " with " << kernel_deps.size() << " dependencies while before it had " << kernel_deps_old.size() << " dependencies" << endl;
+// #endif
+// 		}
+
+		//copy shape arguments before the kernel
 		CopyArguments(shape_args_to_copy, kernel);
+		if (!args_to_copy.empty()) {
+			changed = true;
+		}
+
+		ApplyChanges(false);
 	}
+
+	return !changed;
 }
 
 #define MAX_LOAD_COPY 3000.0f
@@ -794,6 +599,8 @@ bool IR::OptimizeKernelLoadOperations() {
 	vector<Node*> kernels = GetNodesOfType("kernel");
 
 	unordered_set<Node*> nodes_to_remove;
+
+	size_t loads_fused = 0;
 
 	for (auto kernel : kernels) {
 		ShapeInfo kernel_shape = ShapeInfo(kernel);
@@ -823,7 +630,7 @@ bool IR::OptimizeKernelLoadOperations() {
 			float memory_size = ShapeInfo::GetSizeEstimate(memory_shape);
 			float size_ratio = kernel_size / memory_size;
 
-			int output_count = (int)memory_input->args.outputs_.size();
+			int output_count = (int)memory_input->args.OutputCount();
 			//only fuse if this is used less than MAX_LOAD_COPY_COUNT times or we can reduce dimensionality by fusing
 			bool fusion_makes_sense = (output_count < MAX_LOAD_COPY_COUNT) ||
 			                          (size_ratio <= MAX_LOAD_SIZE_RATIO) || memory_size == 1.0f;
@@ -838,6 +645,10 @@ bool IR::OptimizeKernelLoadOperations() {
 			}
 		}
 
+		if (loads_to_copy.empty()) continue;
+
+		//auto kernel_deps_old = ComputeKernelDependencies(kernel);
+
 		for (auto load : loads_to_copy) {
 			//get the load
 			Node* memory_input = load.first;
@@ -845,7 +656,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 			//get the indices
 			unordered_map<int, Node*> indices;
-			for (auto& [arg, from] : load_node->args.inputs_) {
+			for (auto& [arg, from] : load_node->args.Inputs()) {
 				if (arg.first == ArgType::Index) {
 					indices[arg.second] = from;
 				}
@@ -870,15 +681,29 @@ bool IR::OptimizeKernelLoadOperations() {
 			//copy over the information from the original load node
 			copied_load->CopyMetadata(load_node);
 
-			//go over all outputs of the load node and replace them with the copied nodes
-			for (auto [edge, to] : load_node->args.outputs_) {
-				auto& [id, from] = edge;
-				to->args.UpdateArgument(id, copied_load);
-			}
+			map<Node*, Node*> replacements; replacements[load_node] = copied_load;
 
-			//remove the load node since it is not needed anymore
-			nodes_to_remove.insert(load_node);
+			ReplaceArgs(load_node->args.Outputs(), replacements);
 		}
+
+		//auto kernel_deps = ComputeKernelDependencies(kernel);
+
+// 		//if more than allowed then do not apply changes
+// 		if (kernel_deps.size() > max_kernel_memory_dependencies && kernel_deps_old.size() < kernel_deps.size()) {
+// 			ClearChanges();
+// #ifdef _RELWITHDEBINFO
+// 			std::cout << current_pass << ": Warning: Discarding kernel load fusion changes for kernel " << kernel->name << " with " << kernel_deps.size() << " dependencies, before it had " << kernel_deps_old.size() << " dependencies" << endl;
+// #endif
+// 			continue;
+// 		}
+
+		//remove the load node since it is not needed anymore
+		for (auto load : loads_to_copy) {
+			nodes_to_remove.insert(load.second);
+		}
+
+		loads_fused += loads_to_copy.size();
+		ApplyChanges(false);
 	}
 
 	// remove the load nodes
@@ -888,7 +713,7 @@ bool IR::OptimizeKernelLoadOperations() {
 
 	UpdateGraph();
 
-	return nodes_to_remove.empty();
+	return loads_fused == 0;
 }
 
 
@@ -906,7 +731,7 @@ void IR::OptimizeHost() {
 
 		ArgEdges args_to_copy;
 		// go over all inputs
-		for (auto& [arg, from] : node->args.inputs_) {
+		for (auto& [arg, from] : node->args.Inputs()) {
 			bool inside_kernel = from->HasParent("kernel");
 
 			if (inside_kernel && !node->args.CannotCopyArgument(arg)) {
@@ -917,10 +742,10 @@ void IR::OptimizeHost() {
 					continue;
 				}
 				bool cheap_enough = input_cost >= 0.0f && input_cost < MAX_HOST_COPY_COST;
-				bool has_only_one_output = from->args.outputs_.size() == 1;
+				bool has_only_one_output = from->args.OutputCount() == 1;
 
 				if (cheap_enough || has_only_one_output) {
-					args_to_copy.push_back(ArgEdge(Arg(arg, from), *node));
+					args_to_copy.insert(ArgEdge(Arg(arg, from), *node));
 				} else {
 					throw std::runtime_error("Host optimization: Copy cost too high for node " + node->name + " with cost " + to_string(input_cost));
 				}
@@ -928,6 +753,7 @@ void IR::OptimizeHost() {
 		}
 
 		CopyArguments(args_to_copy, node.get());
+		ApplyChanges(false);
 	}
 }
 

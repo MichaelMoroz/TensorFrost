@@ -67,7 +67,7 @@ average_count = 1024
 #finite difference step factor for computing the laplacian
 #(currently is modulated by the distance to the nearest atom)
 #(will be replaced by forward mode autodiff in the future)
-finitedifference_dx = 1.5e-2
+finitedifference_dx = 2.0e-2
 
 #get the molecule information
 molecule_info = molecule.get_summary()
@@ -86,10 +86,10 @@ class PSI(tf.Module):
         self.electron_n = electron_n
         self.spin_up_n = spin_up_n
         self.spin_down_n = electron_n - spin_up_n
-        self.determinants = 1
+        self.determinants = 4
         self.atom_features = feature_atom_id.shape[0]
-        self.mid_n = 24
-        self.corr_n = 12
+        self.mid_n = 32
+        self.corr_n = 16
         self.input_features = 8
 
         # Hyperparameters
@@ -197,22 +197,20 @@ class PSI(tf.Module):
         det_up = self.logdeterminant(up_features, self.spin_up_n)
 
         #product of spin up and spin down determinants
-        orbiprod = det_up + det_down
-        
-        #orbiprod = det_up * det_down
-        #orbiprod = tf.squeeze(det_up) + tf.squeeze(det_down)
-        #orbiprod = tf.squeeze(det_up + det_down)
-        #orbiprodlog = orbiprod.value
-        #orbiprodsign = orbiprod.sign
+        orbiprod = det_up * det_down
+        orbiprodlog = orbiprod.value
+        orbiprodsign = orbiprod.sign
+        print("orbiprod", orbiprod.value)
+
         #sum the determinants (use logsumexp trick)  
-        #maxorbiprodlog = tf.sum(orbiprodlog)
-        #detsum = tf.sum(tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
-        #orbisum = maxorbiprodlog + tf.log2(tf.abs(detsum))
+        maxorbiprodlog = tf.max(orbiprodlog)
+        detsum = tf.sum(orbiprodsign * tf.exp2(orbiprodlog - tf.unsqueeze(maxorbiprodlog)))
+        orbiprodlogsum = maxorbiprodlog + tf.log2(tf.abs(detsum))
 
         tf.region_end('SlaterDeterminant')
 
         tf.region_begin('Jastrow')
-        psi = lognum(orbiprod) * self.jastrow(electrons)
+        psi = lognum(orbiprodlogsum) * self.jastrow(electrons)
         tf.region_end('Jastrow')
 
         tf.region_end('Psi')
@@ -236,6 +234,7 @@ class PSI(tf.Module):
         param2 = tf.select(is_up_i == is_up_j, self.gamma[2], self.gamma[3])
         jastrowcomp = - tf.abs(param1) / (1.0 + tf.abs(param2) * rij)
         jastrow = tf.sum(jastrowcomp)
+        print("jastrow", jastrow)
 
         return lognum(jastrow)
 
@@ -250,10 +249,9 @@ class PSI(tf.Module):
         reordered = orbitals[b, i, j, d]
         logdet = tf.custom("logdet", [reordered], [reordered.shape[0]])
         logdet = tf.reshape(logdet, [orbitals.shape[0], self.determinants])
-        logdet = tf.squeeze(logdet)
-        return logdet / 0.69314718056
-        #TODO: fix compiler bug here
-        return tf.squeeze(logdet / 0.69314718056)
+        print("logdet", logdet)
+        sign = getsign(logdet)
+        return lognum(logdet / 0.69314718056, sign)
 
     #computing psi in log space is more numerically stable
     def log_psi(self, electrons):
@@ -299,32 +297,32 @@ class PSI(tf.Module):
     
     def electron_potential(self, e_pos):
         b, = tf.indices([e_pos.shape[0]])
-        V = tf.const(0.0)
+        Ve = tf.const(0.0)
 
         #compute the nuclei potential sum for each electron*nuclei
         with tf.loop(self.electron_n) as electron:
             with tf.loop(self.atom_n) as n:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - self.atoms[n, 0]) + sqr(e_pos[b, electron, 1] - self.atoms[n, 1]) + sqr(e_pos[b, electron, 2] - self.atoms[n, 2]))
-                V.val -= self.atoms[n, 3] / tf.max(r, self.eps)
+                Ve.val -= self.atoms[n, 3] / tf.max(r, self.eps)
 
         #compute the electron-electron potential sum
         with tf.loop(self.electron_n) as electron:
             with tf.loop(electron + 1, self.electron_n) as f:
                 r = tf.sqrt(sqr(e_pos[b, electron, 0] - e_pos[b, f, 0]) + sqr(e_pos[b, electron, 1] - e_pos[b, f, 1]) + sqr(e_pos[b, electron, 2] - e_pos[b, f, 2]))
-                V.val += 1.0 / tf.max(r, self.eps)
+                Ve.val += 1.0 / tf.max(r, self.eps)
 
-        return V
+        return Ve
 
     def nuclei_potential(self):
-        V = tf.const(0.0)
+        Vn = tf.const(0.0)
 
         #compute the potential between nuclei
         with tf.loop(self.atom_n) as n:
             with tf.loop(n + 1, self.atom_n) as m:
                 r = tf.sqrt(sqr(self.atoms[n, 0] - self.atoms[m, 0]) + sqr(self.atoms[n, 1] - self.atoms[m, 1]) + sqr(self.atoms[n, 2] - self.atoms[m, 2]))
-                V.val += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
+                Vn.val += self.atoms[n, 3] * self.atoms[m, 3] / tf.max(r, self.eps)
 
-        return V
+        return Vn
     
     #average distance to atoms weighted by the atom weights
     def min_distance_to_atoms(self, e_pos):

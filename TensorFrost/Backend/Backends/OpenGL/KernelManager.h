@@ -62,7 +62,7 @@ class OpenGLKernelManager : public KernelManager {
 		if (!success) {
 			GLchar infoLog[512];
 			glGetProgramInfoLog(program, 512, nullptr, infoLog);
-			throw std::runtime_error("TensorFrost: Error linking program: " + std::string(infoLog));
+			throw std::runtime_error("Error linking program: " + std::string(infoLog));
 		}
 
 		glDeleteShader(computeShader);
@@ -71,12 +71,17 @@ class OpenGLKernelManager : public KernelManager {
 
 	void CompileKernel(Kernel* kernel) 
 	{
-	#ifndef NDEBUG
+	#ifndef NDEBUG //print out source if debug is enabled
 		cout << "Compiling kernel \n" << kernel->full_generated_code_ << endl;
 	#endif
-		//print out source if debug is enabled
-		GLuint program = createShaderProgram(kernel->full_generated_code_);
-		kernel_map[kernel->kernel_id_] = program;
+		try {
+			GLuint program = createShaderProgram(kernel->full_generated_code_);
+			kernel_map[kernel->kernel_id_] = program;
+		} catch (const std::exception& e) {
+			string error_message = "Error compiling kernel " + to_string(kernel->kernel_id_) + "\n" + e.what();
+			error_message = error_message + "\n" + kernel->full_generated_code_;
+			throw std::runtime_error(error_message);
+		}
 	}
 
 	//Get uniform location

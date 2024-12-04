@@ -30,10 +30,17 @@ void TensorProgram::CreateProgram(string name) {
 
 	Tensor::SetEvaluationContext(nullptr);
 
+	auto end = std::chrono::high_resolution_clock::now();
+
+	compile_time = std::chrono::duration<float, std::milli>(end - start).count();
+
+	start = std::chrono::high_resolution_clock::now();
+
 	GenerateCode(program);
 
-	auto end = std::chrono::high_resolution_clock::now();
-	compile_time = std::chrono::duration<float, std::milli>(end - start).count();
+	end = std::chrono::high_resolution_clock::now();
+
+	codegen_time = std::chrono::duration<float, std::milli>(end - start).count();
 
 	if (current_backend != BackendType::CodeGen) // no need to compile if we are in codegen mode
 	{
@@ -69,6 +76,7 @@ string TensorProgram::PrintProperties() const {
 	properties += "  Host writes: " + to_string(ir.writebacks) + "\n";
 	properties += "  Lines of generated code: " + to_string(lines) + "\n";
 	properties += "  IR Compile time: " + to_string(compile_time) + " ms\n";
+	properties += "  Codegen time: " + to_string(codegen_time) + " ms\n";
 	if(host_compile_time > 0.01f)
 		properties += "  Host Compile time: " + to_string(host_compile_time) + " ms\n";
 	if (shader_compile_time > 0.01f)

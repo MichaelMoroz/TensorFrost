@@ -2,8 +2,28 @@
 
 namespace TensorFrost {
 
+int IR::max_kernel_memory_dependencies = 12;
+int IR::max_allowed_memory_dependencies = 12;
+
 void IR::RemoveNode(Node* node) {
     if (node->valid()) {
+    	//remove itself from all outputs
+    	auto outputs = node->args.Outputs();
+    	for (auto& [id, output_node] : outputs) {
+    		output_node->args.Remove(id.first);
+    	}
+
+    	//remove all inputs
+    	auto inputs = node->args.InputsCopy();
+    	for (auto& [id, input_node] : inputs) {
+    		node->args.Remove(id);
+    	}
+
+		// if its the child of its parent, update the parent's child
+		if (node->parent && node->parent->child == node) {
+			node->parent->child = node->next;
+    	}
+
         // if child node exists, iterate through it and remove all children
         if (node->child) {
             vector<Node*> to_delete;
@@ -23,11 +43,14 @@ void IR::RemoveNode(Node* node) {
         }
 
         node->next->prev = node->prev;
+    	existing_nodes.erase(node);
         delete node;
     }
 }
 
+#ifdef _RELWITHDEBINFO
 //#define PROFILE_COMPILATION
+#endif
 
 void IR::RunCompilationPass(string pass_name, const function<void()>& expression, bool print, bool update_graph) {
 	current_pass = pass_name;
@@ -38,6 +61,7 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 	try {
 		expression();
 	} catch (const std::exception& e) {
+		CheckIR(pass_name, false, false);
 		throw std::runtime_error("Error in compilation pass " + pass_name + ": " + e.what());
 	}
 
@@ -68,7 +92,8 @@ void IR::RunCompilationPass(string pass_name, const function<void()>& expression
 #define MAX_COMPILATION_ITERATIONS 32
 #define LOAD_FUSION
 
-void IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()>& expression, bool print, bool update_graph) {
+bool IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const function<bool()>& expression, bool print, bool update_graph) {
+	bool anything_happened = false;
 	RunCompilationPass(pass_name, [&]() {
 		bool converged = false;
 		for (int i = 0; i < max_iterations; i++) {
@@ -76,83 +101,108 @@ void IR::RunIterativeCompilationPass(string pass_name, int max_iterations, const
 			if (finished) {
 				converged = true;
 				break;
+			} else {
+				anything_happened = true;
 			}
 		}
 		if (!converged) {
 			throw std::runtime_error("Failed to converge on " + pass_name + ", exceeded maximum iterations");
 		}
 	}, print, update_graph);
+	return anything_happened;
 }
 
 void IR::CompileIR()
 {
 	// TODO (Moroz): Add auto tests into build system
 	CheckIR("Input", false, false);
-	RunCompilationPass("GetInputList", [&]() { GetInputList(); });
-	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
-	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); }, true);
-	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+	RunCompilationPass("InitialCompilation", [&]() {
+		RunCompilationPass("GetInputList", [&]() { GetInputList(); });
+		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+		RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(); }, true);
+		RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 
-	RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PreAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
-		return InsertAlgorithmicPrimitives(true);
+		RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PreAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+			return InsertAlgorithmicPrimitives(true);
+		}, true);
+
+		RunIterativeCompilationPass("ComputeAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+			return ComputeAutodiff();
+		});
+
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
+		RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
+		RunCompilationPass("OptimizeReductions", [&]() { OptimizeReductions(); }, true);
+
+		RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PostAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
+			return InsertAlgorithmicPrimitives(false);
+		}, true);
+
+		RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
+		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
 	}, true);
 
-	RunCompilationPass("ComputeAutodiff", [&]() { ComputeAutodiff(); });
+	RunCompilationPass("KernelGeneration", [&]() {
+		RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); }, true);
+		RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
 
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
-	RunCompilationPass("UnrollAtomicOperations", [&]() { UnrollAtomicOperations(); });
-	RunCompilationPass("OptimizeReductions", [&]() { OptimizeReductions(); }, true);
+		RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
+		RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
+		RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+		RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
 
-	RunIterativeCompilationPass("InsertAlgorithmicPrimitives_PostAutodiff", MAX_COMPILATION_ITERATIONS, [&]() {
-		return InsertAlgorithmicPrimitives(false);
+		RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(4); });
+		RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+		RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
+
+		RunCompilationPass("UpdateKernelShapes", [&]() { UpdateKernelShapes(); }, true);
 	}, true);
-
-	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); });
-	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); }, true);
-
-	RunCompilationPass("SeparateOperationsIntoKernels", [&]() { SeparateOperationsIntoKernels(); }, true);
-	RunCompilationPass("CheckKernelShapes", [&]() { CheckKernelShapes(); });
-	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
-	RunCompilationPass("MoveShapeOutsideKernels", [&]() { MoveShapeOutsideKernels(); });
-	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
-	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
-
-	RunCompilationPass("UnrollLoops", [&]() { UnrollLoops(4); });
-	RunCompilationPass("TryReplaceModificationsWithVersions", [&]() { TryReplaceModificationsWithVersions(); }, true);
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
 
 #ifdef LOAD_FUSION
 	RunIterativeCompilationPass("Iterative load fusion", MAX_COMPILATION_ITERATIONS, [&]() {
 		AddKernelGlobalLoadOperations();
 		AddMemoryOpIndices();
 		bool no_changes = OptimizeKernelLoadOperations();
-		RemoveUnusedOperations();
+		if(!no_changes) {
+			RemoveUnusedOperations();
+		}
 		return no_changes;
 	});
 #endif
 
-	RunCompilationPass("LimitMemoryDependencies", [&]() { LimitKernelMemoryDependencies(); });
-	RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
-	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
-	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
-	RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
-	RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
-	RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
+	RunCompilationPass("Reclusterize", [&]() {
+		LimitKernelMemoryDependencies();
+	}, true);
 
-	//TODO: Add support for unrolling small constant kernel dimensions
-	//RunCompilationPass("UnrollOperations", [&]() { UnrollOperations(); });
-	//RunCompilationPass("SqueezeKernelShapes", [&]() { SqueezeKernelShapes(); });
+	RunCompilationPass("FinilizeKernels", [&]() {
+		RunCompilationPass("AddKernelGlobalStoreOperations", [&]() { AddKernelGlobalStoreOperations(); });
+		RunCompilationPass("AddKernelGlobalStoreOperations: RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
+		RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); });
+		RunCompilationPass("ReorderOperations", [&]() { ReorderOperations(); });
+		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("AddMemoryOpIndices", [&]() { AddMemoryOpIndices(); }, true);
 
-	RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
-	RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
-	RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
-	RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+		//TODO: Add support for unrolling small constant kernel dimensions
+		//RunCompilationPass("UnrollOperations", [&]() { UnrollOperations(); }, true);
+		//RunCompilationPass("SqueezeKernelShapes", [&]() { SqueezeKernelShapes(); });
 
-	RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
-	RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
+		RunCompilationPass("FinalizeMemoryIndexing", [&]() { FinalizeMemoryIndexing(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+		RunCompilationPass("OptimizeKernels", [&]() { OptimizeKernels(); });
+		RunCompilationPass("OptimizeHost", [&]() { OptimizeHost(); });
+		RunCompilationPass("OptimizeOperations", [&]() { OptimizeOperations(); });
+		RunCompilationPass("OptimizeHostValuesWithHints", [&]() { OptimizeHostValuesWithHints(); });
+		RunCompilationPass("RemoveUnusedOperations", [&]() { RemoveUnusedOperations(); });
+
+		RunCompilationPass("RemoveUnusedKernels", [&]() { RemoveUnusedKernels(); }, true);
+		RunCompilationPass("AddMemoryDeallocation", [&]() { AddMemoryDeallocation(); }, true);
+		//RunCompilationPass("CheckFinalKernelShapes", [&]() { CheckKernelShapes(); });
+	}, true);
+
 	RunCompilationPass("GetOutputList", [&]() { GetOutputList(); });
 	RunCompilationPass("ComputeStatistics", [&]() { ComputeStatistics(); });
 

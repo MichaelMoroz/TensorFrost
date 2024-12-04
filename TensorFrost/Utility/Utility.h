@@ -22,7 +22,7 @@ int GetSize(const vector<int>& shape);
 
 template <typename T, int N>
 class FlagSet {
-	array<int, N> data;
+	array<int64_t, N> data;
 
 public:
 	FlagSet() {
@@ -43,7 +43,7 @@ public:
 		data[(int)flag] = value ? 0 : -1;
 	}
 
-	void set(T flag, int value) {
+	void set(T flag, int64_t value) {
 		if(value < 0) {
 			throw std::runtime_error("Flag data must be non-negative");
 		}
@@ -73,8 +73,8 @@ public:
 		return has(flag) && has(args...);
 	}
 
-	int get(T flag, bool throw_error = true) const {
-		int res = data[(int)flag] - 1;
+	int64_t get(T flag, bool throw_error = true) const {
+		int64_t res = data[(int)flag] - 1;
 		if (throw_error && res < 0) {
 			throw std::runtime_error("Flag data is not set");
 		}
@@ -117,8 +117,8 @@ public:
 		return res;
 	}
 
-	unordered_map<T, int> get_data() const {
-		unordered_map<T, int> res;
+	unordered_map<T, int64_t> get_data() const {
+		unordered_map<T, int64_t> res;
 		for (int i = 0; i < N; i++) {
 			T flag = (T)i;
 			if (has(flag)) {

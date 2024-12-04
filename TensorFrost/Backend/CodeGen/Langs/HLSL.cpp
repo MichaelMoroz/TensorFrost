@@ -8,6 +8,7 @@ class HLSLGenerator : public CodeGenerator {
 	HLSLGenerator(IR* ir) : CodeGenerator(ir) {
 		name_map_ = {
 			{"var", "var."},
+			{"group_barrier", "GroupMemoryBarrierWithGroupSync"}
 		};
 	}
 
@@ -22,19 +23,19 @@ class HLSLGenerator : public CodeGenerator {
 		if (op == "InterlockedAdd") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+				return "InterlockedAddF("+memory_name+", " + address + ", " + input + ")";
 			}
-			return "InterlockedAdd("+memory_name+"_mem[" + address + "], " + input + ")";
+			return "InterlockedAdd("+memory_name+"[" + address + "], " + input + ")";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
-				return "InterlockedAddF("+memory_name+"_mem, " + address + ", " + input + ")";
+				return "InterlockedAddF("+memory_name+", " + address + ", " + input + ")";
 			}
-			additional_lines.push_back("InterlockedAdd("+memory_name+"_mem[" + address + "], " +
+			additional_lines.push_back("InterlockedAdd("+memory_name+"[" + address + "], " +
 									   input + ", " + output + ");");
 			return "0";
 		} else {
-			return op + "("+memory_name+"_mem[" + address + "], " + input + ")";
+			return op + "("+memory_name+"[" + address + "], " + input + ")";
 		}
 	}
 };
@@ -88,6 +89,11 @@ string HLSLBufferDeclaration(const string& name, const string& type_name, const 
 	return "RWStructuredBuffer<" + type_name + "> " + name + "_mem : register(u" + to_string(binding) + ");\n";
 }
 
+string HLSLGroupBufferDeclaration(const string& name, const string& type_name, const size_t size) {
+	string decl = "groupshared " + type_name + " " + name + "[" + to_string(size) + "];\n";
+	return decl;
+}
+
 void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_header_ = GetHLSLHeader(kernel);
 
@@ -100,7 +106,11 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 		group_size.push_back(1);
 	}
 
-	string main_function = "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
+	string main_function = "";
+
+	main_function += GetGroupBufferDeclarations(kernel, HLSLGroupBufferDeclaration) + "\n";
+
+	main_function += "[numthreads(" + to_string(group_size[0]) + ", " + to_string(group_size[1]) + ", " + to_string(group_size[2]) + ")]";
 
 	main_function += R"(
 void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)

@@ -25,7 +25,7 @@ const vector<Operation> operations = {
     Operation("break", {""}, 0, "break", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("continue", {""}, 0, "continue", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword),
     Operation("discard", {""}, 0, "discard", {OpProp::Static, OpProp::Nondiff}, OpClass::Keyword), //discard current thread
-    //Operation("group_barrier", {""}, 256, "", {OpType::Static}),  // TODO implement in graph
+    Operation("group_barrier", {""}, 256, "", {OpProp::Static, OpProp::KernelOnly}),
 
     //Allocation operations
     Operation("memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
@@ -33,8 +33,8 @@ const vector<Operation> operations = {
 	Operation("assert", {"_f", "_i", "_u", "_b"}, 0, "assert_tensor", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::MemoryReuse}),
 	Operation("input_shape", {"_i"}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff}),
     Operation("deallocate", {""}, 0, "", {OpProp::Memory, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff}),
-	//Operation("group_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
-	//Operation("local_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpType::Memory, OpType::Special}), // TODO implement in graph
+	Operation("group_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::LocalMemory, OpProp::Special, OpProp::KernelOnly}),
+	Operation("local_memory", {"_f", "_i", "_u", "_b"}, 0, "", {OpProp::Memory, OpProp::LocalMemory, OpProp::Special, OpProp::KernelOnly}),
 
 	Operation("region_begin", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
 	Operation("region_end", {""}, 0, "", {OpProp::Special, OpProp::Static, OpProp::HostOnly, OpProp::Nondiff, OpProp::Debug}),
@@ -60,8 +60,7 @@ const vector<Operation> operations = {
 
 	//Other
 	Operation("dim_reverse", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
-	// Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
-	// Operation("tile_reduce", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProperty::Algorithm}),
+	Operation("dim_repeat", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	// Operation("dim_concat", {"ff_f", "uu_u", "ii_i", "bb_b"}, 0, "", {OpProperty::Algorithm}),
 	Operation("dim_split", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("dim_merge", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
@@ -69,13 +68,13 @@ const vector<Operation> operations = {
 	Operation("unsqueeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 	Operation("squeeze", {"f_f", "u_u", "i_i", "b_b"}, 0, "", {OpProp::Algorithm}),
 
+	Operation("smoothstep", {"fff_f"}, 10, "", {OpProp::Algorithm}),
+
     //Autodiff
     Operation("backwards_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
     Operation("forward_grad", {"ff_f"}, 0, "", {OpProp::Gradient}),
 
     // Memory operations
-    //Operation("local_load", {"_f", "_u", "_i"}, 8, "", {OpType::Load}),
-    //Operation("local_store", {"f_", "u_", "i_"}, 8, "", {OpType::Store, OpType::Modifier}),
     Operation("load", {"_f", "_u", "_i", "_b"}, 128, "",
               {OpProp::Load, OpProp::MemoryOp}),
     Operation("store", {"f_", "u_", "i_", "b_"}, 128, "",
@@ -114,13 +113,14 @@ const vector<Operation> operations = {
     Operation("and", {"uu_u", "ii_i", "bb_b"}, 1, "&", {OpProp::Nondiff}, OpClass::Operator),
     Operation("or", {"uu_u", "ii_i", "bb_b"}, 1, "|", {OpProp::Nondiff}, OpClass::Operator),
     Operation("xor", {"uu_u", "ii_i", "bb_b"}, 1, "^", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("eq", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "==", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("neq", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "!=", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("lt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("lte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, "<=", { OpProp::Nondiff}, OpClass::Operator),
-    Operation("gt", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("gte", {"ff_b", "uu_b", "ii_b", "bb_b"}, 1, ">=", {OpProp::Nondiff}, OpClass::Operator),
-    Operation("not", {"b_b", "u_u", "i_i"}, 1, "!", {OpProp::Nondiff}, OpClass::UnaryOperator),
+    Operation("eq", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, "==", {OpProp::Nondiff}, OpClass::Operator),
+    Operation("neq", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, "!=", {OpProp::Nondiff}, OpClass::Operator),
+    Operation("lt", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, "<", {OpProp::Nondiff}, OpClass::Operator),
+    Operation("lte", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, "<=", { OpProp::Nondiff}, OpClass::Operator),
+    Operation("gt", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, ">", {OpProp::Nondiff}, OpClass::Operator),
+    Operation("gte", {"ff_b", "uu_b", "ii_b", "bb_b", "ui_b", "iu_b"}, 1, ">=", {OpProp::Nondiff}, OpClass::Operator),
+    Operation("notb", {"b_b"}, 1, "!", {OpProp::Nondiff}, OpClass::UnaryOperator),
+	Operation("not", {"u_u", "i_i"}, 1, "~", {OpProp::Nondiff}, OpClass::UnaryOperator),
     Operation("neg", {"f_f", "u_u", "i_i"}, 1, "-", {}, OpClass::UnaryOperator),
     Operation("uint", {"f_u", "u_u", "i_u", "b_u"}, 1, "uint", {OpProp::Nondiff}, OpClass::TypeCast),
     Operation("int", {"f_i", "u_i", "i_i", "b_i"}, 1, "int", {OpProp::Nondiff}, OpClass::TypeCast),
@@ -168,7 +168,6 @@ const vector<Operation> operations = {
     Operation("clamp", {"fff_f", "uuu_u", "iii_i"}, 4),
     Operation("lerp", {"fff_f"}, 4),
     Operation("fma", {"fff_f"}, 1),
-    Operation("smoothstep", {"fff_f"}, 10),
     Operation("ternary", {"bff_f", "buu_u", "bii_i", "bbb_b"}, 4, "", {}, OpClass::TernaryOperator),
     Operation("const", {"_f", "_u", "_i", "_b"}, 0, "", {OpProp::Nondiff}, OpClass::Constant),
 };

@@ -120,3 +120,13 @@ def register_arcsinh():
 
 def tf_arcsinh(x):
     return tf.custom("arcsinh", [x])
+
+def packfloatsign(x, sign):
+    fbits = tf.asuint(x)
+    #put sign bit as least significant bit
+    fbits = (fbits & ~tf.uint(1)) | tf.uint(sign >= 0.0)
+    return tf.asfloat(fbits)
+
+def getsign(x):
+    x = tf.asuint(x)
+    return tf.select(x & tf.uint(1) == tf.uint(0), -1.0, 1.0)

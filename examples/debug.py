@@ -1,20 +1,49 @@
 import numpy as np
 import TensorFrost as tf
 
-tf.initialize(tf.opengl)
+tf.initialize(tf.cpu)
 
 def Test():
-    A = tf.input([-1], tf.float32)
-    i, = A.indices
+    A = tf.input([-1, -1], tf.float32)
+    B = tf.input(A.shape, tf.float32)
 
-    for j in range(16):
-        A = A + tf.sin(A[i - 1] + A[i + 1])
+    i, j = A.indices
+    for t in range(16):
+        A = A + tf.sin(B[i, j])
+        B = B + tf.sin(A[i, j])
 
     return A
 
 test = tf.compile(Test)
 
-A = np.array([1, 2, 3, 4, 6], dtype=np.float32)
-
-restf = test(A)
+# def Test():
+#     A = tf.input([-1, -1], tf.float32)
+#
+#     with tf.kernel(A.shape, group_size=[16]) as (i, j):
+#         # i, j = tf.indices([A.shape[0], 3])
+#         # A[i, j] = A[i, j] + 1.0
+#
+#         v = tf.group_buffer(16, tf.float32)
+#         tid = i.block_thread_index(0)
+#
+#         v[tid] = A[i, j]
+#
+#         tf.group_barrier()
+#
+#         sum = tf.const(0.0)
+#         with tf.loop(tid) as k:
+#             sum.val += v[k]
+#
+#         A[i, j] = sum.val
+#
+#     return A
+#
+# test = tf.compile(Test)
+#
+# A = np.random.rand(3, 16).astype(np.float32)
+#
+# restf = test(A)
+#
+# print(A)
+# print(restf.numpy)
 

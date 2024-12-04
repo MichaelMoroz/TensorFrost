@@ -18,5 +18,7 @@ class TestSplitDim(unittest.TestCase):
         merged, splitted = testprog(data)
 
         self.assertTrue(np.sum(np.abs(data - merged.numpy)) == 0)
-        self.assertTrue(merged.shape == (128, 128, 32))
-        self.assertTrue(splitted.shape == (4, 32, 128, 32))
+        print(merged.shape)
+        self.assertTrue(merged.shape == [128, 128, 32])
+        print(splitted.shape)
+        self.assertTrue(splitted.shape == [4, 32, 128, 32])

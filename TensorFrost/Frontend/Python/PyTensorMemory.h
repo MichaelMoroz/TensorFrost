@@ -44,6 +44,10 @@ class PyTensorMemory {
 		return arr;
 	}
 
+	vector<size_t> Shape() const {
+		return TensorFrost::GetShape(tensor_);
+	}
+
 	~PyTensorMemory() {
 		global_memory_manager->DeallocateTensor(*tensor_);
 	}

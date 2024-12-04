@@ -11,7 +11,9 @@ class GLSLGenerator : public CodeGenerator {
 			{"modf", "mod"},
 			{"atan2", "atan"},
 			{"lerp", "mix"},
-			{"reversebits", "bitfieldReverse"}
+			{"reversebits", "bitfieldReverse"},
+			{"frac", "fract"},
+			{"group_barrier", "barrier"}
 		};
 	}
 
@@ -27,23 +29,23 @@ class GLSLGenerator : public CodeGenerator {
 			{
 				return "atomicAdd_"+memory_name+"(" + address + ", " + input + ")";
 			}
-			return "atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAdd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAdd_Prev") {
 			if(input_type_name == "float")
 			{
 				return  output_type_name + "(atomicAdd_"+memory_name+"(" + address + ", " + input +"))";
 			}
-			return output_type_name + "(atomicAdd("+memory_name+"_mem[" + address + "], uint(" + input + ")))";
+			return output_type_name + "(atomicAdd("+memory_name+"[" + address + "], uint(" + input + ")))";
 		} else if (op == "InterlockedMin") {
-			return "atomicMin("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMin("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedMax") {
-			return "atomicMax("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicMax("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedAnd") {
-			return "atomicAnd("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicAnd("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedOr") {
-			return "atomicOr("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicOr("+memory_name+"[" + address + "], uint(" + input + "))";
 		} else if (op == "InterlockedXor") {
-			return "atomicXor("+memory_name+"_mem[" + address + "], uint(" + input + "))";
+			return "atomicXor("+memory_name+"[" + address + "], uint(" + input + "))";
 		}
 		else
 		{
@@ -55,7 +57,7 @@ class GLSLGenerator : public CodeGenerator {
 
 string GetGLSLHeader(Kernel* kernel) {
 	string header = R"(
-#version 460
+#version 430
 
 uint pcg(uint v) {
   uint state = v * 747796405u + 2891336453u;
@@ -118,7 +120,7 @@ string GLSLBufferDeclaration(const string& name, const string& type_name, const 
 	string decl = "layout(std430, binding = " + to_string(binding) + ") buffer buf_" + name + " {\n  " + type_name + " " + name + "_mem[];\n};\n";
 	//add atomic functions
 	decl += R"(
-float atomicAdd_)" + name + R"((int index, float val) {
+float atomicAdd_)" + name + R"(_mem(int index, float val) {
 	uint uval = floatBitsToUint(val);
 	uint tmp0 = 0;
 	uint tmp1 = 0;
@@ -138,6 +140,11 @@ float atomicAdd_)" + name + R"((int index, float val) {
 	return decl;
 }
 
+string GLSLGroupBufferDeclaration(const string& name, const string& type_name, const size_t size) {
+	string decl = "shared " + type_name + " " + name + "[" + to_string(size) + "];\n";
+	return decl;
+}
+
 void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	kernel->generated_header_ = GetGLSLHeader(kernel);
 
@@ -145,13 +152,17 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 	buffers += "layout(std140) uniform UBOBlock {\n  UBO var;\n};\n\n";
 	kernel->generated_bindings_ = buffers;
 
+	string main_code = "";
+
+	main_code += GetGroupBufferDeclarations(kernel, GLSLGroupBufferDeclaration) + "\n";
+
 	vector<int> group_size = kernel->root->group_size;
 	//pad with 1s
 	while (group_size.size() < 3) {
 		group_size.push_back(1);
 	}
 
-	string main_code = "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
+	main_code += "layout (local_size_x = " + to_string(group_size[0]) + ", local_size_y = " + to_string(group_size[1]) + ", local_size_z = " + to_string(group_size[2]) + ") in;\n";
 
 
 	main_code += R"(

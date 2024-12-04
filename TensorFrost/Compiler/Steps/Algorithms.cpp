@@ -25,23 +25,30 @@ bool IR::InsertAlgorithmicPrimitives(bool skip_differentiable) {
 
 			Tensors results;
 			ImplementationFunction func = GetImplementationForOperation(node->name);
+
+#ifndef NDEBUG
+			current_function = node->name;
+#endif
+
 			func(results, inputs, node->GetTensor(), axes);
+
+#ifndef NDEBUG
+			current_function = "None";
+#endif
 
 			const Tensor* result = results[0];
 
 			//replace the node with the sum
 			node->ReplaceThisWithGivenNode(result->node_);
 
-			ShapeCompareResult shape_result = CompareShape(node, result->node_, true);
-			if (!shape_result.compatible) {
+			ShapeCompareResult shape_result = CompareShape(node, result->node_);
+			if (!shape_result.exactly_compatible) {
 				throw std::runtime_error("Algorithmic primitive " + node->name + " at " + node->debug_name + " has incompatible shapes");
 			}
 		});
 
 		//mark the node for removal
 		nodes_to_remove.insert(node);
-
-		UpdateGraph();
 	}
 
 	// remove all nodes that are not used

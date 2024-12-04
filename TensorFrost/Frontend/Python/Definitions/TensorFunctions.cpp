@@ -54,6 +54,10 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("int", [](const PyTensor& t) { return PT(Tensor::toint(T(t))); });
 	m.def("bool", [](const PyTensor& t) { return PT(Tensor::tobool(T(t))); });
 
+	m.def("asfloat", [](const PyTensor& t) { return PT(Tensor::asfloat(T(t))); });
+	m.def("asuint", [](const PyTensor& t) { return PT(Tensor::asuint(T(t))); });
+	m.def("asint", [](const PyTensor& t) { return PT(Tensor::asint(T(t))); });
+
 	BINARY_FUNCTION(min);
 	BINARY_FUNCTION(max);
 	BINARY_FUNCTION(pow);
@@ -103,31 +107,18 @@ void TensorFunctionsDefinition(py::module& m) {
 		    return PT(Tensor::Memory(Reverse(shape), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
+	m.def("local_buffer", [](int size, TFType type) {
+		return PT(Tensor::LocalMemory(size, type));
+	}, py::arg("size"), py::arg("type") = TFType::Float);
+	m.def("group_buffer", [](int size, TFType type) {
+		return PT(Tensor::GroupMemory(size, type));
+	}, py::arg("size"), py::arg("type") = TFType::Float);
+	m.def("group_barrier", []() {
+		Tensor::GroupBarrier();
+	});
+
 	m.def("zeros", [](py::list shape, TFType type) {
-		switch (type)
-		{
-			case TFType::Float:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
-			case TFType::Uint:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0u));
-			case TFType::Int:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0));
-			default:
-				return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), 0.0f));
-		}
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
-	m.def("zeros", [](std::vector<int> shape, TFType type) {
-		switch (type)
-		{
-			case TFType::Float:
-				return PT(Tensor::Constant(Reverse(shape), 0.0f));
-			case TFType::Uint:
-				return PT(Tensor::Constant(Reverse(shape), 0u));
-			case TFType::Int:
-				return PT(Tensor::Constant(Reverse(shape), 0));
-			default:
-				return PT(Tensor::Constant(Reverse(shape), 0.0f));
-		}
+		return PT(Tensor::Constant(0u, Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
 
 	m.def("const", [](float value, py::list shape) {
@@ -203,9 +194,10 @@ void TensorFunctionsDefinition(py::module& m) {
 		return indices;
 	});
 
-	m.def("reshape", [](const PyTensor& t, py::list shape) {
-		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape))));
-	});
+	m.def("reshape", [](const PyTensor& t, py::list shape, TFType type) {
+		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape)), type));
+	}, py::arg("t"), py::arg("shape"), py::arg("type") = TFType::None);
+
 	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
 		return PT(Tensor::Assert(T(t), Reverse(TensorsFromList(target_shape)), target_type));
 	});
@@ -216,6 +208,9 @@ void TensorFunctionsDefinition(py::module& m) {
 		const Tensor* target_size_ptr = target_size ? &T(*target_size) : nullptr;
 		return PT(Tensor::MergeDim(T(t), -axis-1, target_size_ptr));
 	}, py::arg("t"), py::arg("axis") = -1, py::arg("target_size") = nullptr);
+	m.def("repeat", [](const PyTensor& t, const PyTensor& repeats, const int axis) {
+		return PT(Tensor::Repeat(T(t), T(repeats), -axis-1));
+	}, py::arg("t"), py::arg("repeats"), py::arg("axis") = -1);
 
 	//algorithm functions
 	m.def("sum", [](const PyTensor& t, const int axis) { return PT(Tensor::Sum(T(t), -axis-1)); },
@@ -305,7 +300,7 @@ void TensorFunctionsDefinition(py::module& m) {
 
 	m.def("custom", [](const std::string& name, py::list inputs, py::list shape) {
 		Tensors input_tensors = TensorsFromList(inputs);
-		Tensors shape_tensors = TensorsFromList(shape);
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
 		return PT(Tensor::CustomOperation(name, input_tensors, shape_tensors));
 	}, py::arg("name"), py::arg("inputs"), py::arg("shape"), "Run custom operation");
 

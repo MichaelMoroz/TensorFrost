@@ -61,7 +61,7 @@ class Tensor {
 	}
 
 	static bool AssertTensorShape(const Tensor* a, const Tensor* b, bool throw_error = true) {
-		return CompareShape(a->node_, b->node_, false, throw_error).compatible;
+		return CompareShape(a->node_, b->node_, throw_error).compatible;
 	}
 
 	static tuple<const Operation*, TFType, ShapeInfo> GetOperation(const string& name,
@@ -158,6 +158,23 @@ public:
 			throw std::runtime_error("Tensor indices must be integers");
 		}
 
+		//check if memory op is local
+		bool is_local = false;
+		if(memory->node_->op->HasAllTypes(OpProp::LocalMemory)) {
+			is_local = true;
+		}
+
+		//if local, can only have 1 index
+		if(is_local && indices.size() > 1) {
+			throw std::runtime_error("Local memory operations can only have 1 index");
+		}
+
+		//if global, can only have up to memory dimension indices
+		size_t memory_dim = memory->GetDimension();
+		if(!is_local && indices.size() > memory_dim) {
+			throw std::runtime_error("Too many indices for memory operation, memory has " + std::to_string(memory_dim) + " dimensions, while " + std::to_string(indices.size()) + " indices were provided");
+		}
+
 		// convert the parameter pack to a std::vector
 		Tensors tensors = {args...};
 
@@ -191,11 +208,19 @@ public:
 			}
 		}
 
+		//if no indices or inputs exist, use memory shape
+		if (indices.empty() && tensors.empty())
+		{
+			shape_arguments = memory->node_->args.GetArguments(ArgType::Shape);
+		}
+
 		AddArguments(arguments, shape_arguments);
 
 		if (op == "load") output_type = memory->GetType();
 
-		return CreateNode(output_type, arguments, op);
+		Tensor& output = CreateNode(output_type, arguments, op);
+		if(is_local) output.node_->flags.set(NodeProp::LocalMemoryOp);
+		return output;
 	}
 
 	static Tensor& Static(string op, const NodeArguments& shape,
@@ -256,6 +281,9 @@ public:
 	void DetachGrad() const;
 	void PassGrad() const;
 	void StopFusion() const;
+	void HintRange(float min, float max) const;
+	void HintRange(int min, int max) const;
+	void HintRange(uint min, uint max) const;
 
 	static Tensor* GetCopy(const Tensor& other, NodeArguments args);
 
@@ -328,6 +356,13 @@ public:
 		output.SetData(value);
 		return output;
 	}
+	static Tensor& Constant(uint value, const Tensors& shape, TFType type) {
+		NodeArguments arguments = NodeArguments();
+		AddArguments(arguments, shape, ArgType::Shape);
+		Tensor& output = Static("const", arguments, type);
+		output.SetData(value);
+		return output;
+	}
 
 	static Tensor& Constant(const Tensors& shape, float value) {
 		NodeArguments arguments = NodeArguments();
@@ -389,6 +424,22 @@ public:
 	static Tensor& Memory(const vector<int>& shape,
 		const TFType type = TFType::Float) {
 		return Memory(GetShapeTensors(shape), type);
+	}
+
+	static Tensor& LocalMemory(const int size, const TFType type) {
+		Tensor& output = Static("local_memory", type);
+		output.SetData(size);
+		return output;
+	}
+
+	static Tensor& GroupMemory(const int size, const TFType type) {
+		Tensor& output = Static("group_memory", type);
+		output.SetData(size);
+		return output;
+	}
+
+	static void GroupBarrier() {
+		Op("group_barrier");
 	}
 
 	static Tensors GetInputShapeTensors(Tensors shape);
@@ -478,7 +529,7 @@ public:
 	}
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,
-	                     const Tensors& indices = Tensors(), bool unsafe = false);
+	                     const Tensors& indices = Tensors(), IndexingMode mode = IndexingMode::Clamp);
 
 	void Set(const Tensor& value) const  {
 		//check if memory and value shapes are compatible
@@ -492,38 +543,45 @@ public:
 	}
 
 	static void ScatterAdd(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
 		MemoryOp("InterlockedAdd", &tensor, indices, &value);
 	}
 
 	static Tensor& ScatterAddPrev(const Tensor& tensor, const Tensor& value,
-		const Tensors& indices) {
-		return MemoryOp("InterlockedAdd_Prev", &tensor, indices, &value);
+		const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedAdd_Prev", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
+		return a;
 	}
 
 	static void ScatterMax(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedMax", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedMax", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterMin(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedMin", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedMin", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterOr(const Tensor& tensor, const Tensor& value,
-	                      const Tensors& indices) {
-		MemoryOp("InterlockedOr", &tensor, indices, &value);
+	                      const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedOr", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterAnd(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedAnd", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedAnd", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static void ScatterXor(const Tensor& tensor, const Tensor& value,
-	                       const Tensors& indices) {
-		MemoryOp("InterlockedXor", &tensor, indices, &value);
+	                       const Tensors& indices, IndexingMode mode = IndexingMode::Clamp) {
+		Tensor& a = MemoryOp("InterlockedXor", &tensor, indices, &value);
+		a.node_->indexing_mode_ = mode;
 	}
 
 	static int GetAxis(int dims, int axis) {
@@ -573,6 +631,27 @@ public:
 		int dims = (int)shape.size();
 		axis = GetAxis(dims, axis);
 		Tensor& output = OpShape("dim_reverse", shape, &tensor);
+		output.SetData(axis);
+		return output;
+	}
+
+	static Tensor& Repeat(const Tensor& tensor, const Tensor& repeats, int axis = 0) {
+		//check if repeats is a scalar
+		if (repeats.GetDimension() != 0) {
+			throw std::runtime_error("Repeats argument must be a scalar");
+		}
+		int dims = (int)tensor.GetDimension();
+		axis = GetAxis(dims, axis);
+		Tensors shape = tensor.GetShape();
+		Tensors new_shape = Tensors();
+		for (int i = 0; i < dims; i++) {
+			if (i == axis) {
+				new_shape.push_back(&(*shape[i] * repeats));
+			} else {
+				new_shape.push_back(shape[i]);
+			}
+		}
+		Tensor& output = OpShape("dim_repeat", new_shape, &tensor);
 		output.SetData(axis);
 		return output;
 	}
@@ -725,7 +804,7 @@ public:
 		return output;
 	}
 
-	static Tensor& Reshape(const Tensor& tensor, const Tensors& shape);
+	static Tensor& Reshape(const Tensor &tensor, const Tensors &shape, TFType type = TFType::None);
 	static Tensor& Assert(const Tensor& tensor, const Tensors& shape, TFType type = TFType::Float);
 
 	Tensors enter_tensors = Tensors();
@@ -793,7 +872,7 @@ public:
 		If(!condition, false_body);
 	}
 
-	static Tensor& Kernel(const Tensors shape) {
+	static Tensor& Kernel(const Tensors shape, vector<int> group_size = {}) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, TFType::None);
 		evaluation_context_ir_->ExecuteExpressionFirstChild(kernel.node_, [&]() {
@@ -801,10 +880,11 @@ public:
 				kernel.enter_tensors.push_back(&Index(shape, i)); //thread indices
 			}
 		});
+		kernel.node_->group_size = group_size;
 		return kernel;
 	}
 
-	static Tensor& Kernel(const Tensors shape, const std::function<void(Tensors)>& body) {
+	static Tensor& Kernel(const Tensors shape, const std::function<void(Tensors)>& body, vector<int> group_size = {}) {
 		// create the kernel
 		Tensor& kernel = Kernel(shape);
 
@@ -813,6 +893,7 @@ public:
 			body(kernel.enter_tensors);
 		});
 
+		kernel.node_->group_size = group_size;
 		return kernel;
 	}
 
@@ -837,8 +918,20 @@ public:
 	~Tensor() = default;
 
 	Tensor& operator-() const { return Op("neg", this); }
-	Tensor& operator!() const { return Op("not", this); }
-	Tensor& operator~() const { return Op("not", this); }
+	Tensor& operator!() const {
+		if(node_->type == TFType::Bool) {
+			return Op("notb", this);
+		} else {
+			return Op("not", this);
+		}
+	}
+	Tensor& operator~() const {
+		if(node_->type == TFType::Bool) {
+			return Op("notb", this);
+		} else {
+			return Op("not", this);
+		}
+	}
 
 	Tensor& operator+(const Tensor& other) const {
 		return Op("add", this, &other);

@@ -37,7 +37,7 @@ def load_emoji(emoji):
 target = load_emoji(TARGET_EMOJI)
 
 #load from png file
-# target = PIL.Image.open("examples/ML/NCA/catthink.png")
+# target = PIL.Image.open("catthink.png")
 # target = target.resize((TARGET_SIZE, TARGET_SIZE), PIL.Image.LANCZOS)
 # target = np.array(target)
 # target = np.float32(target)/255.0
@@ -113,8 +113,8 @@ def schedule(iterations):
 
 iterations = 0
 
-input_state_np = np.zeros([1, INFERENCE_SIZE, INFERENCE_SIZE, model.channel_n], np.float32)
-input_state_np[0, INFERENCE_SIZE//2, INFERENCE_SIZE//2, 3:] = 1.0
+input_state_np = np.zeros([1, INFERENCE_SIZE_Y, INFERENCE_SIZE_Y, model.channel_n], np.float32)
+input_state_np[0, INFERENCE_SIZE_Y//2, INFERENCE_SIZE_X//2, 3:] = 1.0
 #pad channels with zeros
 input_state_np = np.pad(input_state_np, [(0, 0), (0, 0), (0, 0), (0, model.channel_n - input_state_np.shape[3])], 'constant')
 input_state = tf.tensor(input_state_np)

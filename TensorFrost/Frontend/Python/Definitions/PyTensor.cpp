@@ -93,6 +93,14 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
           return PT(T(t).Index(dims - dim - 1));
 	});
 
+	py_tensor.def("block_index", [](const PyTensor& t) {
+		return PT(T(t).BlockIndex());
+	});
+
+	py_tensor.def("block_thread_index", [](const PyTensor& t, int block_dim) {
+		return PT(T(t).BlockThreadIndex(block_dim));
+	});
+
 	py_tensor.def("detach_grad", [](const PyTensor& t) {
 		t.Get().DetachGrad();
 		return t;
@@ -107,6 +115,14 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		t.Get().StopFusion();
 		return t;
 	});
+
+	py_tensor.def("hint_range", [](const PyTensor& t, py::object min, py::object max) {
+		if(t.Get().node_->type == TFType::Float) {
+			t.Get().HintRange(py::cast<float>(min), py::cast<float>(max));
+		} else {
+			t.Get().HintRange(py::cast<int>(min), py::cast<int>(max));
+		}
+	}, py::arg("min"), py::arg("max"));
 
 	// operators
 	DefineOperators(py_tensor);
@@ -123,18 +139,10 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def("__getitem__", [](const PyTensor& t, const PyTensor& t1) {
 		Tensors indices;
 		indices.push_back(&t1.Get());
-		if (indices.size() != t.Get().GetDimension()) {
-			throw std::runtime_error(
-			    "Indices must have the same dimension as the tensor");
-		}
 		return PyTensor(&t.Get(), indices);
 	});
 	py_tensor.def("__getitem__", [](const PyTensor& t, py::tuple indices_tuple) {
 		Tensors indices = Reverse(TensorsFromTuple(indices_tuple));
-		if (indices.size() != t.Get().GetDimension()) {
-			throw std::runtime_error(
-			    "Indices must have the same dimension as the tensor");
-		}
 		return PyTensor(&t.Get(), indices);
 	});
 
@@ -142,19 +150,11 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	              [](const PyTensor& t, const PyTensor& t1, const PyTensor& t2) {
 		              Tensors indices;
 		              indices.push_back(&t1.Get());
-		              if (indices.size() != t.Get().GetDimension()) {
-						  throw std::runtime_error(
-				              "Indices must have the same dimension as the tensor");
-					  }
 		              Tensor::Store(t.Get(), T(t2), indices);
 	              });
 	py_tensor.def("__setitem__", [](const PyTensor& t, py::tuple indices_tuple,
 	                                const PyTensor& t2) {
 		Tensors indices = Reverse(TensorsFromTuple(indices_tuple));
-		if (indices.size() != t.Get().GetDimension()) {
-			throw std::runtime_error(
-			    "Indices must have the same dimension as the tensor");
-		}
 		Tensor::Store(t.Get(), T(t2), indices);
 	});
 

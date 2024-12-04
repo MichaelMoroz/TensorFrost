@@ -209,6 +209,10 @@ public:
         }
 
         for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            if(!py::isinstance<Parameter>(param.second)) {
+                continue;
+            }
+
             Parameter& p = py::cast<Parameter&>(param.second);
             if (!p.CanBeInitialized()) {
                 continue;
@@ -220,6 +224,9 @@ public:
         for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
             ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
             for (auto& param : param_array._parameters) {
+                if(!py::isinstance<Parameter>(param.second)) {
+                    continue;
+                }
                 Parameter& p = py::cast<Parameter&>(param.second);
                 if (!p.CanBeInitialized()) {
                     continue;

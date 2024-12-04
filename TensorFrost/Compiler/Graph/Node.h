@@ -19,7 +19,11 @@ enum class NodeProp {
 	DetachGrad,
 	PassGrad,
 	NoLoadFusion,
+	NoCopyFusion,
 	StopFusion,
+	HintMaxValue,
+	HintMinValue,
+	LocalMemoryOp,
 	Count,
 };
 
@@ -33,8 +37,7 @@ enum class MemoryType {
 enum class IndexingMode {
 	Unsafe,
 	Clamp,
-	Repeat,
-	Mirror
+	Repeat
 };
 
 struct TFTypeDesc {
@@ -51,14 +54,16 @@ using NodeProps = FlagSet<NodeProp, (int)NodeProp::Count>;
 class Node {
 	static int global_index;
  public:
-	int index_ = -1;
 	int debug_index = -1;
+	string name;
 	string var_name = "";
 	string debug_name;
-	string name;
+	int index_ = -1;
 	float cost_ = -1.0f;
 	unordered_set<Node*> memory_deps;
 
+	//Edge *prev, *next;
+	//
 	Node *parent = nullptr, *child = nullptr, *next = nullptr, *prev = nullptr;
 	const Operation* op;
 	NodeProps flags;
@@ -70,7 +75,8 @@ class Node {
 	vector<int> group_size; //kernel properties
 
 #ifndef NDEBUG
-	string created_in;
+	string created_in_pass;
+	string created_in_function;
 #endif
 
 	Node(Node* prev = nullptr, Node* parent = nullptr) : parent(parent), prev(prev), args(this) {
@@ -86,7 +92,7 @@ class Node {
 	void UpdateEdges();
 
 	//initialize and create next/child placeholders
-    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type, bool set_static = false);
+    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type,  unordered_set<Node*>& existing_nodes, bool set_static = false);
 
 	void CopyProperties(Node* other);
 	void CopyMetadata(Node* other);
@@ -100,7 +106,7 @@ class Node {
 	/// </summary>
 	/// <param name="replacement"></param>
 	/// <param name="min_index"></param>
-	void ReplaceThisWithGivenNode(Node* replacement, int min_index = -1, bool make_modified = false, bool copy_metadata = true);
+	void ReplaceThisWithGivenNode(Node* replacement, int min_index = -1, bool make_modified = false, bool copy_metadata = true, set<string> nodes_to_modify = {});
 
 	Node* GetParent(string name);
 	Node* GetChild(string name);
@@ -109,6 +115,7 @@ class Node {
 	Node* GetNodeWithCommonParent(Node* other);
 
 	Node* GetLastChild();
+	vector<Node*> GetChildren();
 
 	//checks if the other node has all parents as this node
 	bool HasCommonParents(Node* other, int max_depth = 128) const;
@@ -152,7 +159,6 @@ class NodeIterator {
 		  currentParent(const_cast<Node*>(node_root)) {}
 
 	Node* operator*() const { return currentNode; }
-
 	void update_current_node(Node* new_node) {
 		currentNode = new_node;
 #ifndef NDEBUG

@@ -5,6 +5,14 @@
 #include <iostream>
 #include <iomanip>
 #include <string>
+
+#if __has_include(<format>)
+	#include <format>
+	#define HAS_FORMAT 1
+#else
+	#define HAS_FORMAT 0
+#endif
+
 #include "Compiler/KernelGen.h"
 #include "Tensor/Tensor.h"
 #include "Backend/Backend.h"
@@ -16,6 +24,7 @@ string ReadVariable(Node* node);
 void GenerateNodeNames(const IR& ir);
 
 string GetBufferDeclarations(Kernel* kernel, function<string(const string&, const string&, size_t)> get_name);
+string GetGroupBufferDeclarations(Kernel* kernel, function<string(const string &, const string &, int)> get_shared_name);
 string GetCPPHeader();
 string GetCPPImplementation();
 string GetHLSLHeader(Kernel* kernel);
@@ -27,7 +36,7 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel);
 void GenerateGLSLKernel(Program* program, Kernel* kernel);
 void GenerateCode(Program* program);
 
-string GetNodeString(const Node* node);
+string GetNodeString(const Node* node, bool verbose = false);
 string GetOperationListing(const IR&, bool compact = false,
 						   map<Node*, string> invalid = {});
 
@@ -54,6 +63,7 @@ class Line {
 class CodeGenerator {
 protected:
 	unordered_map<string, string> name_map_;
+	set<string> used_names_;
  public:
 	list<Line*> lines;
 	map<Node*, string> custom_generated_code_;
@@ -78,7 +88,7 @@ protected:
 	unordered_map<string, int> name_count;
 
 	virtual void GenerateArgumentNames(ArgumentManager& args)  {
-		for (auto& arg : args.inputs_) {
+		for (auto& arg : args.Inputs()) {
 			Node* node = arg.second;
 			ArgID id = arg.first;
 			string name = node->var_name;
@@ -96,7 +106,7 @@ protected:
 					expr = node->GetTensor()->GetConstantString();
 				}
 				bool has_name = node->debug_name != "";
-				bool has_single_output = (node->args.outputs_.size() == 1) || is_constant || is_variable;
+				bool has_single_output = (node->args.OutputCount() == 1) || is_constant || is_variable;
 				bool modified = node->flags.has(NodeProp::Modified);
 				bool short_enough = expr.size() < 100;
 				bool can_substitude = !has_name && has_single_output && !modified && short_enough && !is_static && !is_memory;
@@ -114,6 +124,10 @@ protected:
 	}
 
 	void RegenerateNodeName(Node* node) {
+		if(node->op->HasAllTypes(OpProp::LocalMemory)) {
+			used_names_.insert(node->var_name);
+			return;
+		}
 		string debug = node->debug_name;
 		if (debug.empty()) {
 			debug = "v" + node->name;//return;
@@ -128,219 +142,13 @@ protected:
 		} else {
 			name_count[debug] = 1;
 		}
-
+		if (used_names_.contains(debug)) {
+			debug = debug + "_";
+		}
 		node->var_name = debug;
 	}
 
-	virtual Line* GenerateLine(Node* node)  {
-		ArgumentManager& args = node->args;
-		if (kernel) RegenerateNodeName(node);
-		GenerateArgumentNames(args);
-		const Operation* op = node->op;
-
-		string name = node->var_name;
-
-		// get output type
-		TFType output_type = node->type;
-
-		// generate line
-		string left = "";
-		string expression = "";
-		string right = "";
-		bool needs_paranthesis = false;
-
-		if (op->HasAllTypes(OpProp::Special)) {
-			int dims = args.Count(ArgType::Shape);
-
-			string shape_arg = "{";
-
-			for (int j = 0; j < dims; j++) {
-				if (j != 0) {
-					shape_arg += ", ";
-				}
-				Node* shape_node = args.Get(ArgType::Shape, j);
-
-				shape_arg += "(uint)" + args.Name(ArgType::Shape, dims - j - 1);
-			}
-
-			shape_arg += "}";
-
-			if (op->name_ == "loop") {
-				left += GenerateLoop(&args, name);
-			} else if (op->name_ == "if") {
-				left += GenerateIf(&args);
-			} else if (op->name_ == "memory") {
-				// if input memory type then just take the input and store it in the
-				// output
-				if (node->flags.has(NodeProp::InputMemory)) {
-					left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
-					right += ";";
-				}
-				// if any other memory type - allocate it
-				else {
-					left += "TFTensor " + node->var_name + " = ";
-					expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
-					right += ";";
-				}
-			} else if (op->name_ == "deallocate") {
-				left = "tf.deallocate(" + args.Name(ArgType::Memory) + ")";
-				right = ";";
-			} else if (op->name_ == "input_shape") {
-				left = "int " + node->var_name + " = ";
-				expression = ir->input_memory_map[node->flags.get(NodeProp::InputShapeMemory)]->var_name + ".shape[" + to_string(node->flags.get(NodeProp::InputShapeDim)) + "]";
-				right = ";";
-			} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
-				left = "TFTensor " + node->var_name + " = ";
-				expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
-				right = ";";
-			} else if(op->HasAllTypes(OpProp::Debug)) {
-				left = "tf." + op->code_ + "(\"" + node->debug_name + "\"";
-				if (args.Has(ArgType::Input)) {
-					left += ", " + args.Name(ArgType::Input);
-				}
-				left += ")";
-				right = ";";
-			}
-		} else if (op->HasAllTypes(OpProp::MemoryOp)) {
-			string address;
-
-			if (kernel) {
-				address = "0";
-				// if has index (not a scalar)
-				if (args.Has(ArgType::Index)) {
-					address = args.Name(ArgType::Index);
-				}
-
-				string memory_expression = args.Name(ArgType::Memory) + "_mem[" + address + "]";
-				if (op->name_ == "load") {
-					string output_type_name = type_names[output_type];
-					left += output_type_name + " " + name + " = ";
-					expression +=
-					    (output_type == Uint)
-					        ? memory_expression
-					        : TypeReinterpret(output_type_name, memory_expression);
-					right += ";";
-				} else if (op->name_ == "store") {
-					expression += memory_expression + " = ";
-					expression +=
-					    (output_type == Uint)
-					        ? args.Name(ArgType::Input)
-					        : TypeReinterpret("uint", args.Name(ArgType::Input));
-					right += ";";
-				} else if (op->HasAllTypes(OpProp::Scatter)) {
-					if (output_type != None) {
-						left += type_names[output_type] + " " + name + " = ";
-					}
-					string output_type_name = type_names[output_type];
-					string input_type_name = type_names[args.Type(ArgType::Input)];
-					expression += GenerateAtomicOp(op->name_, input_type_name,
-					                               output_type_name, address,
-					                               args.Name(ArgType::Input), name, args.Name(ArgType::Memory));
-					right += ";";
-				}
-			} else {
-				string tensor_name = args.Name(ArgType::Memory);
-				string address = "0";
-				if (args.Has(ArgType::Index)) {
-					address = args.Name(ArgType::Index);
-				}
-
-				if (op->name_ == "load") {
-					//do readback
-					string output_type_name = type_names[output_type];
-					left += output_type_name + " " + name + " = ";
-					string memory_expression = GetName("tf.read") + "(" + tensor_name + ", " + address + ")";
-					expression += (output_type == Uint)
-						? memory_expression
-						: TypeReinterpret(output_type_name, memory_expression);
-					right += ";";
-				} else if (op->name_ == "store") {
-					//do writeback
-					string memory_expression = GetName("tf.write") + "(" + tensor_name + ", " + address + ", ";
-					expression += memory_expression + args.Name(ArgType::Input) + ")";
-					right += ";";
-				} else if (op->HasAllTypes(OpProp::Scatter)) {
-					throw std::runtime_error("Scatter operation not supported in non-kernel mode");
-				}
-			}
-			
-		} else if (op->name_ == "set") {
-			left += args.Name(ArgType::Memory) + " = ";
-			expression += args.Name(ArgType::Input);
-			right += ";";
-		} else {
-			if (output_type != None) {
-				left += type_names[output_type] + " " + name + " = ";
-			}
-			string line;
-			string code = op->code_;
-			switch (op->class_) {
-				case OpClass::Operator:
-					args.AddParenthesis(true);
-					if ((code == "&" || code == "|") && output_type == Bool) {
-						code = code + code;
-					}
-					line += args.Name(ArgType::Input, 0) + " " + code + " " +
-					        args.Name(ArgType::Input, 1);
-					needs_paranthesis = true;
-					break;
-				case OpClass::UnaryOperator:
-					args.AddParenthesis(true);
-					line += op->code_ + args.Name(ArgType::Input, 0);
-					needs_paranthesis = true;
-					break;
-				case OpClass::Function:
-					line += GetName(op->code_) + "(";
-					for (int i = 0; i < args.Count(ArgType::Input); i++) {
-						if (i != 0) {
-							line += ", ";
-						}
-						line += args.Name(ArgType::Input, i);
-					}
-					line += ")";
-					break;
-				case OpClass::Copy:
-					line += args.Name(ArgType::Input, 0);
-				    needs_paranthesis = true;
-					break;
-				case OpClass::Keyword:
-					line += op->code_;
-					break;
-				case OpClass::DimensionIndex:
-					line += op->code_ + to_string(node->data[0]);
-					break;
-				case OpClass::Variable:
-					line += op->code_;
-					break;
-				case OpClass::TypeCast:
-					line += GenerateTypeCast(&args, op->code_);
-					break;
-				case OpClass::TypeReinterpret:
-					line += GenerateTypeReinterpret(&args, op->code_);
-					break;
-				case OpClass::Constant:
-					line += node->GetTensor()->GetConstantString();
-					break;
-				case OpClass::TernaryOperator:
-					args.AddParenthesis(true);
-					line += args.Name(ArgType::Input, 0) + " ? " +
-					        args.Name(ArgType::Input, 1) + " : " +
-					        args.Name(ArgType::Input, 2);
-					needs_paranthesis = true;
-					break;
-				default:
-					throw std::runtime_error("Unknown operation class");
-					break;
-			}
-			expression += line;
-			right += ";";
-		}
-
-		node_expression[node] = expression;
-		requires_paranthesis[node] = needs_paranthesis;
-
-		return new Line(node, left, expression, right, name);
-	}
+	Line* GenerateLine(Node* node);
 
 	virtual string GenerateLoop(ArgumentManager* args, const string& name)
 	{
@@ -377,7 +185,7 @@ protected:
 	                                const string& output_type_name,
 	                                const string& address, const string& input, const string& output, const string& memory_name)
 	{
-		return op + "((" + input_type_name + "*)"+memory_name+"_mem" + ", " + address + ", " + input + ")";
+		return op + "((" + input_type_name + "*)" + memory_name + ", " + address + ", " + input + ")";
 	}
 
 	string GetName(const string& name) {

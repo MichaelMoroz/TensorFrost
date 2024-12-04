@@ -109,7 +109,7 @@ map<string, VJPGradientFunction> gradient_functions =
 	{"floor", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
 	{"ceil", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
 	{"round", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
-	{"frac", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f)); }},
+	{"frac", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad); }},
 	{"atan2", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[1] / (in[0] * in[0] + in[1] * in[1]), -grad * in[0] / (in[0] * in[0] + in[1] * in[1])); }},
 	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
 	{"max", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::select(in[0] > in[1], grad, Tensor::Constant(0.0f)), Tensor::select(in[0] < in[1], grad, Tensor::Constant(0.0f))); }},
@@ -125,31 +125,6 @@ map<string, VJPGradientFunction> gradient_functions =
 	}},
 	{"ternary", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::select(in[0], grad, Tensor::Constant(0.0f)), Tensor::select(in[0], Tensor::Constant(0.0f), grad)); }},
 	{"lerp", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad * in[2], grad * (Tensor::Constant(1.0f) - in[2]), grad * (in[0] - in[1])); }},
-	{"smoothstep", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
-		//smoothstep equation:
-		//t = (x - e0) / (e1 - e0)
-		//tc = clamp(t, 0.0, 1.0);
-		//r = tc * tc * (3 - 2 * tc);
-		//derivative of smoothstep:
-		//dr/dx = dr/dtc * dtc/dt * dt/dx
-		//dr/dtc = 6 * tc * (tc - 1)
-		//dtc/dt = select((t < e0) || (t > e1), 0.0, 1.0)
-		//dt/dx = 1 / (e1 - e0)
-		//dt/dedge0 = (x - e1) / (e1 - e0)^2
-		//dt/dedge1 = (e0 - x) / (e1 - e0)^2
-		const Tensor& e0 = in[0];
-		const Tensor& e1 = in[1];
-		const Tensor& x = in[2];
-		const Tensor& t = (x - e0) / (e1 - e0);
-		const Tensor& tc = Tensor::clamp(t, Tensor::Constant(0.0f), Tensor::Constant(1.0f));
-		const Tensor& dr_dtc = Tensor::Constant(6.0f) * tc * (tc - Tensor::Constant(1.0f));
-		const Tensor& dtc_dt = Tensor::select((t < e0) || (t > e1), Tensor::Constant(0.0f), Tensor::Constant(1.0f));
-		const Tensor& grad_dt = grad * dr_dtc * dtc_dt;
-		const Tensor& dt_dx = Tensor::Constant(1.0f) / (e1 - e0);
-		const Tensor& dt_de0 = (x - e1) * (dt_dx * dt_dx);
-		const Tensor& dt_de1 = (e0 - x) * (dt_dx * dt_dx);
-		grads.Add( grad_dt * dt_de0, grad_dt * dt_de1, grad_dt * dt_dx);
-	}},
 	{"step", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(Tensor::Constant(0.0f), Tensor::Constant(0.0f)); }},
 	{"modf", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(grad, Tensor::Constant(0.0f)); }},
 	{"fma", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) { grads.Add(in[1] * grad, in[0] * grad, grad); }},
@@ -211,41 +186,29 @@ map<string, VJPGradientFunction> gradient_functions =
 		//derivative of load is scatter gradient to the load memory addresses
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& curGrad = *grads.GetGrad(ArgType::Memory, 0);
 		const Tensor& is_out_of_bounds = *IsOutOfBounds(in.GetTensor(ArgType::Memory), tensor_indices);
 		const Tensor& grad_out_of_bounds = Tensor::select(is_out_of_bounds, Tensor::Constant(0.0f), grad);
-		Tensor::ScatterAdd(curGrad, grad_out_of_bounds, tensor_indices);
+		Tensor::ScatterAdd(curGrad, grad_out_of_bounds, tensor_indices, out.node_->indexing_mode_);
 	}},
 	{"store", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of store is load gradient at the store memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, out.node_->indexing_mode_));
 	}},
 	{"InterlockedAdd", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of scatter_add is load gradient at the scatter memory addresses
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
 		int index_count = in.Count(ArgType::Index);
 
-		Tensors tensor_indices = Tensors();
-		for (int i = 0; i < index_count; i++) {
-			tensor_indices.push_back(in.GetTensor(ArgType::Index, i));
-		}
-
+		Tensors tensor_indices = in.GetTensorVector(ArgType::Index);
 		const Tensor& memory_grad = *grads.GetGrad(ArgType::Memory, 0);
-		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices));
+		grads.Add(ArgType::Input, 0, Tensor::Load(memory_grad, tensor_indices, out.node_->indexing_mode_));
 	}},
 	{"set", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		//derivative of set is the gradient of the setted value to the input
@@ -389,7 +352,7 @@ Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*
 		// load the value
 		Tensor* value = &Tensor::Load(*array, load_index, IndexingMode::Unsafe);
 		reduced->Set(*scan_op(reduced, value));
-		Tensor::Store(*scan_result, *reduced, load_index, true);
+		Tensor::Store(*scan_result, *reduced, load_index, IndexingMode::Unsafe);
 	});
 
 	return scan_result;
@@ -519,6 +482,7 @@ Tensor* Transpose(const Tensor* array, map<int, int> permutation) {
 	}
 
 	Tensor& loaded = Tensor::Load(*array, perm_indices, IndexingMode::Unsafe);
+	loaded.SetShape(perm_shape); //in case perm indices has no shape info (0 dim unsqueeze)
 	loaded.SetDebugName("transposed");
 	return &loaded;
 }
@@ -740,6 +704,27 @@ map<string, ImplementationFunction> implementation_functions =
 	{"dim_reverse", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(ReverseDim(inputs[0], axes[0])); }},
 	{"dim_split", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(SplitDim(inputs[0], tensor, axes[0], axes[1])); }},
 	{"dim_merge", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) { outputs.push_back(MergeDim(inputs[0], tensor, axes[0])); }},
+	{"dim_repeat", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) {
+		const Tensor* input_tensor = inputs[0];
+		Tensors shape = input_tensor->GetShape();
+		Tensors new_shape = tensor->GetShape();
+		Tensors indices = Tensors();
+		for (int i = 0; i < (int)new_shape.size(); i++) {
+			indices.push_back(&Tensor::Index(new_shape, i));
+		}
+		Tensor* loaded = &Tensor::Load(*input_tensor, indices, IndexingMode::Repeat);
+		loaded->SetDebugName("repeated");
+		outputs.push_back(loaded);
+	}},
+	{"smoothstep", [](Tensors& outputs, map<int, const Tensor*> inputs, const Tensor* tensor,vector<int> axes ) {
+		const Tensor& x = *inputs[2];
+		const Tensor& edge0 = *inputs[0];
+		const Tensor& edge1 = *inputs[1];
+		Tensor& x1 = (x - edge0) / (edge1 - edge0);
+		Tensor& t = Tensor::clamp(x1, Tensor::Constant(0.0f), Tensor::Constant(1.0f));
+		Tensor& result = t * t * (Tensor::Constant(3.0f) - Tensor::Constant(2.0f) * t);
+		outputs.push_back(&result);
+	}},
 };
 
 ImplementationFunction GetImplementationForOperation(string name) {

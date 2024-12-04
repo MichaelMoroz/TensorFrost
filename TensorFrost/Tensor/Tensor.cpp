@@ -74,22 +74,26 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 	inputs_[id] = node;
 	argument_types_[id] = node->type;
 	argument_counts_[id.first]++;
+	//add this node as an output of the argument
+	node->args.AddOutput(id, node_);
 }
 
 void ArgumentManager::Remove(ArgID id) {
 	if(inputs_.find(id) == inputs_.end()) {
 		throw std::runtime_error("Cannot remove argument that does not exist");
 	}
+	//remove this node as an output of the argument
+	inputs_[id]->args.RemoveOutput(id, node_);
 	inputs_.erase(id);
 	argument_types_.erase(id);
 	argument_counts_[id.first]--;
 }
 
 void ArgumentManager::RemoveArguments(ArgType arg) {
-	unordered_set<ArgID, HashArgID> to_remove;
+	vector<ArgID> to_remove;
 	for (auto& [id, node] : inputs_) {
 		if (id.first == arg) {
-			to_remove.insert(id);
+			to_remove.push_back(id);
 		}
 	}
 	for (auto& id : to_remove) {
@@ -98,10 +102,10 @@ void ArgumentManager::RemoveArguments(ArgType arg) {
 }
 
 vector<const Tensor *> ArgumentManager::GetTensorVector(ArgType type) const  {
-	vector<const Tensor*> tensors;
+	vector<const Tensor*> tensors = vector<const Tensor*>(Count(type));
 	for (auto& [id, node] : inputs_) {
 		if (id.first == type) {
-			tensors.push_back(node->GetTensor());
+			tensors[id.second] = node->tensor_;
 		}
 	}
 	return tensors;
@@ -136,7 +140,7 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 		//check if shapes are compatible and get the final broadcasted shape
 		for (int i = 0; i < tensors.size(); i++) {
 			ShapeInfo shape_info2 = ShapeInfo(tensors[i]->node_);
-			auto result = CompareShape(shape_info, shape_info2, false, true);
+			auto result = CompareShape(shape_info, shape_info2, true);
 			shape_info = result.broadcast_shape;
 		}
 	}
@@ -148,7 +152,7 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 
 bool Tensor::CheckIndices(const Tensors &indices) {
 	for (const Tensor* index : indices) {
-		if (index->node_->type != TFType::Int) {
+		if (index->node_->type != TFType::Int && index->node_->type != TFType::Uint) {
 			return false;
 		}
 	}
@@ -189,6 +193,21 @@ void Tensor::StopFusion() const {
 	node_->flags.set(NodeProp::StopFusion);
 }
 
+void Tensor::HintRange(float min, float max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)AsUint(min));
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)AsUint(max));
+}
+
+void Tensor::HintRange(int min, int max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)min);
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)max);
+}
+
+void Tensor::HintRange(uint min, uint max) const {
+	node_->flags.set(NodeProp::HintMinValue, (int64_t)min);
+	node_->flags.set(NodeProp::HintMaxValue, (int64_t)max);
+}
+
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 	Tensor* copy = &CreateNode(other.node_->type, std::move(args), other.node_->name);
 	copy->node_->data = other.node_->data;
@@ -198,7 +217,7 @@ Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
 
 Tensor* Tensor::GetCopy(const Tensor& other) {
 	NodeArguments new_args;
-	for (auto& [id, from] : other.node_->args.inputs_) {
+	for (auto& [id, from] : other.node_->args.Inputs()) {
 		new_args[id] = from;
 	}
 	return GetCopy(other, new_args);
@@ -220,7 +239,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		{
 			Tensor& mem = Static("input_shape", TFType::Int);
 			//make sure its reversed on the backend
-			mem.node_->flags.set(NodeProp::InputShapeDim, (int)shape.size() - dim - 1);
+			mem.node_->flags.set(NodeProp::InputShapeDim, (int64_t)(shape.size() - dim - 1));
 			result.push_back(&mem);
 		}
 		else
@@ -241,9 +260,9 @@ Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices, IndexingMode 
 }
 
 Tensor& Tensor::Store(const Tensor& tensor, const Tensor& value,
-                      const Tensors& indices, bool unsafe) {
+                      const Tensors& indices, IndexingMode mode) {
 	Tensor& out = MemoryOp("store", &tensor, indices, &value);
-	if (unsafe) out.node_->indexing_mode_ = IndexingMode::Unsafe;
+	out.node_->indexing_mode_ = mode;
 	return out;
 }
 
@@ -286,10 +305,14 @@ bool Tensor::AreTensorsEqual(const Tensor &a, const Tensor &b) {
 	return false;
 }
 
-Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape) {
+Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape, TFType type) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
-	out.node_->type = tensor.node_->type;
+	if(type != TFType::None) {
+		out.node_->type = type;
+	} else {
+		out.node_->type = tensor.node_->type;
+	}
 	return out;
 }
 

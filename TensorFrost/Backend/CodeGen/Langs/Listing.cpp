@@ -4,7 +4,7 @@
 namespace TensorFrost {
 using namespace std;
 
-string GetNodeString(const Node* node) {
+string GetNodeString(const Node* node, bool verbose) {
 	string listing = "";
 	if (node->type != TFType::None) {
 		listing += DataTypeToString(node->type) + " ";
@@ -36,6 +36,14 @@ string GetNodeString(const Node* node) {
 	listing += ArgTypePrint("inputs", ArgType::Input);
 	listing += ArgTypePrint("indices", ArgType::Index);
 
+	if(node->args.OutputCount() > 0) {
+		listing += "outputs=[";
+		for(auto [in, out]: node->args.Outputs()) {
+			listing += GetNodeName(out, false) + ", ";
+		}
+		listing += "], ";
+	}
+
 	if (!node->data.empty()) {
 		listing += "data=[";
 		for (int i = 0; i < node->data.size(); i++) {
@@ -50,7 +58,7 @@ string GetNodeString(const Node* node) {
 		auto flags = node->flags.get_data();
 		for(auto flad_data : flags) {
 			NodeProp flag = flad_data.first;
-			int data = flad_data.second;
+			int64_t data = flad_data.second;
 			listing += NodeFlagsToString(flag);
 			if(data >= 0) {
 				listing += "(" + to_string(data) + ")";
@@ -64,11 +72,25 @@ string GetNodeString(const Node* node) {
 		listing += "cost=" + to_string(node->cost_) + ", ";
 	}
 
+	if(node->memory_deps.size() > 0) {
+		listing += "memory_deps_count=" + to_string(node->memory_deps.size()) + ", ";
+	}
+
 	if(node->indexing_mode_ != IndexingMode::Clamp) {
 		listing += "indexing_mode=" + IndexingModeToString(node->indexing_mode_) + ", ";
 	}
 
 	listing += ArgTypePrint("shape", ArgType::Shape);
+
+#ifdef _DEBUG
+	if (verbose) {
+		listing += "index=" + to_string(node->index_) + ", ";
+		listing += "debug_index=" + to_string(node->debug_index) + ", ";
+		listing += "debug_name=" + node->debug_name + ", ";
+		listing += "created_in=" + node->created_in_pass + ", ";
+		listing += "created_in_func=" + node->created_in_function + ", ";
+	}
+#endif
 
 	listing += ")";
 
@@ -116,7 +138,7 @@ string GetOperationListing(const IR& ir, bool compact, map<Node*, string> debug)
 		}
 		prev_depth = depth;
 
-		listing += GetNodeString(*node);
+		listing += GetNodeString(*node, true);
 		listing += "\n";
 	}
 

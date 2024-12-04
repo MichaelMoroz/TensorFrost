@@ -8,7 +8,8 @@ BATCH_SIZE = 3*3
 POOL_SIZE = 1024
 CELL_FIRE_RATE = 0.75
 
-INFERENCE_SIZE = 128
+INFERENCE_SIZE_X = 1280//2
+INFERENCE_SIZE_Y = 900//2
 
 def GELU(X):
     return 0.5*X*(1.0 + tf.tanh(np.sqrt(2.0/np.pi) * (X + 0.044715 * (X * X * X))))
@@ -114,7 +115,7 @@ def batch_to_img(batch):
     return res
 
 class CATrain(tf.Module):
-    def __init__(self, train_steps = 25, corrupt_every_n = 3):
+    def __init__(self, train_steps = 25, corrupt_every_n = 20):
         super().__init__()
         self.opt = tf.optimizers.adam(CAModel(), clip = 0.01)
         self.opt.set_clipping_type(tf.clipping.norm)
