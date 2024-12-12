@@ -158,7 +158,7 @@ public:
             if(param.random_scale >= 0.0f) {
                 scale = param.random_scale;
             }
-            result = tf.attr("random")(shape_list, tf.attr("const")(0u));
+            result = tf.attr("random_value")(shape_list, tf.attr("const")(0u));
             result = result.attr("__mul__")(py::float_(2.0f));
             result = result.attr("__sub__")(py::float_(1.0f));
             result = result.attr("__mul__")(py::float_(scale));

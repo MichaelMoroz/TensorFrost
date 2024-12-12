@@ -499,6 +499,35 @@ public:
 		return *flat_index;
 	}
 
+	static Tensors IndicesFromFlatIndex(const Tensor* index, Tensors shape)
+	{
+		size_t dims = shape.size();
+		Tensors indices = Tensors(dims);
+		Tensors sizes = Tensors(dims);
+		sizes[0] = shape[0];
+		for (size_t i = 1; i < dims - 1; i++) {
+			sizes[i] = &(*sizes[i - 1] * *shape[i]);
+		}
+
+		Tensor* temp;
+		for (size_t i = 0; i < dims; i++) {
+			Tensor* idx0 = const_cast<Tensor*>(index);
+			if (i < dims - 1) {
+				idx0 = &(*idx0 / *sizes[dims - i - 2]);
+			}
+			if (i > 0) {
+				temp = &(*temp * *shape[dims - i - 1]);
+				idx0 = &(*idx0 - *temp);
+				if (i != dims - 1) temp = &(*temp + *idx0);
+			} else {
+				temp = idx0;
+			}
+			indices[dims - i - 1] = idx0;
+		}
+
+		return indices;
+	}
+
 	static Tensor& ElementIndex(Tensors shape) {
 		return FlatIndex(shape, Indices(shape));
 	}

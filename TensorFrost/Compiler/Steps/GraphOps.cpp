@@ -985,37 +985,8 @@ void IR::AddMemoryDeallocation()
 	UpdateGraph();
 }
 
-vector<Tensor*> ComputeIndicesFromLinearIndex(Tensor* index, Tensors kernel_shape, int dims)
-{
-	vector<Tensor*> indices = vector<Tensor*>(dims);
-	Tensors sizes = Tensors(dims);
-	sizes[0] = kernel_shape[0];
-	for (size_t i = 1; i < dims - 1; i++) {
-		sizes[i] = &(*sizes[i - 1] * *kernel_shape[i]);
-	}
-
-	Tensor* temp;
-	for (size_t i = 0; i < dims; i++) {
-		Tensor* idx0 = index;
-		if (i < dims - 1) {
-			idx0 = &(*idx0 / *sizes[dims - i - 2]);
-		}
-		if (i > 0) {
-			temp = &(*temp * *kernel_shape[dims - i - 1]);
-			idx0 = &(*idx0 - *temp);
-			if (i != dims - 1) temp = &(*temp + *idx0);
-		} else {
-			temp = idx0;
-		}
-		indices[dims - i - 1] = idx0;
-	}
-
-	return indices;
-}
-
-
 // compute the flat index (in C-order)
-Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, map<int, const Tensor*> idx, int memory_dim, IndexingMode mode = IndexingMode::Clamp)
+Tensor* ComputeFlatIndex(NodeArguments memory_shape, Tensors indices, map<int, const Tensor*> idx, int memory_dim, IndexingMode mode = IndexingMode::Clamp)
 {
 	if (memory_dim == 0)
 	{
@@ -1071,7 +1042,7 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 	return &Tensor::FlatIndex(shape, index);
 }
 
-void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)
+void IR::ReplaceDimNodes(Node* kernel, Tensors indices, int dims)
 {
 	// replace all dim nodes with the corresponding index node
 	unordered_set<Node*> nodes_to_remove;
@@ -1117,7 +1088,7 @@ void IR::MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_, in
 	});
 }
 
-vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
+Tensors ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
                                              Tensors kernel_shape, int dims) {
 	//compute in-block index
 	vector<int> block_size = kernel->group_size;
@@ -1144,10 +1115,10 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 		blocks_shape.push_back(kernel_shape[i]);
 		blocks_shape[i]->SetDebugName("blocks_shape_" + to_string(i));
 	}
-	vector<Tensor*> out_block_indices = ComputeIndicesFromLinearIndex(block_index, blocks_shape, dims);
+	Tensors out_block_indices = Tensor::IndicesFromFlatIndex(block_index, blocks_shape);
 
 	//combine the final indices
-	vector<Tensor*> indices = {};
+	Tensors indices = {};
 
 	for (int i = 0; i < block_dim; i++) {
 		indices.push_back(&(*out_block_indices[i] * *block_size_tensors[i] + *in_block_indices[i]));
@@ -1162,7 +1133,7 @@ vector<Tensor*> ComputeIndicesFromBlockIndex(Tensor* block_index, Node* kernel,
 	return indices;
 }
 
-Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims, Tensors kernel_shape)
+Tensor* IR::LinearBlockModeIndices(Tensors& indices, Node* kernel_, int dims, Tensors kernel_shape)
 {
 	Tensor* block_index = nullptr;
 	Tensor* if_tensor = nullptr;
@@ -1214,7 +1185,7 @@ Tensor* IR::LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int 
 	return if_tensor;
 }
 
-void IR::ComputeAddress(Node* node, vector<Tensor*> indices)
+void IR::ComputeAddress(Node* node, Tensors indices)
 {
 	// get the input memory node
 	const Tensor* memory = node->args.GetTensor(ArgType::Memory);
@@ -1264,7 +1235,7 @@ void IR::FinalizeMemoryIndexing() {
 
 		// compute the index for each dimension
 		int dims = (int)kernel_shape.size();
-		vector<Tensor*> indices = vector<Tensor*>(dims);
+		Tensors indices = Tensors(dims);
 		dispatch_checks.push_back(
 		    LinearBlockModeIndices(indices, kernel, dims, kernel_shape));
 
@@ -1283,7 +1254,7 @@ void IR::FinalizeMemoryIndexing() {
 	for (auto node = begin(); !node.end(); node.next()) {
 		if (!node->HasParent("kernel") && node->op->HasAllTypes(OpProp::MemoryOp)) {
 			ExecuteExpressionBefore(node.get(), [&]() {
-				vector<Tensor*> indices = {};
+				Tensors indices = {};
 				ComputeAddress(node.get(), indices);
 			});
 		}

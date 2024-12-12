@@ -210,13 +210,13 @@ public:
 	                                 bool print = false,
 	                                 bool update_graph = false);
 
-	void ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims);
+	void ReplaceDimNodes(Node* kernel, Tensors indices, int dims);
 	void MultiDimensionalModeIndices(vector<Tensor*>& indices, Node* kernel_,
 	                                 int dims, Tensors kernel_shape);
-	Tensor* LinearBlockModeIndices(vector<Tensor*>& indices, Node* kernel_, int dims,
+	Tensor* LinearBlockModeIndices(Tensors& indices, Node* kernel_, int dims,
 	                            Tensors kernel_shape);
 
-	void ComputeAddress(Node *node, vector<Tensor *> indices);
+	void ComputeAddress(Node *node, Tensors indices);
 
 	void FinalizeMemoryIndexing();
 	void RemoveUnusedKernels();

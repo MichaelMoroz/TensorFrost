@@ -131,6 +131,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("const", [](int value, py::list shape) {
 		return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), value));
 	});
+
 	m.def("const", [](int value, std::vector<int> shape) {
 		return PT(Tensor::Constant(Reverse(shape), value));
 	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
@@ -138,6 +139,7 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("input", [](std::vector<int> shape, TFType type) {
 		return PT(Tensor::Input(Reverse(shape), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
+
 	m.def("input", [](py::list shape, TFType type) {
 		return PT(Tensor::Input(Reverse(TensorsFromList(shape)), type));
 	}, py::arg("shape"), py::arg("type") = TFType::Float);
@@ -150,13 +152,29 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Hash(Reverse(TensorsFromList(shape)), T(seed)));
 	}, py::arg("shape"), py::arg("seed"));
 
-	m.def("random", [](py::list shape, const PyTensor& seed) {
+	m.def("random_value", [](py::list shape, const PyTensor& seed) {
 		return PT(Tensor::Random(Reverse(TensorsFromList(shape)), T(seed)));
 	}, py::arg("shape"), py::arg("seed"));
 
 	m.def("element_index", [](py::list shape) {
 		return PT(Tensor::ElementIndex(Reverse(TensorsFromList(shape))));
 	}, py::arg("shape"));
+
+	m.def("flat_index", [](py::list shape, py::list indices) {
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
+		Tensors index_tensors = Reverse(TensorsFromList(indices));
+		return PT(Tensor::FlatIndex(shape_tensors, index_tensors));
+	});
+
+	m.def("indices_from_flat_index", [](const PyTensor& index, py::list shape) {
+		py::tuple indices = py::tuple(shape.size());
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
+		Tensors indices_tensors = Reverse(Tensor::IndicesFromFlatIndex(&T(index), shape_tensors));
+		for (int i = 0; i < indices_tensors.size(); i++) {
+			indices[i] = PT(*indices_tensors[i]);
+		}
+		return indices;
+	});
 
 	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
 
@@ -180,6 +198,7 @@ void TensorFunctionsDefinition(py::module& m) {
 		}
 		return indices;
 	});
+
 
 	m.def("index_grid", [](py::list begin, py::list end) {
 		Tensors begin_tensors = Reverse(TensorsFromList(begin));
