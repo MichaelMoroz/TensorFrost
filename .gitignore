@@ -47,7 +47,7 @@ Python/build/
 Python/dist/
 Python/TensorFrost.egg-info/
 Python/TensorFrost/*
-!Python/TensorFrost/__init__.py
+!Python/TensorFrost/*.py
 dist/
 temp/
 .vscode/settings.json
