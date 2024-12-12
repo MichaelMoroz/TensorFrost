@@ -181,6 +181,10 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	py_tensor.def("__repr__", [](const PyTensor& t) {
 		return GetNodeString(t.Get().node_);
 	});
+
+	py_tensor.def("set_debug_name", [](const PyTensor& t, const std::string& name) {
+		t.Get().SetDebugName(name);
+	});
 }
 
 }  // namespace TensorFrost

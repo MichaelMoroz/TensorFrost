@@ -16,6 +16,22 @@ def Test():
 
 test = tf.compile(Test)
 
+class Test(tf.Module):
+    def __init__(self):
+        super().__init__()
+        self.scales = tf.Parameter([4, 4], tf.float32, random_scale = 0.0, optimize = False)
+        self.zero_point = tf.Parameter([4, 4], tf.float32, random_scale = 0.0, optimize = False)
+        self.sdf = tf.Parameter([-1, -1, -1], tf.float32, optimize = False)
+        self.tex = tf.Parameter([32, 32, 32, 16], tf.float32, random_scale = 0.25, random_offset = 0.5)
+
+def TestInit():
+    model = Test()
+    opt = adam(model, learning_rate = 0.01)
+    opt.initialize_parameters_native()
+    return opt.parameters()
+
+init = tf.compile(TestInit)
+
 # def Test():
 #     A = tf.input([-1, -1], tf.float32)
 #

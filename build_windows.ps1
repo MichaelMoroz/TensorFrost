@@ -22,4 +22,4 @@ $env:NUMBER_OF_PROCESSORS = (Get-WmiObject -Class Win32_ComputerSystem).NumberOf
 cmake --build build --config Release --parallel $env:NUMBER_OF_PROCESSORS
 
 # Build the wheel
-python -m build -w ./PythonBuild
+python -m build -w ./Python

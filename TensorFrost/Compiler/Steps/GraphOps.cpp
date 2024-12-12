@@ -1061,14 +1061,14 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, vector<Tensor*> indices, ma
 		}
 	};
 
-	// compute the flat index (C-order)
-	Tensor* flat_index = get_index(0);
-	for (int i = 1; i < memory_dim; i++) {
-		flat_index = &(*flat_index * *get_shape(i));
-		flat_index = &(*flat_index + *get_index(i));
+	Tensors shape = Tensors();
+	Tensors index = Tensors();
+	for (int i = 0; i < memory_dim; i++) {
+		shape.push_back(get_shape(i));
+		index.push_back(get_index(i));
 	}
 
-	return flat_index;
+	return &Tensor::FlatIndex(shape, index);
 }
 
 void IR::ReplaceDimNodes(Node* kernel, vector<Tensor*> indices, int dims)

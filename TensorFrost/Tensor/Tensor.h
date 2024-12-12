@@ -466,27 +466,58 @@ public:
 		output.SetType(TFType::Int);
 		return output;
 	}
+
 	static Tensor& Index(Tensors shape, int dim) {
 		Tensor& output = Static("dim_id", shape, TFType::Int);
 		output.SetData(dim);
 		output.SetType(TFType::Int);
 		return output;
 	}
+
 	static Tensor& Index(const vector<int>& shape, int dim) {
 		return Index(GetConstantShape(shape), dim);
 	}
 
-	static Tensor& ThreadIndex(const Tensors& shape) {
-		Tensor& output = Static("thread_id", shape, TFType::Int);
-		output.SetType(TFType::Int);
-		return output;
+	static Tensors Indices(Tensors shape) {
+		int dims = (int)shape.size();
+		Tensors indices = Tensors();
+		for (int i = 0; i < dims; i++) {
+			indices.push_back(&Index(shape, i));
+		}
+		return indices;
 	}
 
-	Tensor& ThreadIndex() const {
-		Tensor& output = Static(
-		    "thread_id", node_->args.GetArguments(ArgType::Shape), TFType::Int);
-		output.SetType(TFType::Int);
-		return output;
+	static Tensor& FlatIndex(Tensors shape, Tensors indices) {
+		int memory_dim = (int)shape.size();
+		if(memory_dim == 0) return Constant(0);
+		// compute the flat index (C-order)
+		Tensor* flat_index = const_cast<Tensor*>(indices[0]);
+		for (int i = 1; i < memory_dim; i++) {
+			flat_index = &(*flat_index * *shape[i]);
+			flat_index = &(*flat_index + *indices[i]);
+		}
+		return *flat_index;
+	}
+
+	static Tensor& ElementIndex(Tensors shape) {
+		return FlatIndex(shape, Indices(shape));
+	}
+
+	static Tensor& GetSeed(Tensors shape, const Tensor& seed) {
+		Tensor* full_seed = &const_cast<Tensor&>(seed);
+		if(full_seed->node_->type != TFType::Uint) {
+			full_seed = &asuint(*full_seed); //convert seed to uint
+		}
+		full_seed = &(touint(ElementIndex(shape)) + *full_seed * Constant(2654435761u));
+		return *full_seed;
+	}
+
+	static Tensor& Hash(Tensors shape, const Tensor& seed) {
+		return pcg(GetSeed(shape, seed));
+	}
+
+	static Tensor& Random(Tensors shape, const Tensor& seed) {
+		return pcgf(GetSeed(shape, seed));
 	}
 
 	Tensor& BlockIndex() const {
@@ -520,12 +551,7 @@ public:
 	}
 
 	Tensors Indices() const {
-		int dims = GetDimension();
-		Tensors indices = Tensors();
-		for (int i = 0; i < dims; i++) {
-			indices.push_back(&Index(i));
-		}
-		return indices;
+		return Indices(GetShape());
 	}
 
 	static Tensor& Store(const Tensor& tensor, const Tensor& value,

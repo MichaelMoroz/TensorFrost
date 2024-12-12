@@ -146,6 +146,18 @@ void TensorFunctionsDefinition(py::module& m) {
 		return PT(Tensor::Index(Reverse(TensorsFromList(shape)), dim));
 	});
 
+	m.def("hash", [](py::list shape, const PyTensor& seed) {
+		return PT(Tensor::Hash(Reverse(TensorsFromList(shape)), T(seed)));
+	}, py::arg("shape"), py::arg("seed"));
+
+	m.def("random", [](py::list shape, const PyTensor& seed) {
+		return PT(Tensor::Random(Reverse(TensorsFromList(shape)), T(seed)));
+	}, py::arg("shape"), py::arg("seed"));
+
+	m.def("element_index", [](py::list shape) {
+		return PT(Tensor::ElementIndex(Reverse(TensorsFromList(shape))));
+	}, py::arg("shape"));
+
 	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
 
 	m.def("indices", [](py::list shape) {

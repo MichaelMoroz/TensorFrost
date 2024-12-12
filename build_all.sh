@@ -29,11 +29,11 @@ clean_rebuild() {
     PYTHON_PATH=$(pyenv which python)
 
     # Rest of your build commands
-    git clean -d -x -f -e PythonBuild/dist
+    git clean -d -x -f -e Python/dist
     cmake -DPYBIND11_PYTHON_VERSION="$1" -DPYTHON_EXECUTABLE="$PYTHON_PATH" -S . -B build -DCMAKE_BUILD_TYPE=Release
     cmake --build build
     "$PYTHON_PATH" -m pip install build
-    "$PYTHON_PATH" -m build -w ./PythonBuild
+    "$PYTHON_PATH" -m build -w ./Python
 }
 
 # Main loop

@@ -1,4 +1,5 @@
 #include <TensorFrost.h>
+#include <Frontend/Python/PyTensor.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -14,10 +15,11 @@ public:
     TFType dtype;
     float random_scale;
     float random_offset;
+    string debug_name;
     bool optimize;
 
     Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
-        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), optimize(requires_grad) {}
+        : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), optimize(requires_grad), debug_name("") {}
 
     bool CanBeInitialized() {
         for (int i = 0; i < shape.size(); i++) {
@@ -100,6 +102,9 @@ public:
         } else if (py::isinstance<Module>(value)) {
             type = AttributeType::Module;
             optimize = py::cast<Module&>(value).optimize;
+        } else if (py::isinstance<PyTensor>(value)) {
+            PyTensor& tensor = py::cast<PyTensor&>(value);
+            tensor.Get().node_->debug_name = name;
         }
 
         bool already_exists = _attributes.contains(name);
@@ -137,6 +142,79 @@ public:
 
     virtual void assert_parameters() {}
 
+    py::object initialize_parameter_native(Parameter& param) {
+        //Convert to list
+        vector<py::object> shape_list;
+        for (int i = 0; i < param.shape.size(); i++) {
+            shape_list.push_back(tf.attr("const")(param.shape[i]));
+        }
+        py::object result;
+        if(param.dtype == TFType::Float) {
+            float shape_sum = 0.0f;
+            for (int i = 0; i < param.shape.size(); i++) {
+                shape_sum += (float)param.shape[i];
+            }
+            float scale = sqrt(6.0f / shape_sum);
+            if(param.random_scale >= 0.0f) {
+                scale = param.random_scale;
+            }
+            result = tf.attr("random")(shape_list, tf.attr("const")(0u));
+            result = result.attr("__mul__")(py::float_(2.0f));
+            result = result.attr("__sub__")(py::float_(1.0f));
+            result = result.attr("__mul__")(py::float_(scale));
+            result = result.attr("__add__")(py::float_(param.random_offset));
+        } else if (param.dtype == TFType::Int) { //just use zeros
+            result = tf.attr("const")(0, shape_list);
+        } else if (param.dtype == TFType::Uint) { //just use zeros
+            result = tf.attr("const")(0, shape_list);
+        } else { //just use zeros
+            result = tf.attr("const")(false, shape_list);
+        }
+        if(param.debug_name != "") {
+            result = result.attr("set_debug_name")(param.debug_name);
+        }
+        return result;
+    }
+
+    void initialize_parameters_native() {
+        for (auto& module : get_attributes_of_type(AttributeType::Module)) {
+            module.second.attr("initialize_parameters_native")();
+        }
+
+        for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
+            if(!py::isinstance<Parameter>(param.second)) {
+                continue;
+            }
+
+            Parameter& p = py::cast<Parameter&>(param.second);
+            if (!p.CanBeInitialized()) {
+                //replace all -1 shapes with 1
+                for (int i = 0; i < p.shape.size(); i++) {
+                    if (p.shape[i] == -1) {
+                        p.shape[i] = 1;
+                    }
+                }
+            }
+            py::object tensor = initialize_parameter_native(p);
+            setattr(param.first, tensor);
+        }
+
+        for (auto& array : get_attributes_of_type(AttributeType::ParameterArray)) {
+            ParameterArray& param_array = py::cast<ParameterArray&>(array.second);
+            for (auto& param : param_array._parameters) {
+                if(!py::isinstance<Parameter>(param.second)) {
+                    continue;
+                }
+                Parameter& p = py::cast<Parameter&>(param.second);
+                if (!p.CanBeInitialized()) {
+                    continue;
+                }
+                py::object tensor = initialize_parameter_native(p);
+                param_array.setitem(param.first, tensor);
+            }
+        }
+    }
+
     void initialize_input() {
         for (auto& module : get_attributes_of_type(AttributeType::Module)) {
             module.second.attr("initialize_input")();
@@ -145,6 +223,9 @@ public:
         for (auto& param : get_attributes_of_type(AttributeType::Parameter)) {
             Parameter& p = py::cast<Parameter&>(param.second);
             py::object tensor = tf.attr("input")(p.shape, p.dtype);
+            if(p.debug_name != "") {
+                tensor = tensor.attr("set_debug_name")(p.debug_name);
+            }
             setattr(param.first, tensor);
         }
 
@@ -153,6 +234,9 @@ public:
             for (auto& param : param_array._parameters) {
                 Parameter& p = py::cast<Parameter&>(param.second);
                 py::object tensor = tf.attr("input")(p.shape, p.dtype);
+                if(p.debug_name != "") {
+                    tensor = tensor.attr("set_debug_name")(p.debug_name);
+                }
                 param_array.setitem(param.first, tensor);
             }
         }
@@ -167,15 +251,6 @@ public:
         // Convert the shape vector to a tuple
         py::tuple shape_tuple = py::cast(param.shape);
 
-        // py::array_t<float> arr = random.attr("randn")(*shape_tuple).cast<py::array_t<float>>();
-        // float shape_sum = 0.0f;
-        // for (int i = 0; i < param.shape.size(); i++) {
-        //     shape_sum += (float)param.shape[i];
-        // }
-        // float scale = sqrt(2.0f / shape_sum);
-        // if(param.random_scale >= 0.0f) {
-        //     scale = param.random_scale;
-        // }
         if(param.dtype == TFType::Float) {
             // Generate uniform random values instead of normal
             py::array_t<float> arr = random.attr("uniform")(-1.0f, 1.0f, shape_tuple).cast<py::array_t<float>>();

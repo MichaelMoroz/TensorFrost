@@ -1,3 +1,5 @@
+#pragma once
+
 #include <TensorFrost.h>
 #include <pybind11/functional.h>
 #include <pybind11/numpy.h>
