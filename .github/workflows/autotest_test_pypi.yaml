@@ -25,7 +25,7 @@ jobs:
 
       - name: Install TensorFrost
         run: |
-          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ tensorfrost
+          pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --pre tensorfrost
 
       - name: Install test dependencies
         run: |
