@@ -35,7 +35,7 @@ def bitonic(keys, values = None):
         return keys
 
 #histogram radix sort
-def radix(keys, values, bits_per_pass = 6, max_bits = 32):
+def radix(keys, values = None, bits_per_pass = 6, max_bits = 32):
     def prefix_sum_grouped(A, axis = -1):
         axis = len(A.shape) + axis if axis < 0 else axis
         group_size = 64
@@ -49,33 +49,42 @@ def radix(keys, values, bits_per_pass = 6, max_bits = 32):
         full_scan = tf.merge_dim(group_scan, target_size = A.shape[axis], axis = axis + 1)
         return full_scan
 
+    sign_bit = ~tf.uint(0x7FFFFFFF)
+
     def map_float_to_uint(x):
-        x = tf.asuint(x)
-        return x ^ ((-((x >> 31) & tf.uint(1))) | tf.uint(0x80000000))
+        # Convert float to uint representation
+        ux = tf.asuint(x)
+        # Compute mask
+        mask = tf.select((ux >> 31) == 1, ~tf.uint(0), sign_bit)
+        # Apply XOR
+        return ux ^ mask
 
     def map_uint_to_float(x):
-        x = x ^ (((x >> 31) & tf.uint(1) - 1) | tf.uint(0x80000000))
-        return tf.asfloat(x)
+        # Compute mask
+        mask = tf.select((x >> 31) == 0, ~tf.uint(0), sign_bit)
+        # Apply XOR and convert back to float
+        return tf.asfloat(x ^ mask)
 
     def map_int_to_uint(x):
-        return tf.asuint(x) ^ tf.uint(0x80000000)
+        return tf.asuint(x) ^ sign_bit
 
     def map_uint_to_int(x):
-        return tf.asint(x ^ tf.uint(0x80000000))
+        return tf.asint(x ^ sign_bit)
 
     tf.region_begin('Radix sort')
 
     has_values = values is not None
 
     keys = tf.copy(keys)
-    values = None
     if has_values:
         values = tf.copy(values)
 
-    if(keys.type == tf.float32):
+    original_type = keys.type
+
+    if(original_type == tf.float32):
         keys = map_float_to_uint(keys)
 
-    if(keys.type == tf.int32):
+    if(original_type == tf.int32):
         keys = map_int_to_uint(keys)
 
     iters = (max_bits + bits_per_pass - 1) // bits_per_pass
@@ -155,10 +164,10 @@ def radix(keys, values, bits_per_pass = 6, max_bits = 32):
 
     tf.region_end('Radix sort')
 
-    if(keys.type == tf.float32):
+    if(original_type == tf.float32):
         keys = map_uint_to_float(keys)
 
-    if(keys.type == tf.int32):
+    if(original_type == tf.int32):
         keys = map_uint_to_int(keys)
 
     if has_values:

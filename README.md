@@ -1,3 +1,5 @@
+from Demos.SystemParametersInfo import new_value
+
 # 🔢🥶 TensorFrost
 [![Windows](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml)
 [![Manylinux](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml)
@@ -246,9 +248,11 @@ Also there are these provided functions:
 
 `abs`, `sign`, `ceil`, `floor`, `round`, `frac`, `exp`, `exp2`, `log`, `log2`, `sqrt`, `rsqrt`, `rcp`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `sinh`, `cosh`, `tanh`, `reversebits`, `pow`, `atan2`, `modf`, `step`, `clamp`, `lerp`, `fma`, `smoothstep`, `select`, `const`.
 
-Additionally you can use `uint`, `int`, `float`, `bool` to cast between types, and `asuint`, `asint`, `asfloat`, `asbool` to reinterpret the bits of the number.
+Additionally, you can use `uint`, `int`, `float`, `bool` to cast between types, and `asuint`, `asint`, `asfloat`, `asbool` to reinterpret the bits of the number.
 
 If needed, you can copy a value with the `copy` operation which is useful as you can not assign a tensor to another tensor directly.
+
+### Random number generation
 
 For random number generation you can either implement your own hashing function, or use the provided pcg32 hash.
 
@@ -258,6 +262,34 @@ value = tf.pcgf(seed)
 
 #generate a random uint32 number
 value = tf.pcg(seed)
+```
+
+Additionally, TensorFrost provides a `random` submodule with a set of functions for generating random numbers and shuffling indices.
+
+```python
+#generate a random number between 0 and 1
+value = tf.random.rand(shape, seed=seed)
+
+#generate a random uint32 number
+value = tf.random.randint(seed, max_value)
+
+#generate a random normal number    
+value = tf.random.randn(shape, seed=seed)
+
+#generate a pair of random normal numbers (more efficiently using the box-muller transform)    
+value1, value2 = tf.random.randn2(shape, seed=seed)
+
+#generate a random normal number with the same shape as the input tensor
+value = tf.random.randn_like(tensor, seed=seed)
+
+#generate a random number with the same shape as the input tensor
+value = tf.random.rand_like(tensor, seed=seed)
+
+#generate a random permutation of the numbers from 0 to n
+value = tf.random.permutation(n, seed=seed)
+
+#generate a random shuffle of the input index value
+new_idx = tf.random.shuffle(idx, n, seed=seed, iters=16)
 ```
 
 TensorFrost does not have a built-in seed, so its similar to JAX where you need to provide your own seed. This is useful for reproducibility, as you can just provide the same seed to the program and get the same results.
@@ -677,6 +709,49 @@ To debug the generated code you can either look at the generated code in the Tem
 
 If you want to print out the tensor data at runtime, you can use the `tf.print_value(string, tensor_val)` function, which will print out the tensor data to the console, only if the value is scalar. 
 You can also have an assertion that will throw an error if the boolean scalar tensor value is false, with the `tf.assert_value(string, tensor_val)` function.
+
+### Custom kernels
+
+You can also write custom "kernel" scopes which are guaranteed to be compiled to a single kernel. You can use special low level shader features like groupshared memory and barriers in these scopes. 
+At the moment barriers only work correctly on GPU backends.
+
+```python
+def FasterMatmul():
+    A = tf.input([-1, -1], tf.float32)
+    N, M = A.shape
+    B = tf.input([M, -1], tf.float32)
+    K = B.shape[1]
+    C = tf.buffer([N, K], tf.float32)
+    BK = 32
+    
+    with tf.kernel(C.shape, group_size=[BK,BK]) as (i, j):
+        A_tile = tf.group_buffer(BK*BK, tf.float32)
+        B_tile = tf.group_buffer(BK*BK, tf.float32)
+        tx = i.block_thread_index(1)
+        ty = i.block_thread_index(0)
+    
+        result = tf.const(0.0)
+        with tf.loop(0, K, BK) as blk:
+            A_tile[tx * BK + ty] = A[i,  ty + blk]
+            B_tile[tx * BK + ty] = B[tx + blk, j]
+            tf.group_barrier()
+    
+            with tf.loop(BK) as k:
+                result.val += A_tile[tx * BK + k] * B_tile[k * BK + ty]
+    
+            tf.group_barrier()
+    
+        C[i, j] = result.val
+    
+    return C
+```
+Here is an example of a tiled matrix multiplication kernel. The `tf.kernel` context manager is used to create a custom kernel scope. The first argument is the shape of the kernel compute, the second argument is the group size, which is optional, if its not specified it will automatically estimated from the kernel shape. The `group_size` argument is used to specify the size of the thread group, and the `block_thread_index` method is used to get the thread index in the group. The `group_barrier` method is used to wait for all threads in the group to reach the barrier.
+
+If the dimension count of the group shape is less than the kernel it will only make the group based on the last dimensions. Only up to 3D groups are supported. The automatic group shape estimation can make an up to 3d group with number of thread <= 1024. If the shape of the kernel is small, the group shape will match the kernel shape of those dimensions.
+
+You can define groupshared memory buffers with the `tf.group_buffer` function. The first argument is the size of the buffer, and the second argument is the data type of the buffer. You must use a barrier if you want to exchange data between threads in the groupshared memory.
+
+You can also define local memory arrays with `tf.local_buffer`, which works the same as `tf.group_buffer`, but is local to the thread.
 
 ### GUI and visualization
 

@@ -74,12 +74,10 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 		kernel->var_names[var.second] = var.first->var_name;
 		kernel->var_types[var.second] = type_names[var.first->type];
 	}
+	kernel->var_names.push_back("_kernel_block_offset");
+	kernel->var_types.push_back(type_names[TFType::Uint]);
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";
-	}
-	if(kernel->var_names.size() == 0)
-	{
-		header += "  uint dummy;\n";
 	}
 	header += "};\n\n";
 	return header;
@@ -115,7 +113,7 @@ void GenerateHLSLKernel(Program* program, Kernel* kernel) {
 	main_function += R"(
 void main(uint3 gtid : SV_GroupThreadID, uint3 gid : SV_GroupID)
 {
-  int block_id = gid.x;
+  int block_id = gid.x + var._kernel_block_offset;
   int block_thread_id0 = gtid.x;
   int block_thread_id1 = gtid.y;
   int block_thread_id2 = gtid.z;

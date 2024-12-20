@@ -449,7 +449,10 @@ void TFContext::dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_
 	std::vector<TFTensor> all_tensors;
 	all_tensors.insert(all_tensors.end(), read_write.begin(), read_write.end());
 	all_tensors.insert(all_tensors.end(), read_only.begin(), read_only.end());
-	TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)var.size(), var.begin(), 0};
+	std::vector<uint32_t> all_vars;
+	all_vars.insert(all_vars.end(), var.begin(), var.end());
+	all_vars.push_back(0); //group index offset
+	TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)all_vars.size(), all_vars.data(), 0};
 
 	const TFTensor* read_write_tensors = read_write.begin();
 	for (size_t i = 0; i < read_write.size(); i++) {
@@ -694,12 +697,14 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 		kernel->var_names[var.second] = var.first->var_name;
 		kernel->var_types[var.second] = type_names[var.first->type];
 	}
+	kernel->var_names.push_back("_kernel_block_offset");
+	kernel->var_types.push_back(type_names[TFType::Uint]);
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";
 	}
 
 	loop += "  #pragma omp parallel for\n";
-	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
+	loop += "  for (int block_id = var__kernel_block_offset; block_id < (work_group_count+var__kernel_block_offset); block_id++)\n";
 	loop += "  {\n";
 
 	loop += GetGroupBufferDeclarations(kernel, [](const string& name, const string& type_name, size_t size) {

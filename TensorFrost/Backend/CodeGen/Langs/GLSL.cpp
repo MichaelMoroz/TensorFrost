@@ -105,12 +105,10 @@ bool asbool(uint x) {
 		kernel->var_names[var.second] = var.first->var_name;
 		kernel->var_types[var.second] = type_names[var.first->type];
 	}
+	kernel->var_names.push_back("_kernel_block_offset");
+	kernel->var_types.push_back(type_names[TFType::Uint]);
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		header += "  " + kernel->var_types[i] + " " + kernel->var_names[i] + ";\n";
-	}
-	if(kernel->var_names.size() == 0)
-	{
-		header += "  uint dummy;\n";
 	}
 	header += "};\n\n";
 	return header;
@@ -167,7 +165,7 @@ void GenerateGLSLKernel(Program* program, Kernel* kernel) {
 
 	main_code += R"(
 void main() {
-  int block_id = int(gl_WorkGroupID.x);
+  int block_id = int(gl_WorkGroupID.x + var._kernel_block_offset);
   int block_thread_id0 = int(gl_LocalInvocationID.x);
   int block_thread_id1 = int(gl_LocalInvocationID.y);
   int block_thread_id2 = int(gl_LocalInvocationID.z);
