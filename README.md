@@ -1,5 +1,3 @@
-from Demos.SystemParametersInfo import new_value
-
 # 🔢🥶 TensorFrost
 [![Windows](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_windows.yaml)
 [![Manylinux](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml/badge.svg)](https://github.com/MichaelMoroz/TensorFrost/actions/workflows/build_manylinux.yml)
