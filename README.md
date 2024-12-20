@@ -844,7 +844,7 @@ Core features:
 - [ ] Gradients of control flow operations and gradients from gradients
 - [ ] Advanced data types and quantization
 - [ ] Compile from Python AST instead of tracing
-- [ ] Groupshared memory support
+- [x] Groupshared and local memory support (no CPU yet)
 - [ ] Automatic data caching and reuse
   
 Algorithm library:
@@ -852,7 +852,7 @@ Algorithm library:
 - [x] Module system
 - [x] Optimizer modules (SGD, Adam, RMSProp)
 - [x] Matrix operations (matrix multiplication, etc.)
-- [ ] Sorting algorithms (some examples already in the examples folder)
+- [ ] Sorting algorithms (module partially done, no autodiff support yet)
 - [ ] Advanced matrix operations (QR, SVD, eigenvalues, etc.) (some examples already in the examples folder)
 - [ ] Fast Fourier Transform (some examples already in the examples folder)
 - [ ] High-level neural network layers (convolution, etc.) (some examples already in the examples folder)
