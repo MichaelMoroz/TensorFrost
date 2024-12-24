@@ -273,7 +273,7 @@ string IndexingModeToString(IndexingMode mode) {
     return indexing_mode_names.at(mode);
 }
 
-void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_name, TFType new_type, unordered_set<Node*>& existing_nodes, bool set_static) {
+void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_name, TFDataFormat new_format, unordered_set<Node*>& existing_nodes, bool set_static) {
     if(valid()) {
         throw runtime_error("Node already initialized");
     }
@@ -281,7 +281,7 @@ void Node::initialize(Tensor *tensor, NodeArguments &&new_args, string &&new_nam
     flags.remove(NodeProp::Placeholder);
 
     tensor_ = tensor;
-    type = new_type;
+    format = new_format;
     args.AddArguments(std::move(new_args));
     //args.UpdateOutputs();
     flags.set(NodeProp::IsStatic, set_static);
@@ -296,7 +296,7 @@ void Node::CopyProperties(Node *other) {
     debug_name = other->debug_name;
     indexing_mode_ = other->indexing_mode_;
     group_size = other->group_size;
-    type = other->type;
+    format = other->format;
 
     flags.copy_all(other->flags);
 }

@@ -30,7 +30,7 @@ public:
         root = new Node();
 		root->index_ = 0;
 		root->name = "root";
-        root->initialize(nullptr, {}, "host", TFType::None, existing_nodes, true);
+        root->initialize(nullptr, {}, "host", {TFType::None, 0}, existing_nodes, true);
         cursor = NodeIterator(root);
     }
 
@@ -49,7 +49,7 @@ public:
         return NodeIterator(root);
     }
 
-    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name, TFType type) {
+    Node* AddNode(Tensor* tensor, NodeArguments&& args, string&& name, TFDataFormat type) {
 		Node* newNode = nullptr;
         if (cursor->valid()) { //already initialized, add new node before cursor
             newNode = new Node(cursor->prev, cursor->parent);

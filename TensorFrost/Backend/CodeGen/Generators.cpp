@@ -108,7 +108,8 @@ string GetGroupBufferDeclarations(Kernel *kernel, function<string(const string &
 	// add group memory declarations
 	for (auto& mem : kernel->group_memory) {
 		string name = mem->var_name;
-		string type_name = type_names[mem->type];
+		string type_name = type_names[mem->format.type];
+		//TODO: add support for non 32 bit types
 		final_source += get_shared_name(name, type_name, mem->data[0]);
 	}
 
@@ -207,7 +208,7 @@ string format_float(double value) {
 
 inline string Tensor::GetConstantString() const {
 	if (node_->name == "const" || node_->name == "dim_id") {
-		switch (node_->type) {
+		switch (node_->format.type) {
 			case TFType::Float:
 				return format_float(AsFloat(node_->data[0]));
 			case TFType::Int:
@@ -320,7 +321,8 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 	string name = node->var_name;
 
 	// get output type
-	TFType output_type = node->type;
+	TFDataFormat output_format = node->format;
+	//TODO: add support for non 32 bit types
 
 	// generate line
 	string left = "";
@@ -352,13 +354,13 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			// if input memory type then just take the input and store it in the
 			// output
 			if (node->flags.has(NodeProp::InputMemory)) {
-				left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				left += "tf.check_tensor(" + node->var_name+ ", \"" + node->var_name + "\", " + shape_arg + ", " + DataFormatNames[output_format] + ")";
 				right += ";";
 			}
 			// if any other memory type - allocate it
 			else {
 				left += "TFTensor " + node->var_name + " = ";
-				expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+				expression += "tf.allocate(\"" + node->var_name + "\", " + shape_arg + ", " + DataFormatNames[output_format] + ")";
 				right += ";";
 			}
 		} else if (op->name_ == "deallocate") {
@@ -370,7 +372,7 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			right = ";";
 		} else if(op->HasAllTypes(OpProp::MemoryReuse)) {
 			left = "TFTensor " + node->var_name + " = ";
-			expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", TFType::" + DataTypeNames[output_type] + ")";
+			expression = "tf." + op->code_ + "(" + args.Name(ArgType::Memory) + ", \"" + node->var_name + "\", " + shape_arg + ", " + DataFormatNames[output_format] + ")";
 			right = ";";
 		} else if(op->HasAllTypes(OpProp::Debug)) {
 			left = "tf." + op->code_ + "(\"" + node->debug_name + "\"";
@@ -380,12 +382,12 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			left += ")";
 			right = ";";
 		} else if(op->name_ == "local_memory") {
-			left = type_names[output_type] + " " + name + "[" + to_string(node->data[0]) + "]";
+			left = type_names[output_format.type] + " " + name + "[" + to_string(node->data[0]) + "]";
 			right = ";";
 		} else if(op->name_ == "group_memory") {
 			left = "";
 			//just leave as comment, actual declaration is done outside of the main body of the kernel
-			right = "//" + type_names[output_type] + " " + name + "[" + to_string(node->data[0]) + "]";
+			right = "//" + type_names[output_format.type] + " " + name + "[" + to_string(node->data[0]) + "]";
 		}
 	} else if (op->HasAllTypes(OpProp::MemoryOp)) {
 		string address;
@@ -400,30 +402,30 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 			bool is_local = node->flags.has(NodeProp::LocalMemoryOp);
 			string memory_name = args.Name(ArgType::Memory) + (is_local ? "" : "_mem");
 			string memory_expression = memory_name + "[" + address + "]";
-			TFType memory_type = is_local ? node->type : Uint;
+			TFType memory_type = is_local ? node->format.type : Uint;
 			string memory_type_name = type_names[memory_type];
 
 			if (op->name_ == "load") {
-				string output_type_name = type_names[output_type];
+				string output_type_name = type_names[output_format.type];
 				left += output_type_name + " " + name + " = ";
 				expression +=
-				    (output_type == memory_type)
+				    (output_format.type == memory_type)
 				        ? memory_expression
 				        : TypeReinterpret(output_type_name, memory_expression);
 				right += ";";
 			} else if (op->name_ == "store") {
 				expression += memory_expression + " = ";
 				expression +=
-				    (output_type == memory_type)
+				    (output_format.type == memory_type)
 				        ? args.Name(ArgType::Input)
 				        : TypeReinterpret(memory_type_name, args.Name(ArgType::Input));
 				right += ";";
 			} else if (op->HasAllTypes(OpProp::Scatter)) {
-				if (output_type != None) {
-					left += type_names[output_type] + " " + name + " = ";
+				if (output_format.type != None) {
+					left += type_names[output_format.type] + " " + name + " = ";
 				}
-				string output_type_name = type_names[output_type];
-				string input_type_name = type_names[args.Type(ArgType::Input)];
+				string output_type_name = type_names[output_format.type];
+				string input_type_name = type_names[args.Format(ArgType::Input).type];
 				expression += GenerateAtomicOp(op->name_, input_type_name,
 				                               output_type_name, address,
 				                               args.Name(ArgType::Input), name, memory_name);
@@ -438,10 +440,10 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 
 			if (op->name_ == "load") {
 				//do readback
-				string output_type_name = type_names[output_type];
+				string output_type_name = type_names[output_format.type];
 				left += output_type_name + " " + name + " = ";
 				string memory_expression = GetName("tf.read") + "(" + tensor_name + ", " + address + ")";
-				expression += (output_type == Uint)
+				expression += (output_format.type == Uint)
 					? memory_expression
 					: TypeReinterpret(output_type_name, memory_expression);
 				right += ";";
@@ -460,15 +462,15 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 		expression += args.Name(ArgType::Input);
 		right += ";";
 	} else {
-		if (output_type != None) {
-			left += type_names[output_type] + " " + name + " = ";
+		if (output_format.type != None) {
+			left += type_names[output_format.type] + " " + name + " = ";
 		}
 		string line;
 		string code = op->code_;
 		switch (op->class_) {
 			case OpClass::Operator:
 				args.AddParenthesis(true);
-				if ((code == "&" || code == "|") && output_type == Bool) {
+				if ((code == "&" || code == "|") && output_format.type == Bool) {
 					code = code + code;
 				}
 				line += args.Name(ArgType::Input, 0) + " " + code + " " +
@@ -504,10 +506,10 @@ Line* CodeGenerator::GenerateLine(Node* node)  {
 				line += op->code_;
 				break;
 			case OpClass::TypeCast:
-				line += GenerateTypeCast(&args, DataTypeToString(node->type));
+				line += GenerateTypeCast(&args, DataTypeToString(node->format.type));
 				break;
 			case OpClass::TypeReinterpret:
-				line += GenerateTypeReinterpret(&args, DataTypeToString(node->type));
+				line += GenerateTypeReinterpret(&args, DataTypeToString(node->format.type));
 				break;
 			case OpClass::Constant:
 				line += node->GetTensor()->GetConstantString();

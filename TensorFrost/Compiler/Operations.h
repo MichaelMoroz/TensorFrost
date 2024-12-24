@@ -24,9 +24,41 @@ extern "C" {
 		Bool,
 		None,
 	};
+
+	struct TFDataFormat {
+		TFType type;
+		size_t size;
+
+		bool operator==(const TFDataFormat& other) const {
+			return type == other.type && size == other.size;
+		}
+
+		bool operator!=(const TFDataFormat& other) const {
+			return !(*this == other);
+		}
+
+		int GetHash() const {
+			return (int)type << 16 | (int)size;
+		}
+
+		bool operator<(const TFDataFormat& other) const {
+			return GetHash() < other.GetHash();
+		}
+
+		bool operator>(const TFDataFormat& other) const {
+			return GetHash() > other.GetHash();
+		}
+	};
+
+#define TFTypeNone TFDataFormat{TFType::None, 0}
+#define TFTypeBool32 TFDataFormat{TFType::Bool, 32}
+#define TFTypeFloat32 TFDataFormat{TFType::Float, 32}
+#define TFTypeInt32 TFDataFormat{TFType::Int, 32}
+#define TFTypeUint32 TFDataFormat{TFType::Uint, 32}
 }
 
 extern std::unordered_map<TFType, string> DataTypeNames;
+extern std::map<TFDataFormat, string> DataFormatNames;
 extern std::unordered_map<TFType, string> type_names;
 
 //op can have only one class
@@ -89,6 +121,7 @@ public:
 	//vector<OpClass> op_classes;
 	OpProps props_;
 	OpClass class_;
+	size_t default_size = 32;
 
 	Operation() = default;
 
@@ -181,53 +214,59 @@ public:
 		return overloads_[0].first.size();
 	}
 
-	bool IsInputValid(const vector<TFType>& input_types) const {
+	bool IsOverloadValid(const pair<vector<TFType>, TFType>& overload, const vector<TFDataFormat>& input_types) const {
+		if (overload.first.size() != input_types.size()) {
+			return false;
+		}
+
+		for (size_t i = 0; i < input_types.size(); i++) {
+			if (overload.first[i] != input_types[i].type) {
+				return false;
+			}
+		}
+
+		if (input_types.size() == 0) {
+			return true;
+		}
+
+		//check if all format sizes are the same
+		size_t size = input_types[0].size;
+		for (size_t i = 1; i < input_types.size(); i++) {
+			if (input_types[i].size != size) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool IsInputValid(const vector<TFDataFormat>& input_types) const {
 		for (const auto& overload : overloads_) {
-			if (overload.first.size() != input_types.size()) {
-				continue;
-			}
-
-			bool valid = true;
-			for (size_t i = 0; i < input_types.size(); i++) {
-				if (overload.first[i] != input_types[i]) {
-					valid = false;
-					break;
-				}
-			}
-
-			if (valid) {
+			if (IsOverloadValid(overload, input_types)) {
 				return true;
 			}
 		}
 		return false;
 	}
 
-	bool IsOutputValid(const TFType& output_type) const {
+	bool IsOutputValid(const TFDataFormat& output_type) const {
 		for (const auto& overload : overloads_) {
-			if (overload.second == output_type) {
+			if (overload.second == output_type.type) {
 				return true;
 			}
 		}
 		return false;
 	}
 
-	TFType GetOutputType(
-	    const vector<TFType>& input_types) const {
+	TFDataFormat GetOutputType(
+	    const vector<TFDataFormat>& input_types) const {
 		for (const auto& overload : overloads_) {
-			if (overload.first.size() != input_types.size()) {
-				continue;
-			}
-
-			bool valid = true;
-			for (size_t i = 0; i < input_types.size(); i++) {
-				if (overload.first[i] != input_types[i]) {
-					valid = false;
-					break;
+			if (IsOverloadValid(overload, input_types)) {
+				size_t cur_size = default_size;
+				if (input_types.size() > 0) {
+					cur_size = input_types[0].size;
 				}
-			}
-
-			if (valid) {
-				return overload.second;
+				return {overload.second, cur_size};
 			}
 		}
 		throw std::runtime_error("Invalid input types for operation");

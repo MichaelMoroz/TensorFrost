@@ -16,12 +16,12 @@ class PyTensorMemory {
 
 	explicit PyTensorMemory(TFTensor* tensor) : tensor_(tensor) {}
 
-	PyTensorMemory(vector<size_t> shape, TFType type = TFType::Float) {
+	PyTensorMemory(vector<size_t> shape, TFDataFormat type = TFTypeFloat32) {
 		tensor_ = global_memory_manager->AllocateTensor(shape, type);
 	}
 
-	TFType GetType() const {
-		return tensor_->type;
+	TFDataFormat GetFormat() const {
+		return tensor_->format;
 	}
 
 	PyTensorMemory(py::array arr);

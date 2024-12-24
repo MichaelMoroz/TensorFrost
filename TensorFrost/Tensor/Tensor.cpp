@@ -72,7 +72,7 @@ void ArgumentManager::AddArgument(ArgID id, Node* node) {
 		throw std::runtime_error("Node is null");
 	}
 	inputs_[id] = node;
-	argument_types_[id] = node->type;
+	argument_types_[id] = node->format;
 	argument_counts_[id.first]++;
 	//add this node as an output of the argument
 	node->args.AddOutput(id, node_);
@@ -111,11 +111,11 @@ vector<const Tensor *> ArgumentManager::GetTensorVector(ArgType type) const  {
 	return tensors;
 }
 
-tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &name, const Tensors &tensors,
+tuple<const Operation *, TFDataFormat, ShapeInfo> Tensor::GetOperation(const string &name, const Tensors &tensors,
 	bool check_shape) {
-	vector<TFType> input_types = vector<TFType>();
+	vector<TFDataFormat> input_types = vector<TFDataFormat>();
 	for (const auto& tensor : tensors) {
-		input_types.push_back(tensor->node_->type);
+		input_types.push_back(tensor->node_->format);
 	}
 
 	const Operation* operation = FindOperation(name);
@@ -124,7 +124,7 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 	if (!operation->IsInputValid(input_types)) {
 		string error = "Input types (";
 		for (int i = 0; i < input_types.size(); i++) {
-			error += DataTypeToString(input_types[i]);
+			error += DataTypeToString(input_types[i].type) + "(" + to_string(input_types[i].size) + ")";
 			if (i < input_types.size() - 1) {
 				error += ", ";
 			}
@@ -145,21 +145,21 @@ tuple<const Operation *, TFType, ShapeInfo> Tensor::GetOperation(const string &n
 		}
 	}
 
-	TFType output_type = operation->GetOutputType(input_types);
+	TFDataFormat output_type = operation->GetOutputType(input_types);
 
 	return {operation, output_type, shape_info};
 }
 
 bool Tensor::CheckIndices(const Tensors &indices) {
 	for (const Tensor* index : indices) {
-		if (index->node_->type != TFType::Int && index->node_->type != TFType::Uint) {
+		if (index->node_->format.type != TFType::Int && index->node_->format.type != TFType::Uint) {
 			return false;
 		}
 	}
 	return true;
 }
 
-TFType Tensor::GetType() const { return node_->type; }
+TFDataFormat Tensor::GetFormat() const { return node_->format; }
 
 void Tensor::SetData(const vector<uint> &data) const {
 	node_->data = data;
@@ -177,8 +177,8 @@ void Tensor::SetData(int data) const {
 	SetData(vector<uint>(1, AsUint(data)));
 }
 
-void Tensor::SetType(TFType type) const {
-	node_->type = type;
+void Tensor::SetFormat(TFDataFormat type) const {
+	node_->format = type;
 }
 
 void Tensor::DetachGrad() const {
@@ -209,7 +209,7 @@ void Tensor::HintRange(uint min, uint max) const {
 }
 
 Tensor* Tensor::GetCopy(const Tensor& other, NodeArguments args) {
-	Tensor* copy = &CreateNode(other.node_->type, std::move(args), other.node_->name);
+	Tensor* copy = &CreateNode(other.node_->format, std::move(args), other.node_->name);
 	copy->node_->data = other.node_->data;
 	copy->node_->CopyProperties(other.node_);
 	return copy;
@@ -237,7 +237,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 		//check if tensor is a negative constant
 		if (tensor->node_->name == "const" && (*(int*)&(tensor->node_->data[0])) < 0)
 		{
-			Tensor& mem = Static("input_shape", TFType::Int);
+			Tensor& mem = Static("input_shape", {TFType::Int, 32});
 			//make sure its reversed on the backend
 			mem.node_->flags.set(NodeProp::InputShapeDim, (int64_t)(shape.size() - dim - 1));
 			result.push_back(&mem);
@@ -305,21 +305,21 @@ bool Tensor::AreTensorsEqual(const Tensor &a, const Tensor &b) {
 	return false;
 }
 
-Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape, TFType type) {
+Tensor& Tensor::Reshape(const Tensor& tensor, const Tensors& shape, TFDataFormat format) {
 	Tensor& out = MemoryOpShape("reshape", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
-	if(type != TFType::None) {
-		out.node_->type = type;
+	if(format.type != TFType::None) {
+		out.node_->format = format;
 	} else {
-		out.node_->type = tensor.node_->type;
+		out.node_->format = tensor.node_->format;
 	}
 	return out;
 }
 
-Tensor & Tensor::Assert(const Tensor &tensor, const Tensors &shape, TFType type) {
+Tensor & Tensor::Assert(const Tensor &tensor, const Tensors &shape, TFDataFormat type) {
 	Tensor& out = MemoryOpShape("assert", shape, &tensor);
 	out.SetDebugName(tensor.node_->debug_name);
-	out.node_->type = type;
+	out.node_->format = type;
 	return out;
 }
 
@@ -332,12 +332,12 @@ void Tensor::SetDebugName(const string& name) const
 }
 
 void Tensor::BeginRegion(const string& name) {
-	Tensor& t = Static("region_begin", TFType::None);
+	Tensor& t = Static("region_begin", {TFType::None, 0});
 	t.SetDebugName(name);
 }
 
 void Tensor::EndRegion(const string& name) {
-	Tensor& t = Static("region_end", TFType::None);
+	Tensor& t = Static("region_end", {TFType::None, 0});
 	t.SetDebugName(name);
 }
 

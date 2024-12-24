@@ -16,7 +16,7 @@ void TensorMemoryDefinition(py::module& m,
 	// "constructor"
 	m.def(
 	    "tensor",
-	    [](const std::vector<size_t>& shape, TFType type) {
+	    [](const std::vector<size_t>& shape, TFDataFormat type) {
 		    return PyTensorMemory(shape, type);
 	    },"Create a TensorMemory with the given shape", py::return_value_policy::take_ownership);
 
@@ -35,7 +35,7 @@ void TensorMemoryDefinition(py::module& m,
 	});
 
 	py_tensor_mem.def_property_readonly("type", [](const PyTensorMemory& t) {
-		return t.GetType();
+		return t.GetFormat();
 	});
 
 	py_tensor_mem.def_property_readonly("size", [](const PyTensorMemory& t) {
@@ -48,13 +48,13 @@ void TensorMemoryDefinition(py::module& m,
 	    [](const PyTensorMemory& t)
 	        -> std::variant<py::array_t<float>, py::array_t<int>,
 	                        py::array_t<uint>, py::array_t<bool>> {
-		    if (t.GetType() == TFType::Float) {
+		    if (t.GetFormat() == TFTypeFloat32) {
 		    	return t.ToPyArray<float>();
-		    } else if (t.GetType() == TFType::Int) {
+		    } else if (t.GetFormat() == TFTypeInt32) {
 		    	return t.ToPyArray<int>();
-		    } else if (t.GetType() == TFType::Uint) {
+		    } else if (t.GetFormat() == TFTypeUint32) {
 			    return t.ToPyArray<uint>();
-		    } else if (t.GetType() == TFType::Bool) {
+		    } else if (t.GetFormat() == TFTypeBool32) {
 			    return t.ToPyArray<bool>();
 		    } else {
 			    throw std::runtime_error("Unsupported data type for numpy conversion");

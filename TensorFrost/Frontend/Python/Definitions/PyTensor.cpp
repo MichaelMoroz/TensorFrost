@@ -79,7 +79,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		return PyTensorsFromTensors(Reverse(t.Get().GetShape()));
 	});
 	py_tensor.def_property_readonly(
-	    "type", [](const PyTensor& t) { return t.Get().GetType(); });
+	    "type", [](const PyTensor& t) { return t.Get().GetFormat(); });
 	py_tensor.def_property_readonly("indices", [](const PyTensor& t) {
 		int dim = T(t).GetDimension();
 		py::tuple indices(dim);
@@ -117,7 +117,7 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 	});
 
 	py_tensor.def("hint_range", [](const PyTensor& t, py::object min, py::object max) {
-		if(t.Get().node_->type == TFType::Float) {
+		if(t.Get().node_->format == TFTypeFloat32) {
 			t.Get().HintRange(py::cast<float>(min), py::cast<float>(max));
 		} else {
 			t.Get().HintRange(py::cast<int>(min), py::cast<int>(max));

@@ -41,7 +41,7 @@ TFBuffer * TensorMemoryManager::AllocateBuffer(size_t size) {
     return buffer;
 }
 
-TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, const TFType type, const char* name) {
+TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, const TFDataFormat type, const char* name) {
     size_t size = GetLinearSize(shape);
 
     if (size == 0) {
@@ -55,7 +55,7 @@ TFTensor * TensorMemoryManager::AllocateTensor(const vector<size_t> &shape, cons
 }
 
 TFTensor * TensorMemoryManager::AllocateTensorWithData(const vector<size_t> &shape, const vector<uint32_t> &data,
-    const TFType type, bool read_only, const char* name) {
+    const TFDataFormat type, bool read_only, const char* name) {
     TFTensor* tensor_memory = AllocateTensor(shape, type, name);
     tensor_memory->buffer->read_only = read_only;
     ((TFBufferTemplate*)tensor_memory->buffer)->SetDataAtOffset(0, data);
@@ -66,16 +66,16 @@ void TensorMemoryManager::DeallocateTensor(TFTensor tensor) {
     DeallocateBuffer(tensor.buffer);
 }
 
-TFTensor * TensorMemoryManager::MakeTensor(size_t *shape, size_t dim, TFBuffer *buf, TFType type) {
+TFTensor * TensorMemoryManager::MakeTensor(size_t *shape, size_t dim, TFBuffer *buf, TFDataFormat type) {
     TFTensor* tensor = new TFTensor();
     tensor->buffer = buf;
     tensor->dim = dim;
     tensor->shape = shape;
-    tensor->type = type;
+    tensor->format = type;
     return tensor;
 }
 
-TFTensor * TensorMemoryManager::MakeTensor(const vector<size_t> &shape, TFBuffer *buf, TFType type) {
+TFTensor * TensorMemoryManager::MakeTensor(const vector<size_t> &shape, TFBuffer *buf, TFDataFormat type) {
     size_t* shape_arr = new size_t[shape.size()];
     std::copy(shape.begin(), shape.end(), shape_arr);
     return MakeTensor(shape_arr, shape.size(), buf, type);

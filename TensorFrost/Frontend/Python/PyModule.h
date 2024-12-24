@@ -12,13 +12,13 @@ namespace py = pybind11;
 class Parameter {
 public:
     std::vector<int> shape;
-    TFType dtype;
+    TFDataFormat dtype;
     float random_scale;
     float random_offset;
     string debug_name;
     bool optimize;
 
-    Parameter(const std::vector<int>& shape, TFType dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
+    Parameter(const std::vector<int>& shape, TFDataFormat dtype, float random_scale = -1.0f, float random_offset = 0.0f, bool requires_grad = true)
         : shape(shape), dtype(dtype), random_scale(random_scale), random_offset(random_offset), optimize(requires_grad), debug_name("") {}
 
     bool CanBeInitialized() {
@@ -94,7 +94,7 @@ public:
             type = AttributeType::Parameter;
             optimize = py::cast<Parameter&>(value).optimize;
             //if not float then can't optimize
-            if(py::cast<Parameter&>(value).dtype != TFType::Float) {
+            if(py::cast<Parameter&>(value).dtype.type != TFType::Float) {
                 optimize = false;
             }
         } else if (py::isinstance<ParameterArray>(value)) {
@@ -149,7 +149,7 @@ public:
             shape_list.push_back(tf.attr("const")(param.shape[i]));
         }
         py::object result;
-        if(param.dtype == TFType::Float) {
+        if(param.dtype.type == TFType::Float) {
             float shape_sum = 0.0f;
             for (int i = 0; i < param.shape.size(); i++) {
                 shape_sum += (float)param.shape[i];
@@ -163,9 +163,9 @@ public:
             result = result.attr("__sub__")(py::float_(1.0f));
             result = result.attr("__mul__")(py::float_(scale));
             result = result.attr("__add__")(py::float_(param.random_offset));
-        } else if (param.dtype == TFType::Int) { //just use zeros
+        } else if (param.dtype.type == TFType::Int) { //just use zeros
             result = tf.attr("const")(0, shape_list);
-        } else if (param.dtype == TFType::Uint) { //just use zeros
+        } else if (param.dtype.type == TFType::Uint) { //just use zeros
             result = tf.attr("const")(0, shape_list);
         } else { //just use zeros
             result = tf.attr("const")(false, shape_list);
@@ -251,7 +251,7 @@ public:
         // Convert the shape vector to a tuple
         py::tuple shape_tuple = py::cast(param.shape);
 
-        if(param.dtype == TFType::Float) {
+        if(param.dtype.type == TFType::Float) {
             // Generate uniform random values instead of normal
             py::array_t<float> arr = random.attr("uniform")(-1.0f, 1.0f, shape_tuple).cast<py::array_t<float>>();
             float shape_sum = 0.0f;
@@ -266,10 +266,10 @@ public:
             arr = arr.attr("__mul__")(py::float_(scale));
             arr = arr.attr("__add__")(py::float_(param.random_offset));
             return tf.attr("tensor")(arr);
-        } else if (param.dtype == TFType::Int) { //just use zeros
+        } else if (param.dtype.type == TFType::Int) { //just use zeros
             py::array_t<int> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<int>>();
             return tf.attr("tensor")(arr);
-        } else if (param.dtype == TFType::Uint) { //just use zeros
+        } else if (param.dtype.type == TFType::Uint) { //just use zeros
             py::array_t<unsigned int> arr = np.attr("zeros")(shape_tuple).cast<py::array_t<unsigned int>>();
             return tf.attr("tensor")(arr);
         } else { //just use zeros

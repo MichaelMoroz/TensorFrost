@@ -17,46 +17,46 @@ PyTensorMemory::PyTensorMemory(py::array arr) {
 
     // Determine the data type and conversion function
     std::function<uint32_t(char*)> convert;
-    TFType type = TFType::None;
+    TFDataFormat format = TFTypeNone;
     switch (info.format[0]) {
         case 'f': // float32
             convert = [](char* ptr) { return *reinterpret_cast<uint32_t*>(ptr); };
-            type = TFType::Float;
+            format = TFTypeFloat32;
             break;
         case 'i': // int32
             convert = [](char* ptr) { return static_cast<uint32_t>(*reinterpret_cast<int32_t*>(ptr)); };
-            type = TFType::Int;
+            format = TFTypeInt32;
             break;
     		case 'q': // int64 (convert to int32 before casting)
     				convert = [](char* ptr) {
     						int32_t val = (int32_t)*reinterpret_cast<int64_t*>(ptr);
     						return *reinterpret_cast<uint32_t*>(&val);
     				};
-    				type = TFType::Int;
+    				format = TFTypeInt32;
     				break;
     	  case 'Q': // uint64 (convert to uint32 before casting)
     					convert = [](char* ptr) {
     						uint32_t val = (uint32_t)*reinterpret_cast<uint64_t*>(ptr);
     						return val;
     				};
-    				type = TFType::Uint;
+    				format = TFTypeUint32;
     				break;
         case 'L': // uint32
         case 'I': // uint32
             convert = [](char* ptr) { return *reinterpret_cast<uint32_t*>(ptr); };
-            type = TFType::Uint;
+            format = TFTypeUint32;
             break;
         case '?': // bool
             convert = [](char* ptr) { return static_cast<uint32_t>(*reinterpret_cast<bool*>(ptr)); };
-            type = TFType::Bool;
+            format = TFTypeBool32;
             break;
         case 'd': // float64 (convert to float32 before casting)
             convert = [](char* ptr) { float val = (float)*reinterpret_cast<double*>(ptr); return *reinterpret_cast<uint32_t*>(&val); };
-            type = TFType::Float;
+            format = TFTypeFloat32;
             break;
         case 'l': // int64 (convert to int32 before casting)
             convert = [](char* ptr) { int32_t val = (int32_t)*reinterpret_cast<int64_t*>(ptr); return *reinterpret_cast<uint32_t*>(&val); };
-            type = TFType::Int;
+            format = TFTypeInt32;
             break;
         default:
             throw std::runtime_error("Unsupported data type to create TensorMemory from numpy array, format: " + std::string(info.format));
@@ -79,12 +79,12 @@ PyTensorMemory::PyTensorMemory(py::array arr) {
         }
     };
 
-    // Start the multi-dimensional iteration
+    // Start the multidimensional iteration
     std::vector<size_t> start_indices(info.ndim, 0);
     iter_dims(0, start_indices);
 
     // Allocate the memory
-    tensor_ = global_memory_manager->AllocateTensorWithData(shape, data, type);
+    tensor_ = global_memory_manager->AllocateTensorWithData(shape, data, format);
 }
 
 vector<PyTensorMemory*> TensorMemoryFromTuple(const py::tuple& tuple) {

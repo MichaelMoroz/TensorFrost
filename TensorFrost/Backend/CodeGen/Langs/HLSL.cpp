@@ -72,7 +72,7 @@ float InterlockedAddF(RWStructuredBuffer<uint> buffer, int index, float val)
 	header += "\nstruct UBO {\n";
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
-		kernel->var_types[var.second] = type_names[var.first->type];
+		kernel->var_types[var.second] = type_names[var.first->format.type];
 	}
 	kernel->var_names.push_back("_kernel_block_offset");
 	kernel->var_types.push_back(type_names[TFType::Uint]);

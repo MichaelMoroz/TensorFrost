@@ -4,13 +4,11 @@ import TensorFrost as tf
 tf.initialize(tf.cpu)
 
 def Test():
-    A = tf.input([-1, -1], tf.float32)
-    B = tf.input(A.shape, tf.float32)
+    A = tf.input([-1, -1], tf.int32)
+    A = tf.reshape(A, [A.shape[0] * A.shape[1]])
 
-    i, j = A.indices
-    for t in range(16):
-        A = A + tf.sin(B[i, j])
-        B = B + tf.sin(A[i, j])
+    for i in range(10):
+        A = tf.int(A == i)
 
     return A
 
@@ -26,7 +24,7 @@ class Test(tf.Module):
 
 def TestInit():
     model = Test()
-    opt = adam(model, learning_rate = 0.01)
+    opt = tf.optimizers.adam(model, learning_rate = 0.01)
     opt.initialize_parameters_native()
     return opt.parameters()
 

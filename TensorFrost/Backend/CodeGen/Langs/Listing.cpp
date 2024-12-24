@@ -6,13 +6,13 @@ using namespace std;
 
 string GetNodeString(const Node* node, bool verbose) {
 	string listing = "";
-	if (node->type != TFType::None) {
-		listing += DataTypeToString(node->type) + " ";
+	if (node->format.type != TFType::None) {
+		listing += DataTypeToString(node->format.type) + "(" + to_string(node->format.size) + ") ";
 	}
 
-	if (node->type != TFType::None) {
+	if (node->format.type != TFType::None) {
 		//  the tensor name
-		listing += node->var_name + " = ";
+		listing += node->var_name + "(" + to_string(node->format.size) + ") = ";
 	}
 
 	listing += node->name + "(";

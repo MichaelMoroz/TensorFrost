@@ -265,7 +265,7 @@ void RenderFrame(const TFTensor* tensor) {
 		}
 
 		//check if tensor is float32 (TODO: use int8 instead)
-		if (tensor->type != TFType::Float) {
+		if (tensor->format != TFTypeFloat32) {
 			throw std::runtime_error("Window: Render tensor must be of type float32");
 		}
 

@@ -154,8 +154,8 @@ void IR::UnrollOperations() {
 	Tensor* const_zero;
 
 	ExecuteExpressionFirstChild(root, [&]() {
-		const_one = &Tensor::Constant(1, TFType::Int);
-		const_zero = &Tensor::Constant(0, TFType::Int);
+		const_one = &Tensor::Constant(1, TFTypeInt32);
+		const_zero = &Tensor::Constant(0, TFTypeInt32);
 	});
 
 	vector<pair<Node*, Node*>> nodes_to_store;
@@ -183,15 +183,15 @@ void IR::UnrollOperations() {
 				ExecuteExpressionBefore(*node, [&] {
 					//create local memory with size = to size difference
 					Tensor* local_memory = nullptr;
-					if(node->type != TFType::None) {
-						 local_memory = &Tensor::LocalMemory(unrolled_size, node->type);
+					if(node->format.type != TFType::None) {
+						 local_memory = &Tensor::LocalMemory(unrolled_size, node->format);
 					}
 
 					//create loops for each broadcasted dimension
 					Node* last_loop = nullptr;
 					map<int, Node*> loop_indices;
 					for (int i = 0; i < unrolled_dims.size(); i++) {
-						Tensor* const_loop_size = &Tensor::Constant(unrolled_dims[i].first, TFType::Int);
+						Tensor* const_loop_size = &Tensor::Constant(unrolled_dims[i].first, TFTypeInt32);
 						if(last_loop == nullptr) {
 							last_loop = Tensor::Loop(*const_zero, *const_loop_size, *const_one).node_;
 						} else {
@@ -868,7 +868,7 @@ void IR::AddKernelGlobalStoreOperations() {
 			Node* mem;
 			// add memory node before this kernel
 			ExecuteExpressionBefore(kernel, [&]() {
-				mem = Tensor::Memory(kernel->args.GetArguments(ArgType::Shape), output->type).node_;
+				mem = Tensor::Memory(kernel->args.GetArguments(ArgType::Shape), output->format).node_;
 				mem->debug_name = output->debug_name;
 
 				if (output->flags.has(NodeProp::OutputMemory)) {
@@ -1013,7 +1013,7 @@ Tensor* ComputeFlatIndex(NodeArguments memory_shape, Tensors indices, map<int, c
 		}
 
 		//if index is uint then cast it to int
-		if (out->node_->type == Uint) {
+		if (out->node_->format.type == Uint) {
 			out = &Tensor::toint(*out);
 		}
 
