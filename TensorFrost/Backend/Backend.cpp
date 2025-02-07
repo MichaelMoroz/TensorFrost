@@ -18,6 +18,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 			case BackendType::OpenGL:
 				StopOpenGL();
 				break;
+			default:
+				throw std::runtime_error("Backend not implemented");
 		}
 	}
 
@@ -60,6 +62,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 			global_memory_manager = new OpenGLMemoryManager();
 			global_kernel_manager = new OpenGLKernelManager();
 			break;
+		default:
+			throw std::runtime_error("Backend not implemented");
 	}
 
 	if (kernelType != CodeGenLang::None) {
