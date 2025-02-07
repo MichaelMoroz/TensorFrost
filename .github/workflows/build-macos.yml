@@ -51,7 +51,7 @@ jobs:
         run: cmake --build build --config Release
 
       - name: Check Folder
-        run: ls -R build
+        run: ls -R ./Python
         
       - name: Build wheel
         run: |
