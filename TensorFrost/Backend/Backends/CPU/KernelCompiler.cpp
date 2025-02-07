@@ -6,6 +6,8 @@ namespace TensorFrost {
 
 std::string kernelCompileOptions;
 
+//TODO: Add support for MacOS
+#ifndef __APPLE__
 bool RunCompiler(char* tempPath, char* dllName, const char* sourcePath) {
     std::basic_stringstream<char> ss;
     std::string output;
@@ -112,8 +114,10 @@ void CompileKernelLibrary(const string& sourceCode, char* tempPath,
 
 	RunCompiler(tempPath, dllName, source_name.c_str());
 }
+#endif
 
 void CompileAndLoadKernelModule(Program* program, size_t program_id) {
+#ifndef __APPLE__
 #if defined(_WIN32)
 	char temp_path[MAX_PATH];
 	DWORD path_length = GetTempPath(MAX_PATH, temp_path);
@@ -211,6 +215,10 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 	}
 
 	cout << "Successfully compiled and loaded kernel library." << endl;
+
+#else
+	throw std::runtime_error("Steps error: cannot compile and load kernel module on macOS");
+#endif
 }
 
 }  // namespace TensorFrost
