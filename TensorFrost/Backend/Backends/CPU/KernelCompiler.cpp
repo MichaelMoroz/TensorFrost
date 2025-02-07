@@ -132,14 +132,12 @@ void CompileAndLoadKernelModule(Program* program, size_t program_id) {
 		throw std::runtime_error("Steps error: cannot create temp file");
 	}
 #else
-	// For macOS and Linux (POSIX in general)
+	char temp_path[] = "/tmp/";
 	char filename_template[] = "/tmp/tensorfrost_XXXXXX";
-	int fd = mkstemp(filename_template);
-	if (fd == -1) {
+	char* temp_file_name = mktemp(filename_template);
+	if (!temp_file_name) {
 		throw std::runtime_error("Steps error: cannot create temp file");
 	}
-	std::string temp_file_name(filename_template);
-	close(fd);
 #endif
 
 	cout << "Temp file: " << temp_file_name << endl;
