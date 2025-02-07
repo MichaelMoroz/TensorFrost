@@ -35,7 +35,7 @@ def bitonic(keys, values = None):
         return keys
 
 #histogram radix sort
-def radix(keys, values = None, bits_per_pass = 8, max_bits = 32):
+def radix(keys, values = None, bits_per_pass = 6, max_bits = 32):
     def prefix_sum_grouped(A, axis = -1):
         axis = len(A.shape) + axis if axis < 0 else axis
         group_size = 64
