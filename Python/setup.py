@@ -38,6 +38,6 @@ setup(
         'numpy',
     ],
     # Include pre-compiled extension
-    package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll", ".dylib"]},
+    package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll", "*.dylib"]},
     has_ext_modules=lambda: True
 )
