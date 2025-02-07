@@ -74,7 +74,7 @@ extern "C" {
 class TFBufferTemplate : public
 TFBuffer {
 public:
-	TFBufferTemplate(size_t size) : TFBuffer(size) {}
+	TFBufferTemplate(size_t size) : TFBuffer{ size } {}
 
 	virtual void UpdateName(const char* name) {
 		throw std::runtime_error("UpdateName not implemented");
