@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['cp37-cp37m', 'cp38-cp38', 'cp39-cp39', 'cp310-cp310', 'cp311-cp311', 'cp312-cp312']
+        python-version: ['cp37-cp37m', 'cp38-cp38', 'cp39-cp39', 'cp310-cp310', 'cp311-cp311', 'cp312-cp312', 'cp313-cp313']
     steps:
     - uses: actions/checkout@v4
       with:
