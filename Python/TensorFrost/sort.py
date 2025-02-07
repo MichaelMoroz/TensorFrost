@@ -35,7 +35,7 @@ def bitonic(keys, values = None):
         return keys
 
 #histogram radix sort
-def radix(keys, values = None, bits_per_pass = 6, max_bits = 32):
+def radix(keys, values = None, bits_per_pass = 8, max_bits = 32):
     def prefix_sum_grouped(A, axis = -1):
         axis = len(A.shape) + axis if axis < 0 else axis
         group_size = 64
@@ -80,7 +80,6 @@ def radix(keys, values = None, bits_per_pass = 6, max_bits = 32):
         values = tf.copy(values)
 
     original_type = keys.type
-
     if(original_type == tf.float32):
         keys = map_float_to_uint(keys)
 
@@ -120,42 +119,54 @@ def radix(keys, values = None, bits_per_pass = 6, max_bits = 32):
             total_bit_histogram = tf.prefix_sum(group_histogram_scan[group_histogram_scan.shape[0] - 1, i])
 
             with tf.kernel(grouped.shape, group_size=[group_size]) as (g, e):
-                temp = tf.group_buffer(group_size, tf.uint32)
-                half_count = tf.group_buffer(histogram_size, tf.uint32)
-                gtid = g.block_thread_index(0)
+                if(tf.current_backend() == tf.cpu): #dont use group barriers on CPU - doesn't work
+                    element = g * group_size + e
+                    with tf.if_cond(element < keys_in.shape[0]):
+                        old_key = keys_in[element]
+                        old_val = values_in[element]
+                        bit = GetBits(old_key, iter)
+                        total_offset = tf.select(g == 0, tf.uint(0), group_histogram_scan[g - 1, bit]) + tf.select(bit == tf.uint(0), tf.uint(0), total_bit_histogram[bit - tf.uint(1)])
+                        with tf.loop(e) as j:
+                            total_offset.val += tf.uint(grouped[g, j] == bit)
+                        keys_out[total_offset] = old_key
+                        values_out[total_offset] = old_val
+                else:
+                    temp = tf.group_buffer(group_size, tf.uint32)
+                    half_count = tf.group_buffer(histogram_size, tf.uint32)
+                    gtid = g.block_thread_index(0)
 
-                #initialize counters
-                for i in range((histogram_size + group_size - 1) // group_size):
-                    index = gtid + i * group_size
-                    with tf.if_cond(index < histogram_size):
-                        half_count[index] = 0
-                tf.group_barrier()
-
-                element = g * group_size + e
-                with tf.if_cond(element < keys_in.shape[0]):
-                    old_key = keys_in[element]
-                    bit = GetBits(old_key, iter)
-                    temp[gtid] = bit
-
-                    #count number of bits set in previous sub groups
-                    quarter_index = e / (group_size // 4)
-                    with tf.if_cond(quarter_index < 3):
-                        tf.scatterAdd(half_count[bit], tf.uint(quarter_index < 1) | (tf.uint(quarter_index < 2) << 8) | (tf.uint(quarter_index < 3) << 16))
-
+                    #initialize counters
+                    for i in range((histogram_size + group_size - 1) // group_size):
+                        index = gtid + i * group_size
+                        with tf.if_cond(index < histogram_size):
+                            half_count[index] = 0
                     tf.group_barrier()
 
-                    if has_values:
-                        old_val = values_in[element]
+                    element = g * group_size + e
+                    with tf.if_cond(element < keys_in.shape[0]):
+                        old_key = keys_in[element]
+                        bit = GetBits(old_key, iter)
+                        temp[gtid] = bit
 
-                    total_offset = tf.select(g == 0, tf.uint(0), group_histogram_scan[g - 1, tf.int(bit)]) + tf.select(tf.int(bit) == 0, tf.uint(0), total_bit_histogram[tf.int(bit) - 1])
-                    total_offset += tf.select(quarter_index > 0, (half_count[bit] >> (8*(quarter_index-1))) & tf.uint(0xFF), tf.uint(0))
-                    begin_index = quarter_index * (group_size // 4)
-                    with tf.loop(begin_index, e) as j:
-                        total_offset.val += tf.uint(temp[j] == bit)
-                    keys_out[total_offset] = old_key
+                        #count number of bits set in previous sub groups
+                        quarter_index = e / (group_size // 4)
+                        with tf.if_cond(quarter_index < 3):
+                            tf.scatterAdd(half_count[bit], tf.uint(quarter_index < 1) | (tf.uint(quarter_index < 2) << 8) | (tf.uint(quarter_index < 3) << 16))
 
-                    if has_values:
-                        values_out[total_offset] = old_val
+                        tf.group_barrier()
+
+                        if has_values:
+                            old_val = values_in[element]
+
+                        total_offset = tf.select(g == 0, tf.uint(0), group_histogram_scan[g - 1, tf.int(bit)]) + tf.select(tf.int(bit) == 0, tf.uint(0), total_bit_histogram[tf.int(bit) - 1])
+                        total_offset += tf.select(quarter_index > 0, (half_count[bit] >> (8*(quarter_index-1))) & tf.uint(0xFF), tf.uint(0))
+                        begin_index = quarter_index * (group_size // 4)
+                        with tf.loop(begin_index, e) as j:
+                            total_offset.val += tf.uint(temp[j] == bit)
+                        keys_out[total_offset] = old_key
+
+                        if has_values:
+                            values_out[total_offset] = old_val
 
             tf.region_end('Radix sort iteration')
 

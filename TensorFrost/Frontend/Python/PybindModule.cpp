@@ -33,6 +33,19 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_format.def(py::init<TFType, size_t>());
 	data_format.def_readwrite("type", &TFDataFormat::type);
 	data_format.def_readwrite("size", &TFDataFormat::size);
+	// Add printers for the enums
+	data_format.def("__repr__", [](const TFDataFormat& a) {
+		return "<TFDataFormat: type=" + DataTypeToString(a.type) + ", size=" + std::to_string(a.size) + ">";
+	});
+	data_format.def("__str__", [](const TFDataFormat& a) {
+		return "<TFDataFormat: type=" + DataTypeToString(a.type) + ", size=" + std::to_string(a.size) + ">";
+	});
+	data_type.def("__repr__", [](TFType a) {
+		return "<TFType: " + DataTypeToString(a) + ">";
+	});
+	data_type.def("__str__", [](TFType a) {
+		return "<TFType: " + DataTypeToString(a) + ">";
+	});
 
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
@@ -41,6 +54,17 @@ PYBIND11_MODULE(TensorFrost, m) {
 	code_gen_lang.value("cpp", CodeGenLang::CPP);
 	code_gen_lang.value("glsl", CodeGenLang::GLSL);
 	code_gen_lang.value("hlsl", CodeGenLang::HLSL);
+
+	data_format.def(py::self == py::self);
+	backend_type.def("__eq__", [](BackendType a, BackendType b) {
+		return a == b;
+	});
+	code_gen_lang.def("__eq__", [](CodeGenLang a, CodeGenLang b) {
+		return a == b;
+	});
+	data_type.def("__eq__", [](TFType a, TFType b) {
+		return a == b;
+	});
 
 	m.attr("float32") = TFTypeFloat32;
 	m.attr("int32") = TFTypeInt32;
@@ -70,6 +94,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	WindowDefinitions(m);
 	ScopeDefinitions(m, py_tensor);
 	ModuleDefinitions(m);
+
+	m.def("current_backend", []() {
+		return current_backend;
+	}, "Get the current backend");
 
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options, CodeGenLang kernel_lang) {

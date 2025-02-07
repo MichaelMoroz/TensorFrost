@@ -10,10 +10,11 @@
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
-| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan | WGSL/WebGPU |
-|------------|-----|--------|------|--------|------------|
-| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
-| Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
+| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan | WGSL/WebGPU | CodeGen |
+|------------|-----|--------|------|--------|------------|------------|
+| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   | 🚧 |
+| Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   | 🚧 |
+| MacOS      | ⛔  |  ⛔   |  ⛔  |  ⛔   | ⛔   | 🚧 |
 
 
 For more detail about this project, please read my blog post!
