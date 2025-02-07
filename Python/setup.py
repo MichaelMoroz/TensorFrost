@@ -6,7 +6,7 @@ with open("../README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='TensorFrost',
-    version='0.7.0.dev2',
+    version='0.7.0.dev3',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
     description="A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more \"shader-like\" syntax.",
