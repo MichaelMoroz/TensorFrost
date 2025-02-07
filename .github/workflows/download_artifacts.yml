@@ -26,7 +26,19 @@ jobs:
             
             async function downloadArtifact(workflowPartialName, artifactName) {
               const workflow = await findWorkflow(workflowPartialName);
-              if (!workflow) return false;
+              // If the workflow doesn't exist, return error
+              if (!workflow) {
+                  console.error(`Workflow ${workflowPartialName} not found`);
+              
+                  //list all workflows
+                  const workflows = await github.rest.actions.listRepoWorkflows({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                  });
+                  console.log(workflows.data.workflows);
+
+                  return false;
+              }
             
               const runs = await github.rest.actions.listWorkflowRuns({
                 owner: context.repo.owner,
@@ -60,7 +72,7 @@ jobs:
               return true;
             }
             
-            await downloadArtifact("MacOS", "macos-wheels");
+            await downloadArtifact("macOS", "macos-wheels");
             await downloadArtifact("Windows", "windows-wheels");
             await downloadArtifact("Manylinux", "manylinux-wheels");
 
