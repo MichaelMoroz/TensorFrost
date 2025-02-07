@@ -254,7 +254,7 @@ Tensors Tensor::GetInputShapeTensors(Tensors shape) {
 Tensor& Tensor::Load(const Tensor& tensor, const Tensors& indices, IndexingMode mode) {
 	Tensor& out = MemoryOp("load", &tensor, indices);
 	out.node_->indexing_mode_ = mode;
-	out.SetData({0});
+	out.SetData(0);
 	out.SetDebugName(tensor.node_->debug_name);
 	return out;
 }
