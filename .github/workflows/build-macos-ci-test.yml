@@ -1,0 +1,36 @@
+# This starter workflow is for a CMake project running on a single platform. There is a different starter workflow if you need cross-platform coverage.
+# See: https://github.com/actions/starter-workflows/blob/main/ci/cmake-multi-platform.yml
+name: Build MacOS
+
+on:
+  workflow_dispatch:
+
+env:
+  BUILD_TYPE: Release
+  TARGET_PYTHON_VERSION: 3.11
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5.4.0
+      with:
+        python-version: ${{env.TARGET_PYTHON_VERSION}}
+        architecture: arm64
+
+    - name: Configure CMake
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DPYBIND11_PYTHON_VERSION=${{env.TARGET_PYTHON_VERSION}} -DPython_FIND_REGISTRY=NEVER -DPython_FIND_FRAMEWORK=NEVER -S .
+
+
+    - name: Build
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+    - name: Test
+      working-directory: ${{github.workspace}}/build
+      # Execute tests defined by the CMake configuration.
+      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+      run: ctest -C ${{env.BUILD_TYPE}}
+
