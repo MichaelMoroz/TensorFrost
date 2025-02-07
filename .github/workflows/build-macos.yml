@@ -50,6 +50,9 @@ jobs:
       - name: Build
         run: cmake --build build --config Release
 
+      - name: Check Folder
+        run: ls -R build
+        
       - name: Build wheel
         run: |
           python -m build -w ./Python
