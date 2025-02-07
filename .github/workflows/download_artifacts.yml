@@ -62,6 +62,7 @@ jobs:
             
             await downloadArtifact("Windows", "windows-wheels");
             await downloadArtifact("Manylinux", "manylinux-wheels");
+            await downloadArtifact("MacOS", "macos-wheels");
 
       - name: Unzip artifacts
         run: |
