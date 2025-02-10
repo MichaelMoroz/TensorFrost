@@ -10,11 +10,11 @@
 A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more "shader-like" syntax.
 
 Currently working platforms:
-| Backend/OS | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan | WGSL/WebGPU | CodeGen |
+| Backend/OS | CodeGen Only | C++/OpenMP | GLSL/OpenGL | CUDA | GLSL/Vulkan | WGSL/WebGPU | 
 |------------|-----|--------|------|--------|------------|------------|
-| Windows    | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   | 🚧 |
-| Linux      | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   | 🚧 |
-| MacOS      | ⛔  |  ⛔   |  ⛔  |  ⛔   | ⛔   | 🚧 |
+| Windows    | ✅ | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
+| Linux      | ✅ | 🚧  |  🚧   |  ⛔  |  ⛔   | ⛔   |
+| MacOS      | ✅ | ⛔  |  ⛔   |  ⛔  |  ⛔   | ⛔   |
 
 
 For more detail about this project, please read my blog post!
@@ -751,6 +751,9 @@ If the dimension count of the group shape is less than the kernel it will only m
 You can define groupshared memory buffers with the `tf.group_buffer` function. The first argument is the size of the buffer, and the second argument is the data type of the buffer. You must use a barrier if you want to exchange data between threads in the groupshared memory.
 
 You can also define local memory arrays with `tf.local_buffer`, which works the same as `tf.group_buffer`, but is local to the thread.
+
+> [!TIP]
+> To check if you are currently with a CPU backend you can do `tf.current_backend() == tf.cpu` 
 
 ### GUI and visualization
 
