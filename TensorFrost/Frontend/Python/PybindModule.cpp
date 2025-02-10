@@ -28,6 +28,25 @@ PYBIND11_MODULE(TensorFrost, m) {
 	data_type.value("int", TFType::Int);
 	data_type.value("uint", TFType::Uint);
 	data_type.value("bool", TFType::Bool);
+
+	auto data_format = py::class_<TFDataFormat>(m, "TFDataFormat");
+	data_format.def(py::init<TFType, size_t>());
+	data_format.def_readwrite("type", &TFDataFormat::type);
+	data_format.def_readwrite("size", &TFDataFormat::size);
+	// Add printers for the enums
+	data_format.def("__repr__", [](const TFDataFormat& a) {
+		return "<TFDataFormat: type=" + DataTypeToString(a.type) + ", size=" + std::to_string(a.size) + ">";
+	});
+	data_format.def("__str__", [](const TFDataFormat& a) {
+		return "<TFDataFormat: type=" + DataTypeToString(a.type) + ", size=" + std::to_string(a.size) + ">";
+	});
+	data_type.def("__repr__", [](TFType a) {
+		return "<TFType: " + DataTypeToString(a) + ">";
+	});
+	data_type.def("__str__", [](TFType a) {
+		return "<TFType: " + DataTypeToString(a) + ">";
+	});
+
 	backend_type.value("cpu", BackendType::CPU);
 	backend_type.value("vulkan", BackendType::Vulkan);
 	backend_type.value("opengl", BackendType::OpenGL);
@@ -36,10 +55,21 @@ PYBIND11_MODULE(TensorFrost, m) {
 	code_gen_lang.value("glsl", CodeGenLang::GLSL);
 	code_gen_lang.value("hlsl", CodeGenLang::HLSL);
 
-	m.attr("float32") = TFType::Float;
-	m.attr("int32") = TFType::Int;
-	m.attr("uint32") = TFType::Uint;
-	m.attr("bool1") = TFType::Bool;
+	data_format.def(py::self == py::self);
+	backend_type.def("__eq__", [](BackendType a, BackendType b) {
+		return a == b;
+	});
+	code_gen_lang.def("__eq__", [](CodeGenLang a, CodeGenLang b) {
+		return a == b;
+	});
+	data_type.def("__eq__", [](TFType a, TFType b) {
+		return a == b;
+	});
+
+	m.attr("float32") = TFTypeFloat32;
+	m.attr("int32") = TFTypeInt32;
+	m.attr("uint32") = TFTypeUint32;
+	m.attr("bool1") = TFTypeBool32;
 
 	m.attr("cpu") = BackendType::CPU;
 	m.attr("vulkan") = BackendType::Vulkan;
@@ -64,6 +94,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	WindowDefinitions(m);
 	ScopeDefinitions(m, py_tensor);
 	ModuleDefinitions(m);
+
+	m.def("current_backend", []() {
+		return current_backend;
+	}, "Get the current backend");
 
 	m.def("initialize",
 	      [](BackendType backend_type, const std::string& kernel_compile_options, CodeGenLang kernel_lang) {

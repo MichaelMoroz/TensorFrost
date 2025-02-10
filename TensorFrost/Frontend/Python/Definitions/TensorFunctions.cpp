@@ -100,26 +100,26 @@ void TensorFunctionsDefinition(py::module& m) {
 		Tensor::ScatterXor(*t.Value(), T(t2), t.Indices());
 	});
 
-	m.def("buffer", [](py::list shape, TFType type) {
+	m.def("buffer", [](py::list shape, TFDataFormat type) {
 		    return PT(Tensor::Memory(Reverse(TensorsFromList(shape)), type));
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
-	m.def("buffer", [](std::vector<int> shape, TFType type) {
+	}, py::arg("shape"), py::arg("type") = TFTypeFloat32);
+	m.def("buffer", [](std::vector<int> shape, TFDataFormat type) {
 		    return PT(Tensor::Memory(Reverse(shape), type));
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
+	}, py::arg("shape"), py::arg("type") = TFTypeFloat32);
 
-	m.def("local_buffer", [](int size, TFType type) {
+	m.def("local_buffer", [](int size, TFDataFormat type) {
 		return PT(Tensor::LocalMemory(size, type));
-	}, py::arg("size"), py::arg("type") = TFType::Float);
-	m.def("group_buffer", [](int size, TFType type) {
+	}, py::arg("size"), py::arg("type") = TFTypeFloat32);
+	m.def("group_buffer", [](int size, TFDataFormat type) {
 		return PT(Tensor::GroupMemory(size, type));
-	}, py::arg("size"), py::arg("type") = TFType::Float);
+	}, py::arg("size"), py::arg("type") = TFTypeFloat32);
 	m.def("group_barrier", []() {
 		Tensor::GroupBarrier();
 	});
 
-	m.def("zeros", [](py::list shape, TFType type) {
+	m.def("zeros", [](py::list shape, TFDataFormat type) {
 		return PT(Tensor::Constant(0u, Reverse(TensorsFromList(shape)), type));
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
+	}, py::arg("shape"), py::arg("type") = TFTypeFloat32);
 
 	m.def("const", [](float value, py::list shape) {
 		return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), value));
@@ -131,19 +131,49 @@ void TensorFunctionsDefinition(py::module& m) {
 	m.def("const", [](int value, py::list shape) {
 		return PT(Tensor::Constant(Reverse(TensorsFromList(shape)), value));
 	});
+
 	m.def("const", [](int value, std::vector<int> shape) {
 		return PT(Tensor::Constant(Reverse(shape), value));
 	}, py::arg("value"), py::arg("shape") = std::vector<int>{});
 
-	m.def("input", [](std::vector<int> shape, TFType type) {
+	m.def("input", [](std::vector<int> shape, TFDataFormat type) {
 		return PT(Tensor::Input(Reverse(shape), type));
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
-	m.def("input", [](py::list shape, TFType type) {
+	}, py::arg("shape"), py::arg("type") = TFTypeFloat32);
+
+	m.def("input", [](py::list shape, TFDataFormat type) {
 		return PT(Tensor::Input(Reverse(TensorsFromList(shape)), type));
-	}, py::arg("shape"), py::arg("type") = TFType::Float);
+	}, py::arg("shape"), py::arg("type") = TFTypeFloat32);
 
 	m.def("index", [](int dim, py::list shape) {
 		return PT(Tensor::Index(Reverse(TensorsFromList(shape)), dim));
+	});
+
+	m.def("hash", [](py::list shape, const PyTensor& seed) {
+		return PT(Tensor::Hash(Reverse(TensorsFromList(shape)), T(seed)));
+	}, py::arg("shape"), py::arg("seed"));
+
+	m.def("random_value", [](py::list shape, const PyTensor& seed) {
+		return PT(Tensor::Random(Reverse(TensorsFromList(shape)), T(seed)));
+	}, py::arg("shape"), py::arg("seed"));
+
+	m.def("element_index", [](py::list shape) {
+		return PT(Tensor::ElementIndex(Reverse(TensorsFromList(shape))));
+	}, py::arg("shape"));
+
+	m.def("flat_index", [](py::list shape, py::list indices) {
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
+		Tensors index_tensors = Reverse(TensorsFromList(indices));
+		return PT(Tensor::FlatIndex(shape_tensors, index_tensors));
+	});
+
+	m.def("indices_from_flat_index", [](const PyTensor& index, py::list shape) {
+		py::tuple indices = py::tuple(shape.size());
+		Tensors shape_tensors = Reverse(TensorsFromList(shape));
+		Tensors indices_tensors = Reverse(Tensor::IndicesFromFlatIndex(&T(index), shape_tensors));
+		for (int i = 0; i < indices_tensors.size(); i++) {
+			indices[i] = PT(*indices_tensors[i]);
+		}
+		return indices;
 	});
 
 	m.def("get_copy", [](const PyTensor& t) { return PT(*Tensor::GetCopy(T(t))); });
@@ -168,6 +198,7 @@ void TensorFunctionsDefinition(py::module& m) {
 		}
 		return indices;
 	});
+
 
 	m.def("index_grid", [](py::list begin, py::list end) {
 		Tensors begin_tensors = Reverse(TensorsFromList(begin));
@@ -194,11 +225,11 @@ void TensorFunctionsDefinition(py::module& m) {
 		return indices;
 	});
 
-	m.def("reshape", [](const PyTensor& t, py::list shape, TFType type) {
+	m.def("reshape", [](const PyTensor& t, py::list shape, TFDataFormat type) {
 		return PT(Tensor::Reshape(T(t), Reverse(TensorsFromList(shape)), type));
-	}, py::arg("t"), py::arg("shape"), py::arg("type") = TFType::None);
+	}, py::arg("t"), py::arg("shape"), py::arg("type") = TFTypeNone);
 
-	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFType target_type) {
+	m.def("assert_tensor", [](const PyTensor& t, py::list target_shape, TFDataFormat target_type) {
 		return PT(Tensor::Assert(T(t), Reverse(TensorsFromList(target_shape)), target_type));
 	});
 	m.def("split_dim", [](const PyTensor& t, const int split_size, const int axis) {

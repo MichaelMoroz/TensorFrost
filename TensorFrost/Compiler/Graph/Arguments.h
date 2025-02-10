@@ -43,7 +43,7 @@ using ArgEdges = set<ArgEdge>;
 class ArgumentManager {
 	Node* node_;
 	bool add_parenthesis = false;
-	unordered_map<ArgID, TFType, HashArgID> argument_types_;
+	unordered_map<ArgID, TFDataFormat, HashArgID> argument_types_;
 	unordered_map<ArgType, int> argument_counts_;
 	unordered_map<ArgID, string, HashArgID> argument_names_;
 	unordered_map<ArgID, bool, HashArgID> argument_requires_parenthesis_;
@@ -141,14 +141,14 @@ public:
 
 	const Tensor& operator[](int index) const;
 
-	TFType Type(ArgType type, int index = 0) const {
+	TFDataFormat Format(ArgType type, int index = 0) const {
 		ArgID id = ArgID(type, index);
 		auto Arg = argument_types_.find(id);
 		if (Arg != argument_types_.end()) {
 			return Arg->second;
 		}
 		else {
-			throw std::runtime_error("Argument type not found");
+			throw std::runtime_error("Argument format not found");
 		}
 	}
 

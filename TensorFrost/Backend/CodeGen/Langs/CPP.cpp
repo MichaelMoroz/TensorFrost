@@ -266,13 +266,44 @@ inline float pcgf(uint v)
 }
 
 extern "C" {
-	enum class TFType {
+	enum TFType {
 		Float,
 		Uint,
 		Int,
 		Bool,
 		None,
 	};
+
+	struct TFDataFormat {
+		TFType type;
+		size_t size;
+
+		bool operator==(const TFDataFormat& other) const {
+			return type == other.type && size == other.size;
+		}
+
+		bool operator!=(const TFDataFormat& other) const {
+			return !(*this == other);
+		}
+
+		int GetHash() const {
+			return (int)type << 16 | (int)size;
+		}
+
+		bool operator<(const TFDataFormat& other) const {
+			return GetHash() < other.GetHash();
+		}
+
+		bool operator>(const TFDataFormat& other) const {
+			return GetHash() > other.GetHash();
+		}
+	};
+
+#define TFTypeNone TFDataFormat{TFType::None, 0}
+#define TFTypeBool32 TFDataFormat{TFType::Bool, 32}
+#define TFTypeFloat32 TFDataFormat{TFType::Float, 32}
+#define TFTypeInt32 TFDataFormat{TFType::Int, 32}
+#define TFTypeUint32 TFDataFormat{TFType::Uint, 32}
 
 	struct TFBuffer {
 		size_t size = 0;
@@ -286,7 +317,7 @@ extern "C" {
 
 	struct TFTensor {
 		TFBuffer* buffer;
-		TFType type;
+		TFDataFormat format;
 		size_t dim;
 		const size_t* shape;
 	};
@@ -307,7 +338,7 @@ extern "C" {
 		size_t work_group_count;
 	};
 
-	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFType, void*);
+	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFDataFormat, void*);
 	typedef void dealloc_func(TFTensor, void*);
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
@@ -332,11 +363,11 @@ public:
 
 	TFContext(TFRuntime runtime);
 	size_t compute_size(const size_t* shape, size_t dim);
-	TFTensor allocate(std::string name, std::initializer_list<size_t> shape, TFType type);
+	TFTensor allocate(std::string name, std::initializer_list<size_t> shape, TFDataFormat type);
 	void deallocate(TFTensor tensor);
-	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type);
-	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type);
-	TFTensor assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type);
+	void check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFDataFormat target_type);
+	TFTensor reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFDataFormat type);
+	TFTensor assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFDataFormat target_type);
 	uint32_t read(TFTensor tensor, size_t index);
 	void write(TFTensor tensor, size_t index, uint32_t value);
 	void dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_write, std::initializer_list<TFTensor> read_only, std::initializer_list<uint32_t> var, std::initializer_list<size_t> shape, std::initializer_list<size_t> group);
@@ -370,7 +401,7 @@ size_t TFContext::compute_size(const size_t* shape, size_t dim) {
 	return size;
 }
 
-TFTensor TFContext::allocate(std::string name, std::initializer_list<size_t> shape, TFType type)
+TFTensor TFContext::allocate(std::string name, std::initializer_list<size_t> shape, TFDataFormat type)
 {
 	const size_t* shape_arr = shape.begin();
 	size_t dim = shape.size();
@@ -390,14 +421,14 @@ void TFContext::deallocate(TFTensor tensor)
 	runtime.dealloc(tensor, runtime.custom_data);
 }
 
-void TFContext::check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type)
+void TFContext::check_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFDataFormat target_format)
 {
 	const size_t* shape_arr = tensor.shape;
 	const size_t* target_shape_arr = target_shape.begin();
 	size_t target_dim = target_shape.size();
 
-	if (tensor.type != target_type) {
-		throw std::runtime_error("Invalid type for " + name + ". Expected " + TFTypeNames[target_type] + ", got " + TFTypeNames[tensor.type]);
+	if (tensor.format != target_format) {
+		throw std::runtime_error("Invalid type for " + name + ". Expected " + TFTypeNames[target_format.type] + ", got " + TFTypeNames[tensor.format.type]);
 	}
 
 	if (tensor.dim != target_dim) {
@@ -411,7 +442,7 @@ void TFContext::check_tensor(TFTensor tensor, std::string name, std::initializer
 	}
 }
 
-TFTensor TFContext::reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFType type)
+TFTensor TFContext::reshape(TFTensor tensor, std::string name, std::initializer_list<size_t> shape, TFDataFormat type)
 {
 	size_t* new_shape = new size_t[shape.size()];
 	std::copy(shape.begin(), shape.end(), new_shape);
@@ -427,7 +458,7 @@ TFTensor TFContext::reshape(TFTensor tensor, std::string name, std::initializer_
 	return new_tensor;
 }
 
-TFTensor TFContext::assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFType target_type)
+TFTensor TFContext::assert_tensor(TFTensor tensor, std::string name, std::initializer_list<size_t> target_shape, TFDataFormat target_type)
 {
 	check_tensor(tensor, name, target_shape, target_type);
 	return tensor;
@@ -449,7 +480,10 @@ void TFContext::dispatch(size_t kernel_id, std::initializer_list<TFTensor> read_
 	std::vector<TFTensor> all_tensors;
 	all_tensors.insert(all_tensors.end(), read_write.begin(), read_write.end());
 	all_tensors.insert(all_tensors.end(), read_only.begin(), read_only.end());
-	TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)var.size(), var.begin(), 0};
+	std::vector<uint32_t> all_vars;
+	all_vars.insert(all_vars.end(), var.begin(), var.end());
+	all_vars.push_back(0); //group index offset
+	TFDispatchInfo info = {kernel_id, all_tensors.size(), all_tensors.data(), 0, nullptr, (uint)all_vars.size(), all_vars.data(), 0};
 
 	const TFTensor* read_write_tensors = read_write.begin();
 	for (size_t i = 0; i < read_write.size(); i++) {
@@ -692,14 +726,16 @@ void GenerateCPPKernel(Program* program, Kernel* kernel) {
 	kernel->var_types = vector<string>(kernel->variables.size());
 	for (auto var : kernel->variables) {
 		kernel->var_names[var.second] = var.first->var_name;
-		kernel->var_types[var.second] = type_names[var.first->type];
+		kernel->var_types[var.second] = type_names[var.first->format.type];
 	}
+	kernel->var_names.push_back("_kernel_block_offset");
+	kernel->var_types.push_back(type_names[TFType::Uint]);
 	for (int i = 0; i < kernel->var_names.size(); i++) {
 		loop += "  " + kernel->var_types[i] + " var_" + kernel->var_names[i] + " = as" + kernel->var_types[i] + "(var[" + to_string(i) + "]);\n";
 	}
 
 	loop += "  #pragma omp parallel for\n";
-	loop += "  for (int block_id = 0; block_id < work_group_count; block_id++)\n";
+	loop += "  for (int block_id = var__kernel_block_offset; block_id < (work_group_count+var__kernel_block_offset); block_id++)\n";
 	loop += "  {\n";
 
 	loop += GetGroupBufferDeclarations(kernel, [](const string& name, const string& type_name, size_t size) {

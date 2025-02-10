@@ -7,7 +7,7 @@ bool isConstantAndEqualTo(const Tensor* tensor, float value) {
 		return false;
 	}
 
-	switch (tensor->node_->type) {
+	switch (tensor->node_->format.type) {
 		case TFType::Float:
 			return AsFloat(tensor->node_->data[0]) == value;
 		case TFType::Int:
@@ -24,7 +24,7 @@ bool isConstant(const Tensor* tensor) {
 }
 
 Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float, float)> opF32, std::function<int(int, int)> opI32, std::function<uint(uint, uint)> opU32) {
-	switch (a->node_->type) {
+	switch (a->node_->format.type) {
 		case TFType::Float:
 			return &Tensor::Constant(opF32(AsFloat(a->node_->data[0]), AsFloat(b->node_->data[0])));
 		case TFType::Int:
@@ -37,7 +37,7 @@ Tensor* ApplyMultiOP(const Tensor* a, const Tensor* b, std::function<float(float
 }
 
 Tensor* ApplyUnaryOP(const Tensor* a, std::function<float(float)> opF32, std::function<int(int)> opI32, std::function<uint(uint)> opU32) {
-	switch (a->node_->type) {
+	switch (a->node_->format.type) {
 		case TFType::Float:
 			return &Tensor::Constant(opF32(AsFloat(a->node_->data[0])));
 		case TFType::Int:
@@ -97,14 +97,14 @@ void IR::OptimizeOperations()
 
 				//if both are the same node, then replace with zero
 				if (inputs[0]->node_ == inputs[1]->node_) {
-					result = &Tensor::Constant(0u, inputs[0]->node_->type);
+					result = &Tensor::Constant(0u, inputs[0]->node_->format);
 				}
 			} else if (op == "mul") {
 				// if any are zero, replace with zero
 				if (isConstantAndEqualTo(inputs[0], 0.0F) ||
 									    isConstantAndEqualTo(inputs[1], 0.0F)) {
 					// replace with zero
-					result = &Tensor::Constant(0u, inputs[0]->node_->type);
+					result = &Tensor::Constant(0u, inputs[0]->node_->format);
 				}
 
 				// if any are one, replace with the other
@@ -125,7 +125,7 @@ void IR::OptimizeOperations()
 				// if first is zero, replace with zero
 				if (isConstantAndEqualTo(inputs[0], 0.0F)) {
 					// replace with zero
-					result = &Tensor::Constant(0u, inputs[0]->node_->type);
+					result = &Tensor::Constant(0u, inputs[0]->node_->format);
 				}
 
 				// if second is one, replace with first
@@ -157,7 +157,7 @@ void IR::OptimizeOperations()
 				int dim = node->data[0];
 				const Tensor* shape = node->args.Get(ArgType::Shape, dim)->GetTensor();
 				if(isConstantAndEqualTo(shape, 1.0F)) {
-					result = &Tensor::Constant(0u, TFType::Int);
+					result = &Tensor::Constant(0u, TFTypeInt32);
 				}
 			}
 			//TODO (Moroz): add more optimizations
@@ -183,7 +183,7 @@ void IR::OptimizeHostValuesWithHints()
 			//if node has a max value hint, then replace it with it
 			if(node->flags.has(NodeProp::HintMaxValue)) {
 				int64_t max_value = node->flags.get(NodeProp::HintMaxValue);
-				result = &Tensor::Constant((uint)max_value, node->type);
+				result = &Tensor::Constant((uint)max_value, node->format);
 			}
 
 			if (result != nullptr)
@@ -420,7 +420,7 @@ void IR::UnrollAtomicOperations() {
 			if (!unused_dimensions.contains(i)) {
 				old_to_new_dim[i] = current_reduce->Index(new_idx++).node_;
 			} else {
-				old_to_new_dim[i] = Tensor::Constant(current_reduce->GetShape(), 0, current_reduce->GetType()).node_;
+				old_to_new_dim[i] = Tensor::Constant(current_reduce->GetShape(), 0, current_reduce->GetFormat()).node_;
 			}
 		}
 

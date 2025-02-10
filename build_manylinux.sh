@@ -40,7 +40,7 @@ $PYTHON_EXECUTABLE -m cmake \
   -S . -B build -DCMAKE_BUILD_TYPE=Release
 
 $PYTHON_EXECUTABLE -m cmake --build build --config Release
-$PYTHON_EXECUTABLE -m build -w ./PythonBuild
-for whl in PythonBuild/dist/*.whl; do
+$PYTHON_EXECUTABLE -m build -w ./Python
+for whl in Python/dist/*.whl; do
   auditwheel repair "$whl" -w ./wheelhouse/
 done

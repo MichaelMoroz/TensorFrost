@@ -6,7 +6,7 @@ with open("../README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name='TensorFrost',
-    version='0.6.4.0',
+    version='0.7.0',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
     description="A static optimizing tensor compiler with a Python frontend, autodifferentiation, and a more \"shader-like\" syntax.",
@@ -38,6 +38,6 @@ setup(
         'numpy',
     ],
     # Include pre-compiled extension
-    package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll"]},
+    package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll", "*.dylib"]},
     has_ext_modules=lambda: True
 )

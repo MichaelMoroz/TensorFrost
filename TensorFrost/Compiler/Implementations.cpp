@@ -57,13 +57,13 @@ Tensor* ConstantOutOfBounds(const Tensor* array, Tensors indices, uint constant)
 	ShapeInfo shapeinfo = array->GetShapeInfo();
 	int dims = shapeinfo.dim;
 	Tensors shape = shapeinfo.GetTensors();
-	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
+	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFTypeBool32);
 	for (int i = 0; i < dims; i++) {
 		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
 		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
 	}
 	is_out_of_bounds->SetDebugName("out_of_bounds");
-	Tensor* value = &Tensor::Constant(constant, array->node_->type);
+	Tensor* value = &Tensor::Constant(constant, array->node_->format);
 	Tensor* loaded = &Tensor::Load(*array, indices);
 	return &Tensor::select(*is_out_of_bounds, *value, *loaded);
 }
@@ -73,7 +73,7 @@ Tensor* IsOutOfBounds(const Tensor* array, Tensors indices) {
 	ShapeInfo shapeinfo = array->GetShapeInfo();
 	int dims = shapeinfo.dim;
 	Tensors shape = shapeinfo.GetTensors();
-	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFType::Bool);
+	Tensor* is_out_of_bounds = &Tensor::Constant(0, TFTypeBool32);
 	for (int i = 0; i < dims; i++) {
 		Tensor* is_out = &(*indices[i] < Tensor::Constant(0) || *indices[i] >= *shape[i]);
 		is_out_of_bounds = &(*is_out_of_bounds || *is_out);
@@ -179,7 +179,7 @@ map<string, VJPGradientFunction> gradient_functions =
 	}},
 	{"assert", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
 		const Tensor* memory_input = in.GetTensor(ArgType::Memory);
-		grads.Add(ArgType::Memory, 0, Tensor::Assert(grad, memory_input->GetShape(), memory_input->GetType()));
+		grads.Add(ArgType::Memory, 0, Tensor::Assert(grad, memory_input->GetShape(), memory_input->GetFormat()));
 	}},
 	//memory operations
 	{"load", [](ArgumentManager& in, const Tensor& out, const Tensor& grad, NodeGrads& grads) {
@@ -281,7 +281,7 @@ Tensor* ComputeReduction(const Tensor* array, int axis,
 	}
 
 	// start with the first value
-	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->node_->type);
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->node_->format);
 	reduced->SetDebugName(debug_name);
 
 	// create a loop over the last dimension starting from the second value
@@ -306,7 +306,7 @@ Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*
 	// Get shape of the array
 	Tensors shape = array->GetShape();
 
-	Tensor* scan_result = &Tensor::Memory(shape, array->node_->type);
+	Tensor* scan_result = &Tensor::Memory(shape, array->node_->format);
 
 	axis = GetAxis((int)shape.size(), axis);
 
@@ -342,7 +342,7 @@ Tensor* ComputeScan(const Tensor* array, int axis, std::function<Tensor*(Tensor*
 	}
 
 	// start with the first value
-	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->node_->type);
+	Tensor* reduced = &Tensor::Constant(sum_shape, initial, array->node_->format);
 	reduced->SetDebugName(debug_name);
 
 	// create a loop over the last dimension starting from the second value
@@ -397,11 +397,11 @@ uint GetInitialMin(TFType type) {
 
 Tensor* ComputeMax(const Tensor* array, int axis) {
 	uint initial = 0;
-	if (array->node_->type == TFType::Float) {
+	if (array->node_->format == TFTypeFloat32) {
 		float init = -FLT_MAX;
 		initial = *(uint*)&init;
 	}
-	else if (array->node_->type == TFType::Int) {
+	else if (array->node_->format == TFTypeInt32) {
 		int init = INT_MIN;
 		initial = *(uint*)&init;
 	}
@@ -412,11 +412,11 @@ Tensor* ComputeMax(const Tensor* array, int axis) {
 
 Tensor* ComputeMin(const Tensor* array, int axis) {
 	uint initial = UINT_MAX;
-	if (array->node_->type == TFType::Float) {
+	if (array->node_->format == TFTypeFloat32) {
 		float init = FLT_MAX;
 		initial = *(uint*)&init;
 	}
-	else if (array->node_->type == TFType::Int) {
+	else if (array->node_->format == TFTypeInt32) {
 		int init = INT_MAX;
 		initial = *(uint*)&init;
 	}
@@ -427,7 +427,7 @@ Tensor* ComputeMin(const Tensor* array, int axis) {
 
 Tensor* ComputeProduct(const Tensor* array, int axis) {
 	uint initial = 1;
-	if (array->node_->type == TFType::Float) {
+	if (array->node_->format == TFTypeInt32) {
 		float init = 1.0f;
 		initial = *(uint*)&init;
 	}
@@ -609,7 +609,7 @@ Tensor* ComputeMatMul(const Tensor* a, const Tensor* b) {
 	}
 
 	// start with 0
-	Tensor* c = &Tensor::Constant(shape_c, 0, a->node_->type);
+	Tensor* c = &Tensor::Constant(shape_c, 0, a->node_->format);
 	c->SetDebugName("matmul");
 
 	// loop over k and compute += A t1t2..tN ik * B t1t2..tN kj

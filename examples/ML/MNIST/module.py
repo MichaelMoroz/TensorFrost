@@ -103,7 +103,6 @@ def OptimizerStep():
 
     L = model.loss(Xbatch, Ybatch)
 
-    
     opt.step(L)
     tf.region_end('Backprop/Optimizer')
 

@@ -29,7 +29,7 @@ extern "C" {
 
 	struct TFTensor {
 		TFBuffer* buffer;
-		TFType type;
+		TFDataFormat format;
 		size_t dim;
 		const size_t* shape;
 	};
@@ -50,7 +50,7 @@ extern "C" {
 		size_t work_group_count;
 	};
 
-	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFType, void*);
+	typedef TFTensor alloc_func(const char*, const size_t*, size_t, TFDataFormat, void*);
 	typedef void dealloc_func(TFTensor, void*);
 	typedef uint readback_func(TFTensor, size_t, void*);
 	typedef void writeback_func(TFTensor, size_t, uint32_t, void*);
@@ -74,7 +74,7 @@ extern "C" {
 class TFBufferTemplate : public
 TFBuffer {
 public:
-	TFBufferTemplate(size_t size) : TFBuffer(size) {}
+	TFBufferTemplate(size_t size) : TFBuffer{ size } {}
 
 	virtual void UpdateName(const char* name) {
 		throw std::runtime_error("UpdateName not implemented");
@@ -105,8 +105,8 @@ private:
 	map<size_t, size_t> allocation_delay; //stores the time between the last 2 allocations of a buffer size
 	unordered_set<TFBuffer*> unused_buffers;
 
-	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFType type);
-	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFType type);
+	static TFTensor* MakeTensor(size_t* shape, size_t dim, TFBuffer* buf, TFDataFormat type);
+	static TFTensor* MakeTensor(const vector<size_t>& shape, TFBuffer* buf, TFDataFormat type);
 	void UpdateTick();
 	size_t GetDeallocationDelay(size_t size) const;
 
@@ -130,8 +130,8 @@ public:
 	virtual void Writeback(const TFTensor* memory, const vector<uint32_t>& data);
 	virtual void WritebackValue(const TFTensor* memory, size_t index, uint32_t value);
 
-	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFType type = TFType::Float, const char* name = nullptr);
-	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFType type = TFType::Float, bool read_only = false, const char* name = nullptr);
+	TFTensor* AllocateTensor(const vector<size_t>& shape, const TFDataFormat type = TFTypeFloat32, const char* name = nullptr);
+	TFTensor* AllocateTensorWithData(const vector<size_t>& shape, const vector<uint32_t>& data, const TFDataFormat type = TFTypeFloat32, bool read_only = false, const char* name = nullptr);
 	void DeallocateTensor(TFTensor tensor);
 
 	size_t GetAllocatedSize() const;

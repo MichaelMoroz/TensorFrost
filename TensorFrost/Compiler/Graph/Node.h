@@ -69,7 +69,7 @@ class Node {
 	NodeProps flags;
 	ArgumentManager args;
 	const Tensor* tensor_;
-	TFType type = TFType::Float;
+	TFDataFormat format = {TFType::Float, 32};
 	std::vector<uint> data;
 	IndexingMode indexing_mode_; //clamp unless otherwise specified
 	vector<int> group_size; //kernel properties
@@ -92,7 +92,7 @@ class Node {
 	void UpdateEdges();
 
 	//initialize and create next/child placeholders
-    void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFType new_type,  unordered_set<Node*>& existing_nodes, bool set_static = false);
+	void initialize(Tensor* tensor, NodeArguments&& new_args, string&& new_name, TFDataFormat new_format,  unordered_set<Node*>& existing_nodes, bool set_static = false);
 
 	void CopyProperties(Node* other);
 	void CopyMetadata(Node* other);

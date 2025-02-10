@@ -15,7 +15,7 @@ endif()
 # Set the output directory for the .pyd file for all configurations and types
 foreach(TYPE ARCHIVE LIBRARY RUNTIME PDB)
   foreach(CONFIG RELEASE DEBUG RELWITHDEBINFO MINSIZEREL)
-    set(CMAKE_${TYPE}_OUTPUT_DIRECTORY_${CONFIG} ${CMAKE_SOURCE_DIR}/PythonBuild/TensorFrost)
+    set(CMAKE_${TYPE}_OUTPUT_DIRECTORY_${CONFIG} ${CMAKE_SOURCE_DIR}/Python/TensorFrost)
   endforeach()
 endforeach()
 

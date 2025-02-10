@@ -62,7 +62,7 @@ bool IR::ComputeAutodiff()
 			bool in_range = (dep->index_ <= loss->index_ && dep->index_ >= min_range[loss]);
 			bool dep_is_accessible = dep->HasCommonParents(loss); //is it in scope of the loss
 			if(in_range && !dep->op->HasAllTypes(OpProp::Nondiff) &&
-			   dep_is_accessible && (dep->type == TFType::Float || dep->op->HasAllTypes(OpProp::Modifier))) {
+			   dep_is_accessible && (dep->format.type == TFType::Float || dep->op->HasAllTypes(OpProp::Modifier))) {
 				queue.push_back(dep);
 			}
 		}

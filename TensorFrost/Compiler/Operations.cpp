@@ -14,6 +14,12 @@ std::unordered_map<TFType, string> DataTypeNames = {
 	{TFType::None, "None"},
 };
 
+std::map<TFDataFormat, string> DataFormatNames = {
+	{TFTypeFloat32, "TFTypeFloat32"}, {TFTypeInt32, "TFTypeInt32"},
+	{TFTypeUint32, "TFTypeUint32"},   {TFTypeBool32, "TFTypeBool32"},
+	{TFTypeNone, "TFTypeNone"},
+};
+
 const vector<Operation> operations = {
     //Scope operations
     Operation("host", {""}, 0, "", {OpProp::Static, OpProp::Special, OpProp::HostOnly, OpProp::Nondiff, OpProp::HasChildren}),

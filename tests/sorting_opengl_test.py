@@ -3,7 +3,7 @@ import numpy as np
 import TensorFrost as tf
 import unittest
 
-tf.initialize(tf.cpu)
+tf.initialize(tf.opengl)
 
 def Sort0():
     keys = tf.input([-1], tf.uint32)

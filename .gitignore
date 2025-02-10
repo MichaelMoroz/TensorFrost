@@ -43,11 +43,11 @@ venv.bak/
 # Build folder
 build/
 build_tidy/
-PythonBuild/build/
-PythonBuild/dist/
-PythonBuild/TensorFrost.egg-info/
-PythonBuild/TensorFrost/*
-!PythonBuild/TensorFrost/__init__.py
+Python/build/
+Python/dist/
+Python/TensorFrost.egg-info/
+Python/TensorFrost/*
+!Python/TensorFrost/*.py
 dist/
 temp/
 .vscode/settings.json

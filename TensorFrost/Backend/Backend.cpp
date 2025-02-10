@@ -18,6 +18,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 			case BackendType::OpenGL:
 				StopOpenGL();
 				break;
+			default:
+				throw std::runtime_error("Backend not implemented");
 		}
 	}
 
@@ -60,6 +62,8 @@ void InitializeBackend(BackendType backendType, const string& compilerOptions, C
 			global_memory_manager = new OpenGLMemoryManager();
 			global_kernel_manager = new OpenGLKernelManager();
 			break;
+		default:
+			throw std::runtime_error("Backend not implemented");
 	}
 
 	if (kernelType != CodeGenLang::None) {
@@ -88,10 +92,10 @@ void CompileKernels(Program* program) {
 	program->shader_compile_time = milliseconds;
 }
 
-TFTensor Allocator(const char* name, const size_t* a, size_t dim, TFType type, void* data) {
+TFTensor Allocator(const char* name, const size_t* a, size_t dim, TFDataFormat format, void* data) {
 	try {
 		vector<size_t> shape(a, a + dim);
-		return *global_memory_manager->AllocateTensor(shape, type, name);
+		return *global_memory_manager->AllocateTensor(shape, format, name);
 	} catch (const std::exception& e) {
 		size_t size = 1;
 		for (size_t i = 0; i < dim; i++) {
