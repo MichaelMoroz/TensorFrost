@@ -325,9 +325,12 @@ Tensor & Tensor::Assert(const Tensor &tensor, const Tensors &shape, TFDataFormat
 
 void Tensor::SetDebugName(const string& name) const
 {
-	if (name != "")
-	{
+	if (name != "") {
 		node_->debug_name = name;
+	}
+
+	if (strip_debug_names) {
+		node_->debug_name = "";
 	}
 }
 

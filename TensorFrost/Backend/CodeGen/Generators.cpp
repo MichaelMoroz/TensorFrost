@@ -46,6 +46,9 @@ void GenerateNodeNames(const IR& ir) {
 	Node* curent_cluster = nullptr;
 	map<string, int> name_count;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
+		if (strip_debug_names) {
+			node->debug_name = "";
+		}
 		if (node->parent != curent_cluster) {
 			cluster_index++;
 			var_index = 0;

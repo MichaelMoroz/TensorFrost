@@ -5,6 +5,7 @@
 namespace TensorFrost {
 
 void TensorProgram::CreateProgram(string name) {
+	if(strip_debug_names) name = "program" + std::to_string(program_id);
 	Tensor::SetEvaluationContext(nullptr);
 
 	//get current time

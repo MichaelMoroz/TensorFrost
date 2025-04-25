@@ -104,6 +104,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 		      InitializeBackend(backend_type, kernel_compile_options, kernel_lang);
 	      }, py::arg("backend_type") = BackendType::CPU, py::arg("kernel_compile_options") = "", py::arg("kernel_lang") = CodeGenLang::None, "Initialize the backend");
 
+	m.def("strip_debug_info", [](bool strip) {
+		strip_debug_names = strip;
+	}, py::arg("strip") = true, "Strip debug info from the kernel");
+
 #ifdef NDEBUG
 	py::print("TensorFrost module loaded!");
 #else
