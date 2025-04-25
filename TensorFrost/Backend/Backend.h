@@ -37,6 +37,7 @@ enum class CodeGenLang {
 extern BackendType current_backend;
 extern CodeGenLang current_kernel_lang;
 extern CodeGenLang current_main_lang;
+extern bool strip_debug_names;
 
 vector<TFTensor*> ExecuteProgram(
     Program* program, vector<TFTensor*> inputs);

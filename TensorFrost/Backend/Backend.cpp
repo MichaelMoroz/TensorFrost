@@ -5,6 +5,7 @@ namespace TensorFrost {
 BackendType current_backend = BackendType::NotInitialized;
 CodeGenLang current_kernel_lang = CodeGenLang::CPP;
 CodeGenLang current_main_lang = CodeGenLang::CPP;
+bool strip_debug_names = false;
 
 void InitializeBackend(BackendType backendType, const string& compilerOptions, CodeGenLang kernelType) {
 	if (current_backend != BackendType::NotInitialized) {

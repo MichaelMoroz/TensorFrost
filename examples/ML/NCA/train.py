@@ -37,11 +37,11 @@ def load_emoji(emoji):
 target = load_emoji(TARGET_EMOJI)
 
 #load from png file
-# target = PIL.Image.open("catthink.png")
-# target = target.resize((TARGET_SIZE, TARGET_SIZE), PIL.Image.LANCZOS)
-# target = np.array(target)
-# target = np.float32(target)/255.0
-# target = target[..., :] * target[..., 3:4]
+target = PIL.Image.open("H:/TensorFrost/examples/ML/NCA/bugcat.png")
+target = target.resize((TARGET_SIZE, TARGET_SIZE), PIL.Image.LANCZOS)
+target = np.array(target)
+target = np.float32(target)/255.0
+target = target[..., :] * target[..., 3:4]
 
 # #plot the target image
 # plt.imshow(target)
