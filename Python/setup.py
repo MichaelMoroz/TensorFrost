@@ -5,7 +5,7 @@ with open("../README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
-    name='TensorFrost',
+    name='tensorfrost',
     version='0.7.2',
     author="Mykhailo Moroz",
     author_email="michael08840884@gmail.com",
@@ -33,11 +33,11 @@ setup(
         "Environment :: GPU",
     ],
     python_requires='>=3.7',
-    packages=["TensorFrost"],
+    packages=["tensorfrost"],
     install_requires=[
         'numpy',
     ],
     # Include pre-compiled extension
-    package_data={"TensorFrost": ["*.so", "*.pyd", "*.dll", "*.dylib"]},
+    package_data={"tensorfrost": ["*.so", "*.pyd", "*.dll", "*.dylib"]},
     has_ext_modules=lambda: True
 )
