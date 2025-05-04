@@ -25,6 +25,13 @@ jobs:
     - name: Build and Package
       run: .\build_windows.ps1
 
+    - name: Check Folder
+      run: |
+        echo "Contents of Python directory:"
+        ls -R ./Python
+        echo "Contents of dist directory:"
+        ls -R ./Python/dist
+
     - name: Upload wheels as artifact
       uses: actions/upload-artifact@v4
       with:
