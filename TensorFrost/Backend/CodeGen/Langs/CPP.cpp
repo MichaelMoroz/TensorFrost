@@ -130,6 +130,11 @@ inline uint reversebits(uint x)
 	return ((x >> 16) | (x << 16));
 }
 
+inline int reversebits(int x)
+{
+	return (uint)reversebits((uint)x);
+}
+
 inline void InterlockedAdd(int* memory, int address, int value)
 {
 	std::atomic<int>* place = reinterpret_cast<std::atomic<int>*>(&memory[address]);

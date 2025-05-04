@@ -165,7 +165,7 @@ const vector<Operation> operations = {
     Operation("cosh", {"f_f"}, 8),
     Operation("tanh", {"f_f"}, 8),
     Operation("pcg", {"u_u"}, 32),
-	Operation("reversebits", {"u_u"}, 8),
+	Operation("reversebits", {"i_i", "u_u"}, 8),
     Operation("pcgf", {"u_f"}, 34, "", {OpProp::Nondiff}),
     Operation("pow", {"ff_f"}, 6),
     Operation("atan2", {"ff_f"}, 32),
