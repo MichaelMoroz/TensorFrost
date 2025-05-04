@@ -22,6 +22,6 @@ export PYTHON_EXECUTABLE=$PYTHON_ROOT/bin/python
 
 $PYTHON_EXECUTABLE -m pip wheel ./Python -w Python/dist --verbose
 
-for whl in Python/dist/*.whl; do
+for whl in Python/dist/tensorfrost-*.whl; do
   auditwheel repair "$whl" -w ./wheelhouse/
 done
