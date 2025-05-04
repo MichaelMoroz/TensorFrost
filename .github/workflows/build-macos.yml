@@ -36,7 +36,7 @@ jobs:
           echo "Python version: $PYTHON_VERSION"
           echo "Python executable: $PYTHON_EXECUTABLE"
           
-          ${PYTHON_EXECUTABLE} -m pip wheel /Python -w Python/dist --verbose
+          ${PYTHON_EXECUTABLE} -m pip wheel ./Python -w Python/dist --verbose
 
       - name: Check Folder
         run: ls -R ./Python

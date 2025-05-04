@@ -22,6 +22,9 @@ jobs:
         docker build -t tensorfrost-manylinux .
         docker run --rm -e PYTHON_VERSION=${{ matrix.python-version }} -v $(pwd):/io tensorfrost-manylinux
 
+    - name: Check Folder
+      run: ls -R ./wheelhouse
+
     - name: Upload wheels as artifact
       uses: actions/upload-artifact@v4
       with:
