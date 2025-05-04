@@ -54,12 +54,17 @@ git clone --recurse-submodules https://github.com/MichaelMoroz/TensorFrost.git
 cd TensorFrost
 ```
 
-Then you can either install the library for development or build a wheel file for distribution.
+Then you can either install the library for development.
 
 ```bash
-python -m pip install --upgrade pip setuptools wheel
-python -m pip install -e Python/ -v # install the library for development
-python -m pip wheel ./Python -w dist -v # build a wheel file
+py -$YOUR_PYTHON_VERSION$ -m pip install --upgrade pip setuptools wheel
+py -$YOUR_PYTHON_VERSION$ -m pip install -e Python/ -v # install the library for development
+```
+This will link the build folder to Python, so any changes you make to the source code will be reflected in the installed library, in case of changed CPP code you need to rebuild the file library files using `cmake --build . --config Release` command, or by using any IDE.
+
+You can also build a wheel file for distribution. This will create a wheel file in the `dist` folder.
+```bash
+py -$YOUR_PYTHON_VERSION$ -m pip wheel ./Python -w dist -v # build a wheel file
 ```
 
 > [!TIP]
