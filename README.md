@@ -54,16 +54,16 @@ git clone --recurse-submodules https://github.com/MichaelMoroz/TensorFrost.git
 cd TensorFrost
 ```
 
-Then run cmake to build the library.
+Then you can either install the library for development or build a wheel file for distribution.
 
 ```bash
-cmake -S . -B build && cmake --build build
+python -m pip install --upgrade pip setuptools wheel
+python -m pip install -e Python/ -v # install the library for development
+python -m pip wheel ./Python -w dist -v # build a wheel file
 ```
 
 > [!TIP]
 > If you are using a Linux distribution that doesn't support installing packages through pip (e.g. Arch Linux), read **[Using a Virtual Environment](#using-a-virtual-environment)**.
-
-The cmake script will automatically install the compiled python module into your python environment.
 
 ### Using a Virtual Environment
 
@@ -81,16 +81,13 @@ Certain Linux distributions (e.g. Arch Linux) want you to use their package mana
     source venv/bin/activate
     ```
 
-3. Install `jinja` (required for building)
 
-    ```sh
-    pip install jinja
-    ```
-
-4. Now, you can use CMake as usual.
+4. Now, you can use pip to install the library:
 
     ```bash
-    cmake -S . -B build && cmake --build build
+    python -m pip install --upgrade pip setuptools wheel
+    python -m pip install -e Python/ -v # install the library for development
+    python -m pip wheel ./Python -w dist -v # build a wheel file
     ```
 
 > [!TIP]

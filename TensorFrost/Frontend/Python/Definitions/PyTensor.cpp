@@ -88,6 +88,15 @@ void PyTensorDefinition(py::module& /*m*/, py::class_<PyTensor>& py_tensor) {
 		}
 		return indices;
 	});
+	py_tensor.def_property_readonly("op_name", [](const PyTensor& t) {
+		return T(t).node_->name;
+	});
+	py_tensor.def("try_get_constant", [](const PyTensor& t) {
+		if(T(t).node_->name != "const") {
+			throw std::runtime_error("Can not get constant from non-constant tensor");
+		}
+		return T(t).TryGetConstant();
+	});
 	py_tensor.def("index",[](const PyTensor& t, int dim) {
 		  int dims = T(t).GetDimension();
           return PT(T(t).Index(dims - dim - 1));

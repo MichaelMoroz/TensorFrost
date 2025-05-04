@@ -1,6 +1,10 @@
 [build-system]
-requires = ["setuptools>=64", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = [
+    "scikit-build-core>=0.11",
+    "pybind11>=2.12",
+    "jinja2>=3.1"
+]
+build-backend = "scikit_build_core.build"
 
 [project]
 name = "TensorFrost"
@@ -28,6 +32,15 @@ classifiers = [
     "Environment :: X11 Applications",
     "Environment :: GPU",
 ]
+readme = "../README.md"
 
 [tool.setuptools.package-data]
 "TensorFrost" = ["*.so", "*.pyd", "*.dll", "*.dylib"]
+
+[tool.scikit-build]
+
+[tool.scikit-build.cmake]
+source-dir = ".."
+
+[tool.scikit-build.logging]
+level = "INFO"
