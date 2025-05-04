@@ -11,7 +11,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.7', '3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
+        python-version: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13']
     steps:
     - uses: actions/checkout@v4
       with:
@@ -25,8 +25,15 @@ jobs:
     - name: Build and Package
       run: .\build_windows.ps1
 
+    - name: Check Folder
+      run: |
+        echo "Contents of Python directory:"
+        ls -R ./Python
+        echo "Contents of dist directory:"
+        ls -R ./Python/dist
+
     - name: Upload wheels as artifact
       uses: actions/upload-artifact@v4
       with:
         name: windows-wheels-py${{ matrix.python-version }}
-        path: Python/dist/*.whl
+        path: Python/dist/tensorfrost-*.whl

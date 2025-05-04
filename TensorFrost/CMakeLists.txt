@@ -3,6 +3,14 @@ file(GLOB_RECURSE TENSORFROST_HEADER_LIST CONFIGURE_DEPENDS *.h *.hpp)
 
 pybind11_add_module(TensorFrost ${TENSORFROST_SOURCE_LIST} ${TENSORFROST_HEADER_LIST})
 
+if(APPLE)
+    set(CMAKE_MACOSX_RPATH ON)
+    set_target_properties(TensorFrost PROPERTIES
+            BUILD_WITH_INSTALL_RPATH ON
+            INSTALL_RPATH "@loader_path/."
+    )
+endif()
+
 # Add GLFW
 target_link_libraries(TensorFrost PRIVATE glfw)
 
@@ -29,12 +37,6 @@ target_sources(TensorFrost PRIVATE ${IMGUI_SOURCE_LIST} ${IMGUI_BACKEND_SOURCE_L
 #add renderdoc headers
 target_include_directories(TensorFrost PRIVATE ${CMAKE_SOURCE_DIR}/external/renderdoc)
 
-add_custom_command(
-    TARGET TensorFrost
-    POST_BUILD
-    COMMAND ${Python3_EXECUTABLE} -m pip install -e Python/
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
 
 add_custom_target(install_python_package ALL
     DEPENDS TensorFrost

@@ -23,10 +23,9 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
           pip install cmake build  # or other tools you need
 
-      - name: Configure CMake
+      - name: Build wheel
         run: |
           # Grab the path to the "python" selected by setup-python
           export PYTHON_EXECUTABLE="$(which python)"
@@ -36,42 +35,14 @@ jobs:
 
           echo "Python version: $PYTHON_VERSION"
           echo "Python executable: $PYTHON_EXECUTABLE"
-
-          cmake \
-            -DPYBIND11_PYTHON_VERSION="${PYTHON_VERSION}" \
-            -DPython3_EXECUTABLE="${PYTHON_EXECUTABLE}" \
-            -DPython_FIND_STRATEGY=LOCATION \
-            -DPython_FIND_REGISTRY=NEVER \
-            -DPython_FIND_FRAMEWORK=NEVER \
-            -S . \
-            -B build \
-            -DCMAKE_BUILD_TYPE=Release
-
-      - name: Build
-        run: cmake --build build --config Release
-
-      - name: Fix library pathing
-        run: |
-          # Find the shared object file under the Python/TensorFrost folder.
-          # This command will locate any *.so file
-          SO_FILE=$(find Python/TensorFrost -type f -name "*.so")
-          if [ -z "$SO_FILE" ]; then
-            echo "No shared library found!"
-            exit 1
-          fi
-          echo "Found shared library: $SO_FILE"
-          # Add the rpath relative to the shared library’s loader
-          install_name_tool -add_rpath @loader_path/. "$SO_FILE"
+          
+          ${PYTHON_EXECUTABLE} -m pip wheel ./Python -w Python/dist --verbose
 
       - name: Check Folder
         run: ls -R ./Python
-
-      - name: Build wheel
-        run: |
-          python -m build -w ./Python
 
       - name: Upload wheels as artifact
         uses: actions/upload-artifact@v4
         with:
           name: macos-wheels-py${{ matrix.python-version }}
-          path: Python/dist/*.whl
+          path: Python/dist/tensorfrost-*.whl

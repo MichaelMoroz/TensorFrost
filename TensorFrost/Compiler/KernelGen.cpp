@@ -4,7 +4,7 @@ namespace TensorFrost {
 
 Program* GenerateProgram(IR* ir) 
 {
-	ir->CompileIR(); 
+	ir->CompileIR();
 
 	auto* program = new Program(ir);
 
