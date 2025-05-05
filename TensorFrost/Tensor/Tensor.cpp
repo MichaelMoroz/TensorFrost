@@ -330,7 +330,9 @@ void Tensor::SetDebugName(const string& name) const
 	}
 
 	if (strip_debug_names) {
-		node_->debug_name = "";
+		static int count = 0;
+
+		node_->debug_name = "tensor_" + std::to_string(count++);
 	}
 }
 

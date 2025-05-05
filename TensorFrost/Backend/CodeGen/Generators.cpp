@@ -46,8 +46,9 @@ void GenerateNodeNames(const IR& ir) {
 	Node* curent_cluster = nullptr;
 	map<string, int> name_count;
 	for (auto node = ir.begin(); !node.end(); node.next()) {
-		if (strip_debug_names) {
-			node->debug_name = "";
+		if (strip_debug_names && !node->debug_name.empty()) {
+			static int count = 0;
+			node->debug_name = "id_" + std::to_string(count++);
 		}
 		if (node->parent != curent_cluster) {
 			cluster_index++;
