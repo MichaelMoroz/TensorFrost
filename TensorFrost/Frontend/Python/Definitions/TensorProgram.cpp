@@ -16,12 +16,35 @@ void TensorProgramDefinition(py::module& m,
 		    std::string func_name =
 		        py_evaluate.attr("__name__").cast<std::string>();
 
-	    	vector<ArgInfo> input_names = GetFunctionArguments(py_evaluate);
+	    	vector<ArgInfo> inputs = GetFunctionArguments(py_evaluate);
+		    vector<string> arg_names;
+	    	vector<PyTensorArg> arg_props;
+			for (auto arg : inputs) {
+				arg_names.push_back(std::get<0>(arg));
+				py::object arg_prop = std::get<1>(arg);
+				py::object arg_default = std::get<2>(arg);
+				if (py::isinstance<PyTensorArg>(arg_prop)) {
+					PyTensorArg arg_tensor = arg_prop.cast<PyTensorArg>();
+					arg_props.push_back(arg_tensor);
+				} else {
+					throw std::runtime_error("Unsupported input type " + std::string(py::str(arg_prop)));
+				}
+			}
 
 		    TensorProgram& program = *new TensorProgram(
-		        [py_evaluate]() -> Tensors {
+		        [py_evaluate, arg_names, arg_props]() -> Tensors {
 			        py::gil_scoped_acquire acquire;
-			        py::object result = py_evaluate();
+		        	std::vector<PyTensor*> args;
+					//create inputs from the arguments
+		        	for (size_t i = 0; i < arg_names.size(); i++) {
+		        		Tensor& input = Tensor::Input(arg_props[i].shape, arg_props[i].type);
+		        		input.SetDebugName(arg_names[i]);
+		        		PyTensor* py_tensor = new PyTensor(&input);
+		        		args.push_back(py_tensor);
+		        	}
+		        	//convert to py::args
+		        	py::args py_args = py::cast(args);
+			        py::object result = py_evaluate(*py_args);
 					Tensors outputs;
 					//if the result is a single tensor
 		        	if (py::isinstance<PyTensor>(result)) {

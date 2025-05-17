@@ -66,6 +66,17 @@ void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor) {
 	    },
 	    py::arg("shape"), py::arg("body"));
 
+	// m.def(
+	// 	"vmap",
+	// 	[](py::list inputs, py::list shape, const py::function& func) {
+	// 		std::function<void()> f = [&func]() {
+	// 			py::gil_scoped_acquire acquire;
+	// 			func();
+	// 		};
+	// 		Tensor::If(T(condition), f);
+	// 	},
+	// 	py::arg("condition"), py::arg("true_body"));
+
 	py_tensor.def("__enter__", &PyTensor::__enter__);
 	py_tensor.def("__exit__", &PyTensor::__exit__);
 

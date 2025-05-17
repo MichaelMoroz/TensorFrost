@@ -3,61 +3,44 @@ import TensorFrost as tf
 
 tf.initialize(tf.cpu)
 
-def Test():
-    A = tf.input([-1, -1], tf.int32)
-    A = tf.reshape(A, [A.shape[0] * A.shape[1]])
+blur_d = 16
+blur_r = blur_d * 0.5
 
-    for i in range(10):
-        A = tf.int(A == i)
+def kernel(r):
+    #return 1.0
+    return tf.exp(-0.5 * (r / blur_r)**2.0) / (blur_r * np.sqrt(2.0 * np.pi))
 
-    return A
+# def blurfunc():
+#     img = tf.func_input([-1, -1], tf.float32)
+#     with tf.loop(-blur_d, blur_d+1, 1) as k:
+#         blur_h += img[i+k, j] * kernel(tf.float(k))
+#     with tf.loop(-blur_d, blur_d+1, 1) as k:
+#         blur_v += blur_h[i, j+k] * kernel(tf.float(k))
+#     return blur_v
+#
+# def blur():
+#     img = tf.input([-1, -1, -1], tf.float32)
+#     N, M, C = img.shape
+#     blur_h = tf.zeros(img.shape, tf.float32)
+#     blur_v = tf.zeros(img.shape, tf.float32)
+#     i, j, ch = img.indices
+#
+#     tf.vmap(inputs=[img], map=[C], func=blurfunc);
+#
+#     return blur_v
 
-test = tf.compile(Test)
+@tf.compile
+def blur(img: tf.Arg([-1, -1, -1], tf.float32)):
+    blur_h = tf.zeros(img.shape, tf.float32)
+    blur_v = tf.zeros(img.shape, tf.float32)
+    i, j, ch = img.indices
 
-class Test(tf.Module):
-    def __init__(self):
-        super().__init__()
-        self.scales = tf.Parameter([4, 4], tf.float32, random_scale = 0.0, optimize = False)
-        self.zero_point = tf.Parameter([4, 4], tf.float32, random_scale = 0.0, optimize = False)
-        self.sdf = tf.Parameter([-1, -1, -1], tf.float32, optimize = False)
-        self.tex = tf.Parameter([32, 32, 32, 16], tf.float32, random_scale = 0.25, random_offset = 0.5)
+    #horizontal blur
+    with tf.loop(-blur_d, blur_d+1, 1) as k:
+        blur_h += img[i+k, j, ch] * kernel(tf.float(k))
 
-def TestInit():
-    model = Test()
-    opt = tf.optimizers.adam(model, learning_rate = 0.01)
-    opt.initialize_parameters_native()
-    return opt.parameters()
+    #vertical blur
+    with tf.loop(-blur_d, blur_d+1, 1) as k:
+        blur_v += blur_h[i, j+k, ch] * kernel(tf.float(k))
 
-init = tf.compile(TestInit)
-
-# def Test():
-#     A = tf.input([-1, -1], tf.float32)
-#
-#     with tf.kernel(A.shape, group_size=[16]) as (i, j):
-#         # i, j = tf.indices([A.shape[0], 3])
-#         # A[i, j] = A[i, j] + 1.0
-#
-#         v = tf.group_buffer(16, tf.float32)
-#         tid = i.block_thread_index(0)
-#
-#         v[tid] = A[i, j]
-#
-#         tf.group_barrier()
-#
-#         sum = tf.const(0.0)
-#         with tf.loop(tid) as k:
-#             sum.val += v[k]
-#
-#         A[i, j] = sum.val
-#
-#     return A
-#
-# test = tf.compile(Test)
-#
-# A = np.random.rand(3, 16).astype(np.float32)
-#
-# restf = test(A)
-#
-# print(A)
-# print(restf.numpy)
-
+    return blur_v

@@ -26,7 +26,7 @@ Tensors TensorsFromList(const py::list& list);
 PyTensors PyTensorsFromTensors(const Tensors& tensors);
 std::variant<PyTensor*, py::tuple> PyTensorsToTupleVariant(const PyTensors& tensors);
 
-using ArgInfo = std::tuple<std::string, std::string, std::string>; // (name, annotation, default)
+using ArgInfo = std::tuple<std::string, py::object, py::object>; // (name, annotation, default)
 
 vector<ArgInfo> GetFunctionArguments(const py::function& func);
 
@@ -89,6 +89,14 @@ class PyTensor {
 	}
 };
 
+class PyTensorArg {
+public:
+	std::vector<int> shape;
+	TFDataFormat type;
+
+	PyTensorArg(std::vector<int> shape, TFDataFormat type)
+		: shape(std::move(shape)), type(type) {}
+};
 
 std::string r_op(const std::string& name);
 std::string l_op(const std::string& name);

@@ -3,6 +3,7 @@
 
 #include <Frontend/Python/PyTensor.h>
 #include <Frontend/Python/PyTensorMemory.h>
+#include <pybind11/eval.h>
 
 namespace TensorFrost {
 
@@ -23,6 +24,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	auto py_tensor = py::class_<PyTensor>(m, "Tensor");
 	auto tensor_program = py::class_<TensorProgram>(m, "TensorProgram");
 	auto py_tensor_mem = py::class_<PyTensorMemory>(m, "TensorMemory");
+	auto py_tensor_arg = py::class_<PyTensorArg>(m, "Arg");
 
 	data_type.value("float", TFType::Float);
 	data_type.value("int", TFType::Int);
@@ -94,6 +96,14 @@ PYBIND11_MODULE(TensorFrost, m) {
 	WindowDefinitions(m);
 	ScopeDefinitions(m, py_tensor);
 	ModuleDefinitions(m);
+
+	py_tensor_arg.def(py::init([](py::list shape, TFDataFormat type) {
+		std::vector<int> shape_vec;
+		for (auto& s : shape) {
+			shape_vec.push_back(s.cast<int>());
+		}
+		return PyTensorArg(shape_vec, type);
+	}), "Create a TensorArg with the given shape and type", py::return_value_policy::take_ownership);
 
 	m.def("current_backend", []() {
 		return current_backend;
