@@ -104,7 +104,15 @@ def fft():
     inplace_fft(B, axis=1, inverse=False)
     return B
 
+def ifft():
+    A = tf.input([target_res, target_res, 2], tf.float32)
+    B = tf.copy(A)
+    inplace_fft(B, axis=0, inverse=True)
+    inplace_fft(B, axis=1, inverse=True)
+    return B
+
 fft = tf.compile(fft)
+ifft = tf.compile(ifft)
 
 all_kernels = tf.get_all_generated_kernels()
 print("Generated kernels:")
@@ -114,9 +122,9 @@ for k in all_kernels:
 input_img = np.array(plt.imread(current_folder+"/test.png"), dtype=np.float32)
 image_resampled = np.pad(input_img, ((0, target_res - input_img.shape[0]), (0, target_res - input_img.shape[1]), (0, 0)), 'constant')
 
-plt.imshow(image_resampled)
-plt.show()
-print(image_resampled.shape)
+# plt.imshow(image_resampled)
+# plt.show()
+# print(image_resampled.shape)
 
 r_channel = image_resampled[..., 0]
 complex_image = np.zeros((target_res, target_res, 2), dtype=np.float32)
@@ -124,11 +132,19 @@ complex_image[..., 0] = r_channel
 complex_image[..., 1] = np.zeros((target_res, target_res), dtype=np.float32)
 
 image_tf = tf.tensor(complex_image)
-transformed = fft(image_tf)
-transformed = transformed.numpy
+transformed_tf = fft(image_tf)
+transformed = transformed_tf.numpy
 
 #plot the magnitude of the transformed image
 plt.imshow(np.log(np.abs(transformed[..., 0] + 1j * transformed[..., 1])))
 plt.colorbar()
 plt.title("FFT")
+plt.show()
+
+image_recovered_tf = ifft(transformed_tf)
+image_recovered = image_recovered_tf.numpy
+#plot the recovered image
+plt.imshow(image_recovered[..., 0])
+plt.colorbar()
+plt.title("Recovered Image")
 plt.show()

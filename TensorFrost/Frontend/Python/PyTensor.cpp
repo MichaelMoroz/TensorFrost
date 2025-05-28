@@ -190,29 +190,16 @@ std::vector<ArgInfo> GetFunctionArguments(const py::function& func) {
 
         // Get annotation
         PyObject* annotation = annotations ? PyDict_GetItemString(annotations, arg_name.c_str()) : nullptr;
-        std::string arg_annotation = "";
-        if (annotation) {
-            PyObject* annotation_str = PyObject_Str(annotation);
-            if (annotation_str) {
-                arg_annotation = PyUnicode_AsUTF8(annotation_str);
-                Py_XDECREF(annotation_str);
-            }
-        }
 
         // Get default value
         PyObject* default_val = (defaults && PyTuple_Check(defaults) && i >= (arg_count - PyTuple_Size(defaults)))
                                 ? PyTuple_GetItem(defaults, i - (arg_count - PyTuple_Size(defaults)))
                                 : nullptr;
-        std::string arg_default = "";
-        if (default_val) {
-            PyObject* default_str = PyObject_Str(default_val);
-            if (default_str) {
-                arg_default = PyUnicode_AsUTF8(default_str);
-                Py_XDECREF(default_str);
-            }
-        }
 
-        arg_info_list.emplace_back(arg_name, arg_annotation, arg_default);
+        py::object annotation_obj = py::reinterpret_borrow<py::object>(annotation);
+    	py::object default_obj = py::reinterpret_borrow<py::object>(default_val);
+
+		arg_info_list.emplace_back(arg_name, annotation_obj, default_obj);
     }
 
     Py_XDECREF(varnames);

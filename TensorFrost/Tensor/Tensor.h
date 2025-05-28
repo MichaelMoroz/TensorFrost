@@ -925,6 +925,16 @@ public:
 		If(!condition, false_body);
 	}
 
+	static void Vmap(const Tensors inputs, const Tensors shape, const std::function<void()>& body) {
+		// create the if
+		Tensor& vmap_main = OpShape("vmap", Tensors(), inputs);
+
+		evaluation_context_ir_->ExecuteExpressionFirstChild(vmap_main.node_, [&]() {
+			// create the body
+			body();
+		});
+	}
+
 	static Tensor& Kernel(const Tensors shape, vector<int> group_size = {}) {
 		// create the kernel
 		Tensor& kernel = Static("kernel", shape, TFTypeNone);
