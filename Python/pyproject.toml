@@ -8,8 +8,8 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "TensorFrost"
-version = "0.7.3"
-description = "A static optimizing tensor compiler with a Python frontend…"
+version = "0.7.4"
+description = "A static optimizing tensor compiler with a Python frontend"
 authors = [{name = "Mykhailo Moroz", email = "michael08840884@gmail.com"}]
 requires-python = ">=3.7"
 dependencies = ["numpy"]
@@ -25,6 +25,7 @@ classifiers = [
     "Environment :: Win32 (MS Windows)",
     "Operating System :: POSIX :: Linux",
     "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
     "Intended Audience :: Developers",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
