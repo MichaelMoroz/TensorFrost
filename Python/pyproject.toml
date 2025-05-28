@@ -8,7 +8,7 @@ build-backend = "scikit_build_core.build"
 
 [project]
 name = "TensorFrost"
-version = "0.7.4"
+version = "0.8.0.dev0"
 description = "A static optimizing tensor compiler with a Python frontend"
 authors = [{name = "Mykhailo Moroz", email = "michael08840884@gmail.com"}]
 requires-python = ">=3.7"
