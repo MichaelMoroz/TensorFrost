@@ -9,6 +9,8 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "TensorFrost.h"
+
 namespace py = pybind11;
 
 namespace TensorFrost {
@@ -129,6 +131,13 @@ PYBIND11_MODULE(TensorFrost, m) {
 #else
 	py::print("TensorFrost module loaded in debug mode! Expect slow performance.");
 #endif
+
+	// TEST CODE
+	StartExecutionContext();
+	Op& a = constant(5);
+	Op& b = constant(10);
+	Op& c = a + b;
+	py::print("Created operation: ", c.opcode);
 }
 
 }  // namespace TensorFrost

@@ -5,13 +5,12 @@ namespace TensorFrost {
 
 Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args, std::vector<Op*> shape);
 
-template <typename... Args>
-Op& func_op(std::string op, const Args&... args) {
-    std::vector<Op*> mem;
-    std::vector<Op*> ids;
-    std::vector<Op*> args_vec = {&args...};
-    std::vector<Op*> shape;
-    return make_op(op, mem, ids, args_vec, shape);
+template<class... Ts>
+Op &func_op(const std::string &name, const Ts &... args) {
+    std::vector<Op*> v;
+    v.reserve(sizeof...(args));
+    (v.push_back(const_cast<Op*>(&args)), ...);
+    return make_op(name, {}, {}, v, {});
 }
 
 Op& constant(int value);
