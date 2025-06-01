@@ -7,7 +7,7 @@ ExecutionContext::ExecutionContext(): base_block(std::make_unique<OpBlock>()), c
 
 void ExecutionContext::BeginBlock(Op *op) {
     stack.push_back(current_block);
-    current_block = new OpBlock();
+    current_block = op->NewBlock();
 }
 
 void ExecutionContext::EndBlock() {

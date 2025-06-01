@@ -17,10 +17,7 @@ struct Op {
     std::vector<std::unique_ptr<OpBlock>> blocks;
 
     Op(std::string op_name);
-    Op(int value);
-    Op(uint value);
-    Op(float value);
-    Op(bool value);
+    OpBlock* NewBlock();
 };
 
 

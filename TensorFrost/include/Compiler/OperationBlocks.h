@@ -4,8 +4,11 @@
 namespace TensorFrost {
 
 struct OpBlock {
+    Op* parent_op = nullptr;
     std::list<std::unique_ptr<Op>> ops;
     Op* append(std::unique_ptr<Op> op);
+
+    OpBlock(Op* parent = nullptr);
 };
 
 class OpBlockIterator {

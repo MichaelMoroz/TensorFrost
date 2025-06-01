@@ -6,6 +6,8 @@ Op* OpBlock::append(std::unique_ptr<Op> op) {
     return ops.back().get();
 }
 
+OpBlock::OpBlock(Op *parent): parent_op(parent) {}
+
 OpBlockIterator::OpBlockIterator(OpBlock* root) : current_op(nullptr) {
     if (root && !root->ops.empty()) {
         stack.push_back({root, root->ops.begin(), root->ops.end()});

@@ -56,6 +56,8 @@ OverloadsMap ovr(const std::string& input) {
 }
 
 vector<OpSpec> default_operations = {
+    OpSpec("const", ovr("f(); u(); i(); b(); tuple()")),
+
     OpSpec("add", ovr("f(f,f); u(u,u); i(i,i)")),
     OpSpec("sub", ovr("f(f,f); u(u,u); i(i,i)")),
     OpSpec("mul", ovr("f(f,f); u(u,u); i(i,i)")),
