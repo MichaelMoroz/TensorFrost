@@ -1,85 +1,53 @@
 #include "Compiler/Operation.h"
 
 namespace TensorFrost {
-Op* OpBlock::append(std::unique_ptr<Op> op) {
-    ops.emplace_back(std::move(op));
-    return ops.back().get();
-}
-
 OpBlock::OpBlock(Op *parent): parent_op(parent) {}
 
-OpBlockIterator::OpBlockIterator(OpBlock* root) : current_op(nullptr) {
-    if (root && !root->ops.empty()) {
-        stack.push_back({root, root->ops.begin(), root->ops.end()});
-        current_op = stack.back().it->get();
-    }
+OpBlock::Iterator::Iterator(OpBlock *parent, List::iterator it)
+    : parent_(parent), list_(&parent->ops), cur_(it) {}
+
+Op* OpBlock::Iterator::operator*() const { return cur_->get(); }
+Op* OpBlock::Iterator::operator->() const { return cur_->get(); }
+
+Op * OpBlock::Iterator::get_next() const { return cur_->get(); }
+Op * OpBlock::Iterator::get_prev() const {
+    if (cur_ == list_->begin()) return nullptr;
+    return std::prev(cur_)->get();
 }
 
-Op* OpBlockIterator::current() const {
-    return current_op;
+OpBlock::Iterator & OpBlock::Iterator::next() { if (cur_ != list_->end()) ++cur_; return *this; }
+OpBlock::Iterator & OpBlock::Iterator::prev() { if (cur_ != list_->begin()) --cur_; return *this; }
+
+OpBlock::Iterator& OpBlock::Iterator::insert_after(std::unique_ptr<Op> op) {
+    if (op->parent_block) throw std::runtime_error("Op already belongs to a block");
+
+    auto pos = (cur_ == list_->end()) ? list_->end() : std::next(cur_);
+    cur_ = list_->insert(pos, std::move(op));   // <- after-cursor
+    cur_->get()->parent_block = parent_;
+    return *this;
 }
 
-Op* OpBlockIterator::next() {
-    if (stack.empty()) return nullptr;
-    // If current op has sub-blocks, go down
-    if (!current_op->blocks.empty() && current_op->blocks[0] && !current_op->blocks[0]->ops.empty()) {
-        OpBlock* sub = current_op->blocks[0].get();
-        stack.push_back({sub, sub->ops.begin(), sub->ops.end()});
-        current_op = stack.back().it->get();
-        return current_op;
-    }
-    // Otherwise, go to next op in current block or up
-    while (!stack.empty()) {
-        auto& frame = stack.back();
-        ++frame.it;
-        if (frame.it != frame.end) {
-            current_op = frame.it->get();
-            return current_op;
-        } else {
-            stack.pop_back();
+OpBlock::Iterator& OpBlock::Iterator::insert_before(std::unique_ptr<Op> op) {
+    if (op->parent_block) throw std::runtime_error("Op already belongs to a block");
+
+    cur_ = list_->insert(cur_, std::move(op));   // <- before-cursor
+    cur_->get()->parent_block = parent_;
+    return *this;
+}
+
+bool OpBlock::Iterator::valid() const { return cur_ != list_->end(); }
+bool OpBlock::Iterator::operator==(const Iterator &o) const { return cur_ == o.cur_; }
+bool OpBlock::Iterator::operator!=(const Iterator &o) const { return cur_ != o.cur_; }
+
+OpBlock::Iterator OpBlock::begin() { return Iterator(this, ops.begin()); }
+OpBlock::Iterator OpBlock::end() { return Iterator(this, ops.end()); }
+
+void ApplyOpTransform(OpBlock &block, const std::function<void(Op &)> &transform) {
+    for (auto& op : block.ops) {
+        for (auto& sub_block : op->blocks) {
+            ApplyOpTransform(*sub_block, transform);
         }
+        transform(*op);
     }
-    current_op = nullptr;
-    return nullptr;
-}
-
-Op* OpBlockIterator::prev() {
-    if (stack.empty()) return nullptr;
-    auto& frame = stack.back();
-    if (frame.it == frame.block->ops.begin()) {
-        stack.pop_back();
-        if (!stack.empty()) {
-            current_op = stack.back().it->get();
-            return current_op;
-        }
-        current_op = nullptr;
-        return nullptr;
-    }
-    --frame.it;
-    // Go to the deepest last op in sub-blocks if any
-    Op* op = frame.it->get();
-    while (!op->blocks.empty() && op->blocks[0] && !op->blocks[0]->ops.empty()) {
-        OpBlock* sub = op->blocks[0].get();
-        stack.push_back({sub, --sub->ops.end(), sub->ops.end()});
-        op = stack.back().it->get();
-    }
-    current_op = op;
-    return current_op;
-}
-
-bool OpBlockIterator::down() {
-    if (!current_op || current_op->blocks.empty() || !current_op->blocks[0] || current_op->blocks[0]->ops.empty())
-        return false;
-    OpBlock* sub = current_op->blocks[0].get();
-    stack.push_back({sub, sub->ops.begin(), sub->ops.end()});
-    current_op = stack.back().it->get();
-    return true;
-}
-
-bool OpBlockIterator::up() {
-    if (stack.size() <= 1) return false;
-    stack.pop_back();
-    current_op = stack.back().it->get();
-    return true;
 }
 }

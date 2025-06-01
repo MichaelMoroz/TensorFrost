@@ -17,6 +17,10 @@ struct Arguments {
 
     void AddInput(ArgType type, Op* from, int index = 0);
     bool CheckValidity(bool throw_error = false) const;
+    void RemoveInput(int index);
+
+    std::vector<Argument*> Args() const;
+    std::vector<Op*> Inputs() const;
 };
 
 struct ShapeArgs : Arguments {
@@ -24,9 +28,7 @@ struct ShapeArgs : Arguments {
     float GetSizeEstimate();
     void ExpandDimensionsTo(int new_dim);
 
-    bool CompareShape(const ShapeArgs& other, bool throw_error = false) const {
-        //TODO: Implement shape comparison logic
-    }
+    bool CompareShape(const ShapeArgs& other, bool throw_error = false) const;
 };
 
 struct ArgumentManager {
@@ -36,9 +38,11 @@ struct ArgumentManager {
     ArgumentManager(Op* parent);
     void AddArgument(Op* from, ArgType type, int index = 0);
     void SetAsOutput(Argument *arg);
+    void RemoveOutput(Argument *arg);
     void SetArguments(ArgType type, std::vector<Op*> args);
 
-    Arguments* GetArguments(ArgType type) const;
+    Arguments* Get(ArgType type) const;
+    Arguments* operator[](ArgType type) const;
 };
 
 }

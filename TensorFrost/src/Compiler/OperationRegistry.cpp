@@ -3,9 +3,10 @@
 using namespace std;
 
 namespace TensorFrost {
-OpSpec::OpSpec(std::string op_name, OverloadsMap overloads_list) {
+OpSpec::OpSpec(std::string op_name, OverloadsMap overloads_list, int block_count) {
     name = std::move(op_name);
     overloads = std::move(overloads_list);
+    blocks = block_count;
 }
 
 TFDataFormat OpSpec::GetOutputType(const std::vector<TFDataFormat> &args) const {
@@ -63,7 +64,7 @@ vector<OpSpec> default_operations = {
     OpSpec("mul", ovr("f(f,f); u(u,u); i(i,i)")),
     OpSpec("div", ovr("f(f,f); u(u,u); i(i,i)")),
 
-    OpSpec("parallel", ovr("tuple()")),
+    OpSpec("vmap", ovr("tuple()"), 1),
 };
 
 std::unordered_map<string, unique_ptr<OpSpec>> CreateOperationRegistry() {

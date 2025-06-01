@@ -2,16 +2,8 @@
 #include "Operation.h"
 
 namespace TensorFrost {
-
 Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args, std::vector<Op*> shape);
-
-template<class... Ts>
-Op &func_op(const std::string &name, const Ts &... args) {
-    std::vector<Op*> v;
-    v.reserve(sizeof...(args));
-    (v.push_back(const_cast<Op*>(&args)), ...);
-    return make_op(name, {}, {}, v, {});
-}
+Op& func_op(const std::string& name, std::vector<Op*> args = {}, std::vector<Op*> shape = {});
 
 Op& constant(int value);
 Op& constant(uint value);
@@ -22,50 +14,50 @@ template<class T> concept Num   = std::is_arithmetic_v<std::remove_cvref_t<T>>;
 template<class T> concept IsOp  = std::same_as<std::remove_cvref_t<T>, Op>;
 
 template<Num T>
-inline Op& as_op(T v) {
+inline Op* as_op(T v) {
     using D = std::remove_cvref_t<T>;
     using Target =
         std::conditional_t<std::same_as<D,bool>,           bool,
         std::conditional_t<std::floating_point<D>,         float,
         std::conditional_t<std::unsigned_integral<D>,      unsigned int,
                                                             int>>>;
-    return constant(static_cast<Target>(v));
+    return &constant(static_cast<Target>(v));
 }
-inline Op& as_op(const Op& x) { return const_cast<Op&>(x); }
+inline Op* as_op(const Op& x) { return &const_cast<Op&>(x); }
 
 #define UNARY_OPERATOR(op, opname) \
 template<class T> \
 requires IsOp<T> \
 inline Op& operator op(const T& x) { \
-    return func_op(opname, as_op(x)); \
+    return func_op(opname, {as_op(x)}); \
 }
 
 #define BINARY_OPERATOR(op, opname) \
 template<class T, class U> \
 requires (IsOp<T> || IsOp<U>) \
 inline Op& operator op(const T& x, const U& y) { \
-    return func_op(opname, as_op(x), as_op(y)); \
+    return func_op(opname, {as_op(x), as_op(y)}); \
 }
 
 #define UNARY_FUNCTION(func, opname) \
 template<class T> \
 requires IsOp<T> \
 inline Op& func(const T& x) { \
-    return func_op(opname, as_op(x)); \
+    return func_op(opname, {as_op(x)}); \
 }
 
 #define BINARY_FUNCTION(func, opname) \
 template<class T, class U> \
 requires (IsOp<T> || IsOp<U>) \
 inline Op& func(const T& x, const U& y) { \
-    return func_op(opname, as_op(x), as_op(y)); \
+    return func_op(opname, {as_op(x), as_op(y)}); \
 }
 
 #define TERNARY_FUNCTION(func, opname) \
 template<class T, class U, class V> \
 requires (IsOp<T> || IsOp<U> || IsOp<V>) \
 inline Op& func(const T& x, const U& y, const V& z) { \
-    return func_op(opname, as_op(x), as_op(y), as_op(z)); \
+    return func_op(opname, {as_op(x), as_op(y), as_op(z)}); \
 }
 
 UNARY_OPERATOR(+, "pos")
@@ -145,4 +137,5 @@ TERNARY_FUNCTION(smoothstep, "smoothstep")
 TERNARY_FUNCTION(select, "ternary")
 TERNARY_FUNCTION(fma, "fma")
 
+Op& vmap(std::vector<Op*> shape, std::function<void(Op*)> body);
 }

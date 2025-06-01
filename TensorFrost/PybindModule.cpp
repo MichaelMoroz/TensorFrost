@@ -137,7 +137,11 @@ PYBIND11_MODULE(TensorFrost, m) {
 	Op& a = constant(5);
 	Op& b = constant(10);
 	Op& c = a + b * 3;
-	std::string tree = PrintTree(*GetContext()->base_block.get());
+	vmap({&a, &b, &c}, [&](Op* op) {
+		Op& d = c + b;
+	});
+	AssignVariableNames(*GetBaseBlock());
+	std::string tree = PrintBlock(*GetBaseBlock());
 	py::print("Created operation tree:");
 	py::print(tree);
 }

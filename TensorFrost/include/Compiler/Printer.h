@@ -5,5 +5,7 @@
 namespace TensorFrost {
 
 void PrintOp(const Op& op, std::ostream& os);
-std::string PrintTree(const OpBlock& base_block);
+std::string PrintBlock(OpBlock& base_block);
+void AssignVariableNames(OpBlock &block);
+
 }

@@ -2,38 +2,43 @@
 #include "Operation.h"
 
 namespace TensorFrost {
-
 struct OpBlock {
+    using List = std::list<std::unique_ptr<Op>>;
+    using It   = List::iterator;
+
     Op* parent_op = nullptr;
-    std::list<std::unique_ptr<Op>> ops;
-    Op* append(std::unique_ptr<Op> op);
+    List ops;
 
     OpBlock(Op* parent = nullptr);
-};
 
-class OpBlockIterator {
-public:
-    using OpIter = std::list<std::unique_ptr<Op>>::iterator;
-    using OpRevIter = std::list<std::unique_ptr<Op>>::reverse_iterator;
+    class Iterator {
+        OpBlock* parent_;
+        List* list_;
+        It    cur_;
 
-    struct Frame {
-        OpBlock* block;
-        OpIter it;
-        OpIter end;
+    public:
+        Iterator(OpBlock *parent, List::iterator it);
+
+        Op* operator*()  const;
+        Op* operator->() const;
+        Op* get_next() const;
+        Op* get_prev() const;
+
+        Iterator& next();
+        Iterator& prev();
+        Iterator& insert_after(std::unique_ptr<Op> op);
+        Iterator& insert_before(std::unique_ptr<Op> op);
+
+        OpBlock* parent() const { return parent_; }
+
+        bool valid() const;
+        bool operator==(const Iterator& o) const;
+        bool operator!=(const Iterator& o) const;
     };
 
-    OpBlockIterator(OpBlock* root);
-
-    Op* next();   // Move to next Op in depth-first order
-    Op* prev();   // Move to previous Op in depth-first order
-    bool down();  // Enter the first sub-block of current Op (if any)
-    bool up();    // Exit to parent block
-
-    Op* current() const;
-
-private:
-    std::vector<Frame> stack;
-    Op* current_op;
+    Iterator begin();
+    Iterator end();
 };
 
+void ApplyOpTransform(OpBlock& block, const std::function<void(Op&)>& transform);
 }

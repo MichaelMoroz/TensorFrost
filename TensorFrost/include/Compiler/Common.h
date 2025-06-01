@@ -9,6 +9,8 @@
 #include <array>
 #include <set>
 #include <sstream>
+#include <functional>
+#include <stack>
 
 namespace TensorFrost {
 extern "C" {
@@ -83,13 +85,13 @@ inline std::string ToString(ArgType type) {
 
 inline std::string ToString(const TFDataFormat& format) {
     switch (format.type) {
-        case TFType::Float: return "Float" + std::to_string(format.size);
-        case TFType::Uint: return "Uint" + std::to_string(format.size);
-        case TFType::Int: return "Int" + std::to_string(format.size);
-        case TFType::Bool: return "Bool" + std::to_string(format.size);
-        case TFType::Tuple: return "Tuple";
-        case TFType::None: return "None";
-        default: return "Unknown";
+        case TFType::Float: return "float" + std::to_string(format.size);
+        case TFType::Uint: return "uint" + std::to_string(format.size);
+        case TFType::Int: return "int" + std::to_string(format.size);
+        case TFType::Bool: return "bool" + std::to_string(format.size);
+        case TFType::Tuple: return "tuple";
+        case TFType::None: return "none";
+        default: return "unknown";
     }
 }
 
@@ -106,8 +108,19 @@ struct Argument;
 using Attribute = std::variant<int, uint, float, bool, std::string>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;
 
+//ostringstream conversion for Attribute
+inline std::ostream& operator<<(std::ostream& os, const Attribute& attr) {
+    std::visit([&os](const auto& v) { os << v; }, attr);
+    return os;
 }
 
+inline std::string ToString(const Attribute& attr) {
+    std::ostringstream oss;
+    oss << attr;
+    return oss.str();
+}
+
+}
 namespace std {
 template<>
 struct hash<TensorFrost::TFDataFormat> {

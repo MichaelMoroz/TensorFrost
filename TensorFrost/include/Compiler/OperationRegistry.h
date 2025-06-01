@@ -8,8 +8,9 @@ using OverloadsMap = std::unordered_map<std::vector<TFDataFormat>, TFDataFormat,
 struct OpSpec {
     std::string name;
     OverloadsMap overloads;
+    int blocks = 0;
 
-    OpSpec(std::string op_name, OverloadsMap overloads_list);
+    OpSpec(std::string op_name, OverloadsMap overloads_list, int block_count = 0);
 
     TFDataFormat GetOutputType(const std::vector<TFDataFormat>& args) const;
 };

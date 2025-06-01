@@ -10,7 +10,11 @@
 namespace TensorFrost {
 
 struct Op {
+    OpBlock* parent_block = nullptr;
+
+    size_t index = 0; //might not be up to date
     std::string opcode;
+    std::string varname;
     std::unique_ptr<ArgumentManager> args;
     AttributeMap attributes;
     TFDataFormat type;

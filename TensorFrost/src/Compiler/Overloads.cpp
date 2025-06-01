@@ -17,8 +17,23 @@ Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vec
     op_instance->args->SetArguments(ArgType::Memory, mem);
     op_instance->args->SetArguments(ArgType::Index, ids);
     op_instance->args->SetArguments(ArgType::Input, args);
+
+    if(shape.empty()) {
+        shape = op_instance->args->Get(ArgType::Shape)->Inputs();
+    }
+
     op_instance->args->SetArguments(ArgType::Shape, shape);
-    return GetContext()->AddOp(std::unique_ptr<Op>(op_instance));
+
+    // Create blocks
+    for (int i = 0; i < spec->blocks; ++i) {
+        op_instance->NewBlock();
+    }
+
+    return GetContext()->Add(std::unique_ptr<Op>(op_instance));
+}
+
+Op & func_op(const std::string &name, std::vector<Op *> args, std::vector<Op *> shape) {
+    return make_op(name, {}, {}, std::move(args), std::move(shape));
 }
 
 Op& constant(int value) {
@@ -47,5 +62,13 @@ Op& constant(bool value) {
     const_op.attributes["value"] = value;
     const_op.type = TFTypeBool32;
     return const_op;
+}
+
+Op & vmap(std::vector<Op *> shape, std::function<void(Op *)> body) {
+    Op& par_op = func_op("vmap", {}, shape);
+    GetContext()->BeginCursor(par_op.blocks.front()->begin());
+    body(&par_op);
+    GetContext()->EndCursor();
+    return par_op;
 }
 }
