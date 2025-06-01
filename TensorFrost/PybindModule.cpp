@@ -136,8 +136,10 @@ PYBIND11_MODULE(TensorFrost, m) {
 	StartExecutionContext();
 	Op& a = constant(5);
 	Op& b = constant(10);
-	Op& c = a + b;
-	py::print("Created operation: ", c.opcode);
+	Op& c = a + b * 3;
+	std::string tree = PrintTree(*GetContext()->base_block.get());
+	py::print("Created operation tree:");
+	py::print(tree);
 }
 
 }  // namespace TensorFrost

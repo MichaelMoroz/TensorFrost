@@ -40,4 +40,8 @@ void ArgumentManager::SetArguments(ArgType type, std::vector<Op*> args) {
         AddArgument(args[i], type, (int)i);
     }
 }
+
+Arguments * ArgumentManager::GetArguments(ArgType type) const {
+    return type_args[(int)type].get();
+}
 }

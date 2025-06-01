@@ -37,6 +37,8 @@ struct ArgumentManager {
     void AddArgument(Op* from, ArgType type, int index = 0);
     void SetAsOutput(Argument *arg);
     void SetArguments(ArgType type, std::vector<Op*> args);
+
+    Arguments* GetArguments(ArgType type) const;
 };
 
 }
