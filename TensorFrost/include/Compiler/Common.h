@@ -69,7 +69,6 @@ enum class ArgType {
     Input,
     Index,
     Memory,
-    Shape, //must be last
     Count,
 };
 
@@ -77,7 +76,6 @@ inline std::string ToString(ArgType type) {
     switch (type) {
         case ArgType::Input: return "Input";
         case ArgType::Index: return "Index";
-        case ArgType::Shape: return "Shape";
         case ArgType::Memory: return "Memory";
         default: return "Unknown";
     }
@@ -102,7 +100,6 @@ struct Arguments;
 struct OpBlock;
 class OpBlockIterator;
 struct ArgumentManager;
-struct ShapeArgs;
 struct Argument;
 
 using Attribute = std::variant<int, uint, float, bool, std::string>;

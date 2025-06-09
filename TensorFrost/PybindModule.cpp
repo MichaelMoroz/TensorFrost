@@ -137,8 +137,15 @@ PYBIND11_MODULE(TensorFrost, m) {
 	Op& a = constant(5);
 	Op& b = constant(10);
 	Op& c = a + b * 3;
-	vmap({&a, &b, &c}, [&](Op* op) {
-		Op& d = c + b;
+	Op& mem = memory({&a, &b, &c}, TFTypeFloat32);
+	mem.AddAttribute("program_input", 0); //is the first argument to the program
+	vmap({&a, &b, &c}, [&](Op& ids0) {
+		Op& imem = toint(mem);
+		Op& d = c + b + ids0[0] * imem;
+		vmap({&c, &c}, [&](Op& ids1) {
+			Op& m = d * c * imem[{&ids1[1], &ids1[0], &ids0[0]}];
+			m.AddAttribute("program_output", 0); //is the first output of the program
+		});
 	});
 	AssignVariableNames(*GetBaseBlock());
 	std::string tree = PrintBlock(*GetBaseBlock());

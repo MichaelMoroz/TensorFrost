@@ -3,16 +3,31 @@
 using namespace std;
 
 namespace TensorFrost {
-OpSpec::OpSpec(std::string op_name, OverloadsMap overloads_list, int block_count) {
+OpSpec::OpSpec(std::string op_name, OverloadsMap overloads_list, int block_count, OpClass op_class_type, std::set<OpProp> props) {
     name = std::move(op_name);
     overloads = std::move(overloads_list);
     blocks = block_count;
+    op_class = op_class_type;
+    properties = std::move(props);
 }
 
 TFDataFormat OpSpec::GetOutputType(const std::vector<TFDataFormat> &args) const {
+    if (properties.contains(OpProp::HasShape) || args.empty()) {
+        return overloads.find({})->second;
+    }
     auto it = overloads.find(args);
     if (it == overloads.end()) {
-        throw std::runtime_error("No overload found for operation: " + name + " with args: " + to_string(args.size()));
+        std::string error_msg = "No overload found for operation: " + name + " with args: (";
+        for (const auto& arg : args) {
+            error_msg += ToString(arg) + ", ";
+        }
+        if (!args.empty()) {
+            error_msg.pop_back(); // Remove last comma
+            error_msg.pop_back(); // Remove last space
+        }
+        error_msg += ")";
+
+        throw std::runtime_error(error_msg);
     }
     return it->second;
 }
@@ -57,14 +72,27 @@ OverloadsMap ovr(const std::string& input) {
 }
 
 vector<OpSpec> default_operations = {
-    OpSpec("const", ovr("f(); u(); i(); b(); tuple()")),
+    OpSpec("memory", ovr("f(); u(); i(); b(); tuple()"), 0, OpClass::Memory, {OpProp::HasShape}),
+    OpSpec("const", ovr("f(); u(); i(); b(); tuple()"), 0, OpClass::Constant),
 
-    OpSpec("add", ovr("f(f,f); u(u,u); i(i,i)")),
-    OpSpec("sub", ovr("f(f,f); u(u,u); i(i,i)")),
-    OpSpec("mul", ovr("f(f,f); u(u,u); i(i,i)")),
-    OpSpec("div", ovr("f(f,f); u(u,u); i(i,i)")),
+    OpSpec("add", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
+    OpSpec("sub", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
+    OpSpec("mul", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
+    OpSpec("div", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
 
-    OpSpec("vmap", ovr("tuple()"), 1),
+    OpSpec("vmap", ovr("tuple()"), 1, OpClass::Parallel, {OpProp::HasShape}),
+
+    OpSpec("unpack_tuple_int", ovr("i(tuple)"), 0, OpClass::Function),
+
+    OpSpec("copy", ovr("f(f); u(u); i(i); b(b)"), 0, OpClass::Copy),
+
+    OpSpec("tofloat", ovr("f(i); f(u); f(b)"), 0, OpClass::TypeCast),
+    OpSpec("toint", ovr("i(f); i(u); i(b)"), 0, OpClass::TypeCast),
+    OpSpec("touint", ovr("u(f); u(i); u(b)"), 0, OpClass::TypeCast),
+    OpSpec("tobool", ovr("b(f); b(i); b(u)"), 0, OpClass::TypeCast),
+
+    OpSpec("load", ovr("f(); u(); i(); b()"), 0, OpClass::Function, {OpProp::Load, OpProp::MemoryOp}),
+    OpSpec("store", ovr("f(); u(); i(); b()"), 0, OpClass::Function, {OpProp::Store, OpProp::MemoryOp}),
 };
 
 std::unordered_map<string, unique_ptr<OpSpec>> CreateOperationRegistry() {

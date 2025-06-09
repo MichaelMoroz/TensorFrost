@@ -46,22 +46,15 @@ std::vector<Op *> Arguments::Inputs() const {
     return result;
 }
 
-bool ShapeArgs::CompareShape(const ShapeArgs &other, bool throw_error) const {
-    //TODO: Implement shape comparison logic
-    return true; // Placeholder
-}
-
 ArgumentManager::ArgumentManager(Op *parent): parent_op(parent) {
-    for (int i = 0; i < (int)ArgType::Shape; ++i) {
+    for (int i = 0; i < (int)ArgType::Count; ++i) {
         type_args[i] = std::make_unique<Arguments>();
         type_args[i]->parent_op = parent;
     }
-    type_args[(int)ArgType::Shape] = std::make_unique<ShapeArgs>();
-    type_args[(int)ArgType::Shape]->parent_op = parent;
 }
 
-void ArgumentManager::AddArgument(Op *from, ArgType type, int index) {
-    type_args[(int)type]->AddInput(type, from, index);
+void ArgumentManager::AddArgument(Op &from, ArgType type, int index) {
+    type_args[(int)type]->AddInput(type, &from, index);
 }
 
 void ArgumentManager::SetAsOutput(Argument *arg) {
@@ -74,7 +67,7 @@ void ArgumentManager::RemoveOutput(Argument *arg) {
 
 void ArgumentManager::SetArguments(ArgType type, std::vector<Op*> args) {
     for (size_t i = 0; i < args.size(); ++i) {
-        AddArgument(args[i], type, (int)i);
+        AddArgument(*args[i], type, (int)i);
     }
 }
 

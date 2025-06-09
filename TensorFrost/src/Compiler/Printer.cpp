@@ -28,11 +28,8 @@ bool PrintArguments(const auto_vector<std::unique_ptr<Argument>>& vec, std::ostr
 
 void PrintOp(const Op* op, std::ostringstream &os) {
     os << ToString(op->type) << " " << op->varname;
-    PrintArguments(op->args->Get(ArgType::Shape)->inputs, os, "[", "]");
-
     if (op->opcode == "const") {
         os << " = " << op->attributes.at("value");
-        return;
     } else {
         os << " = " << op->opcode << "(";
         // Print inputs
@@ -77,7 +74,7 @@ std::string PrintBlock(OpBlock &block) {
                 if (!first) oss << "{\n";
                 oss<<AddIndent(PrintBlock(*sub_block.get()), 4);
                 first = false;
-                oss << "}\n";
+                oss << "}";
             }
         }
         oss << "\n";

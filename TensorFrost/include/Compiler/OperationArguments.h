@@ -23,23 +23,15 @@ struct Arguments {
     std::vector<Op*> Inputs() const;
 };
 
-struct ShapeArgs : Arguments {
-    std::vector<int> TryGetShape(int default_value = 256) const;
-    float GetSizeEstimate();
-    void ExpandDimensionsTo(int new_dim);
-
-    bool CompareShape(const ShapeArgs& other, bool throw_error = false) const;
-};
-
 struct ArgumentManager {
     Op* parent_op = nullptr;
     std::array<std::unique_ptr<Arguments>, (int)ArgType::Count> type_args;
 
     ArgumentManager(Op* parent);
-    void AddArgument(Op* from, ArgType type, int index = 0);
+    void AddArgument(Op &from, ArgType type, int index = 0);
     void SetAsOutput(Argument *arg);
     void RemoveOutput(Argument *arg);
-    void SetArguments(ArgType type, std::vector<Op*> args);
+    void SetArguments(ArgType type, std::vector<Op *> args);
 
     Arguments* Get(ArgType type) const;
     Arguments* operator[](ArgType type) const;

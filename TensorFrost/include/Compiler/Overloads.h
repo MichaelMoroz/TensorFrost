@@ -2,8 +2,8 @@
 #include "Operation.h"
 
 namespace TensorFrost {
-Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args, std::vector<Op*> shape);
-Op& func_op(const std::string& name, std::vector<Op*> args = {}, std::vector<Op*> shape = {});
+Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args);
+Op& func_op(const std::string& name, std::vector<Op*> args = {});
 
 Op& constant(int value);
 Op& constant(uint value);
@@ -137,5 +137,8 @@ TERNARY_FUNCTION(smoothstep, "smoothstep")
 TERNARY_FUNCTION(select, "ternary")
 TERNARY_FUNCTION(fma, "fma")
 
-Op& vmap(std::vector<Op*> shape, std::function<void(Op*)> body);
+Op& unpack_tuple(const Op& x, int index = 0);
+Op& vmap(std::vector<Op*> shape, std::function<void(Op&)> body);
+Op& memory(std::vector<Op*> shape, TFDataFormat type);
+Op& load_at_index(const Op& mem, std::vector<Op*> indices);
 }
