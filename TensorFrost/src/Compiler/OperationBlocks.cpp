@@ -35,6 +35,13 @@ OpBlock::Iterator& OpBlock::Iterator::insert_before(std::unique_ptr<Op> op) {
     return *this;
 }
 
+OpBlock::Iterator& OpBlock::Iterator::remove() {
+    if (cur_ == list_->end()) return *this; // Nothing to remove
+    cur_->get()->parent_block = nullptr;    // Clear parent block reference
+    cur_ = list_->erase(cur_);              // Remove and update iterator
+    return *this;
+}
+
 bool OpBlock::Iterator::valid() const { return cur_ != list_->end(); }
 bool OpBlock::Iterator::operator==(const Iterator &o) const { return cur_ == o.cur_; }
 bool OpBlock::Iterator::operator!=(const Iterator &o) const { return cur_ != o.cur_; }
@@ -49,5 +56,42 @@ void ApplyOpTransform(OpBlock &block, const std::function<void(Op &)> &transform
         }
         transform(*op);
     }
+}
+
+void IterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
+    for (OpBlock::Iterator it = block.begin(); it.valid(); it.next()) {
+        for (auto& sub_block : it->blocks) {
+            IterateOver(*sub_block, transform);
+        }
+        transform(it);
+    }
+}
+
+void ReverseIterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
+    for (OpBlock::Iterator it = block.end(); it.valid(); it.prev()) {
+        for (auto& sub_block : it->blocks) {
+            ReverseIterateOver(*sub_block, transform);
+        }
+        transform(it);
+    }
+}
+
+std::set<Op*> GetDependencies(std::vector<Op*> ops) {
+    std::set<Op*> dependencies;
+    std::function<void(Op*)> collect_dependencies = [&](Op* op) {
+        if (op == nullptr || dependencies.contains(op)) return; // Already processed
+        dependencies.insert(op);
+        for (auto& input : op->args->Get(ArgType::Input)->inputs) {
+            collect_dependencies(input->from);
+        }
+        for (auto& input : op->args->Get(ArgType::Index)->inputs) {
+            collect_dependencies(input->from);
+        }
+        collect_dependencies(op->parent_block->parent_op); // Collect dependencies of the parent op
+    };
+    for (Op* op : ops) {
+        collect_dependencies(op);
+    }
+    return dependencies;
 }
 }

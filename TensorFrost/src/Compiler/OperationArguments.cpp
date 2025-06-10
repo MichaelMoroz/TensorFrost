@@ -83,6 +83,7 @@ void ArgumentManager::RemoveType(ArgType type) {
     for (size_t i = 0; i < args->inputs.size(); ++i) {
         args->RemoveInput((int)i);
     }
+    args->inputs.clear();
 }
 
 void ArgumentManager::RemoveAll() {

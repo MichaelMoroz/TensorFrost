@@ -20,7 +20,7 @@ void ExecutionContext::EndCursor() {
 
 Op& ExecutionContext::Add(std::unique_ptr<Op> op) {
     cursor.insert_before(std::move(op));
-    Op* new_op = cursor.get_next();
+    Op* new_op = *cursor;
     cursor.next(); // Move cursor to the new op
     return *new_op;
 }

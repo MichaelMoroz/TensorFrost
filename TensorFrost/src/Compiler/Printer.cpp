@@ -63,10 +63,10 @@ void PrintOp(const Op* op, std::ostringstream &os) {
     if (op->opcode == "const") {
         os << " = " << op->attributes.at("value");
     } else {
-        // std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
-        // std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
-        std::string inputs = "args=" + PrintArguments(op->args->Get(ArgType::Input));
-        std::string index = "index=" + PrintArguments(op->args->Get(ArgType::Index));
+        std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
+        std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
+        // std::string inputs = "args=" + PrintArguments(op->args->Get(ArgType::Input));
+        // std::string index = "index=" + PrintArguments(op->args->Get(ArgType::Index));
         std::vector<std::string> attributes;
         for (const auto& [key, value] : op->attributes) {
             attributes.push_back(key + ": " + PrintAttribute(value));

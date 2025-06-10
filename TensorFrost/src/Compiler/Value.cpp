@@ -14,9 +14,7 @@ Value::Value(Op* operation) : op(operation) {
 Value::Value(float value) : op(constant(value).op) {}
 Value::Value(int value) : op(constant(value).op) {}
 Value::Value(uint value) : op(constant(value).op) {}
-Value::Value(bool value) : op(constant(value).op) {
-
-}
+Value::Value(bool value) : op(constant(value).op) {}
 
 std::vector<Op*> values_to_ops(const std::vector<Value>& values) {
     std::vector<Op*> ops;

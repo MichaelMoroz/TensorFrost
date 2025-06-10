@@ -10,14 +10,14 @@ TFProgram::TFProgram(std::function<std::pair<std::vector<Value>, std::vector<Val
     if (program_outputs.empty()) {
         throw std::runtime_error("Program must have at least one output");
     }
-
-    AssignVariableNames(*GetBaseBlock());
     EndExecutionContext();
 }
 
 void TFProgram::Compile() {
     StartExecutionContext(&context);
     ConstantFold();
+    RemoveUnused();
+    AssignVariableNames(*GetBaseBlock());
     EndExecutionContext();
 }
 
@@ -39,26 +39,13 @@ void TFProgram::ConstantFold() {
    });
 }
 
-// void FindUsedOps(std::set<Op*>& used_ops, OpBlock& block) {
-//     for (auto& op : block.ops) {
-//         if (op->used_at.empty()) continue; // Skip unused operations
-//         used_ops.insert(op.get());
-//         for (auto& sub_block : op->blocks) {
-//             FindUsedOps(used_ops, *sub_block);
-//         }
-//     }
-// }
-
 void TFProgram::RemoveUnused() {
-     StartExecutionContext(&context);
-
-     ApplyOpTransform(*GetBaseBlock(), [](Op& op) {
-          // if (op.opcode == "const") return; // Skip constants
-          // if (op.args->Get(ArgType::Input)->inputs.empty()) return; // Skip operations with no inputs
-          // if (op.args->Get(ArgType::Output)->inputs.empty()) return; // Skip operations with no outputs
-          // if (op.used_at.empty()) return; // Skip unused operations
+     std::set<Op*> used_ops = GetDependencies(values_to_ops(program_outputs));
+     IterateOver(*GetBaseBlock(), [&](OpBlock::Iterator& it) {
+         if (!used_ops.contains(*it)) {
+             it.remove(); // Remove unused operations
+         }
      });
-     EndExecutionContext();
 }
 
 std::string TFProgram::DebugPrint() const {
