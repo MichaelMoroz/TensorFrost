@@ -11,6 +11,8 @@
 #include <sstream>
 #include <functional>
 #include <stack>
+#include <span>
+#include <optional>
 
 namespace TensorFrost {
 extern "C" {
@@ -68,7 +70,6 @@ struct VecHash {
 enum class ArgType {
     Input,
     Index,
-    Memory,
     Count,
 };
 
@@ -76,7 +77,6 @@ inline std::string ToString(ArgType type) {
     switch (type) {
         case ArgType::Input: return "Input";
         case ArgType::Index: return "Index";
-        case ArgType::Memory: return "Memory";
         default: return "Unknown";
     }
 }
@@ -102,8 +102,9 @@ class OpBlockIterator;
 struct ArgumentManager;
 struct Argument;
 
-using Attribute = std::variant<int, uint, float, bool, std::string>;
+using Attribute = std::variant<int, uint, float>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;
+using AttributeSpan = std::span<const Attribute>;
 
 //ostringstream conversion for Attribute
 inline std::ostream& operator<<(std::ostream& os, const Attribute& attr) {
@@ -117,7 +118,18 @@ inline std::string ToString(const Attribute& attr) {
     return oss.str();
 }
 
+template<typename Container, typename Func>
+auto TransformVector(const Container& input, Func func) {
+    using T2 = decltype(func(*std::begin(input)));
+    std::vector<T2> output;
+    output.reserve(input.size());
+    for (const auto& item : input) {
+        output.push_back(func(item));
+    }
+    return output;
 }
+}
+
 namespace std {
 template<>
 struct hash<TensorFrost::TFDataFormat> {

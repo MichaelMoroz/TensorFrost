@@ -5,7 +5,7 @@ using namespace std;
 
 namespace TensorFrost {
 // General function to create an Op instance in the current execution context
-Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args) {
+Op& make_op(std::string op, std::vector<Op*> ids, std::vector<Op*> args) {
     OpSpec* spec = GetOpSpec(op);
     vector<TFDataFormat> arg_types;
     for (const auto& arg : args) {
@@ -14,7 +14,6 @@ Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vec
     TFDataFormat output_type = spec->GetOutputType(arg_types);
     Op* op_instance = new Op(op);
     op_instance->type = output_type;
-    op_instance->args->SetArguments(ArgType::Memory, mem);
     op_instance->args->SetArguments(ArgType::Index, ids);
     op_instance->args->SetArguments(ArgType::Input, args);
 
@@ -26,8 +25,8 @@ Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vec
     return GetContext()->Add(std::unique_ptr<Op>(op_instance));
 }
 
-Op & func_op(const std::string &name, std::vector<Op *> args) {
-    return make_op(name, {}, {}, std::move(args));
+Op & func_op(const std::string &name, std::vector<Op*> args) {
+    return make_op(name,  {}, std::move(args));
 }
 
 Op& constant(int value) {
@@ -79,9 +78,7 @@ Op& memory(std::vector<Op*> shape, TFDataFormat type) {
 }
 
 Op& load_at_index(const Op& mem, std::vector<Op*> indices) {
-    Op& load_op = make_op("load", {as_op(mem)}, indices, {});
-    load_op.type = mem.type; // Assume the loaded type is the same as the memory type
-    return load_op;
+    return make_op("load", indices, {as_op(mem)});
 }
 
 Op& Op::operator[](int index) {

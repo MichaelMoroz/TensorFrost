@@ -2,7 +2,7 @@
 #include "Operation.h"
 
 namespace TensorFrost {
-Op& make_op(std::string op, std::vector<Op*> mem, std::vector<Op*> ids, std::vector<Op*> args);
+Op& make_op(std::string op, std::vector<Op*> ids, std::vector<Op*> args);
 Op& func_op(const std::string& name, std::vector<Op*> args = {});
 
 Op& constant(int value);

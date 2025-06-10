@@ -18,7 +18,7 @@ struct ExecutionContext {
     Op &AddBeforeCursor(std::unique_ptr<Op> op);
 };
 
-void StartExecutionContext();
+void StartExecutionContext(ExecutionContext* ctx);
 ExecutionContext* GetContext();
 OpBlock* GetBaseBlock();
 OpBlock* GetCurrentBlock();

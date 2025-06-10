@@ -32,11 +32,14 @@ Op& ExecutionContext::AddBeforeCursor(std::unique_ptr<Op> op) {
 
 ExecutionContext* current_context = nullptr;
 
-void StartExecutionContext() {
+void StartExecutionContext(ExecutionContext* ctx) {
     if (current_context) {
         throw std::runtime_error("Execution context already started");
     }
-    current_context = new ExecutionContext();
+    if (!ctx) {
+        throw std::invalid_argument("Execution context cannot be null");
+    }
+    current_context = ctx;
 }
 
 ExecutionContext* GetContext() {
@@ -87,7 +90,6 @@ void EndExecutionContext() {
     if (!current_context) {
         throw std::runtime_error("No execution context to end");
     }
-    delete current_context;
     current_context = nullptr;
 }
 }

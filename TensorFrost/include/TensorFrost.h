@@ -6,3 +6,4 @@
 #include "Compiler/OperationArguments.h"
 #include "Compiler/Overloads.h"
 #include "Compiler/Printer.h"
+#include "Compiler/TFProgram.h"

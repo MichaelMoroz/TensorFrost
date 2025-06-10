@@ -3,16 +3,8 @@
 using namespace std;
 
 namespace TensorFrost {
-OpSpec::OpSpec(std::string op_name, OverloadsMap overloads_list, int block_count, OpClass op_class_type, std::set<OpProp> props) {
-    name = std::move(op_name);
-    overloads = std::move(overloads_list);
-    blocks = block_count;
-    op_class = op_class_type;
-    properties = std::move(props);
-}
-
 TFDataFormat OpSpec::GetOutputType(const std::vector<TFDataFormat> &args) const {
-    if (properties.contains(OpProp::HasShape) || args.empty()) {
+    if (props.contains(OpProp::ShapeArgs) || args.empty()) {
         return overloads.find({})->second;
     }
     auto it = overloads.find(args);
@@ -48,7 +40,7 @@ static std::string trim(std::string_view s) {
     return std::string{s.substr(a, b - a)};
 }
 
-OverloadsMap ovr(const std::string& input) {
+OverloadsMap GenerateOverloadMap(const std::string& input) {
     OverloadsMap out;
     std::stringstream ss(input);
     std::string stmt;
@@ -71,28 +63,48 @@ OverloadsMap ovr(const std::string& input) {
     return out;
 }
 
+#define DEF_OP(op_name, overload_str, operation_class, ...) \
+    OpSpec{ .name = op_name, .overloads = GenerateOverloadMap(overload_str), .op_class = operation_class,  __VA_ARGS__ }
+
+#define BIN_OP_FOLD(op) \
+    make_fold2([](auto a, auto b) { return a op b; })
+
+#define UN_OP_FOLD(op) \
+    make_fold1([](auto a) { return op a; })
+
+#define UN_FUNC_FOLD(op) \
+    make_fold1([](auto a) { return op(a); })
+
+#define BIN_FUNC_FOLD(op) \
+    make_fold2([](auto a, auto b) { return op(a, b); })
+
+#define TERN_FUNC_FOLD(op) \
+    make_fold3([](auto a, auto b, auto c) { return op(a, b, c); })
+
 vector<OpSpec> default_operations = {
-    OpSpec("memory", ovr("f(); u(); i(); b(); tuple()"), 0, OpClass::Memory, {OpProp::HasShape}),
-    OpSpec("const", ovr("f(); u(); i(); b(); tuple()"), 0, OpClass::Constant),
+    DEF_OP("memory", "f(); u(); i(); b(); tuple()", OpClass::Memory, .props = {OpProp::ShapeArgs}),
+    DEF_OP("load", "f(f); u(u); i(i); b(b)", OpClass::Function, .props = {OpProp::Load, OpProp::MemoryOp}),
+    DEF_OP("store", "f(f); u(u); i(i); b(b)", OpClass::Function, .props = {OpProp::Store, OpProp::MemoryOp}),
 
-    OpSpec("add", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
-    OpSpec("sub", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
-    OpSpec("mul", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
-    OpSpec("div", ovr("f(f,f); u(u,u); i(i,i)"), 0, OpClass::Operator),
+    DEF_OP("const", "f(); u(); i(); b(); tuple()", OpClass::Constant),
+    DEF_OP("copy", "f(f); u(u); i(i); b(b)", OpClass::Copy),
+    DEF_OP("add", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(+)),
+    DEF_OP("sub", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(-)),
+    DEF_OP("mul", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(*)),
+    DEF_OP("div", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(/)),
+    DEF_OP("sin", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::sinf)),
+    DEF_OP("cos", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::cosf)),
+    DEF_OP("tan", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::tanf)),
 
-    OpSpec("vmap", ovr("tuple()"), 1, OpClass::Parallel, {OpProp::HasShape}),
 
-    OpSpec("unpack_tuple_int", ovr("i(tuple)"), 0, OpClass::Function),
+    DEF_OP("tofloat", "f(i); f(u); f(b)", OpClass::TypeCast),
+    DEF_OP("toint", "i(f); i(u); i(b)", OpClass::TypeCast),
+    DEF_OP("touint", "u(f); u(i); u(b)", OpClass::TypeCast),
+    DEF_OP("tobool", "b(f); b(i); b(u)", OpClass::TypeCast),
 
-    OpSpec("copy", ovr("f(f); u(u); i(i); b(b)"), 0, OpClass::Copy),
+    DEF_OP("unpack_tuple_int", "i(tuple)", OpClass::Function),
 
-    OpSpec("tofloat", ovr("f(i); f(u); f(b)"), 0, OpClass::TypeCast),
-    OpSpec("toint", ovr("i(f); i(u); i(b)"), 0, OpClass::TypeCast),
-    OpSpec("touint", ovr("u(f); u(i); u(b)"), 0, OpClass::TypeCast),
-    OpSpec("tobool", ovr("b(f); b(i); b(u)"), 0, OpClass::TypeCast),
-
-    OpSpec("load", ovr("f(); u(); i(); b()"), 0, OpClass::Function, {OpProp::Load, OpProp::MemoryOp}),
-    OpSpec("store", ovr("f(); u(); i(); b()"), 0, OpClass::Function, {OpProp::Store, OpProp::MemoryOp}),
+    DEF_OP("vmap", "tuple()", OpClass::Parallel, .props = {OpProp::ShapeArgs}, .blocks = 1),
 };
 
 std::unordered_map<string, unique_ptr<OpSpec>> CreateOperationRegistry() {
