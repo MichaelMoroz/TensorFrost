@@ -71,6 +71,26 @@ void ArgumentManager::SetArguments(ArgType type, std::vector<Op*> args) {
     }
 }
 
+void ArgumentManager::Remove(ArgType type, int index) {
+    if (index < 0 || index >= type_args[(int)type]->inputs.size()) {
+        throw std::out_of_range("Index out of range for argument type " + ToString(type));
+    }
+    type_args[(int)type]->RemoveInput(index);
+}
+
+void ArgumentManager::RemoveType(ArgType type) {
+    auto& args = type_args[(int)type];
+    for (size_t i = 0; i < args->inputs.size(); ++i) {
+        args->RemoveInput((int)i);
+    }
+}
+
+void ArgumentManager::RemoveAll() {
+    for (int i = 0; i < (int)ArgType::Count; ++i) {
+        RemoveType((ArgType)i);
+    }
+}
+
 Arguments* ArgumentManager::Get(ArgType type) const {
     return type_args[(int)type].get();
 }

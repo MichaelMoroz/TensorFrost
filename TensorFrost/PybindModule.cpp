@@ -151,7 +151,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 		});
 		return std::make_pair(inputs, outputs);
 	});
-
+	program.Compile();
 	py::print(program.DebugPrint());
 }
 

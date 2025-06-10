@@ -11,8 +11,6 @@
 #include <sstream>
 #include <functional>
 #include <stack>
-#include <span>
-#include <optional>
 
 namespace TensorFrost {
 extern "C" {
@@ -104,7 +102,7 @@ struct Argument;
 
 using Attribute = std::variant<int, uint, float>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;
-using AttributeSpan = std::span<const Attribute>;
+using AttributeVector = std::vector<Attribute>;
 
 //ostringstream conversion for Attribute
 inline std::ostream& operator<<(std::ostream& os, const Attribute& attr) {

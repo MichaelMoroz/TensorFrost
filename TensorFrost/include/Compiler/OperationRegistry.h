@@ -29,7 +29,7 @@ enum class OpProp {
     Set,
 };
 
-using FoldFn = std::function<Attribute(AttributeSpan)>;
+using FoldFn = std::function<Attribute(AttributeVector)>;
 
 [[noreturn]] inline void bad_arity(std::size_t expect, std::size_t got)
 {
@@ -39,7 +39,7 @@ using FoldFn = std::function<Attribute(AttributeSpan)>;
 
 template<class F>
 FoldFn make_fold1(F f) {
-    return [f = std::move(f)](AttributeSpan a) -> Attribute {
+    return [f = std::move(f)](AttributeVector a) -> Attribute {
         if (a.size() != 1) bad_arity(1, a.size());
         return std::visit([&](auto &&x) -> Attribute {
             return f(std::forward<decltype(x)>(x));
@@ -49,7 +49,7 @@ FoldFn make_fold1(F f) {
 
 template<class F>
 FoldFn make_fold2(F f) {
-    return [f = std::move(f)](AttributeSpan a) -> Attribute {
+    return [f = std::move(f)](AttributeVector a) -> Attribute {
         if (a.size() != 2) bad_arity(2, a.size());
         return std::visit([&](auto &&x, auto &&y) -> Attribute {
             return f(std::forward<decltype(x)>(x), std::forward<decltype(y)>(y));
@@ -59,7 +59,7 @@ FoldFn make_fold2(F f) {
 
 template<class F>
 FoldFn make_fold3(F f) {
-    return [f = std::move(f)](AttributeSpan a) -> Attribute {
+    return [f = std::move(f)](AttributeVector a) -> Attribute {
         if (a.size() != 3) bad_arity(3, a.size());
         return std::visit([&](auto &&x, auto &&y, auto &&z) -> Attribute {
             return f(std::forward<decltype(x)>(x), std::forward<decltype(y)>(y), std::forward<decltype(z)>(z));

@@ -32,6 +32,9 @@ struct ArgumentManager {
     void SetAsOutput(Argument *arg);
     void RemoveOutput(Argument *arg);
     void SetArguments(ArgType type, std::vector<Op *> args);
+    void Remove(ArgType type, int index);
+    void RemoveType(ArgType type);
+    void RemoveAll();
 
     Arguments* Get(ArgType type) const;
     Arguments* operator[](ArgType type) const;
