@@ -1,7 +1,7 @@
 #include "Compiler/TFProgram.h"
 
 namespace TensorFrost {
-TFProgram::TFProgram(std::function<std::pair<std::vector<Op*>, std::vector<Op*>>()> program_fn) {
+TFProgram::TFProgram(std::function<std::pair<std::vector<Value>, std::vector<Value>>()> program_fn) {
     StartExecutionContext(&context);
 
     auto [ins, outs] = program_fn();
@@ -39,15 +39,15 @@ void TFProgram::ConstantFold() {
    });
 }
 
-void FindUsedOps(std::set<Op*>& used_ops, OpBlock& block) {
-    for (auto& op : block.ops) {
-        if (op->used_at.empty()) continue; // Skip unused operations
-        used_ops.insert(op.get());
-        for (auto& sub_block : op->blocks) {
-            FindUsedOps(used_ops, *sub_block);
-        }
-    }
-}
+// void FindUsedOps(std::set<Op*>& used_ops, OpBlock& block) {
+//     for (auto& op : block.ops) {
+//         if (op->used_at.empty()) continue; // Skip unused operations
+//         used_ops.insert(op.get());
+//         for (auto& sub_block : op->blocks) {
+//             FindUsedOps(used_ops, *sub_block);
+//         }
+//     }
+// }
 
 void TFProgram::RemoveUnused() {
      StartExecutionContext(&context);
@@ -62,9 +62,9 @@ void TFProgram::RemoveUnused() {
 }
 
 std::string TFProgram::DebugPrint() const {
-    std::string program_header = "TFProgram(inputs=" + PrintArray(TransformVector(program_inputs, VariableName), "[", "]") + ") {\n";
+    std::string program_header = "TFProgram(inputs=" + PrintArray(TransformVector(values_to_ops(program_inputs), VariableName), "[", "]") + ") {\n";
     std::string inner_code = PrintBlock(*context.base_block);
-    inner_code += "return " + PrintArray(TransformVector(program_outputs, VariableName), "[", "]") + ";\n";
+    inner_code += "return " + PrintArray(TransformVector(values_to_ops(program_outputs), VariableName), "[", "]") + ";\n";
     return program_header + AddIndent(inner_code, 2) + "}\n";
 }
 }

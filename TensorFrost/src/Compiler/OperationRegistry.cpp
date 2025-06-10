@@ -67,7 +67,13 @@ OverloadsMap GenerateOverloadMap(const std::string& input) {
     OpSpec{ .name = op_name, .overloads = GenerateOverloadMap(overload_str), .op_class = operation_class,  __VA_ARGS__ }
 
 #define BIN_OP_FOLD(op) \
-    make_fold2([](auto a, auto b) { return a op b; })
+make_fold2([](auto a, auto b) { \
+    if constexpr (std::is_same_v<decltype(a), bool> || std::is_same_v<decltype(b), bool>) { \
+        return static_cast<int>(a) op static_cast<int>(b); \
+    } else { \
+        return a op b; \
+    } \
+})
 
 #define UN_OP_FOLD(op) \
     make_fold1([](auto a) { return op a; })

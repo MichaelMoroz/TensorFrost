@@ -101,9 +101,11 @@ struct ArgumentManager;
 struct Argument;
 class Value;
 
-using Attribute = std::variant<int, uint, float>;
+using Attribute = std::variant<int, uint, float, bool>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;
 using AttributeVector = std::vector<Attribute>;
+
+TFDataFormat GetTypeFromAttribute(const Attribute& attr);
 
 //ostringstream conversion for Attribute
 inline std::ostream& operator<<(std::ostream& os, const Attribute& attr) {

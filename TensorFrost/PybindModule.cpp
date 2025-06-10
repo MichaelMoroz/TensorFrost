@@ -134,19 +134,19 @@ PYBIND11_MODULE(TensorFrost, m) {
 
 	// TEST CODE
 	TFProgram program([]() -> auto {
-		std::vector<Op*> inputs;
-		std::vector<Op*> outputs;
-		Op& a = constant(5);
-		Op& b = constant(10);
-		Op& c = a + b * 3;
-		Op& mem = memory({&a, &b, &c}, TFTypeFloat32);
-		inputs.push_back(&mem);
-		vmap({&a, &b, &c}, [&](Op& ids0) {
-			Op& imem = toint(mem);
-			Op& d = c + b + ids0[0] * imem;
-			vmap({&c, &c}, [&](Op& ids1) {
-				Op& m = d * c * imem[{&ids1[1], &ids1[0], &ids0[0]}];
-				outputs.push_back(&m);
+		std::vector<Value> inputs;
+		std::vector<Value> outputs;
+		Value a = 5;
+		Value b = 10;
+		Value c = a + b * 3;
+		Value mem = memory({a, b, c}, TFTypeFloat32);
+		inputs.push_back(mem);
+		vmap({a, b, c}, [&](Value ids0) {
+			Value imem = toint(mem);
+			Value d = c + b + ids0[0] * imem;
+			vmap({c, c}, [&](Value ids1) {
+				Value m = d * c * imem[{ids1[1], ids1[0], ids0[0]}];
+				outputs.push_back(m);
 			});
 		});
 		return std::make_pair(inputs, outputs);

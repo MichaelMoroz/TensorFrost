@@ -7,10 +7,10 @@ namespace TensorFrost {
 class TFProgram {
 public:
     ExecutionContext context;
-    std::vector<Op*> program_inputs;
-    std::vector<Op*> program_outputs;
+    std::vector<Value> program_inputs;
+    std::vector<Value> program_outputs;
 
-    TFProgram(std::function<std::pair<std::vector<Op*>, std::vector<Op*>>()> program_fn);
+    TFProgram(std::function<std::pair<std::vector<Value>, std::vector<Value>>()> program_fn);
 
     void Compile();
     void ConstantFold();
