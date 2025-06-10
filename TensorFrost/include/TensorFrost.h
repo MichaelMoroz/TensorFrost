@@ -5,5 +5,6 @@
 #include "Compiler/OperationBlocks.h"
 #include "Compiler/OperationArguments.h"
 #include "Compiler/Overloads.h"
+#include "Compiler/Value.h"
 #include "Compiler/Printer.h"
 #include "Compiler/TFProgram.h"

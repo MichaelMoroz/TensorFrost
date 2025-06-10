@@ -24,9 +24,6 @@ struct Op {
     OpBlock* NewBlock();
     OpBlock& GetBlock(int index = 0);
 
-    Op& operator[](int index);
-    Op& operator[](std::vector<Op*> indices);
-
     void AddAttribute(const std::string& name, const Attribute& value);
     void ChangeAttribute(const std::string& name, const Attribute& value);
     void GetAttribute(const std::string& name, Attribute& value) const;

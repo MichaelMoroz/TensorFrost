@@ -56,37 +56,47 @@ Op& constant(bool value) {
     const_op.type = TFTypeBool32;
     return const_op;
 }
+//
+// Op& unpack_tuple(const Op &x, int index) {
+//     Op& elem = func_op("unpack_tuple_int", {as_op(x)});
+//     elem.attributes["index"] = index; // Default index
+//     return elem;
+// }
+//
+// Op& vmap(std::vector<Op*> shape, std::function<void(Op&)> body) {
+//     Op& par_op = func_op("vmap", std::move(shape));
+//     GetContext()->BeginCursor(par_op.GetBlock().begin());
+//     body(par_op);
+//     GetContext()->EndCursor();
+//     return par_op;
+// }
+//
+// Op& memory(std::vector<Op*> shape, TFDataFormat type) {
+//     Op& mem_op = func_op("memory", std::move(shape));
+//     mem_op.type = type;
+//     return mem_op;
+// }
+//
+// Op& load_at_index(const Op& mem, std::vector<Op*> indices) {
+//     return make_op("load", indices, {as_op(mem)});
+// }
 
-Op& unpack_tuple(const Op &x, int index) {
-    Op& elem = func_op("unpack_tuple_int", {as_op(x)});
+Value unpack_tuple(Value x, int index) {
+    if (x.op->type.type != TFType::Tuple) {
+        throw std::runtime_error("Cannot unpack non-tuple value");
+    }
+    Op& elem = func_op("unpack_tuple_int", {x.op});
     elem.attributes["index"] = index; // Default index
-    return elem;
+    return Value(&elem);
 }
 
-Op& vmap(std::vector<Op*> shape, std::function<void(Op&)> body) {
-    Op& par_op = func_op("vmap", std::move(shape));
+Value vmap(std::vector<Value> shape, std::function<void(Value)> body) {
+    Op& par_op = func_op("vmap", {});
+    for (const auto& dim : shape) {
+        par_op.args->AddArgument(ArgType::Input, dim.op);
+    }
     GetContext()->BeginCursor(par_op.GetBlock().begin());
-    body(par_op);
+    body(Value(&par_op));
     GetContext()->EndCursor();
-    return par_op;
-}
-
-Op& memory(std::vector<Op*> shape, TFDataFormat type) {
-    Op& mem_op = func_op("memory", std::move(shape));
-    mem_op.type = type;
-    return mem_op;
-}
-
-Op& load_at_index(const Op& mem, std::vector<Op*> indices) {
-    return make_op("load", indices, {as_op(mem)});
-}
-
-Op& Op::operator[](int index) {
-    return unpack_tuple(*this, index);
-}
-
-Op& Op::operator[](std::vector<Op*> indices) {
-    return load_at_index(*this, std::move(indices));
-}
-
+    return Value(&par_op);
 }
