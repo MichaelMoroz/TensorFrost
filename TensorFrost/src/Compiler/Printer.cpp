@@ -38,6 +38,20 @@ std::string PrintArguments(const auto_vector<std::unique_ptr<Argument>>& vec, st
     return PrintArray(StringifyArguments(vec), begin, end);
 }
 
+std::string PrintArguments(const Arguments* args) {
+    if (!args) return "";
+    std::vector<std::string> inputs = StringifyArguments(args->inputs);
+    std::vector<std::string> outputs;
+    for (const auto& arg : args->used_at) {
+        if (arg.second->to) {
+            outputs.push_back(VariableName(arg.second->to));
+        }
+    }
+    std::string inputs_str = PrintArray(inputs, "inputs={", "}");
+    std::string outputs_str = PrintArray(outputs, "outputs={", "}");
+    return "[" + inputs_str + ", " + outputs_str + "]";
+}
+
 std::string PrintAttribute(Attribute attr) {
     std::ostringstream oss;
     std::visit([&oss](const auto& v) { oss << v; }, attr);
@@ -49,8 +63,10 @@ void PrintOp(const Op* op, std::ostringstream &os) {
     if (op->opcode == "const") {
         os << " = " << op->attributes.at("value");
     } else {
-        std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
-        std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
+        // std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
+        // std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
+        std::string inputs = "args=" + PrintArguments(op->args->Get(ArgType::Input));
+        std::string index = "index=" + PrintArguments(op->args->Get(ArgType::Index));
         std::vector<std::string> attributes;
         for (const auto& [key, value] : op->attributes) {
             attributes.push_back(key + ": " + PrintAttribute(value));
