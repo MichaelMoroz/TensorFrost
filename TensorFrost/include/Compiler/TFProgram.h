@@ -15,6 +15,7 @@ public:
     void Compile();
     void ConstantFold();
     void RemoveUnused();
+    void CombineVmapDepthwise();
 
     std::string DebugPrint() const;
 };

@@ -18,11 +18,13 @@ enum class OpClass {
     Constant,
     TernaryOperator,
     Memory,
+    Phi,
     None,
 };
 
 enum class OpProp {
-    ShapeArgs,
+    Variadic,
+    HasShape,
     Load,
     Store,
     MemoryOp,
@@ -73,7 +75,7 @@ struct OpSpec {
     OpClass op_class = OpClass::None;
     std::set<OpProp> props;
     int blocks = 0;
-    FoldFn constant_fold = nullptr;
+    FoldFn const_fold = nullptr;
 
     TFDataFormat GetOutputType(const std::vector<TFDataFormat>& args) const;
 };

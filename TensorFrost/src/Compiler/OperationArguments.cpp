@@ -99,4 +99,13 @@ Arguments* ArgumentManager::Get(ArgType type) const {
 Arguments * ArgumentManager::operator[](ArgType type) const {
     return Get(type);
 }
+
+std::vector<Op *> ArgumentManager::GetInputs(ArgType type) const {
+    auto *args = Get(type);
+    std::vector<Op*> inputs;
+    for (const auto& arg : args->inputs) {
+        inputs.push_back(arg->from);
+    }
+    return inputs;
+}
 }

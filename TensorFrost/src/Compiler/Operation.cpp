@@ -32,11 +32,68 @@ void Op::ChangeAttribute(const std::string &name, const Attribute &value) {
     attributes[name] = value;
 }
 
-void Op::GetAttribute(const std::string &name, Attribute &value) const {
+Attribute Op::GetAttribute(const std::string &name) const {
     auto it = attributes.find(name);
     if (it == attributes.end()) {
         throw std::runtime_error("Attribute '" + name + "' not found in operation '" + opcode + "'");
     }
-    value = it->second;
+    return it->second;
+}
+
+bool Op::Compare(const Op &other) const {
+    bool both_const = (opcode == "const" && other.opcode == "const");
+    if (both_const) {
+        // Compare constant values directly
+        Attribute this_value = GetAttribute("value");
+        Attribute other_value = other.GetAttribute("value");
+        return (this_value == other_value);
+    }
+    return false; // TODO: Implement more complex comparison logic for non-constant operations
+}
+
+void ApplyOpTransform(OpBlock &block, const std::function<void(Op &)> &transform) {
+    for (auto& op : block.ops) {
+        for (auto& sub_block : op->blocks) {
+            ApplyOpTransform(*sub_block, transform);
+        }
+        transform(*op);
+    }
+}
+
+void IterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
+    for (OpBlock::Iterator it = block.begin(); it.valid(); it.next()) {
+        for (auto& sub_block : it->blocks) {
+            IterateOver(*sub_block, transform);
+        }
+        transform(it);
+    }
+}
+
+void ReverseIterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
+    for (OpBlock::Iterator it = block.end(); it.valid(); it.prev()) {
+        for (auto& sub_block : it->blocks) {
+            ReverseIterateOver(*sub_block, transform);
+        }
+        transform(it);
+    }
+}
+
+std::set<Op*> CollectDependencies(std::vector<Op*> ops) {
+    std::set<Op*> dependencies;
+    std::function<void(Op*)> collect_dependencies = [&](Op* op) {
+        if (op == nullptr || dependencies.contains(op)) return; // Already processed
+        dependencies.insert(op);
+        for (auto& input : op->args->Get(ArgType::Input)->inputs) {
+            collect_dependencies(input->from);
+        }
+        for (auto& input : op->args->Get(ArgType::Index)->inputs) {
+            collect_dependencies(input->from);
+        }
+        collect_dependencies(op->parent_block->parent_op); // Parent depends on this operation
+    };
+    for (Op* op : ops) {
+        collect_dependencies(op);
+    }
+    return dependencies;
 }
 }

@@ -26,9 +26,37 @@ struct Op {
 
     void AddAttribute(const std::string& name, const Attribute& value);
     void ChangeAttribute(const std::string& name, const Attribute& value);
-    void GetAttribute(const std::string& name, Attribute& value) const;
+
+    Attribute GetAttribute(const std::string &name) const;
+
+    bool Compare(const Op& other) const;
 };
 
+void ApplyOpTransform(OpBlock& block, const std::function<void(Op&)>& transform);
+void IterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform);
+std::set<Op*> CollectDependencies(std::vector<Op*> ops);
+
+template<class State, class Fn>
+State IterateWithLocalState(OpBlock &block, Fn &&f) {
+    State current = {};
+    for (auto it = block.begin(); it.valid(); it.next()) {
+        std::vector<State> kids;
+        for (auto &sb : it->blocks)
+            kids.push_back(IterateWithLocalState<State>(*sb, f));
+        f(it, current, kids);
+    }
+    return current;
+}
+
+template<class State, class Fn>
+void IterateWithGlobalState(OpBlock &block, State& current, Fn &&f) {
+    for (auto it = block.begin(); it.valid(); it.next()) {
+        std::vector<State> kids;
+        for (auto &sb : it->blocks)
+            kids.push_back(IterateWithGlobalState<State>(*sb,current, f));
+        f(it, current, kids);
+    }
+}
 
 } // namespace ir
 

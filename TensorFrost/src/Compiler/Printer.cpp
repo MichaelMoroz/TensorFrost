@@ -38,6 +38,14 @@ std::string PrintArguments(const auto_vector<std::unique_ptr<Argument>>& vec, st
     return PrintArray(StringifyArguments(vec), begin, end);
 }
 
+std::string PrintShape(const Shape& shape) {
+    std::vector<std::string> dims;
+    for (const auto& dim : shape.dimensions) {
+        dims.push_back(VariableName(dim.op));
+    }
+    return PrintArray(dims, "[", "]", ", ");
+}
+
 std::string PrintArguments(const Arguments* args) {
     if (!args) return "";
     std::vector<std::string> inputs = StringifyArguments(args->inputs);
@@ -58,10 +66,12 @@ std::string PrintAttribute(Attribute attr) {
     return oss.str();
 }
 
-void PrintOp(const Op* op, std::ostringstream &os) {
+std::string PrintOp(const Op* op) {
+    std::ostringstream os;
     os << ToString(op->type) << " " << op->varname;
     if (op->opcode == "const") {
-        os << " = " << op->attributes.at("value");
+        return "";
+        //os << " = " << op->attributes.at("value");
     } else {
         std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
         std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
@@ -73,8 +83,11 @@ void PrintOp(const Op* op, std::ostringstream &os) {
         }
         std::string attributes_str = PrintArray(attributes, "{", "}");
 
-        os << " = " << op->opcode << "(" << PrintArray({inputs, index, attributes_str}) << ")";
+        std::string shape_str = "";// PrintShape(ComputeShape(Value(op)));
+
+        os << shape_str << " = " << op->opcode << "(" << PrintArray({inputs, index, attributes_str}) << ")";
     }
+    return os.str();
 }
 
 std::string AddIndent(const std::string& str, int indent) {
@@ -88,21 +101,19 @@ std::string AddIndent(const std::string& str, int indent) {
     return indented;
 }
 
-
-std::string PrintBlock(OpBlock &block) {
-    auto oss = std::ostringstream();
-    for (auto it = block.begin(); it.valid(); it.next()) {
-        PrintOp(*it, oss);
-        if(it->blocks.size() > 0) {
-            std::vector<std::string> blocks;
-            for (auto& sub_block : it->blocks) {
-                blocks.push_back(AddIndent(PrintBlock(*sub_block.get()), 4));
-            }
-            oss << PrintArray(blocks, " { \n", "}", "} { \n");
+std::string PrintBlock(OpBlock &root) {
+    return IterateWithLocalState<std::string>(root, [](OpBlock::Iterator &it, std::string& current, const std::vector<std::string> &kids) {
+        std::string result = PrintOp(*it);
+        if(result.empty()) return;
+        if (!kids.empty()) {
+            std::vector<std::string> indented;
+            indented.reserve(kids.size());
+            for (auto &s : kids) indented.push_back(AddIndent(s, 4));
+            result += PrintArray(indented, " { \n", "}", "} else { \n");
         }
-        oss << "\n";
-    }
-    return oss.str();
+        result += '\n';
+        current += result;
+    });
 }
 
 void AssignVariableNames(OpBlock &block) {

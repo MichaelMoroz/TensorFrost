@@ -38,6 +38,7 @@ struct ArgumentManager {
 
     Arguments* Get(ArgType type) const;
     Arguments* operator[](ArgType type) const;
+    std::vector<Op*> GetInputs(ArgType type) const;
 };
 
 }

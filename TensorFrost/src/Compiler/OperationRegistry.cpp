@@ -4,7 +4,7 @@ using namespace std;
 
 namespace TensorFrost {
 TFDataFormat OpSpec::GetOutputType(const std::vector<TFDataFormat> &args) const {
-    if (props.contains(OpProp::ShapeArgs) || args.empty()) {
+    if (props.contains(OpProp::Variadic) || args.empty()) {
         return overloads.find({})->second;
     }
     auto it = overloads.find(args);
@@ -88,29 +88,40 @@ make_fold2([](auto a, auto b) { \
     make_fold3([](auto a, auto b, auto c) { return op(a, b, c); })
 
 vector<OpSpec> default_operations = {
-    DEF_OP("memory", "f(); u(); i(); b(); tuple()", OpClass::Memory, .props = {OpProp::ShapeArgs}),
+    DEF_OP("memory", "f(); u(); i(); b(); tuple()", OpClass::Memory, .props = {OpProp::Variadic, OpProp::HasShape}),
     DEF_OP("load", "f(f); u(u); i(i); b(b)", OpClass::Function, .props = {OpProp::Load, OpProp::MemoryOp}),
     DEF_OP("store", "f(f); u(u); i(i); b(b)", OpClass::Function, .props = {OpProp::Store, OpProp::MemoryOp}),
 
     DEF_OP("const", "f(); u(); i(); b(); tuple()", OpClass::Constant),
     DEF_OP("copy", "f(f); u(u); i(i); b(b)", OpClass::Copy),
-    DEF_OP("add", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(+)),
-    DEF_OP("sub", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(-)),
-    DEF_OP("mul", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(*)),
-    DEF_OP("div", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .constant_fold = BIN_OP_FOLD(/)),
-    DEF_OP("sin", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::sinf)),
-    DEF_OP("cos", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::cosf)),
-    DEF_OP("tan", "f(f); u(u); i(i)", OpClass::UnaryOperator, .constant_fold = UN_FUNC_FOLD(std::tanf)),
+    DEF_OP("add", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .const_fold = BIN_OP_FOLD(+)),
+    DEF_OP("sub", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .const_fold = BIN_OP_FOLD(-)),
+    DEF_OP("mul", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .const_fold = BIN_OP_FOLD(*)),
+    DEF_OP("div", "f(f,f); u(u,u); i(i,i)", OpClass::Operator, .const_fold = BIN_OP_FOLD(/)),
+    DEF_OP("sin", "f(f); u(u); i(i)", OpClass::UnaryOperator, .const_fold = UN_FUNC_FOLD(std::sinf)),
+    DEF_OP("cos", "f(f); u(u); i(i)", OpClass::UnaryOperator, .const_fold = UN_FUNC_FOLD(std::cosf)),
+    DEF_OP("tan", "f(f); u(u); i(i)", OpClass::UnaryOperator, .const_fold = UN_FUNC_FOLD(std::tanf)),
 
+    DEF_OP("eq", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::equal_to<>())),
+    DEF_OP("ne", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::not_equal_to<>())),
+    DEF_OP("lt", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::less<>())),
+    DEF_OP("le", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::less_equal<>())),
+    DEF_OP("gt", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::greater<>())),
+    DEF_OP("ge", "b(f,f); b(u,u); b(i,i)", OpClass::Operator, .const_fold = BIN_FUNC_FOLD(std::greater_equal<>())),
 
-    DEF_OP("tofloat", "f(i); f(u); f(b)", OpClass::TypeCast),
-    DEF_OP("toint", "i(f); i(u); i(b)", OpClass::TypeCast),
-    DEF_OP("touint", "u(f); u(i); u(b)", OpClass::TypeCast),
-    DEF_OP("tobool", "b(f); b(i); b(u)", OpClass::TypeCast),
+    DEF_OP("tofloat", "f(f); f(i); f(u); f(b)", OpClass::Function, .const_fold = UN_FUNC_FOLD(static_cast<float>)),
+    DEF_OP("toint", "i(f); i(i); i(u); i(b)", OpClass::Function, .const_fold = UN_FUNC_FOLD(static_cast<int32_t>)),
+    DEF_OP("touint", "u(f); u(i); u(u); u(b)", OpClass::Function, .const_fold = UN_FUNC_FOLD(static_cast<uint32_t>)),
+    DEF_OP("tobool", "b(f); b(i); b(u); b(b)", OpClass::Function, .const_fold = UN_FUNC_FOLD(static_cast<bool>)),
 
     DEF_OP("unpack_tuple_int", "i(tuple)", OpClass::Function),
 
-    DEF_OP("vmap", "tuple()", OpClass::Parallel, .props = {OpProp::ShapeArgs}, .blocks = 1),
+    // Operations with blocks
+    DEF_OP("vmap", "tuple()", OpClass::Parallel, .props = {OpProp::Variadic, OpProp::HasShape}, .blocks = 1),
+    DEF_OP("if_cond", "void(b)", OpClass::Function, .blocks = 2),
+    DEF_OP("loop", "i(i,i,i)", OpClass::Function, .blocks = 1),
+
+    DEF_OP("phi", "f(); u(); i(); b()", OpClass::Phi, .props = {OpProp::Variadic}),
 };
 
 std::unordered_map<string, unique_ptr<OpSpec>> CreateOperationRegistry() {

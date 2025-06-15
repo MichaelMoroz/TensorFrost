@@ -100,6 +100,7 @@ class OpBlockIterator;
 struct ArgumentManager;
 struct Argument;
 class Value;
+struct Shape;
 
 using Attribute = std::variant<int, uint, float, bool>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;

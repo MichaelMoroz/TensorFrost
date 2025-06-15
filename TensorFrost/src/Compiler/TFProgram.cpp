@@ -24,7 +24,7 @@ void TFProgram::Compile() {
 void TFProgram::ConstantFold() {
     ApplyOpTransform(*GetBaseBlock(), [](Op& op) {
        OpSpec* spec = GetOpSpec(op.opcode);
-       if(!spec->constant_fold) return; // Skip if no constant folding is defined for this operation
+       if(!spec->const_fold) return; // Skip if no constant folding is defined for this operation
        AttributeVector inputs;
        for (const auto& arg : op.args->Get(ArgType::Input)->inputs) {
            if(!arg->from->attributes.contains("value")) {
@@ -32,7 +32,7 @@ void TFProgram::ConstantFold() {
            }
            inputs.push_back(arg->from->attributes.at("value"));
        }
-       Attribute result = spec->constant_fold(inputs);
+       Attribute result = spec->const_fold(inputs);
        op.attributes["value"] = result; // Set the result as a constant value
        op.opcode = "const"; // Change the opcode to constant
        op.args->RemoveAll(); // Clear all arguments
@@ -40,11 +40,19 @@ void TFProgram::ConstantFold() {
 }
 
 void TFProgram::RemoveUnused() {
-     std::set<Op*> used_ops = GetDependencies(values_to_ops(program_outputs));
+     std::set<Op*> used_ops = CollectDependencies(values_to_ops(program_outputs));
      IterateOver(*GetBaseBlock(), [&](OpBlock::Iterator& it) {
          if (!used_ops.contains(*it)) {
              it.remove(); // Remove unused operations
          }
+     });
+}
+
+// Converts multilevel vmap operations into a sequence of vmaps with concatenated shape
+void TFProgram::CombineVmapDepthwise() {
+    IterateOver(*GetBaseBlock(), [&](OpBlock::Iterator& it) {
+         static OpBlock* last_block = nullptr;
+         OpBlock* current_block = it->parent_block;
      });
 }
 

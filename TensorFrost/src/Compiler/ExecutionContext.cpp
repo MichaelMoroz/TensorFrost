@@ -3,31 +3,31 @@
 #include "Compiler/OperationBlocks.h"
 
 namespace TensorFrost {
-ExecutionContext::ExecutionContext(): base_block(std::make_unique<OpBlock>()), cursor(base_block->begin()) {}
+ExecutionContext::ExecutionContext(): base_block(std::make_unique<OpBlock>()) {
+    cursor_stack.push(base_block->begin());
+}
 
 void ExecutionContext::BeginCursor(OpBlock::Iterator it) {
-    stack.push(&cursor);
-    cursor = it;
+    cursor_stack.push(it);
 }
 
 void ExecutionContext::EndCursor() {
-    if (stack.empty()) {
+    if (cursor_stack.empty()) {
         throw std::runtime_error("This is the last cursor, cannot end it");
     }
-    cursor = *stack.top();
-    stack.pop();
+    cursor_stack.pop();
 }
 
 Op& ExecutionContext::Add(std::unique_ptr<Op> op) {
-    cursor.insert_before(std::move(op));
-    Op* new_op = *cursor;
-    cursor.next(); // Move cursor to the new op
+    cursor_stack.top().insert_before(std::move(op));
+    Op* new_op = *cursor_stack.top();
+    cursor_stack.top().next(); // Move the cursor to the new op
     return *new_op;
 }
 
 Op& ExecutionContext::AddBeforeCursor(std::unique_ptr<Op> op) {
-    cursor.insert_before(std::move(op));
-    return **cursor;
+    cursor_stack.top().insert_before(std::move(op));
+    return **cursor_stack.top();
 }
 
 ExecutionContext* current_context = nullptr;
@@ -57,7 +57,7 @@ OpBlock* GetCurrentBlock() {
     if (!current_context) {
         throw std::runtime_error("No execution context available");
     }
-    return current_context->cursor.parent();
+    return current_context->cursor_stack.top().parent();
 }
 
 void BeginCursor(OpBlock::Iterator it) {

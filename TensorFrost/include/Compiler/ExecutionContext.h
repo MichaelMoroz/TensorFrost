@@ -7,8 +7,7 @@ namespace TensorFrost {
 
 struct ExecutionContext {
     std::unique_ptr<OpBlock> base_block;
-    OpBlock::Iterator cursor;
-    std::stack<OpBlock::Iterator*> stack;
+    std::stack<OpBlock::Iterator> cursor_stack;
 
     ExecutionContext();
     void BeginCursor(OpBlock::Iterator it);

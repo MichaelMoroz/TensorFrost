@@ -42,6 +42,25 @@ OpBlock::Iterator& OpBlock::Iterator::remove() {
     return *this;
 }
 
+OpBlock::Iterator& OpBlock::Iterator::move_before(Iterator other)
+{
+    auto pos = cur_;
+    list_->splice(pos, *other.list_, other.cur_);
+    cur_ = std::prev(pos);
+    cur_->get()->parent_block = parent_;
+    return *this;
+}
+
+OpBlock::Iterator& OpBlock::Iterator::move_range_before(Iterator other_start, Iterator other_end)
+{
+    auto pos = cur_;
+    for(auto it = other_start.cur_; it != other_end.cur_; ++it)
+        it->get()->parent_block = parent_;
+    list_->splice(pos, *other_start.list_, other_start.cur_, other_end.cur_);
+    cur_ = std::prev(pos);
+    return *this;
+}
+
 bool OpBlock::Iterator::valid() const { return cur_ != list_->end(); }
 bool OpBlock::Iterator::operator==(const Iterator &o) const { return cur_ == o.cur_; }
 bool OpBlock::Iterator::operator!=(const Iterator &o) const { return cur_ != o.cur_; }
@@ -49,49 +68,4 @@ bool OpBlock::Iterator::operator!=(const Iterator &o) const { return cur_ != o.c
 OpBlock::Iterator OpBlock::begin() { return Iterator(this, ops.begin()); }
 OpBlock::Iterator OpBlock::end() { return Iterator(this, ops.end()); }
 
-void ApplyOpTransform(OpBlock &block, const std::function<void(Op &)> &transform) {
-    for (auto& op : block.ops) {
-        for (auto& sub_block : op->blocks) {
-            ApplyOpTransform(*sub_block, transform);
-        }
-        transform(*op);
-    }
-}
-
-void IterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
-    for (OpBlock::Iterator it = block.begin(); it.valid(); it.next()) {
-        for (auto& sub_block : it->blocks) {
-            IterateOver(*sub_block, transform);
-        }
-        transform(it);
-    }
-}
-
-void ReverseIterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform) {
-    for (OpBlock::Iterator it = block.end(); it.valid(); it.prev()) {
-        for (auto& sub_block : it->blocks) {
-            ReverseIterateOver(*sub_block, transform);
-        }
-        transform(it);
-    }
-}
-
-std::set<Op*> GetDependencies(std::vector<Op*> ops) {
-    std::set<Op*> dependencies;
-    std::function<void(Op*)> collect_dependencies = [&](Op* op) {
-        if (op == nullptr || dependencies.contains(op)) return; // Already processed
-        dependencies.insert(op);
-        for (auto& input : op->args->Get(ArgType::Input)->inputs) {
-            collect_dependencies(input->from);
-        }
-        for (auto& input : op->args->Get(ArgType::Index)->inputs) {
-            collect_dependencies(input->from);
-        }
-        collect_dependencies(op->parent_block->parent_op); // Collect dependencies of the parent op
-    };
-    for (Op* op : ops) {
-        collect_dependencies(op);
-    }
-    return dependencies;
-}
 }

@@ -71,4 +71,37 @@ Value load_at_index(Value mem, std::vector<Value> indices) {
     }
     return make_op("load", indices, {mem});
 }
+
+void if_cond(Value cond, std::function<void()> body_true, std::function<void()> body_false) {
+    if (cond.op->type != TFTypeBool32) {
+        throw std::runtime_error("Condition must be a boolean value");
+    }
+    Value if_op = func_op("if_cond", {cond});
+    GetContext()->BeginCursor(if_op.op->GetBlock(0).begin());
+    body_true();
+    GetContext()->EndCursor();
+    if (body_false) {
+        GetContext()->BeginCursor(if_op.op->GetBlock(1).begin());
+        body_false();
+        GetContext()->EndCursor();
+    }
+}
+
+Value loop(Value start, Value end, Value step, std::function<void(Value)> body) {
+    if (start.op->type != TFTypeInt32 || end.op->type != TFTypeInt32 || step.op->type != TFTypeInt32) {
+        throw std::runtime_error("Loop indices must be of type int32");
+    }
+    Value loop_op = func_op("loop", {start, end, step});
+    GetContext()->BeginCursor(loop_op.op->GetBlock().begin());
+    body(loop_op);
+    GetContext()->EndCursor();
+    return loop_op;
+}
+
+Value phi(std::vector<Value> inputs) {
+    Value phi_op = func_op("phi", inputs);
+    phi_op.op->type = inputs.empty() ? TFTypeNone : inputs[0].op->type; // Set type based on first input
+    return phi_op;
+}
+
 }

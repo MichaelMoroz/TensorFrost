@@ -30,6 +30,9 @@ struct OpBlock {
         Iterator& insert_before(std::unique_ptr<Op> op);
         Iterator& remove();
 
+        Iterator& move_before(Iterator other);
+        Iterator& move_range_before(Iterator other_start, Iterator other_end);
+
         OpBlock* parent() const { return parent_; }
 
         bool valid() const;
@@ -41,7 +44,4 @@ struct OpBlock {
     Iterator end();
 };
 
-void ApplyOpTransform(OpBlock& block, const std::function<void(Op&)>& transform);
-void IterateOver(OpBlock &block, const std::function<void(OpBlock::Iterator&)> &transform);
-std::set<Op*> GetDependencies(std::vector<Op*> ops);
 }
