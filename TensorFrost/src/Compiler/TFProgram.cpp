@@ -51,8 +51,9 @@ void TFProgram::RemoveUnused() {
 // Converts multilevel vmap operations into a sequence of vmaps with concatenated shape
 void TFProgram::CombineVmapDepthwise() {
     IterateOver(*GetBaseBlock(), [&](OpBlock::Iterator& it) {
-         static OpBlock* last_block = nullptr;
-         OpBlock* current_block = it->parent_block;
+         static OpBlock* last_vmap_block = nullptr;
+         static OpBlock* current_vmap_block = nullptr;
+         static Shape current_shape;
      });
 }
 

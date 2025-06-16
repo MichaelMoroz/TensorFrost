@@ -131,8 +131,11 @@ void Shape::AddDimensions(const std::vector<Value> &dims) {
 }
 
 bool Shape::Broadcastable(const Shape &other) const {
-    size_t min_size = std::min(dimensions.size(), other.dimensions.size());
-    for (size_t i = 0; i < min_size; ++i) {
+    size_t size = other.dimensions.size();
+    if (dimensions.size() < size) {
+        throw std::runtime_error("Other shape has more dimensions than this shape");
+    }
+    for (size_t i = 0; i < size; ++i) {
         if (!dimensions[i].Compare(other.dimensions[i])) {
             return false;
         }

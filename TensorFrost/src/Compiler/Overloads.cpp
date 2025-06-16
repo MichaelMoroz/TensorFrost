@@ -6,7 +6,7 @@ using namespace std;
 
 namespace TensorFrost {
 // General function to create an Op instance in the current execution context
-Value make_op(std::string op, std::vector<Value> ids, std::vector<Value> args) {
+Value make_op(std::string op, std::vector<Value> args, std::vector<Value> mem) {
     OpSpec* spec = GetOpSpec(op);
     vector<TFDataFormat> arg_types;
     for (const auto& arg : args) {
@@ -22,12 +22,11 @@ Value make_op(std::string op, std::vector<Value> ids, std::vector<Value> args) {
     for (int i = 0; i < spec->blocks; ++i) {
         op_instance->NewBlock();
     }
+    op_instance = &GetContext()->Add(std::unique_ptr<Op>(op_instance));
+    Shape shape = ComputeShape(Value(op_instance));
 
-    return Value(&GetContext()->Add(std::unique_ptr<Op>(op_instance)));
-}
 
-Value func_op(const std::string &name, std::vector<Value> args) {
-    return make_op(name,  {}, std::move(args));
+    return Value(op_instance);
 }
 
 Value constant(Attribute value) {

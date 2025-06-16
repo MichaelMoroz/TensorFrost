@@ -3,8 +3,6 @@
 
 namespace TensorFrost {
 
-using OverloadsMap = std::unordered_map<std::vector<TFDataFormat>, TFDataFormat, VecHash<TFDataFormat>>;
-
 enum class OpClass {
     Operator,
     UnaryOperator,
@@ -23,7 +21,6 @@ enum class OpClass {
 };
 
 enum class OpProp {
-    Variadic,
     HasShape,
     Load,
     Store,
@@ -69,9 +66,29 @@ FoldFn make_fold3(F f) {
     };
 }
 
+enum class ArgProp {
+    IgnoreShape
+};
+
+struct ArgSpec {
+    char out;
+    std::vector<char> in;
+    std::map<char, std::set<TFDataFormat>> types;
+    std::map<char, std::set<ArgProp>> props;
+    bool variadic = false;
+
+    ArgSpec(std::string io,
+            std::map<char, std::set<TFDataFormat>> types = {},
+            std::map<char, std::set<ArgProp>> props = {});
+
+    bool IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) const;
+    TFDataFormat EstimateOutputType(const std::vector<TFDataFormat>& inputs) const;
+    std::vector<std::set<ArgProp>> InputProperties(const std::vector<TFDataFormat>& inputs) const;
+};
+
 struct OpSpec {
     std::string name;
-    OverloadsMap overloads;
+    ArgSpec arg_spec;
     OpClass op_class = OpClass::None;
     std::set<OpProp> props;
     int blocks = 0;

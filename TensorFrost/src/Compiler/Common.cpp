@@ -23,13 +23,13 @@ bool TFDataFormat::operator>(const TFDataFormat &other) const {
 
 TFDataFormat GetTypeFromAttribute(const Attribute& attr) {
     if (std::holds_alternative<int>(attr)) {
-        return TFTypeInt32;
+        return TFInt32;
     } else if (std::holds_alternative<uint>(attr)) {
-        return TFTypeUint32;
+        return TFUint32;
     } else if (std::holds_alternative<float>(attr)) {
-        return TFTypeFloat32;
+        return TFFloat32;
     } else if (std::holds_alternative<bool>(attr)) {
-        return TFTypeBool32;
+        return TFBool;
     }
     throw std::runtime_error("Unsupported attribute type for TFDataFormat conversion");
 }

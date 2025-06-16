@@ -11,6 +11,7 @@
 #include <sstream>
 #include <functional>
 #include <stack>
+#include <map>
 
 namespace TensorFrost {
 extern "C" {
@@ -21,6 +22,7 @@ extern "C" {
         Bool,
         Tuple,
         None,
+        Unknown,
     };
 
     struct TFDataFormat {
@@ -34,12 +36,13 @@ extern "C" {
         bool operator>(const TFDataFormat& other) const;
     };
 
-#define TFTypeNone TFDataFormat{TFType::None, 0}
-#define TFTypeTuple TFDataFormat{TFType::Tuple, 0}
-#define TFTypeBool32 TFDataFormat{TFType::Bool, 32}
-#define TFTypeFloat32 TFDataFormat{TFType::Float, 32}
-#define TFTypeInt32 TFDataFormat{TFType::Int, 32}
-#define TFTypeUint32 TFDataFormat{TFType::Uint, 32}
+#define TFNone TFDataFormat{TFType::None, 0}
+#define TFUnknown TFDataFormat{TFType::Unknown, 0}
+#define TFTuple TFDataFormat{TFType::Tuple, 0}
+#define TFBool TFDataFormat{TFType::Bool, 32}
+#define TFFloat32 TFDataFormat{TFType::Float, 32}
+#define TFInt32 TFDataFormat{TFType::Int, 32}
+#define TFUint32 TFDataFormat{TFType::Uint, 32}
 }
 
 // Utility class to automatically resize and set elements in a vector
@@ -65,20 +68,6 @@ struct VecHash {
     }
 };
 
-enum class ArgType {
-    Input,
-    Index,
-    Count,
-};
-
-inline std::string ToString(ArgType type) {
-    switch (type) {
-        case ArgType::Input: return "Input";
-        case ArgType::Index: return "Index";
-        default: return "Unknown";
-    }
-}
-
 inline std::string ToString(const TFDataFormat& format) {
     switch (format.type) {
         case TFType::Float: return "float" + std::to_string(format.size);
@@ -94,7 +83,6 @@ inline std::string ToString(const TFDataFormat& format) {
 using uint = unsigned int;
 
 struct Op;
-struct Arguments;
 struct OpBlock;
 class OpBlockIterator;
 struct ArgumentManager;

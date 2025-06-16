@@ -141,7 +141,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 		Value f = 2.5f;
 		Value g = 3.5f;
 		Value c = a + b * 3;
-		Value mem = memory({a, b, c}, TFTypeFloat32);
+		Value mem = memory({a, b, c}, TFFloat32);
 		inputs.push_back(mem);
 		vmap({a, b}, [&](Value ids0) {
 			Value something = tofloat(mem * sin(f + g));
@@ -151,9 +151,15 @@ PYBIND11_MODULE(TensorFrost, m) {
 			Value d = c + b + ids0[0] * imem;
 			Value m0, m1;
 			if_cond(d > 0, [&]() {
-				m0 = d * c * imem;
+				Value t = d * c * imem;
+				vmap({c}, [&](Value ids1) {
+					m0 = t * imem[{ids1[0], ids0[0], ids0[1]}];
+				});
 			}, [&]() {
-				m1 = d * c * imem + 1;
+				Value t = d * c / imem;
+				vmap({c}, [&](Value ids1) {
+					m1 = t / imem[{ids1[0], ids0[0], ids0[1]}];
+				});
 			});
 			Value result = phi({m0, m1});
 			vmap({c, c}, [&](Value ids1) {

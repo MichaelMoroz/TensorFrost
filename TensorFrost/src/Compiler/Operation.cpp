@@ -3,7 +3,7 @@
 namespace TensorFrost {
 Op::Op(std::string op_name): opcode(std::move(op_name)) {
     args = std::make_unique<ArgumentManager>(this);
-    type = TFTypeNone;
+    type = TFNone;
 }
 
 OpBlock* Op::NewBlock() {
