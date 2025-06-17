@@ -1,0 +1,16 @@
+Node = [name, arguments, attributes] 
+
+
+n = input_dim(attributes{type=int32, input_index=0, dim_index=0})
+a = input(args{shape=[n]}, attributes{type=float32, input_index=0})
+b = sin(args{input=[a], shape=[n]}, attributes{type=float32})
+c = load(args{input=[b], indices=[0]}, attributes{type=float32})
+d = average(args{input=[b]}, attributes{type=float32})
+res = div(args{input=[d,c]}, attributes{type=float32})
+ids = parallel(args{shape=[n, n]}, attributes{type=tuple}) {
+    i = unpack_tuple(args{input=[ids,0]}, attributes{type=int32})
+    j = unpack_tuple(args{input=[ids,0]}, attributes{type=int32})
+    a0 = load(args{input=[b], indices=[i]}, attributes{type=float32})
+    a1 = load(args{input=[b], indices=[j]}, attributes{type=float32})
+    outer = mul(args{input=[a0, a1]}, attributes{type=float32, output_index=0})
+}
