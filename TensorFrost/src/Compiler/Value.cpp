@@ -5,83 +5,89 @@ using namespace std;
 
 namespace TensorFrost {
 
-Value::Value(Op* operation) : op(operation) {
+Value::Value(Op* operation, int from_index) : op(operation), out_index(from_index) {
     if (!op) {
         throw std::runtime_error("Value cannot be constructed with a null Op pointer");
     }
+    if(from_index >= op->output_count) {
+        throw std::out_of_range("Output index out of range for the operation");
+    }
 }
 
-Value::Value(const Op *operation) {
-    if (!operation) {
+Value::Value(const Op *operation, int from_index) : out_index(from_index) {
+    op = const_cast<Op*>(operation);
+    if (!op) {
         throw std::runtime_error("Value cannot be constructed with a null Op pointer");
     }
-    op = const_cast<Op*>(operation);
+    if(from_index >= op->output_count) {
+        throw std::out_of_range("Output index out of range for the operation");
+    }
 }
 
 Value::Value(float value) : op(constant(value).op) {}
 Value::Value(int value) : op(constant(value).op) {}
 Value::Value(uint value) : op(constant(value).op) {}
 Value::Value(bool value) : op(constant(value).op) {}
-
+Value::Value(const Value &other): op(other.op), out_index(other.out_index) {}
 
 Value Value::operator+(const Value& other) const {
-    return func_op("add", {op, other.op});
+    return value_op("add", {op, other.op});
 }
 Value Value::operator-(const Value& other) const {
-    return func_op("sub", {op, other.op});
+    return value_op("sub", {op, other.op});
 }
 Value Value::operator*(const Value& other) const {
-    return func_op("mul", {op, other.op});
+    return value_op("mul", {op, other.op});
 }
 Value Value::operator/(const Value& other) const {
-    return func_op("div", {op, other.op});
+    return value_op("div", {op, other.op});
 }
 Value Value::operator%(const Value& other) const {
-    return func_op("mod", {op, other.op});
+    return value_op("mod", {op, other.op});
 }
 Value Value::operator==(const Value& other) const {
-    return func_op("eq", {op, other.op});
+    return value_op("eq", {op, other.op});
 }
 Value Value::operator!=(const Value& other) const {
-    return func_op("ne", {op, other.op});
+    return value_op("ne", {op, other.op});
 }
 Value Value::operator<(const Value& other) const {
-    return func_op("lt", {op, other.op});
+    return value_op("lt", {op, other.op});
 }
 Value Value::operator<=(const Value& other) const {
-    return func_op("le", {op, other.op});
+    return value_op("le", {op, other.op});
 }
 Value Value::operator>(const Value& other) const {
-    return func_op("gt", {op, other.op});
+    return value_op("gt", {op, other.op});
 }
 Value Value::operator>=(const Value& other) const {
-    return func_op("ge", {op, other.op});
+    return value_op("ge", {op, other.op});
 }
 Value Value::operator<<(const Value& other) const {
-    return func_op("shl", {op, other.op});
+    return value_op("shl", {op, other.op});
 }
 Value Value::operator>>(const Value& other) const {
-    return func_op("shr", {op, other.op});
+    return value_op("shr", {op, other.op});
 }
 
 Value Value::operator&&(const Value& other) const {
-    return func_op("land", {op, other.op});
+    return value_op("land", {op, other.op});
 }
 Value Value::operator||(const Value& other) const {
-    return func_op("lor", {op, other.op});
+    return value_op("lor", {op, other.op});
 }
 Value Value::operator!() const {
-    return func_op("lnot", {op});
+    return value_op("lnot", {op});
 }
 
 Value Value::operator-() const {
-    return func_op("neg", {op});
+    return value_op("neg", {op});
 }
 Value Value::operator+() const {
-    return func_op("pos", {op});
+    return value_op("pos", {op});
 }
 Value Value::operator~() const {
-    return func_op("not", {op});
+    return value_op("not", {op});
 }
 
 bool Value::Compare(const Value &other) const {
@@ -89,14 +95,11 @@ bool Value::Compare(const Value &other) const {
     return op->Compare(*other.op);
 }
 
-Value Value::operator[](int index) const {
-    return unpack_tuple(*this, index);
-}
-Value Value::operator[](const std::vector<Value>& indices) const {
+Value Value::operator[](const Values& indices) const {
     return load_at_index(*this, indices);
 }
 
-std::vector<Op*> values_to_ops(const std::vector<Value>& values) {
+std::vector<Op*> values_to_ops(const Values& values) {
     std::vector<Op*> ops;
     ops.reserve(values.size());
     for (const auto& value : values) {
@@ -109,8 +112,8 @@ std::vector<Op*> values_to_ops(const std::vector<Value>& values) {
     return ops;
 }
 
-std::vector<Value> ops_to_values(const std::vector<Op*>& ops) {
-    std::vector<Value> values;
+Values ops_to_values(const std::vector<Op*>& ops) {
+    Values values;
     values.reserve(ops.size());
     for (const auto& op : ops) {
         if (op) {
@@ -126,7 +129,7 @@ void Shape::AddDimension(const Value &dim) {
     dimensions.push_back(dim);
 }
 
-void Shape::AddDimensions(const std::vector<Value> &dims) {
+void Shape::AddDimensions(const Values &dims) {
     dimensions.insert(dimensions.end(), dims.begin(), dims.end());
 }
 
@@ -155,7 +158,7 @@ Shape ComputeShape(Value x) {
     for (const auto& parent : parents) {
         OpSpec* spec = GetOpSpec(parent->opcode);
         if(spec->props.contains(OpProp::HasShape)) {
-            shape.AddDimensions(ops_to_values(parent->args->GetInputs(ArgType::Input)));
+            shape.AddDimensions(parent->args->Inputs());
         }
     }
     return shape;

@@ -20,7 +20,6 @@ extern "C" {
         Uint,
         Int,
         Bool,
-        Tuple,
         None,
         Unknown,
     };
@@ -38,7 +37,6 @@ extern "C" {
 
 #define TFNone TFDataFormat{TFType::None, 0}
 #define TFUnknown TFDataFormat{TFType::Unknown, 0}
-#define TFTuple TFDataFormat{TFType::Tuple, 0}
 #define TFBool TFDataFormat{TFType::Bool, 32}
 #define TFFloat32 TFDataFormat{TFType::Float, 32}
 #define TFInt32 TFDataFormat{TFType::Int, 32}
@@ -74,8 +72,7 @@ inline std::string ToString(const TFDataFormat& format) {
         case TFType::Uint: return "uint" + std::to_string(format.size);
         case TFType::Int: return "int" + std::to_string(format.size);
         case TFType::Bool: return "bool" + std::to_string(format.size);
-        case TFType::Tuple: return "tuple";
-        case TFType::None: return "none";
+        case TFType::None: return "void";
         default: return "unknown";
     }
 }
@@ -93,6 +90,7 @@ struct Shape;
 using Attribute = std::variant<int, uint, float, bool>;
 using AttributeMap = std::unordered_map<std::string, Attribute>;
 using AttributeVector = std::vector<Attribute>;
+using Values = std::vector<Value>;
 
 TFDataFormat GetTypeFromAttribute(const Attribute& attr);
 
@@ -117,6 +115,26 @@ auto TransformVector(const Container& input, Func func) {
         output.push_back(func(item));
     }
     return output;
+}
+
+template<typename T>
+auto ConcatVectors(const std::vector<T>& a, const std::vector<T>& b) {
+    std::vector<T> result;
+    result.reserve(a.size() + b.size());
+    result.insert(result.end(), a.begin(), a.end());
+    result.insert(result.end(), b.begin(), b.end());
+    return result;
+}
+
+template<typename T>
+auto SliceVector(const std::vector<T>& vec, size_t start, size_t end = -1) {
+    if (end == -1 || end > vec.size()) {
+        end = vec.size();
+    }
+    if (start >= end || start >= vec.size()) {
+        return std::vector<T>();
+    }
+    return std::vector<T>(vec.begin() + start, vec.begin() + end);
 }
 }
 

@@ -63,8 +63,6 @@ bool ArgSpec::IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) con
 }
 
 TFDataFormat ArgSpec::EstimateOutputType(const std::vector<TFDataFormat> &inputs) const {
-    if (variadic && inputs.empty()) return TFUnknown;
-
     auto name_of = [&](size_t i) -> const char& {
         return variadic ? in.front() : in[i];
     };
@@ -108,6 +106,10 @@ std::vector<std::set<ArgProp>> ArgSpec::InputProperties(const std::vector<TFData
 TFDataFormat OpSpec::GetOutputType(const std::vector<TFDataFormat> &args) const {
     TFDataFormat ret = arg_spec.EstimateOutputType(args);
     return ret;
+}
+
+bool OpSpec::IsValid(const std::vector<TFDataFormat>& inputs, TFDataFormat output) const {
+    return arg_spec.IsValid(inputs, output);
 }
 
 #define BIN_OP_FOLD(op) \
@@ -180,10 +182,14 @@ vector<OpSpec> default_operations = {
     DEF_OP("tobool", ("x(y)", {{'x', {TFBool}}}), OpClass::Function,
         .const_fold = UN_FUNC_FOLD(static_cast<bool>)),
 
-    DEF_OP("unpack", ("x(y)"), OpClass::Function),
-
     // Operations with blocks
-    DEF_OP("vmap", ("x(y,...)", {{'x', {TFTuple}}, {'y', {TFInt32}}}), OpClass::Parallel, .props = {OpProp::HasShape}, .blocks = 1),
+    DEF_OP("vmap", ("x(x,...)", {{'x', {TFInt32}}}), OpClass::Parallel, .props = {OpProp::HasShape}, .blocks = 1,
+        .calc_tuple = [](Op* op, Values args) -> Values {
+            Values tuple;
+            op->output_count = args.size();
+            for (size_t i = 0; i < args.size(); ++i) tuple.push_back(Value(op, i));
+            return tuple;
+        }),
     DEF_OP("if_cond", ("x(y)", {{'x', {TFNone}}, {'y', {TFBool}}}), OpClass::Function, .blocks = 2),
     DEF_OP("loop", ("x(x,x,x)", {{'x', {TFInt32}}}), OpClass::Function, .blocks = 1),
 

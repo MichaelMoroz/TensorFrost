@@ -2,25 +2,29 @@
 
 namespace TensorFrost {
 
+Value Argument::From() const {
+    return Value(from, from_index);
+}
+
 ArgumentManager::ArgumentManager(Op *parent): parent_op(parent) {
 }
 
-void ArgumentManager::AddArgument(Op &from, int index) {
-    inputs.set_element(index, std::make_unique<Argument>(Argument{&from, parent_op, index}));
-    from.args->SetAsOutput(inputs[index].get());
+void ArgumentManager::AddArgument(Value from, int arg_index) {
+    inputs.set_element(arg_index, std::make_unique<Argument>(Argument{from.op, parent_op, arg_index, from.out_index}));
+    from.op->args->SetAsOutput(inputs[arg_index].get());
 }
 
 void ArgumentManager::SetAsOutput(Argument *arg) {
-    used_at.insert({arg->index, arg});
+    used_at.insert({arg->arg_index, arg});
 }
 
 void ArgumentManager::RemoveOutput(Argument *arg) {
-    used_at.erase({arg->index, arg});
+    used_at.erase({arg->arg_index, arg});
 }
 
-void ArgumentManager::SetArguments(std::vector<Op*> args) {
+void ArgumentManager::SetArguments(Values args) {
     for (size_t i = 0; i < args.size(); ++i) {
-        AddArgument(*args[i], (int)i);
+        AddArgument(args[i], (int)i);
     }
 }
 
@@ -41,22 +45,10 @@ void ArgumentManager::RemoveAll() {
     inputs.clear();
 }
 
-std::vector<Argument *> ArgumentManager::Args() const {
-    std::vector<Argument*> result;
+Values ArgumentManager::Inputs() const {
+    Values result;
     for (const auto& arg : inputs) {
-        if (arg) {
-            result.push_back(arg.get());
-        }
-    }
-    return result;
-}
-
-std::vector<Op *> ArgumentManager::Inputs() const {
-    std::vector<Op*> result;
-    for (const auto& arg : inputs) {
-        if (arg && arg->from) {
-            result.push_back(arg->from);
-        }
+        if (arg) result.push_back(arg->From());
     }
     return result;
 }

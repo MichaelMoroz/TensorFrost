@@ -134,8 +134,8 @@ PYBIND11_MODULE(TensorFrost, m) {
 
 	// TEST CODE
 	TFProgram program([]() -> auto {
-		std::vector<Value> inputs;
-		std::vector<Value> outputs;
+		Values inputs;
+		Values outputs;
 		Value a = 5;
 		Value b = 10;
 		Value f = 2.5f;
@@ -143,26 +143,26 @@ PYBIND11_MODULE(TensorFrost, m) {
 		Value c = a + b * 3;
 		Value mem = memory({a, b, c}, TFFloat32);
 		inputs.push_back(mem);
-		vmap({a, b}, [&](Value ids0) {
+		vmap({a, b}, [&](Values ids0) {
 			Value something = tofloat(mem * sin(f + g));
 		});
-		vmap({a, b, c}, [&](Value ids0) {
+		vmap({a, b, c}, [&](Values ids0) {
 			Value imem = toint(mem * sin(f + g));
 			Value d = c + b + ids0[0] * imem;
 			Value m0, m1;
 			if_cond(d > 0, [&]() {
 				Value t = d * c * imem;
-				vmap({c}, [&](Value ids1) {
+				vmap({c}, [&](Values ids1) {
 					m0 = t * imem[{ids1[0], ids0[0], ids0[1]}];
 				});
 			}, [&]() {
 				Value t = d * c / imem;
-				vmap({c}, [&](Value ids1) {
+				vmap({c}, [&](Values ids1) {
 					m1 = t / imem[{ids1[0], ids0[0], ids0[1]}];
 				});
 			});
 			Value result = phi({m0, m1});
-			vmap({c, c}, [&](Value ids1) {
+			vmap({c, c}, [&](Values ids1) {
 				Value m = result * imem[{ids1[1], ids1[0], ids0[0]}];
 				outputs.push_back(m);
 			});

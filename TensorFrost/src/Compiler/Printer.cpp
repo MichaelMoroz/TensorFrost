@@ -15,7 +15,7 @@ std::string VariableName(const Op* op) {
 
 std::vector<std::string> StringifyArguments(const auto_vector<std::unique_ptr<Argument>>& vec) {
     return TransformVector(vec, [](const std::unique_ptr<Argument>& arg) {
-        return VariableName(arg->from);
+        return VariableName(arg->from) + (arg->from->output_count > 1 ? "[" + std::to_string(arg->from_index) + "]" : "");
     });
 }
 
@@ -46,20 +46,6 @@ std::string PrintShape(const Shape& shape) {
     return PrintArray(dims, "[", "]", ", ");
 }
 
-std::string PrintArguments(const Arguments* args) {
-    if (!args) return "";
-    std::vector<std::string> inputs = StringifyArguments(args->inputs);
-    std::vector<std::string> outputs;
-    for (const auto& arg : args->used_at) {
-        if (arg.second->to) {
-            outputs.push_back(VariableName(arg.second->to));
-        }
-    }
-    std::string inputs_str = PrintArray(inputs, "inputs={", "}");
-    std::string outputs_str = PrintArray(outputs, "outputs={", "}");
-    return "[" + inputs_str + ", " + outputs_str + "]";
-}
-
 std::string PrintAttribute(Attribute attr) {
     std::ostringstream oss;
     std::visit([&oss](const auto& v) { oss << v; }, attr);
@@ -70,13 +56,10 @@ std::string PrintOp(const Op* op) {
     std::ostringstream os;
     os << ToString(op->type) << " " << op->varname;
     if (op->opcode == "const") {
-        return "";
-        //os << " = " << op->attributes.at("value");
+        //return "";
+        os << " = " << op->attributes.at("value");
     } else {
-        std::string inputs = PrintArguments(op->args->Get(ArgType::Input)->inputs, "", "");
-        std::string index = PrintArguments(op->args->Get(ArgType::Index)->inputs, "index={", "}");
-        // std::string inputs = "args=" + PrintArguments(op->args->Get(ArgType::Input));
-        // std::string index = "index=" + PrintArguments(op->args->Get(ArgType::Index));
+        std::string inputs = PrintArguments(op->args->inputs, "", "");
         std::vector<std::string> attributes;
         for (const auto& [key, value] : op->attributes) {
             attributes.push_back(key + ": " + PrintAttribute(value));
@@ -85,7 +68,8 @@ std::string PrintOp(const Op* op) {
 
         std::string shape_str = "";// PrintShape(ComputeShape(Value(op)));
 
-        os << shape_str << " = " << op->opcode << "(" << PrintArray({inputs, index, attributes_str}) << ")";
+        os << shape_str << (op->output_count > 1 ? "[" + std::to_string(op->output_count) + "]" : "");
+        os << " = " << op->opcode << "(" << PrintArray({inputs, attributes_str}) << ")";
     }
     return os.str();
 }

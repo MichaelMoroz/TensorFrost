@@ -83,10 +83,7 @@ std::set<Op*> CollectDependencies(std::vector<Op*> ops) {
     std::function<void(Op*)> collect_dependencies = [&](Op* op) {
         if (op == nullptr || dependencies.contains(op)) return; // Already processed
         dependencies.insert(op);
-        for (auto& input : op->args->Get(ArgType::Input)->inputs) {
-            collect_dependencies(input->from);
-        }
-        for (auto& input : op->args->Get(ArgType::Index)->inputs) {
+        for (auto& input : op->args->inputs) {
             collect_dependencies(input->from);
         }
         collect_dependencies(op->parent_block->parent_op); // Parent depends on this operation

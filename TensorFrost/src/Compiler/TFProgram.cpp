@@ -1,7 +1,7 @@
 #include "Compiler/TFProgram.h"
 
 namespace TensorFrost {
-TFProgram::TFProgram(std::function<std::pair<std::vector<Value>, std::vector<Value>>()> program_fn) {
+TFProgram::TFProgram(std::function<std::pair<Values, Values>()> program_fn) {
     StartExecutionContext(&context);
 
     auto [ins, outs] = program_fn();
@@ -26,7 +26,7 @@ void TFProgram::ConstantFold() {
        OpSpec* spec = GetOpSpec(op.opcode);
        if(!spec->const_fold) return; // Skip if no constant folding is defined for this operation
        AttributeVector inputs;
-       for (const auto& arg : op.args->Get(ArgType::Input)->inputs) {
+       for (const auto& arg : op.args->inputs) {
            if(!arg->from->attributes.contains("value")) {
                return; // Skip if some argument does not have a constant value
            }

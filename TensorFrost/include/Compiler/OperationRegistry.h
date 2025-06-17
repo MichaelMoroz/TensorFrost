@@ -29,6 +29,7 @@ enum class OpProp {
 };
 
 using FoldFn = std::function<Attribute(AttributeVector)>;
+using CalcTuple = std::function<Values(Op*, Values)>;
 
 [[noreturn]] inline void bad_arity(std::size_t expect, std::size_t got)
 {
@@ -93,8 +94,10 @@ struct OpSpec {
     std::set<OpProp> props;
     int blocks = 0;
     FoldFn const_fold = nullptr;
+    CalcTuple calc_tuple = nullptr;
 
     TFDataFormat GetOutputType(const std::vector<TFDataFormat>& args) const;
+    bool IsValid(const std::vector<TFDataFormat>& inputs, TFDataFormat output) const;
 };
 
 void RegisterOperation(const OpSpec& spec);

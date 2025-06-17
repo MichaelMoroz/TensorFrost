@@ -15,6 +15,7 @@ struct Op {
     AttributeMap attributes;
     TFDataFormat type;
     std::vector<std::unique_ptr<OpBlock>> blocks;
+    int output_count = 1;
 
     OpBlock* parent_block = nullptr;
     size_t index = 0; //might not be up to date

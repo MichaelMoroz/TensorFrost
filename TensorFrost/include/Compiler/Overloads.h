@@ -3,27 +3,28 @@
 #include "Value.h"
 
 namespace TensorFrost {
-Value make_op(std::string op, std::vector<Value> ids = {}, std::vector<Value> args = {});
-Value func_op(const std::string &name, std::vector<Value> args = {});
+std::pair<Op*, OpSpec*> create_op(std::string op, const Values& args, TFDataFormat output_type  = TFUnknown);
+Value value_op(std::string op, Values args = {}, TFDataFormat output_type = TFUnknown);
+Values tuple_op(std::string op, Values args  = {}, TFDataFormat output_type = TFUnknown);
+
 Value constant(int value);
 Value constant(uint value);
 Value constant(float value);
 Value constant(bool value);
 
-Value unpack_tuple(Value x, int index = 0);
-Value vmap(std::vector<Value> shape, std::function<void(Value)> body);
-Value memory(std::vector<Value> shape, TFDataFormat type);
-Value load_at_index(Value mem, std::vector<Value> indices);
+void vmap(Values shape, std::function<void(Values)> body);
+Value memory(Values shape, TFDataFormat type);
+Value load_at_index(Value mem, Values indices);
 void if_cond(Value cond, std::function<void()> body_true, std::function<void()> body_false = nullptr);
 Value loop(Value start, Value end, Value step, std::function<void(Value)> body);
-Value phi(std::vector<Value> inputs);
+Value phi(Values inputs);
 
-inline Value toint(Value x) { return func_op("toint", {x}); }
-inline Value tofloat(Value x) { return func_op("tofloat", {x}); }
-inline Value touint(Value x) { return func_op("touint", {x}); }
-inline Value tobool(Value x) { return func_op("tobool", {x}); }
+inline Value toint(Value x) { return value_op("toint", {x}); }
+inline Value tofloat(Value x) { return value_op("tofloat", {x}); }
+inline Value touint(Value x) { return value_op("touint", {x}); }
+inline Value tobool(Value x) { return value_op("tobool", {x}); }
 
-inline Value sin(Value x) { return func_op("sin", {x}); }
-inline Value cos(Value x) { return func_op("cos", {x}); }
-inline Value tan(Value x) { return func_op("tan", {x}); }
+inline Value sin(Value x) { return value_op("sin", {x}); }
+inline Value cos(Value x) { return value_op("cos", {x}); }
+inline Value tan(Value x) { return value_op("tan", {x}); }
 }
