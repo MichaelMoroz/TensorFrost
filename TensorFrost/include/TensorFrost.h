@@ -8,3 +8,4 @@
 #include "Compiler/Value.h"
 #include "Compiler/Printer.h"
 #include "Compiler/TFProgram.h"
+#include "Backend/Vulkan.h"

@@ -143,34 +143,100 @@ PYBIND11_MODULE(TensorFrost, m) {
 		Value c = a + b * 3;
 		Value mem = memory({a, b, c}, TFFloat32);
 		inputs.push_back(mem);
-		vmap({a, b}, [&](Values ids0) {
-			Value something = tofloat(mem * sin(f + g));
-		});
 		vmap({a, b, c}, [&](Values ids0) {
-			Value imem = toint(mem * sin(f + g));
-			Value d = c + b + ids0[0] * imem;
-			Value m0, m1;
-			if_cond(d > 0, [&]() {
-				Value t = d * c * imem;
-				vmap({c}, [&](Values ids1) {
-					m0 = t * imem[{ids1[0], ids0[0], ids0[1]}];
-				});
-			}, [&]() {
-				Value t = d * c / imem;
-				vmap({c}, [&](Values ids1) {
-					m1 = t / imem[{ids1[0], ids0[0], ids0[1]}];
-				});
-			});
-			Value result = phi({m0, m1});
-			vmap({c, c}, [&](Values ids1) {
-				Value m = result * imem[{ids1[1], ids1[0], ids0[0]}];
-				outputs.push_back(m);
-			});
+			Value something = tofloat(mem * sin(f + g));
+			outputs.push_back(something);
 		});
+		// vmap({a, b, c}, [&](Values ids0) {
+		// 	Value imem = toint(mem * sin(f + g));
+		// 	Value d = c + b + ids0[0] * imem;
+		// 	Value m0, m1;
+		// 	if_cond(d > 0, [&]() {
+		//         Value t = d * c * imem;
+		//         vmap({c}, [&](Values ids1) {
+		// 	        m0 = t * imem[{ids0[1], ids0[1], ids0[1]}];
+		//         });
+	 //        }, [&]() {
+		//         Value t = d * c / imem;
+		//         vmap({c}, [&](Values ids1) {
+		// 	        m1 = t / imem[{ids1[0], ids0[0], ids0[1]}];
+		//         });
+	 //        });
+		// 	Value result;
+		// 	vmap({c}, [&](Values ids1) {
+		// 		result = phi({m0, m1});
+		// 	});
+		// 	vmap({c, c}, [&](Values ids1) {
+		// 		Value m = result * imem[{ids1[1], ids1[0], ids0[0]}];
+		// 		outputs.push_back(m);
+		// 	});
+		// });
 		return std::make_pair(inputs, outputs);
 	});
 	program.Compile();
 	py::print(program.DebugPrint());
+
+
+	VulkanContext ctx;
+
+	const size_t N = 1024;
+	// create buffers
+	Buffer aBuf = createBuffer(ctx, N, sizeof(float), true);
+	Buffer bBuf = createBuffer(ctx, N, sizeof(float), true);
+	Buffer outBuf = createBuffer(ctx, N, sizeof(float), false);
+
+	// map and write input data
+	float* aPtr = static_cast<float*>(ctx.device.mapMemory(aBuf.memory, 0, aBuf.size));
+	float* bPtr = static_cast<float*>(ctx.device.mapMemory(bBuf.memory, 0, bBuf.size));
+	for (size_t i = 0; i < N; i++) {
+		aPtr[i] = static_cast<float>(i);
+		bPtr[i] = static_cast<float>(2 * i);
+	}
+	ctx.device.unmapMemory(aBuf.memory);
+	ctx.device.unmapMemory(bBuf.memory);
+
+	// load SPIR-V compute shader (compiled from add.comp)
+	// The GLSL code:
+//
+// #version 450
+// 	layout(local_size_x = 64) in;
+// 	layout(set=0,binding=0) readonly buffer A { float a[]; };
+// 	layout(set=0,binding=1) readonly buffer B { float b[]; };
+// 	layout(set=0,binding=2) buffer C { float c[]; };
+// 	void main() { uint idx = gl_GlobalInvocationID.x; c[idx] = a[idx] + b[idx]; }
+	std::string code = R"(
+#version 450
+	layout(local_size_x = 64) in;
+	layout(set=0,binding=0) readonly buffer A { float a[]; };
+	layout(set=0,binding=1) readonly buffer B { float b[]; };
+	layout(set=0,binding=2) buffer C { float c[]; };
+	void main() {
+		uint idx = gl_GlobalInvocationID.x;
+		c[idx] = 2.0f * a[idx] + b[idx];
+	}
+)";
+	ComputeProgram prog = createComputeProgramFromGLSL(ctx, code,{ &aBuf, &bBuf },{ &outBuf });
+
+	// run compute
+	runProgram(ctx, prog, static_cast<uint32_t>(N));
+
+	// read back result
+	float* outPtr = static_cast<float*>(ctx.device.mapMemory(outBuf.memory, 0, outBuf.size));
+	bool ok = true;
+	for (size_t i = 0; i < N; i++) {
+		float expected = 2.0f*aPtr[i] + bPtr[i];
+		if (outPtr[i] != expected) {
+			ok = false; break;
+		}
+	}
+	ctx.device.unmapMemory(outBuf.memory);
+	py::print("Compute result is ", ok ? "correct" : "incorrect");
+
+	// cleanup
+	destroyComputeProgram(ctx, prog);
+	destroyBuffer(ctx, aBuf);
+	destroyBuffer(ctx, bBuf);
+	destroyBuffer(ctx, outBuf);
 }
 
 }  // namespace TensorFrost

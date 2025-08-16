@@ -17,9 +17,9 @@ std::pair<Op*, OpSpec*> create_op(std::string op, const Values& args, TFDataForm
     if (output_type == TFUnknown) {
         output_type = spec->GetOutputType(arg_types);
     }
-    if (output_type == TFUnknown) {
-        throw std::runtime_error("Cannot determine output type for operation '" + op + "'");
-    }
+    // if (output_type == TFUnknown) {
+    //     throw std::runtime_error("Cannot determine output type for operation '" + op + "'");
+    // }
     Op* op_instance = new Op(op);
     op_instance->type = output_type;
     op_instance->args->SetArguments(args);
@@ -29,13 +29,22 @@ std::pair<Op*, OpSpec*> create_op(std::string op, const Values& args, TFDataForm
         op_instance->NewBlock();
     }
     op_instance = &GetContext()->Add(std::unique_ptr<Op>(op_instance));
-    Shape shape = ComputeShape(Value(op_instance));
-
     bool valid = spec->IsValid(arg_types, output_type);
     if (!valid) {
-        throw std::runtime_error("Invalid operation '" + op + "' with arguments: " +
+        throw std::runtime_error("Invalid operation types for '" + op + "' with arguments: " +
                                  PrintArray(TransformVector(values_to_ops(args), PrintOp), "[", "]", ", \n"));
     }
+
+    // Check if the shape is compatible
+    Shape shape = ComputeShape(Value(op_instance));
+    std::vector<std::set<ArgProp>> input_props = spec->arg_spec.InputProperties(arg_types);
+    for (size_t i = 0; i < args.size(); ++i) {
+        if (input_props[i].contains(ArgProp::IgnoreShape)) continue;
+        if (!shape.Broadcastable(ComputeShape(args[i]))) {
+            throw std::runtime_error("Incompatible shape for argument " + to_string(i) + " in operation '" + op + "'");
+        }
+    }
+
     return {op_instance, spec};
 }
 

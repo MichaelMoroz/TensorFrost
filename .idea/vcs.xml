@@ -6,5 +6,13 @@
     <mapping directory="$PROJECT_DIR$/external/glfw" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/imgui" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/external/pybind11" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/abseil_cpp" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/effcee" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/glslang" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/googletest" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/re2" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/spirv-headers" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/external/shaderc/third_party/spirv-tools" vcs="Git" />
   </component>
 </project>

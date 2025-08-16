@@ -56,7 +56,7 @@ std::string PrintOp(const Op* op) {
     std::ostringstream os;
     os << ToString(op->type) << " " << op->varname;
     if (op->opcode == "const") {
-        //return "";
+       //return "";
         os << " = " << op->attributes.at("value");
     } else {
         std::string inputs = PrintArguments(op->args->inputs, "", "");

@@ -43,7 +43,7 @@ bool ArgSpec::IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) con
     for (size_t i = 0; i < inputs.size(); ++i) {
         const auto& n = name_of(i);
         if (seen.count(n) && !(seen[n] == inputs[i]))
-            throw std::runtime_error("Conflicting types for arg " + n);
+            return false; // Conflicting types for arg
         seen[n] = inputs[i];
 
         auto a = types.find(n);
@@ -71,7 +71,7 @@ TFDataFormat ArgSpec::EstimateOutputType(const std::vector<TFDataFormat> &inputs
     for (size_t i = 0; i < inputs.size(); ++i) {
         const auto& n = name_of(i);
         if (seen.count(n) && !(seen[n] == inputs[i]))
-            throw std::runtime_error("Conflicting types for arg " + n);
+            return TFUnknown; // Conflicting types for arg
         seen[n] = inputs[i];
     }
 

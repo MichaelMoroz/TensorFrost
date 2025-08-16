@@ -32,14 +32,9 @@ if(APPLE)
     )
 endif()
 
-# ---- libraries ----
-target_link_libraries(TensorFrost PRIVATE glfw)
-
-glad_add_library(glad_gl_core_46 SHARED  API gl:core=4.6)
-target_link_libraries(TensorFrost PRIVATE glad_gl_core_46)
-
-glad_add_library(glad_vulkan_12 REPRODUCIBLE LOADER API vulkan=1.2)
-target_link_libraries(TensorFrost PRIVATE glad_vulkan_12)
+target_compile_definitions(TensorFrost PRIVATE VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)
+target_link_libraries(TensorFrost PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined glfw)
+target_include_directories(TensorFrost PRIVATE $ENV{VULKAN_SDK}/Include)
 
 if (MSVC)
     target_compile_options(TensorFrost PRIVATE /wd4804 /wd4805 /wd4018)

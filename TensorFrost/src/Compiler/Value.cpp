@@ -136,7 +136,7 @@ void Shape::AddDimensions(const Values &dims) {
 bool Shape::Broadcastable(const Shape &other) const {
     size_t size = other.dimensions.size();
     if (dimensions.size() < size) {
-        throw std::runtime_error("Other shape has more dimensions than this shape");
+        return false; // Cannot broadcast if this shape has fewer dimensions
     }
     for (size_t i = 0; i < size; ++i) {
         if (!dimensions[i].Compare(other.dimensions[i])) {
