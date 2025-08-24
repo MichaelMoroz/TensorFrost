@@ -32,8 +32,19 @@ if(APPLE)
     )
 endif()
 
+find_library(SLANG_LIB_RELEASE NAMES slang        PATHS $ENV{VULKAN_SDK}/Lib)
+find_library(SLANG_LIB_DEBUG   NAMES slangd slang PATHS $ENV{VULKAN_SDK}/Lib)
+
+if (NOT SLANG_LIB_RELEASE)
+    message(FATAL_ERROR "slang.lib not found in %VULKAN_SDK%/Lib")
+endif()
+
 target_compile_definitions(TensorFrost PRIVATE VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)
 target_link_libraries(TensorFrost PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined glfw)
+target_link_libraries(TensorFrost PRIVATE
+        $<$<CONFIG:Debug>:${SLANG_LIB_DEBUG}>
+        $<$<NOT:$<CONFIG:Debug>>:${SLANG_LIB_RELEASE}>
+)
 target_include_directories(TensorFrost PRIVATE $ENV{VULKAN_SDK}/Include)
 
 if (MSVC)
@@ -49,7 +60,7 @@ file(GLOB  IMGUI_SOURCE_LIST
         ${CMAKE_SOURCE_DIR}/external/imgui/*.cpp)
 file(GLOB  IMGUI_BACKEND_SOURCE_LIST
         ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_glfw.cpp
-        ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_opengl3.cpp)
+        ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_vulkan.cpp)
 target_sources(TensorFrost PRIVATE ${IMGUI_SOURCE_LIST} ${IMGUI_BACKEND_SOURCE_LIST})
 
 # ---- RenderDoc headers ----
@@ -74,4 +85,18 @@ set_target_properties(TensorFrost PROPERTIES
         VS_DEBUGGER_COMMAND_ARGUMENTS  "${DEBUG_PYTHON_SCRIPT}"
         VS_DEBUGGER_WORKING_DIRECTORY  "${CMAKE_SOURCE_DIR}"
         LINK_FLAGS_RELWITHDEBINFO      "/PROFILE"
+)
+
+set(VKSDK_BIN "$ENV{VULKAN_SDK}/Bin")
+
+add_custom_command(TARGET TensorFrost POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:TensorFrost>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/slang$<$<CONFIG:Debug>:d>.dll"                         "$<TARGET_FILE_DIR:TensorFrost>/slang$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/slang-glslang$<$<CONFIG:Debug>:d>.dll"                 "$<TARGET_FILE_DIR:TensorFrost>/slang-glslang$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/slang-glsl-module$<$<CONFIG:Debug>:d>.dll"             "$<TARGET_FILE_DIR:TensorFrost>/slang-glsl-module$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/glslang$<$<CONFIG:Debug>:d>.dll"                       "$<TARGET_FILE_DIR:TensorFrost>/glslang$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/glslang-default-resource-limits$<$<CONFIG:Debug>:d>.dll" "$<TARGET_FILE_DIR:TensorFrost>/glslang-default-resource-limits$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/SPIRV-Tools-shared$<$<CONFIG:Debug>:d>.dll"            "$<TARGET_FILE_DIR:TensorFrost>/SPIRV-Tools-shared$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/SPIRV$<$<CONFIG:Debug>:d>.dll"                         "$<TARGET_FILE_DIR:TensorFrost>/SPIRV$<$<CONFIG:Debug>:d>.dll"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${VKSDK_BIN}/SPVRemapper$<$<CONFIG:Debug>:d>.dll"                   "$<TARGET_FILE_DIR:TensorFrost>/SPVRemapper$<$<CONFIG:Debug>:d>.dll"
 )

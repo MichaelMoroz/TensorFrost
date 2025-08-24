@@ -45,6 +45,9 @@ ComputeProgram createComputeProgramFromGLSL(VulkanContext& ctx,
     const std::vector<Buffer*>& readonlyBuffers,
     const std::vector<Buffer*>& readwriteBuffers);
 
+ComputeProgram createComputeProgramFromSlang(VulkanContext& ctx, const std::string& moduleName,
+    const std::string& source, const std::string& entry, const std::vector<Buffer*>& readonlyBuffers, const std::vector<Buffer*>& readwriteBuffers);
+
 // Destroys the compute program and associated resources.
 void destroyComputeProgram(VulkanContext& ctx, ComputeProgram& prog);
 

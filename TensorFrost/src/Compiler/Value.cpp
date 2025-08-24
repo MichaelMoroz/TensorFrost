@@ -95,6 +95,12 @@ bool Value::Compare(const Value &other) const {
     return op->Compare(*other.op);
 }
 
+void Value::Set(Value value) {
+    Value set = value_op("set", {*this,value});
+    this->op = set.op;
+    this->out_index = set.out_index;
+}
+
 Value Value::operator[](const Values& indices) const {
     return load_at_index(*this, indices);
 }

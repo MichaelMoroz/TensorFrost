@@ -28,12 +28,13 @@ ArgSpec::ArgSpec(std::string io, std::map<char, std::set<TFDataFormat>> types,
     }
 }
 
+bool ArgSpec::ValidArgCount(size_t count) const {
+    return variadic ? count >= in.size() - 1 : count == in.size();
+}
+
 bool ArgSpec::IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) const {
-    if (variadic) {
-        if (in.empty() || inputs.empty()) return false;
-    } else {
-        if (inputs.size() != in.size()) return false;
-    }
+    bool valid_count = ValidArgCount(inputs.size());
+    if (!valid_count) return false;
 
     auto name_of = [&](size_t i) -> const char& {
         return variadic ? in.front() : in[i];
@@ -63,6 +64,9 @@ bool ArgSpec::IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) con
 }
 
 TFDataFormat ArgSpec::EstimateOutputType(const std::vector<TFDataFormat> &inputs) const {
+    bool valid_count = ValidArgCount(inputs.size());
+    if (!valid_count) return TFUnknown;
+
     auto name_of = [&](size_t i) -> const char& {
         return variadic ? in.front() : in[i];
     };
@@ -145,6 +149,7 @@ vector<OpSpec> default_operations = {
 
     DEF_OP("const", ("x()"), OpClass::Constant),
     DEF_OP("copy", ("x(x)"), OpClass::Copy),
+    DEF_OP("set", ("x(x,x)"), OpClass::Set),
     DEF_OP("add", ("x(x,x)"), OpClass::Operator,
         .const_fold = BIN_OP_FOLD(+)),
     DEF_OP("sub", ("x(x,x)"), OpClass::Operator,

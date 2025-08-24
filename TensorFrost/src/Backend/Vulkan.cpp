@@ -1,6 +1,8 @@
 #include "Backend/Vulkan.h"
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <shaderc/shaderc.hpp>
+#include <slang/slang.h>
+#include <slang/slang-com-ptr.h>
 #include <stdexcept>
 
 // compile GLSL to SPIR-V at runtime
@@ -16,6 +18,65 @@ static std::vector<uint32_t> compileGLSLToSpirv(const std::string& source) {
     }
     return {result.cbegin(), result.cend()};
 }
+
+std::vector<uint32_t> compileSlangToSpirv(const char* moduleName,
+                                          const char* source,
+                                          const char* entry,
+                                          const char* profile /* e.g., "spirv_1_5" */) {
+    Slang::ComPtr<slang::IGlobalSession> global;
+    createGlobalSession(global.writeRef());
+
+    slang::TargetDesc tgt{};
+    tgt.format = SLANG_SPIRV;
+    tgt.profile = global->findProfile(profile);
+
+    slang::SessionDesc sd{};
+    sd.targets = &tgt; sd.targetCount = 1;
+
+    Slang::ComPtr<slang::ISession> session;
+    global->createSession(sd, session.writeRef());
+
+    Slang::ComPtr<slang::IBlob> diag;
+    Slang::ComPtr<slang::IModule> mod;
+    mod = session->loadModuleFromSourceString(moduleName, moduleName, source, diag.writeRef());
+    if (diag && diag->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)diag->getBufferPointer());
+    if (!mod) throw std::runtime_error("slang: module load failed");
+
+    Slang::ComPtr<slang::IEntryPoint> ep;
+    mod->findEntryPointByName(entry, ep.writeRef());
+    if (!ep) throw std::runtime_error("slang: entry not found");
+
+    slang::IComponentType* parts[] = { mod.get(), ep.get() };
+    Slang::ComPtr<slang::IComponentType> composed, linked;
+
+    {
+        Slang::ComPtr<slang::IBlob> d;
+        SlangResult r = session->createCompositeComponentType(parts, 2, composed.writeRef(), d.writeRef());
+        if (d && d->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)d->getBufferPointer());
+        if (SLANG_FAILED(r)) throw std::runtime_error("slang: compose failed");
+    }
+    {
+        Slang::ComPtr<slang::IBlob> d;
+        SlangResult r = composed->link(linked.writeRef(), d.writeRef());
+        if (d && d->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)d->getBufferPointer());
+        if (SLANG_FAILED(r)) throw std::runtime_error("slang: link failed");
+    }
+
+    Slang::ComPtr<slang::IBlob> spirv;
+    {
+        Slang::ComPtr<slang::IBlob> d;
+        SlangResult r = linked->getEntryPointCode(0, 0, spirv.writeRef(), d.writeRef());
+        if (d && d->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)d->getBufferPointer());
+        if (SLANG_FAILED(r)) throw std::runtime_error("slang: getEntryPointCode failed");
+    }
+
+    size_t n = spirv->getBufferSize();
+    auto* p = static_cast<const uint8_t*>(spirv->getBufferPointer());
+    std::vector<uint32_t> out((n + 3) / 4);
+    std::memcpy(out.data(), p, n);
+    return out;
+}
+
 
 // VulkanContext constructor sets up instance, selects a compute device and queue, and creates a command pool.
 VulkanContext::VulkanContext() {
@@ -165,6 +226,12 @@ ComputeProgram createComputeProgramFromGLSL(VulkanContext& ctx,
     const std::vector<Buffer*>& readwriteBuffers) {
 
     auto spirv = compileGLSLToSpirv(glsl_source);
+    return createComputeProgram(ctx, spirv, readonlyBuffers, readwriteBuffers);
+}
+
+ComputeProgram createComputeProgramFromSlang(VulkanContext& ctx, const std::string& moduleName,
+    const std::string& source, const std::string& entry, const std::vector<Buffer*>& readonlyBuffers, const std::vector<Buffer*>& readwriteBuffers) {
+    auto spirv = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
     return createComputeProgram(ctx, spirv, readonlyBuffers, readwriteBuffers);
 }
 

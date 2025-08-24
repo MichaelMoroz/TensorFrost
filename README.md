@@ -46,7 +46,7 @@ pip install tensorfrost
 
 ## From source
 
-You need to have CMake installed to build the library.
+You need to have CMake and Vulkan SDK installed to build the library.
 
 First clone the repository:
 ```bash

@@ -17,6 +17,7 @@ enum class OpClass {
     TernaryOperator,
     Memory,
     Phi,
+    Set,
     None,
 };
 
@@ -81,6 +82,8 @@ struct ArgSpec {
     ArgSpec(std::string io,
             std::map<char, std::set<TFDataFormat>> types = {},
             std::map<char, std::set<ArgProp>> props = {});
+
+    bool ValidArgCount(size_t count) const;
 
     bool IsValid(std::vector<TFDataFormat> inputs, TFDataFormat output) const;
     TFDataFormat EstimateOutputType(const std::vector<TFDataFormat>& inputs) const;

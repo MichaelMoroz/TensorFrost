@@ -3,7 +3,7 @@
 
 namespace TensorFrost {
 
-// Op wrapper class for overloaded mathematics and manipulations
+// Op thin wrapper class for overloaded mathematics and manipulations
 class Value {
 public:
     Op* op = nullptr;
@@ -45,6 +45,8 @@ public:
     Value operator~() const;
 
     bool Compare(const Value& other) const;
+
+    void Set(Value value);
 };
 
 std::vector<Op*> values_to_ops(const Values& values);

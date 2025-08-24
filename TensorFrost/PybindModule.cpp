@@ -24,6 +24,37 @@ namespace TensorFrost {
 // void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 // void ModuleDefinitions(py::module& m);
 
+struct PyDevice {
+	vk::Device* dev{};
+	explicit PyDevice(vk::Device* d) : dev(d) {}
+
+	py::memoryview mapMemory(const vk::DeviceMemory& mem, uint64_t offset, uint64_t size, bool readonly=false) {
+		if (size == 0) throw py::value_error("size==0");
+		if (size > static_cast<uint64_t>(std::numeric_limits<Py_ssize_t>::max()))
+			throw py::value_error("size too large");
+
+		void* p = nullptr;
+		{
+			py::gil_scoped_release nogil;
+			p = dev->mapMemory(mem, offset, size);
+		}
+		if (!p) throw py::value_error("vkMapMemory returned nullptr");
+
+		PyObject* raw = PyMemoryView_FromMemory(
+			reinterpret_cast<char*>(p),
+			static_cast<Py_ssize_t>(size),
+			readonly ? PyBUF_READ : PyBUF_WRITE);
+		if (!raw) throw py::error_already_set();
+
+		return py::reinterpret_steal<py::memoryview>(raw);
+	}
+
+	void unmapMemory(const vk::DeviceMemory& mem) {
+		py::gil_scoped_release nogil;
+		dev->unmapMemory(mem);
+	}
+};
+
 PYBIND11_MODULE(TensorFrost, m) {
 	m.doc() = "TensorFrost library";
 	// auto data_type = py::enum_<TFType>(m, "TFType");
@@ -147,96 +178,115 @@ PYBIND11_MODULE(TensorFrost, m) {
 			Value something = tofloat(mem * sin(f + g));
 			outputs.push_back(something);
 		});
-		// vmap({a, b, c}, [&](Values ids0) {
-		// 	Value imem = toint(mem * sin(f + g));
-		// 	Value d = c + b + ids0[0] * imem;
-		// 	Value m0, m1;
-		// 	if_cond(d > 0, [&]() {
-		//         Value t = d * c * imem;
-		//         vmap({c}, [&](Values ids1) {
-		// 	        m0 = t * imem[{ids0[1], ids0[1], ids0[1]}];
-		//         });
-	 //        }, [&]() {
-		//         Value t = d * c / imem;
-		//         vmap({c}, [&](Values ids1) {
-		// 	        m1 = t / imem[{ids1[0], ids0[0], ids0[1]}];
-		//         });
-	 //        });
-		// 	Value result;
-		// 	vmap({c}, [&](Values ids1) {
-		// 		result = phi({m0, m1});
-		// 	});
-		// 	vmap({c, c}, [&](Values ids1) {
-		// 		Value m = result * imem[{ids1[1], ids1[0], ids0[0]}];
-		// 		outputs.push_back(m);
-		// 	});
-		// });
+		vmap({a, b, c}, [&](Values ids0) {
+			Value imem = toint(mem * sin(f + g));
+			Value d = c + b + ids0[0] * imem;
+			Value m0;
+			vmap({c}, [&](Values ids1) {
+				m0 = 0;
+			});
+			if_cond(d > 0, [&]() {
+		        Value t = d * c * imem;
+		        vmap({c}, [&](Values ids1) {
+			        m0.Set(t * imem[{ids0[1], ids0[1], ids0[1]}]);
+		        });
+	        }, [&]() {
+		        Value t = d * c / imem;
+		        vmap({c}, [&](Values ids1) {
+			        m0.Set(t / imem[{ids1[0], ids0[0], ids0[1]}]);
+		        });
+	        });
+			vmap({c, c}, [&](Values ids1) {
+				Value m = m0 * imem[{ids1[1], ids1[0], ids0[0]}];
+				outputs.push_back(m);
+			});
+		});
 		return std::make_pair(inputs, outputs);
 	});
 	program.Compile();
 	py::print(program.DebugPrint());
 
+	py::class_<vk::DeviceMemory>(m, "DeviceMemory");
+	py::class_<PyDevice>(m, "Device")
+	   .def("mapMemory", &PyDevice::mapMemory,
+			py::arg("memory"), py::arg("offset"), py::arg("size"), py::arg("readonly") = false)
+	   .def("unmapMemory", &PyDevice::unmapMemory, py::arg("memory"));
 
-	VulkanContext ctx;
+	py::class_<VulkanContext>(m, "VulkanContext")
+		.def(py::init<>())
+		.def_property_readonly("device",
+			[](VulkanContext& c){ return PyDevice(&c.device); },
+			py::return_value_policy::reference_internal);
 
-	const size_t N = 1024;
-	// create buffers
-	Buffer aBuf = createBuffer(ctx, N, sizeof(float), true);
-	Buffer bBuf = createBuffer(ctx, N, sizeof(float), true);
-	Buffer outBuf = createBuffer(ctx, N, sizeof(float), false);
+	py::class_<Buffer>(m, "Buffer")
+		.def_readonly("memory", &Buffer::memory)
+		.def_property_readonly("size", [](const Buffer& b){ return b.size; });
 
-	// map and write input data
-	float* aPtr = static_cast<float*>(ctx.device.mapMemory(aBuf.memory, 0, aBuf.size));
-	float* bPtr = static_cast<float*>(ctx.device.mapMemory(bBuf.memory, 0, bBuf.size));
-	for (size_t i = 0; i < N; i++) {
-		aPtr[i] = static_cast<float>(i);
-		bPtr[i] = static_cast<float>(2 * i);
-	}
-	ctx.device.unmapMemory(aBuf.memory);
-	ctx.device.unmapMemory(bBuf.memory);
+	py::class_<ComputeProgram>(m, "ComputeProgram");
 
-	// load SPIR-V compute shader (compiled from add.comp)
-	// The GLSL code:
+	m.def("createBuffer", &createBuffer, py::arg("ctx"), py::arg("count"), py::arg("dtypeSize"), py::arg("readOnly"),
+		  py::return_value_policy::move);
+	m.def("destroyBuffer", &destroyBuffer, py::arg("ctx"), py::arg("buf"));
+	m.def("createComputeProgramFromGLSL", &createComputeProgramFromGLSL,
+		  py::arg("ctx"), py::arg("glsl_source"), py::arg("readonlyBuffers"), py::arg("readwriteBuffers"),
+		  py::return_value_policy::move, py::keep_alive<0,3>(), py::keep_alive<0,4>());
+	m.def("createComputeProgramFromSlang", &createComputeProgramFromSlang,
+		  py::arg("ctx"), py::arg("moduleName"), py::arg("source"), py::arg("entry"),
+		  py::arg("readonlyBuffers"), py::arg("readwriteBuffers"),
+		  py::return_value_policy::move, py::keep_alive<0,5>(), py::keep_alive<0,6>());
+	m.def("destroyComputeProgram", &destroyComputeProgram, py::arg("ctx"), py::arg("prog"));
+	m.def("runProgram", &runProgram, py::arg("ctx"), py::arg("prog"), py::arg("numInvocations"),
+		  py::call_guard<py::gil_scoped_release>());
+// 	VulkanContext ctx;
 //
-// #version 450
-// 	layout(local_size_x = 64) in;
-// 	layout(set=0,binding=0) readonly buffer A { float a[]; };
-// 	layout(set=0,binding=1) readonly buffer B { float b[]; };
-// 	layout(set=0,binding=2) buffer C { float c[]; };
-// 	void main() { uint idx = gl_GlobalInvocationID.x; c[idx] = a[idx] + b[idx]; }
-	std::string code = R"(
-#version 450
-	layout(local_size_x = 64) in;
-	layout(set=0,binding=0) readonly buffer A { float a[]; };
-	layout(set=0,binding=1) readonly buffer B { float b[]; };
-	layout(set=0,binding=2) buffer C { float c[]; };
-	void main() {
-		uint idx = gl_GlobalInvocationID.x;
-		c[idx] = 2.0f * a[idx] + b[idx];
-	}
-)";
-	ComputeProgram prog = createComputeProgramFromGLSL(ctx, code,{ &aBuf, &bBuf },{ &outBuf });
-
-	// run compute
-	runProgram(ctx, prog, static_cast<uint32_t>(N));
-
-	// read back result
-	float* outPtr = static_cast<float*>(ctx.device.mapMemory(outBuf.memory, 0, outBuf.size));
-	bool ok = true;
-	for (size_t i = 0; i < N; i++) {
-		float expected = 2.0f*aPtr[i] + bPtr[i];
-		if (outPtr[i] != expected) {
-			ok = false; break;
-		}
-	}
-	ctx.device.unmapMemory(outBuf.memory);
-	py::print("Compute result is ", ok ? "correct" : "incorrect");
-
-	// cleanup
-	destroyComputeProgram(ctx, prog);
-	destroyBuffer(ctx, aBuf);
-	destroyBuffer(ctx, bBuf);
-	destroyBuffer(ctx, outBuf);
+// 	const size_t N = 1024;
+// 	// create buffers
+// 	Buffer aBuf = createBuffer(ctx, N, sizeof(float), true);
+// 	Buffer bBuf = createBuffer(ctx, N, sizeof(float), true);
+// 	Buffer outBuf = createBuffer(ctx, N, sizeof(float), false);
+//
+// 	// map and write input data
+// 	float* aPtr = static_cast<float*>(ctx.device.mapMemory(aBuf.memory, 0, aBuf.size));
+// 	float* bPtr = static_cast<float*>(ctx.device.mapMemory(bBuf.memory, 0, bBuf.size));
+// 	for (size_t i = 0; i < N; i++) {
+// 		aPtr[i] = static_cast<float>(i);
+// 		bPtr[i] = static_cast<float>(2 * i);
+// 	}
+// 	ctx.device.unmapMemory(aBuf.memory);
+// 	ctx.device.unmapMemory(bBuf.memory);
+//
+// 	std::string code = R"(
+// [[vk::binding(2,0)]] RWStructuredBuffer<float> C;
+// [[vk::binding(0,0)]] StructuredBuffer<float>   A;
+// [[vk::binding(1,0)]] StructuredBuffer<float>   B;
+//
+// [shader("compute")] [numthreads(64,1,1)]
+// void computeMain(uint3 tid: SV_DispatchThreadID) {
+// 	C[tid.x] = 2.0f*A[tid.x] + B[tid.x];
+// }
+// )";
+// 	ComputeProgram prog = createComputeProgramFromSlang(ctx, "vecadd", code, "computeMain", { &aBuf, &bBuf },{ &outBuf });
+//
+// 	// run compute
+// 	runProgram(ctx, prog, N);
+//
+// 	// read back result
+// 	float* outPtr = static_cast<float*>(ctx.device.mapMemory(outBuf.memory, 0, outBuf.size));
+// 	bool ok = true;
+// 	for (size_t i = 0; i < N; i++) {
+// 		float expected = 2.0f*aPtr[i] + bPtr[i];
+// 		if (outPtr[i] != expected) {
+// 			ok = false; break;
+// 		}
+// 	}
+// 	ctx.device.unmapMemory(outBuf.memory);
+// 	py::print("Compute result is ", ok ? "correct" : "incorrect");
+//
+// 	// cleanup
+// 	destroyComputeProgram(ctx, prog);
+// 	destroyBuffer(ctx, aBuf);
+// 	destroyBuffer(ctx, bBuf);
+// 	destroyBuffer(ctx, outBuf);
 }
 
 }  // namespace TensorFrost
