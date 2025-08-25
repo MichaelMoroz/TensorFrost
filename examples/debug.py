@@ -1,48 +1,86 @@
 import numpy as np
 import TensorFrost as tf
 
-ctx = tf.VulkanContext()
+# GLSL: 1D dispatch (local_size_x=64). Pixels are packed with packUnorm4x8.
+glsl = r"""
+#version 450
+layout(local_size_x = 64) in;
 
-N = 1024
-aBuf = tf.createBuffer(ctx, N, 4, True)
-bBuf = tf.createBuffer(ctx, N, 4, True)
-outBuf = tf.createBuffer(ctx, N, 4, False)
+layout(std430, binding = 0) readonly buffer Params { float p[]; }; // [w,h,xmin,ymin,dx,dy,maxIter,isBGRA]
+layout(std430, binding = 1) writeonly buffer Pixels { uint out_u32[]; };
 
-# write inputs via mapped views
-a_map = ctx.device.mapMemory(aBuf.memory, 0, aBuf.size)
-b_map = ctx.device.mapMemory(bBuf.memory, 0, bBuf.size)
-np.frombuffer(a_map, dtype=np.float32)[:] = np.arange(N, dtype=np.float32)
-np.frombuffer(b_map, dtype=np.float32)[:] = 2 * np.arange(N, dtype=np.float32)
-ctx.device.unmapMemory(aBuf.memory)
-ctx.device.unmapMemory(bBuf.memory)
-
-code = r'''
-[[vk::binding(2,0)]] RWStructuredBuffer<float> C;
-[[vk::binding(0,0)]] StructuredBuffer<float>   A;
-[[vk::binding(1,0)]] StructuredBuffer<float>   B;
-
-[shader("compute")] [numthreads(64,1,1)]
-void computeMain(uint3 tid: SV_DispatchThreadID) {
-    C[tid.x] = 2.0f*A[tid.x] + B[tid.x];
+vec3 palette(float t) {
+    // simple smooth palette
+    return vec3(0.5 + 0.5*cos(6.28318*(vec3(0.0,0.33,0.67)+t)));
 }
-'''
 
-prog = tf.createComputeProgramFromSlang(
-    ctx, "vecadd", code, "computeMain",
-    [aBuf, bBuf], [outBuf]
-)
+void main() {
+    uint idx1D = gl_GlobalInvocationID.x;
+    int W = int(p[0] + 0.5), H = int(p[1] + 0.5);
+    uint N = uint(W*H);
+    if (idx1D >= N) return;
 
-tf.runProgram(ctx, prog, N)
+    int x = int(idx1D % uint(W));
+    int y = int(idx1D / uint(W));
 
-# read back
-out_map = ctx.device.mapMemory(outBuf.memory, 0, outBuf.size)
-out = np.frombuffer(out_map, dtype=np.float32).copy()
-ctx.device.unmapMemory(outBuf.memory)
+    float xmin = p[2], ymin = p[3], dx = p[4], dy = p[5];
+    int maxIter = int(p[6] + 0.5);
+    bool isBGRA = (p[7] > 0.5);
 
-ok = np.allclose(out, 4 * np.arange(N, dtype=np.float32))
-print("Compute result is", "correct" if ok else "incorrect")
+    float cx = xmin + float(x) * dx;
+    float cy = ymin + float(y) * dy;
 
-tf.destroyComputeProgram(ctx, prog)
-tf.destroyBuffer(ctx, aBuf)
-tf.destroyBuffer(ctx, bBuf)
-tf.destroyBuffer(ctx, outBuf)
+    float zx = 0.0, zy = 0.0;
+    int i = 0;
+    for (; i < maxIter; ++i) {
+        float zx2 = zx*zx - zy*zy + cx;
+        float zy2 = 2.0*zx*zy + cy;
+        zx = zx2; zy = zy2;
+        if (zx*zx + zy*zy > 4.0) break;
+    }
+
+    float t = (i == maxIter) ? 0.0 :
+              float(i) - log2(log(length(vec2(zx,zy)))) + 4.0;
+    t = clamp(t / float(maxIter), 0.0, 1.0);
+
+    vec3 rgb = palette(t);
+    vec4 c = vec4(rgb, 1.0);
+    uint packed = isBGRA ? packUnorm4x8(c.bgra) : packUnorm4x8(c);
+    out_u32[idx1D] = packed;
+}
+"""
+
+def main():
+    ctx = tf.VulkanContext()
+
+    W, H = 1024, 768
+    win = tf.createWindow(ctx, W, H, "Mandelbrot (compute → buffer → swapchain)")
+    fmt = int(win.format)
+    is_bgra = fmt in (44, 50)  # VK_FORMAT_B8G8R8A8_UNORM / _SRGB
+
+    pix = tf.createBuffer(ctx, W*H, 4, False)        # uint32 pixels
+    params = tf.createBuffer(ctx, 8, 4, True)        # 8 float32 params
+
+    prog = tf.createComputeProgramFromGLSL(ctx, glsl, roCount=1, rwCount=1)
+
+    # view rectangle with aspect correction
+    xspan = 3.0
+    yspan = xspan * (H / float(W))
+    xmin, ymin = -2.0, -yspan * 0.5
+    dx, dy = xspan / W, yspan / H
+    max_iter = 500.0
+
+    p = np.array([float(W), float(H), xmin, ymin, dx, dy, max_iter, 1.0 if is_bgra else 0.0], dtype=np.float32)
+    tf.setBufferData(ctx, params, p)
+
+    try:
+        while tf.windowOpen(win):
+            tf.runProgram(ctx, prog, [params], [pix], W*H)
+            tf.drawBuffer(win, pix, W, H)
+    finally:
+        tf.destroyComputeProgram(ctx, prog)
+        tf.destroyBuffer(ctx, pix)
+        tf.destroyBuffer(ctx, params)
+
+if __name__ == "__main__":
+    main()

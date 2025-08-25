@@ -9,3 +9,4 @@
 #include "Compiler/Printer.h"
 #include "Compiler/TFProgram.h"
 #include "Backend/Vulkan.h"
+#include "Backend/Window.h"
