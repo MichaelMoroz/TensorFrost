@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 
 #include "TensorFrost.h"
+#include "Definitions/VulkanBindings.h"
 
 namespace py = pybind11;
 
@@ -23,15 +24,6 @@ namespace TensorFrost {
 // void WindowDefinitions(py::module& m);
 // void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 // void ModuleDefinitions(py::module& m);
-
-static bool is_c_contig(const py::buffer_info& i) {
-	py::ssize_t stride = i.itemsize;
-	for (py::ssize_t d = i.ndim - 1; d >= 0; --d) {
-		if (i.strides[d] != stride) return false;
-		stride *= i.shape[d];
-	}
-	return true;
-}
 
 PYBIND11_MODULE(TensorFrost, m) {
 	m.doc() = "TensorFrost library";
@@ -184,94 +176,7 @@ PYBIND11_MODULE(TensorFrost, m) {
 	program.Compile();
 	py::print(program.DebugPrint());
 
-	py::class_<VulkanContext>(m, "VulkanContext").def(py::init<>());
-
-    py::class_<Buffer>(m, "Buffer")
-        .def_property_readonly("size", [](const Buffer& b){ return b.size; });
-
-    py::class_<ComputeProgram>(m, "ComputeProgram");
-
-    m.def("createBuffer", &createBuffer,
-          py::arg("ctx"), py::arg("count"), py::arg("dtypeSize"), py::arg("readOnly"),
-          py::return_value_policy::move);
-
-    m.def("destroyBuffer", &destroyBuffer, py::arg("ctx"), py::arg("buf"));
-
-    m.def("createComputeProgramFromGLSL", &createComputeProgramFromGLSL,
-          py::arg("ctx"), py::arg("glsl_source"), py::arg("roCount"), py::arg("rwCount"),
-          py::return_value_policy::move);
-
-    m.def("createComputeProgramFromSlang", &createComputeProgramFromSlang,
-          py::arg("ctx"), py::arg("moduleName"), py::arg("source"), py::arg("entry"),
-          py::arg("roCount"), py::arg("rwCount"),
-          py::return_value_policy::move);
-
-    m.def("destroyComputeProgram", &destroyComputeProgram, py::arg("ctx"), py::arg("prog"));
-
-    m.def("runProgram", &runProgram,
-          py::arg("ctx"), py::arg("prog"),
-          py::arg("readonlyBuffers"), py::arg("readwriteBuffers"),
-          py::arg("numInvocations"),
-          py::call_guard<py::gil_scoped_release>());
-
-    // --- numpy I/O ---
-	m.def("setBufferData",
-      [](VulkanContext& ctx, Buffer& buf, py::array arr, size_t offset) {
-          auto info = arr.request();  // GIL held
-          if (!is_c_contig(info)) throw std::runtime_error("array must be C-contiguous");
-          size_t nbytes = static_cast<size_t>(info.size) * static_cast<size_t>(info.itemsize);
-          if (offset + nbytes > buf.size) throw std::out_of_range("write out of range");
-          py::gil_scoped_release release;
-          setBufferData(ctx, buf, info.ptr, nbytes, offset);
-      },
-      py::arg("ctx"), py::arg("buf"), py::arg("array"), py::arg("offset") = 0);
-
-	m.def("getBufferData",
-	      [](VulkanContext& ctx, const Buffer& buf, py::dtype dt, size_t count, size_t offset) {
-	          size_t itemsize = dt.attr("itemsize").cast<size_t>(); // GIL held
-	          size_t nbytes   = count * itemsize;
-	          if (offset + nbytes > buf.size) throw std::out_of_range("read out of range");
-
-	          py::array out(dt, py::array::ShapeContainer{ static_cast<py::ssize_t>(count) });
-	          auto info = out.request(); // contiguous by default
-
-	          { py::gil_scoped_release release;
-	            getBufferData(ctx, buf, info.ptr, nbytes, offset);
-	          }
-	          return out;
-	      },
-	      py::arg("ctx"), py::arg("buf"), py::arg("dtype"), py::arg("count"), py::arg("offset") = 0);
-
-	m.def("getBufferData_into",
-	      [](VulkanContext& ctx, const Buffer& buf, py::array out, size_t offset) {
-	          auto info = out.request();  // GIL held
-	          if (info.readonly)          throw std::runtime_error("output array must be writeable");
-	          if (!is_c_contig(info))     throw std::runtime_error("output array must be C-contiguous");
-	          size_t nbytes = static_cast<size_t>(info.size) * static_cast<size_t>(info.itemsize);
-	          if (offset + nbytes > buf.size) throw std::out_of_range("read out of range");
-	          py::gil_scoped_release release;
-	          getBufferData(ctx, buf, info.ptr, nbytes, offset);
-	      },
-	      py::arg("ctx"), py::arg("buf"), py::arg("out"), py::arg("offset") = 0);
-
-	py::class_<WindowContext>(m, "WindowContext")
-	.def_property_readonly("size",
-		[](const WindowContext& c){ return py::make_tuple(c.extent.width, c.extent.height); })
-	.def_property_readonly("format",
-		[](const WindowContext& c){ return static_cast<int>(c.format); });
-
-	m.def("createWindow",
-		  static_cast<WindowContext(*)(VulkanContext&,int,int,const char*)>(&createWindow),
-		  py::arg("ctx"), py::arg("width"), py::arg("height"), py::arg("title"),
-		  py::return_value_policy::move,
-		  py::keep_alive<0,1>(),                 // keep ctx alive as long as WindowContext lives
-		  py::call_guard<py::gil_scoped_release>());
-
-	m.def("windowOpen", &windowOpen, py::arg("ctx"));
-	m.def("drawBuffer",
-		  static_cast<void(*)(WindowContext&, const Buffer&, uint32_t, uint32_t, size_t)>(&drawBuffer),
-		  py::arg("ctx"), py::arg("buffer"), py::arg("width"), py::arg("height"), py::arg("offset") = 0,
-		  py::call_guard<py::gil_scoped_release>());
+	VulkanDefinitions(m);
 // 	VulkanContext ctx;
 //
 // 	const size_t N = 1024;
