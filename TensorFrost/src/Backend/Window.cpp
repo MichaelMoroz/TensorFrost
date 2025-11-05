@@ -1,7 +1,8 @@
 #include "Backend/Vulkan.h"
 #include "Backend/Window.h"
 
-WindowContext createWindow(VulkanContext& vctx, int width, int height, const char* title) {
+WindowContext createWindow(int width, int height, const char* title) {
+    auto& vctx = getVulkanContext();
     if (!glfwInit()) throw std::runtime_error("glfwInit");
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 

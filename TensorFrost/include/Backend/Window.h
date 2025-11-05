@@ -73,7 +73,7 @@ private:
     }
 };
 
-WindowContext createWindow(VulkanContext& vctx, int width, int height, const char* title);
+WindowContext createWindow(int width, int height, const char* title);
 bool windowOpen(const WindowContext& ctx);
 void drawBuffer(WindowContext& ctx, vk::Buffer src, uint32_t width, uint32_t height, vk::DeviceSize offset = 0);
 void drawBuffer(WindowContext& ctx, const Buffer& b, uint32_t w, uint32_t h, size_t offset = 0);

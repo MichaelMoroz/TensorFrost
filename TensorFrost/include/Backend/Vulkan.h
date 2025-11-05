@@ -83,14 +83,16 @@ struct VulkanContext {
     ~VulkanContext();
 };
 
-Buffer createBuffer(VulkanContext& ctx, size_t count, size_t dtypeSize, bool readOnly);
-void destroyBuffer(VulkanContext& ctx, Buffer& buf);
-void setBufferData(VulkanContext& ctx, Buffer& buf, const void* src, size_t bytes, size_t offset = 0);
-void getBufferData(VulkanContext& ctx, const Buffer& buf, void* dst, size_t bytes, size_t offset = 0);
+Buffer createBuffer(size_t count, size_t dtypeSize, bool readOnly);
+void destroyBuffer(Buffer& buf);
+void setBufferData(Buffer& buf, const void* src, size_t bytes, size_t offset = 0);
+void getBufferData(const Buffer& buf, void* dst, size_t bytes, size_t offset = 0);
 
-ComputeProgram createComputeProgramFromGLSL(VulkanContext& ctx, const std::string& glsl, uint32_t roCount, uint32_t rwCount);
-ComputeProgram createComputeProgramFromSlang(VulkanContext& ctx, const std::string& moduleName,
+ComputeProgram createComputeProgramFromGLSL(const std::string& glsl, uint32_t roCount, uint32_t rwCount);
+ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
     const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount);
-void destroyComputeProgram(VulkanContext& ctx, ComputeProgram& prog);
+void destroyComputeProgram(ComputeProgram& prog);
 
-void runProgram(VulkanContext& ctx, const ComputeProgram& prog, const std::vector<Buffer*>& readonlyBuffers, const std::vector<Buffer*>& readwriteBuffers, uint32_t n);
+void runProgram(const ComputeProgram& prog, const std::vector<Buffer*>& readonlyBuffers, const std::vector<Buffer*>& readwriteBuffers, uint32_t n);
+
+VulkanContext& getVulkanContext();

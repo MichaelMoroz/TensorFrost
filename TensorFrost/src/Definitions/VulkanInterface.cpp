@@ -16,11 +16,6 @@ namespace py = pybind11;
 namespace TensorFrost {
 namespace {
 
-VulkanContext& getContext() {
-    static VulkanContext ctx{};
-    return ctx;
-}
-
 bool isCContiguous(const py::buffer_info& info) {
     py::ssize_t stride = info.itemsize;
     for (py::ssize_t d = info.ndim - 1; d >= 0; --d) {
@@ -33,12 +28,12 @@ bool isCContiguous(const py::buffer_info& info) {
 }  // namespace
 
 PyBuffer::PyBuffer(size_t count, size_t dtypeSize, bool readOnly)
-    : ctx_(&getContext()),
-      buffer_(createBuffer(*ctx_, count, dtypeSize, readOnly)),
-      readOnly_(readOnly),
-      dtypeSizeHint_(dtypeSize ? dtypeSize : 1),
-      lastCount_(count),
-      lastDtype_(py::none()) {}
+        : ctx_(&getVulkanContext()),
+            buffer_(createBuffer(count, dtypeSize, readOnly)),
+            readOnly_(readOnly),
+            dtypeSizeHint_(dtypeSize ? dtypeSize : 1),
+            lastCount_(count),
+            lastDtype_(py::none()) {}
 
 PyBuffer::~PyBuffer() { release(); }
 
@@ -62,7 +57,7 @@ bool PyBuffer::isReadOnly() const { return readOnly_; }
 
 void PyBuffer::release() {
     if (ctx_ && buffer_.buffer) {
-        destroyBuffer(*ctx_, buffer_);
+        destroyBuffer(buffer_);
     }
     buffer_ = {};
     ctx_ = nullptr;
@@ -79,7 +74,7 @@ void PyBuffer::setData(const py::array& array, size_t offset) {
     if (offset + nbytes > buffer_.size) throw std::out_of_range("write out of range");
     {
         py::gil_scoped_release release;
-        setBufferData(*ctx_, buffer_, info.ptr, nbytes, offset);
+        setBufferData(buffer_, info.ptr, nbytes, offset);
     }
     lastDtype_ = array.dtype();
     lastCount_ = static_cast<size_t>(info.size);
@@ -103,7 +98,7 @@ py::array PyBuffer::getData(const py::object& dtypeArg, const py::object& countA
     auto info = out.request();
     {
         py::gil_scoped_release release;
-        getBufferData(*ctx_, buffer_, info.ptr, nbytes, offset);
+        getBufferData(buffer_, info.ptr, nbytes, offset);
     }
     return out;
 }
@@ -160,7 +155,7 @@ size_t PyBuffer::resolveCount(const py::object& countArg, size_t itemsize, size_
 }
 
 PyComputeProgram::PyComputeProgram(ComputeProgram&& prog)
-    : ctx_(&getContext()), program_(std::move(prog)) {}
+    : ctx_(&getVulkanContext()), program_(std::move(prog)) {}
 
 PyComputeProgram::~PyComputeProgram() { release(); }
 
@@ -186,12 +181,12 @@ void PyComputeProgram::run(const py::iterable& readonlyBuffers,
         throw std::runtime_error("buffer count does not match program layout");
     }
     py::gil_scoped_release release;
-    runProgram(*ctx_, program_, ro, rw, numInvocations);
+    runProgram(program_, ro, rw, numInvocations);
 }
 
 void PyComputeProgram::release() {
     if (ctx_ && program_.pipeline) {
-        destroyComputeProgram(*ctx_, program_);
+        destroyComputeProgram(program_);
     }
     program_ = {};
     ctx_ = nullptr;
@@ -233,7 +228,7 @@ void PyComputeProgram::moveFrom(PyComputeProgram&& other) {
 }
 
 PyWindow::PyWindow(int width, int height, const std::string& title)
-    : ctx_(&getContext()), window_(createWindow(*ctx_, width, height, title.c_str())) {}
+    : ctx_(&getVulkanContext()), window_(createWindow(width, height, title.c_str())) {}
 
 PyWindow::~PyWindow() = default;
 
@@ -287,7 +282,7 @@ void PyWindow::moveFrom(PyWindow&& other) {
 PyComputeProgram MakeComputeProgramFromGLSL(const std::string& source,
                                             uint32_t roCount,
                                             uint32_t rwCount) {
-    return PyComputeProgram(createComputeProgramFromGLSL(getContext(), source, roCount, rwCount));
+    return PyComputeProgram(createComputeProgramFromGLSL(source, roCount, rwCount));
 }
 
 PyComputeProgram MakeComputeProgramFromSlang(const std::string& moduleName,
@@ -295,7 +290,7 @@ PyComputeProgram MakeComputeProgramFromSlang(const std::string& moduleName,
                                              const std::string& entry,
                                              uint32_t roCount,
                                              uint32_t rwCount) {
-    return PyComputeProgram(createComputeProgramFromSlang(getContext(), moduleName, source, entry, roCount, rwCount));
+    return PyComputeProgram(createComputeProgramFromSlang(moduleName, source, entry, roCount, rwCount));
 }
 
 }  // namespace TensorFrost

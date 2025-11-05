@@ -5,6 +5,17 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <slang/slang-com-ptr.h>
 #include <stdexcept>
 
+namespace {
+VulkanContext& getOrCreateGlobalContext() {
+    static VulkanContext ctx{};
+    return ctx;
+}
+}
+
+VulkanContext& getVulkanContext() {
+    return getOrCreateGlobalContext();
+}
+
 VulkanContext::VulkanContext() {
     if (!glfwInit()) throw std::runtime_error("GLFW init failed");
     if (!glfwVulkanSupported())
@@ -234,7 +245,8 @@ static bool takeBufferFromCache(VulkanContext& ctx, size_t bytes, Buffer& out) {
 }
 
 // create a storage buffer
-Buffer createBuffer(VulkanContext& ctx, size_t count, size_t dtypeSize, bool readOnly) {
+Buffer createBuffer(size_t count, size_t dtypeSize, bool readOnly) {
+    auto& ctx = getVulkanContext();
     Buffer buf{};
     buf.size = count * dtypeSize;
 
@@ -260,7 +272,8 @@ Buffer createBuffer(VulkanContext& ctx, size_t count, size_t dtypeSize, bool rea
     return buf;
 }
 
-void destroyBuffer(VulkanContext& ctx, Buffer& buf) {
+void destroyBuffer(Buffer& buf) {
+    auto& ctx = getVulkanContext();
     if (!buf.buffer) return;
     // logical death → drop any dsCache entries that reference it
     invalidateDescriptorCacheForBuffer(ctx, buf.buffer); // keep if you have the DS cache; else remove this line
@@ -276,7 +289,8 @@ void destroyBuffer(VulkanContext& ctx, Buffer& buf) {
     evictBuffersToCapacity(ctx);
 }
 
-void setBufferData(VulkanContext& ctx, Buffer& buf, const void* src, size_t bytes, size_t offset) {
+void setBufferData(Buffer& buf, const void* src, size_t bytes, size_t offset) {
+    auto& ctx = getVulkanContext();
     if (offset + bytes > buf.size) throw std::out_of_range("write out of range");
     auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
     vk::DeviceSize mapOff = offset - (offset % atom);
@@ -290,7 +304,8 @@ void setBufferData(VulkanContext& ctx, Buffer& buf, const void* src, size_t byte
     ctx.device.unmapMemory(buf.memory);
 }
 
-void getBufferData(VulkanContext& ctx, const Buffer& buf, void* dst, size_t bytes, size_t offset) {
+void getBufferData(const Buffer& buf, void* dst, size_t bytes, size_t offset) {
+    auto& ctx = getVulkanContext();
     if (offset + bytes > buf.size) throw std::out_of_range("read out of range");
     auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
     vk::DeviceSize mapOff = offset - (offset % atom);
@@ -413,9 +428,9 @@ ComputeBindings createBindings(VulkanContext& ctx, const ComputeProgram& prog,
     return b;
 }
 
-static ComputeProgram createComputeProgram(VulkanContext& ctx,
-    const std::vector<uint32_t>& spirv,
+static ComputeProgram createComputeProgram(const std::vector<uint32_t>& spirv,
     uint32_t roCount, uint32_t rwCount) {
+    auto& ctx = getVulkanContext();
 
     ComputeProgram prog;
     prog.numRO = roCount; prog.numRW = rwCount;
@@ -440,17 +455,18 @@ static ComputeProgram createComputeProgram(VulkanContext& ctx,
     return prog;
 }
 
-ComputeProgram createComputeProgramFromGLSL(VulkanContext& ctx, const std::string& glsl, uint32_t roCount, uint32_t rwCount) {
+ComputeProgram createComputeProgramFromGLSL(const std::string& glsl, uint32_t roCount, uint32_t rwCount) {
     auto spirv = compileGLSLToSpirv(glsl);
-    return createComputeProgram(ctx, spirv, roCount, rwCount);
+    return createComputeProgram(spirv, roCount, rwCount);
 }
-ComputeProgram createComputeProgramFromSlang(VulkanContext& ctx, const std::string& moduleName,
+ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
     const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount) {
     auto spirv = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
-    return createComputeProgram(ctx, spirv, roCount, rwCount);
+    return createComputeProgram(spirv, roCount, rwCount);
 }
 
-void destroyComputeProgram(VulkanContext& ctx, ComputeProgram& prog) {
+void destroyComputeProgram(ComputeProgram& prog) {
+    auto& ctx = getVulkanContext();
     invalidateDescriptorCacheForLayout(ctx, prog.descriptorLayout);
     ctx.device.destroyPipeline(prog.pipeline);
     ctx.device.destroyPipelineLayout(prog.pipelineLayout);
@@ -459,10 +475,11 @@ void destroyComputeProgram(VulkanContext& ctx, ComputeProgram& prog) {
     prog = {};
 }
 
-void runProgram(VulkanContext& ctx, const ComputeProgram& prog,
+void runProgram(const ComputeProgram& prog,
                 const std::vector<Buffer*>& readonlyBuffers,
                 const std::vector<Buffer*>& readwriteBuffers,
                 uint32_t n) {
+    auto& ctx = getVulkanContext();
     auto set = getOrCreateSet(ctx, prog, readonlyBuffers, readwriteBuffers);
 
     vk::CommandBufferAllocateInfo ai(ctx.commandPool, vk::CommandBufferLevel::ePrimary, 1);
