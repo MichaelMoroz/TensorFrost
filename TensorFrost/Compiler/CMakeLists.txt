@@ -20,6 +20,12 @@ target_compile_features(TensorFrostCompiler PUBLIC cxx_std_20)
 
 if (MSVC)
         target_compile_options(TensorFrostCompiler PRIVATE /wd4804 /wd4805 /wd4018)
+        target_compile_definitions(TensorFrostCompiler PRIVATE
+                $<$<CONFIG:Debug>:_ITERATOR_DEBUG_LEVEL=2>
+                $<$<CONFIG:Debug>:_HAS_ITERATOR_DEBUGGING=1>
+        )
+        set_property(TARGET TensorFrostCompiler PROPERTY
+                MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL")
 endif()
 
 source_group(TREE ${TF_COMPILER_SRC_DIR} PREFIX "Source Files"

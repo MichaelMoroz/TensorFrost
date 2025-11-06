@@ -21,7 +21,6 @@ namespace TensorFrost {
 // void TensorProgramDefinition(py::module&, py::class_<TensorProgram>&);
 // void TensorMemoryDefinition(py::module& m,
 //                             py::class_<PyTensorMemory>& py_tensor_mem);
-// void WindowDefinitions(py::module& m);
 // void ScopeDefinitions(py::module& m, py::class_<PyTensor>& py_tensor);
 // void ModuleDefinitions(py::module& m);
 
@@ -102,7 +101,6 @@ PYBIND11_MODULE(TensorFrost, m) {
 	// TensorFunctionsDefinition(m);
 	// TensorProgramDefinition(m, tensor_program);
 	// TensorMemoryDefinition(m, py_tensor_mem);
-	// WindowDefinitions(m);
 	// ScopeDefinitions(m, py_tensor);
 	// ModuleDefinitions(m);
 	//

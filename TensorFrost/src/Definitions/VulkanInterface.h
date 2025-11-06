@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -98,13 +99,38 @@ public:
 
     bool isOpen() const;
     void drawBuffer(const PyBuffer& buffer, uint32_t width, uint32_t height, size_t offset);
+    void present();
     pybind11::tuple size() const;
     int format() const;
     void close();
 
+    pybind11::tuple imguiBegin(const std::string& name,
+                               const std::optional<bool>& open,
+                               int flags);
+    void imguiEnd();
+    void imguiText(const std::string& text);
+    bool imguiButton(const std::string& label);
+    bool imguiCheckbox(const std::string& label, bool value);
+    int imguiSliderInt(const std::string& label, int value, int min, int max);
+    float imguiSliderFloat(const std::string& label, float value, float min, float max);
+    void imguiPlotLines(const std::string& label,
+                        pybind11::array_t<float, pybind11::array::c_style | pybind11::array::forcecast> values,
+                        int valuesOffset,
+                        const std::string& overlayText,
+                        float scaleMin,
+                        float scaleMax,
+                        pybind11::tuple graphSize,
+                        int stride);
+    void imguiScaleAllSizes(float scale);
+    void imguiAddBackgroundText(const std::string& text,
+                                pybind11::tuple pos,
+                                pybind11::tuple color);
+
 private:
     void ensureValid() const;
     void moveFrom(PyWindow&& other);
+    ImGuiContext* bindImGui();
+    static void validateTupleSize(const pybind11::tuple& tpl, size_t expected, const char* name);
 
     VulkanContext* ctx_{};
     WindowContext window_{};

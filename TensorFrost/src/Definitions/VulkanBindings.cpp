@@ -1,8 +1,11 @@
 #include "Definitions/VulkanBindings.h"
 #include "VulkanInterface.h"
 
+#include <cfloat>
+
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 namespace py = pybind11;
 
@@ -79,8 +82,43 @@ void VulkanDefinitions(py::module_& m) {
         .def("drawBuffer", &PyWindow::drawBuffer,
              py::arg("buffer"), py::arg("width"), py::arg("height"), py::arg("offset") = 0,
              "Copy a buffer of packed pixels onto the swapchain.")
+        .def("present", &PyWindow::present,
+             "Present the current frame without uploading new pixels.")
         .def("close", &PyWindow::close,
-             "Destroy the window and release its swapchain resources.");
+             "Destroy the window and release its swapchain resources.")
+        .def("imgui_begin", &PyWindow::imguiBegin,
+             py::arg("name"), py::arg("open") = py::none(), py::arg("flags") = 0,
+             "Begin a new ImGui window, returning (visible, open_flag_or_None).")
+        .def("imgui_end", &PyWindow::imguiEnd,
+             "End the current ImGui window.")
+        .def("imgui_text", &PyWindow::imguiText,
+             py::arg("text"),
+             "Add text to the current ImGui window.")
+        .def("imgui_button", &PyWindow::imguiButton,
+             py::arg("label"),
+             "Add a button and return True when pressed.")
+        .def("imgui_checkbox", &PyWindow::imguiCheckbox,
+             py::arg("label"), py::arg("value"),
+             "Add a checkbox and return the updated value.")
+        .def("imgui_slider_int", &PyWindow::imguiSliderInt,
+             py::arg("label"), py::arg("value"), py::arg("min"), py::arg("max"),
+             "Slider that returns the updated integer value.")
+        .def("imgui_slider_float", &PyWindow::imguiSliderFloat,
+             py::arg("label"), py::arg("value"), py::arg("min"), py::arg("max"),
+             "Slider that returns the updated float value.")
+        .def("imgui_plot_lines", &PyWindow::imguiPlotLines,
+             py::arg("label"), py::arg("values"), py::arg("values_offset") = 0,
+             py::arg("overlay_text") = "", py::arg("scale_min") = FLT_MAX,
+             py::arg("scale_max") = FLT_MAX,
+             py::arg("graph_size") = py::make_tuple(0.0f, 0.0f),
+             py::arg("stride") = sizeof(float),
+             "Plot a sequence of values as lines.")
+        .def("imgui_scale_all_sizes", &PyWindow::imguiScaleAllSizes,
+             py::arg("scale"),
+             "Scale all ImGui sizes by a factor.")
+        .def("imgui_add_background_text", &PyWindow::imguiAddBackgroundText,
+             py::arg("text"), py::arg("pos"), py::arg("color"),
+             "Draw text in the background draw list.");
 
     m.def("createWindow",
           [](int width, int height, const std::string& title) {

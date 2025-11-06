@@ -15,7 +15,9 @@ add_library(TensorFrostBackend STATIC
 target_include_directories(TensorFrostBackend
         PUBLIC
         ${TF_BACKEND_INC_DIR}
-        $ENV{VULKAN_SDK}/Include)
+        $ENV{VULKAN_SDK}/Include
+        ${CMAKE_SOURCE_DIR}/external/imgui
+        ${CMAKE_SOURCE_DIR}/external/imgui/backends)
 
 target_link_libraries(TensorFrostBackend
         PUBLIC

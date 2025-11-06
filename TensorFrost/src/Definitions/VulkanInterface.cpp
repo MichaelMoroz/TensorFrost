@@ -8,6 +8,8 @@
 #include <stdexcept>
 #include <utility>
 
+#include <imgui.h>
+
 #include "Backend/Vulkan.h"
 #include "Backend/Window.h"
 
@@ -252,6 +254,12 @@ void PyWindow::drawBuffer(const PyBuffer& buffer, uint32_t width, uint32_t heigh
     ::drawBuffer(window_, buffer.raw(), width, height, offset);
 }
 
+void PyWindow::present() {
+    ensureValid();
+    py::gil_scoped_release release;
+    ::drawBuffer(window_, vk::Buffer{}, window_.extent.width, window_.extent.height, 0);
+}
+
 py::tuple PyWindow::size() const {
     ensureValid();
     return py::make_tuple(window_.extent.width, window_.extent.height);
@@ -267,6 +275,90 @@ void PyWindow::close() {
     ctx_ = nullptr;
 }
 
+py::tuple PyWindow::imguiBegin(const std::string& name,
+                               const std::optional<bool>& open,
+                               int flags) {
+    bindImGui();
+    bool openValue = open.value_or(true);
+    bool visible = ImGui::Begin(name.c_str(), open ? &openValue : nullptr, flags);
+    return py::make_tuple(visible, open ? py::cast(openValue) : py::none());
+}
+
+void PyWindow::imguiEnd() {
+    bindImGui();
+    ImGui::End();
+}
+
+void PyWindow::imguiText(const std::string& text) {
+    bindImGui();
+    ImGui::TextUnformatted(text.c_str());
+}
+
+bool PyWindow::imguiButton(const std::string& label) {
+    bindImGui();
+    return ImGui::Button(label.c_str());
+}
+
+bool PyWindow::imguiCheckbox(const std::string& label, bool value) {
+    bindImGui();
+    bool v = value;
+    ImGui::Checkbox(label.c_str(), &v);
+    return v;
+}
+
+int PyWindow::imguiSliderInt(const std::string& label, int value, int min, int max) {
+    bindImGui();
+    int v = value;
+    ImGui::SliderInt(label.c_str(), &v, min, max);
+    return v;
+}
+
+float PyWindow::imguiSliderFloat(const std::string& label, float value, float min, float max) {
+    bindImGui();
+    float v = value;
+    ImGui::SliderFloat(label.c_str(), &v, min, max);
+    return v;
+}
+
+void PyWindow::imguiPlotLines(const std::string& label,
+                              py::array_t<float, py::array::c_style | py::array::forcecast> values,
+                              int valuesOffset,
+                              const std::string& overlayText,
+                              float scaleMin,
+                              float scaleMax,
+                              py::tuple graphSize,
+                              int stride) {
+    bindImGui();
+    validateTupleSize(graphSize, 2, "graph_size");
+    ImGui::PlotLines(
+        label.c_str(),
+        values.data(),
+        static_cast<int>(values.size()),
+        valuesOffset,
+        overlayText.empty() ? nullptr : overlayText.c_str(),
+        scaleMin,
+        scaleMax,
+        ImVec2(graphSize[0].cast<float>(), graphSize[1].cast<float>()),
+        stride);
+}
+
+void PyWindow::imguiScaleAllSizes(float scale) {
+    bindImGui();
+    ImGui::GetStyle().ScaleAllSizes(scale);
+}
+
+void PyWindow::imguiAddBackgroundText(const std::string& text,
+                                      py::tuple pos,
+                                      py::tuple color) {
+    bindImGui();
+    validateTupleSize(pos, 2, "pos");
+    validateTupleSize(color, 4, "color");
+    ImGui::GetBackgroundDrawList()->AddText(
+        ImVec2(pos[0].cast<float>(), pos[1].cast<float>()),
+        ImColor(color[0].cast<float>(), color[1].cast<float>(), color[2].cast<float>(), color[3].cast<float>()),
+        text.c_str());
+}
+
 void PyWindow::ensureValid() const {
     if (!window_.wnd) {
         throw std::runtime_error("Window has been closed");
@@ -277,6 +369,22 @@ void PyWindow::moveFrom(PyWindow&& other) {
     ctx_ = other.ctx_;
     window_ = std::move(other.window_);
     other.ctx_ = nullptr;
+}
+
+ImGuiContext* PyWindow::bindImGui() {
+    ensureValid();
+    EnsureImGuiFrame(window_);
+    if (!window_.imguiContext) {
+        throw std::runtime_error("ImGui context is not initialized for this window");
+    }
+    ImGui::SetCurrentContext(window_.imguiContext);
+    return window_.imguiContext;
+}
+
+void PyWindow::validateTupleSize(const py::tuple& tpl, size_t expected, const char* name) {
+    if (tpl.size() != expected) {
+        throw std::invalid_argument(std::string("Expected tuple of size ") + std::to_string(expected) + " for " + name);
+    }
 }
 
 PyComputeProgram MakeComputeProgramFromGLSL(const std::string& source,
