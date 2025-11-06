@@ -10,6 +10,11 @@ struct WindowContext;
 void ReleaseImGui(WindowContext& ctx);
 struct ImGuiContext;
 
+namespace TFWindowDetail {
+void RegisterScrollContext(GLFWwindow* wnd, WindowContext* ctx);
+void UnregisterScrollContext(GLFWwindow* wnd);
+}
+
 struct WindowContext {
     GLFWwindow* wnd{};
     vk::Instance instance;
@@ -35,6 +40,9 @@ struct WindowContext {
     std::vector<vk::Framebuffer> framebuffers;
     ImGuiContext* imguiContext{};
     bool imguiFrameActive = false;
+    double scrollDeltaX = 0.0;
+    double scrollDeltaY = 0.0;
+    GLFWscrollfun prevScrollCallback = nullptr;
 
     WindowContext() = default;
     WindowContext(const WindowContext&) = delete;
@@ -72,6 +80,12 @@ private:
         framebuffers=std::move(o.framebuffers);
         imguiContext=o.imguiContext; o.imguiContext=nullptr;
         imguiFrameActive=o.imguiFrameActive; o.imguiFrameActive=false;
+        scrollDeltaX = o.scrollDeltaX; o.scrollDeltaX = 0.0;
+        scrollDeltaY = o.scrollDeltaY; o.scrollDeltaY = 0.0;
+        prevScrollCallback = o.prevScrollCallback; o.prevScrollCallback = nullptr;
+        if (wnd) {
+            TFWindowDetail::RegisterScrollContext(wnd, this);
+        }
     }
 
     void cleanup() {
@@ -95,9 +109,16 @@ private:
             if (swapchain) device.destroySwapchainKHR(swapchain), swapchain=nullptr;
         }
         if (surface)  instance.destroySurfaceKHR(surface), surface=nullptr;
-        if (wnd) { glfwDestroyWindow(wnd); wnd=nullptr; }
+        if (wnd) {
+            TFWindowDetail::UnregisterScrollContext(wnd);
+            glfwDestroyWindow(wnd);
+            wnd=nullptr;
+        }
         // leave GLFW alive; app can call glfwTerminate() once at shutdown if it wants
         device=nullptr; instance=nullptr; queue=nullptr;
+        scrollDeltaX = 0.0;
+        scrollDeltaY = 0.0;
+        prevScrollCallback = nullptr;
     }
 };
 
@@ -105,6 +126,7 @@ WindowContext createWindow(int width, int height, const char* title);
 bool windowOpen(const WindowContext& ctx);
 void drawBuffer(WindowContext& ctx, vk::Buffer src, uint32_t width, uint32_t height, vk::DeviceSize offset = 0);
 void drawBuffer(WindowContext& ctx, const Buffer& b, uint32_t w, uint32_t h, size_t offset = 0);
+void AttachWindowCallbacks(WindowContext& ctx);
 
 // Global helpers used by higher-level integrations / Python bindings
 WindowContext* GetWindow();

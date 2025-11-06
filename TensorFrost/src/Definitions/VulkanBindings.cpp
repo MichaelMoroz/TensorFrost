@@ -216,7 +216,16 @@ void VulkanDefinitions(py::module_& m) {
              "Get a style color as an RGBA tuple.")
         .def("imgui_set_style_color_vec4", &PyWindow::imguiSetStyleColorVec4,
              py::arg("index"), py::arg("color"),
-             "Set a style color from an RGBA tuple.");
+             "Set a style color from an RGBA tuple.")
+        .def("mouse_position", &PyWindow::mousePosition,
+             "Get the current mouse position in window coordinates.")
+        .def("is_mouse_button_pressed", &PyWindow::isMouseButtonPressed,
+             py::arg("button"),
+             "Return True if the specified mouse button is pressed.")
+        .def("imgui_want_capture_mouse", &PyWindow::imguiWantCaptureMouse,
+             "Return True if ImGui wants to capture mouse input this frame.")
+        .def("consume_scroll_delta", &PyWindow::consumeScrollDelta,
+             "Consume the accumulated scroll delta as a tuple ``(x, y)`` and reset it to zero.");
 
     m.def("createWindow",
           [](int width, int height, const std::string& title) {

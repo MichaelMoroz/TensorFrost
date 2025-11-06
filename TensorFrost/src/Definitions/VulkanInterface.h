@@ -187,6 +187,11 @@ public:
     pybind11::tuple imguiGetStyleColorVec4(int idx);
     void imguiSetStyleColorVec4(int idx, pybind11::tuple color);
 
+    pybind11::tuple mousePosition();
+    bool isMouseButtonPressed(int button);
+    bool imguiWantCaptureMouse() const;
+    pybind11::tuple consumeScrollDelta();
+
 private:
     void ensureValid() const;
     void moveFrom(PyWindow&& other);

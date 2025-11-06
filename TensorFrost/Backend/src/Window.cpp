@@ -9,6 +9,10 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
+
+static std::unordered_map<GLFWwindow*, WindowContext*> gScrollContexts;
+static std::mutex gScrollMutex;
 
 namespace {
 std::unique_ptr<WindowContext> gWindow;
@@ -17,6 +21,28 @@ std::mutex gWindowMutex;
 void CheckVkResult(VkResult err) {
     if (err == VK_SUCCESS) return;
     throw std::runtime_error("ImGui Vulkan backend error: " + std::to_string(err));
+}
+
+void ScrollCallback(GLFWwindow* wnd, double xoffset, double yoffset) {
+    WindowContext* ctx = nullptr;
+    GLFWscrollfun prev = nullptr;
+    {
+        std::scoped_lock lock(gScrollMutex);
+        auto it = gScrollContexts.find(wnd);
+        if (it != gScrollContexts.end()) {
+            ctx = it->second;
+            prev = ctx ? ctx->prevScrollCallback : nullptr;
+        }
+    }
+
+    if (ctx) {
+        ctx->scrollDeltaX += xoffset;
+        ctx->scrollDeltaY += yoffset;
+    }
+
+    if (prev && prev != ScrollCallback) {
+        prev(wnd, xoffset, yoffset);
+    }
 }
 
 void EnsureFramebuffers(WindowContext& ctx) {
@@ -241,6 +267,31 @@ void RecreateSwapchain(WindowContext& ctx, vk::Extent2D desiredExtent) {
     }
 }
 } // namespace
+
+namespace TFWindowDetail {
+
+void RegisterScrollContext(GLFWwindow* wnd, WindowContext* ctx) {
+    if (!wnd) return;
+    std::scoped_lock lock(gScrollMutex);
+    gScrollContexts[wnd] = ctx;
+}
+
+void UnregisterScrollContext(GLFWwindow* wnd) {
+    if (!wnd) return;
+    std::scoped_lock lock(gScrollMutex);
+    gScrollContexts.erase(wnd);
+}
+
+}  // namespace TFWindowDetail
+
+void AttachWindowCallbacks(WindowContext& ctx) {
+    if (!ctx.wnd) return;
+    TFWindowDetail::RegisterScrollContext(ctx.wnd, &ctx);
+    GLFWscrollfun prev = glfwSetScrollCallback(ctx.wnd, ScrollCallback);
+    if (prev && prev != ScrollCallback) {
+        ctx.prevScrollCallback = prev;
+    }
+}
 
 void ReleaseImGui(WindowContext& ctx) {
     if (!ctx.imguiContext) return;
@@ -484,6 +535,7 @@ void ShowWindow(int width, int height, const char* title) {
     std::scoped_lock lock(gWindowMutex);
     if (gWindow && windowOpen(*gWindow)) return;
     gWindow = std::make_unique<WindowContext>(createWindow(width, height, title));
+    AttachWindowCallbacks(*gWindow);
 }
 
 void HideWindow() {

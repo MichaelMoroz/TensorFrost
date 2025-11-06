@@ -231,7 +231,9 @@ void PyComputeProgram::moveFrom(PyComputeProgram&& other) {
 }
 
 PyWindow::PyWindow(int width, int height, const std::string& title)
-    : ctx_(&getVulkanContext()), window_(createWindow(width, height, title.c_str())) {}
+    : ctx_(&getVulkanContext()), window_(createWindow(width, height, title.c_str())) {
+    AttachWindowCallbacks(window_);
+}
 
 PyWindow::~PyWindow() = default;
 
@@ -611,6 +613,37 @@ void PyWindow::imguiSetStyleColorVec4(int idx, py::tuple color) {
     ImGui::GetStyle().Colors[idx] = col;
 }
 
+py::tuple PyWindow::mousePosition() {
+    ensureValid();
+    double x = 0.0;
+    double y = 0.0;
+    glfwGetCursorPos(window_.wnd, &x, &y);
+    return py::make_tuple(x, y);
+}
+
+bool PyWindow::isMouseButtonPressed(int button) {
+    ensureValid();
+    return glfwGetMouseButton(window_.wnd, button) == GLFW_PRESS;
+}
+
+bool PyWindow::imguiWantCaptureMouse() const {
+    ensureValid();
+    if (!window_.imguiContext) {
+        return false;
+    }
+    ImGui::SetCurrentContext(window_.imguiContext);
+    return ImGui::GetIO().WantCaptureMouse;
+}
+
+py::tuple PyWindow::consumeScrollDelta() {
+    ensureValid();
+    double dx = window_.scrollDeltaX;
+    double dy = window_.scrollDeltaY;
+    window_.scrollDeltaX = 0.0;
+    window_.scrollDeltaY = 0.0;
+    return py::make_tuple(dx, dy);
+}
+
 void PyWindow::ensureValid() const {
     if (!window_.wnd) {
         throw std::runtime_error("Window has been closed");
@@ -621,6 +654,9 @@ void PyWindow::moveFrom(PyWindow&& other) {
     ctx_ = other.ctx_;
     window_ = std::move(other.window_);
     other.ctx_ = nullptr;
+    if (window_.wnd) {
+        TFWindowDetail::RegisterScrollContext(window_.wnd, &window_);
+    }
 }
 
 ImGuiContext* PyWindow::bindImGui() {
