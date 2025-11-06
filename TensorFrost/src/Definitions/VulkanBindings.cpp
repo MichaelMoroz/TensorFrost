@@ -118,7 +118,105 @@ void VulkanDefinitions(py::module_& m) {
              "Scale all ImGui sizes by a factor.")
         .def("imgui_add_background_text", &PyWindow::imguiAddBackgroundText,
              py::arg("text"), py::arg("pos"), py::arg("color"),
-             "Draw text in the background draw list.");
+             "Draw text in the background draw list.")
+        .def("imgui_same_line", &PyWindow::imguiSameLine,
+             py::arg("offset_from_start_x") = 0.0f, py::arg("spacing") = -1.0f,
+             "Place the next item on the same horizontal line.")
+        .def("imgui_separator", &PyWindow::imguiSeparator,
+             "Insert a separator line between items.")
+        .def("imgui_spacing", &PyWindow::imguiSpacing,
+             "Insert vertical spacing between items.")
+        .def("imgui_indent", &PyWindow::imguiIndent,
+             py::arg("indent_w") = 0.0f,
+             "Increase the current horizontal indent.")
+        .def("imgui_unindent", &PyWindow::imguiUnindent,
+             py::arg("indent_w") = 0.0f,
+             "Decrease the current horizontal indent.")
+        .def("imgui_begin_child", &PyWindow::imguiBeginChild,
+             py::arg("id"), py::arg("size") = py::none(), py::arg("border") = false, py::arg("flags") = 0,
+             "Begin a child region and return True if visible. Always pair with :meth:`imgui_end_child` even when the return value is False.")
+        .def("imgui_end_child", &PyWindow::imguiEndChild,
+             "End the current child region.")
+        .def("imgui_text_wrapped", &PyWindow::imguiTextWrapped,
+             py::arg("text"),
+             "Render wrapped text within the current column width.")
+        .def("imgui_text_colored", &PyWindow::imguiTextColored,
+             py::arg("color"), py::arg("text"),
+             "Render text with the given RGBA color.")
+        .def("imgui_bullet_text", &PyWindow::imguiBulletText,
+             py::arg("text"),
+             "Render text preceded by a bullet.")
+        .def("imgui_input_text", &PyWindow::imguiInputText,
+             py::arg("label"), py::arg("value"), py::arg("buffer_length") = 0, py::arg("flags") = 0,
+             "Input text returning (modified, value).")
+        .def("imgui_input_int", &PyWindow::imguiInputInt,
+             py::arg("label"), py::arg("value"), py::arg("step") = 1, py::arg("step_fast") = 100, py::arg("flags") = 0,
+             "Integer input returning the updated value.")
+        .def("imgui_input_float", &PyWindow::imguiInputFloat,
+             py::arg("label"), py::arg("value"), py::arg("step") = 0.0f, py::arg("step_fast") = 0.0f,
+             py::arg("format") = "%.3f", py::arg("flags") = 0,
+             "Float input returning the updated value.")
+        .def("imgui_color_edit3", &PyWindow::imguiColorEdit3,
+             py::arg("label"), py::arg("color"), py::arg("flags") = 0,
+             "Color editor returning (modified, rgb tuple).")
+        .def("imgui_color_edit4", &PyWindow::imguiColorEdit4,
+             py::arg("label"), py::arg("color"), py::arg("flags") = 0,
+             "Color editor returning (modified, rgba tuple).")
+        .def("imgui_begin_main_menu_bar", &PyWindow::imguiBeginMainMenuBar,
+             "Begin the global main menu bar, returning True if it is visible.")
+        .def("imgui_end_main_menu_bar", &PyWindow::imguiEndMainMenuBar,
+             "End the global main menu bar.")
+        .def("imgui_begin_menu_bar", &PyWindow::imguiBeginMenuBar,
+             "Begin a menu bar on the current window, returning True if visible.")
+        .def("imgui_end_menu_bar", &PyWindow::imguiEndMenuBar,
+             "End the current menu bar.")
+        .def("imgui_begin_menu", &PyWindow::imguiBeginMenu,
+             py::arg("label"), py::arg("enabled") = true,
+             "Begin a menu entry and return True if it is open.")
+        .def("imgui_end_menu", &PyWindow::imguiEndMenu,
+             "End the current menu entry.")
+        .def("imgui_menu_item", &PyWindow::imguiMenuItem,
+             py::arg("label"), py::arg("shortcut") = py::none(), py::arg("selected") = false, py::arg("enabled") = true,
+             "Create a menu item and return True when activated.")
+        .def("imgui_open_popup", &PyWindow::imguiOpenPopup,
+             py::arg("id"), py::arg("popup_flags") = 0,
+             "Open a popup window by identifier.")
+        .def("imgui_begin_popup", &PyWindow::imguiBeginPopup,
+             py::arg("id"), py::arg("flags") = 0,
+             "Begin a popup window, returning True if it is open.")
+        .def("imgui_begin_popup_modal", &PyWindow::imguiBeginPopupModal,
+             py::arg("name"), py::arg("open") = py::none(), py::arg("flags") = 0,
+             "Begin a modal popup, returning (visible, open_flag_or_None).")
+        .def("imgui_end_popup", &PyWindow::imguiEndPopup,
+             "End the current popup window.")
+        .def("imgui_close_current_popup", &PyWindow::imguiCloseCurrentPopup,
+             "Close the current popup window.")
+        .def("imgui_push_style_color", &PyWindow::imguiPushStyleColor,
+             py::arg("index"), py::arg("color"),
+             "Push a style color onto the stack.")
+        .def("imgui_pop_style_color", &PyWindow::imguiPopStyleColor,
+             py::arg("count") = 1,
+             "Pop style colors from the stack.")
+        .def("imgui_push_style_var_float", &PyWindow::imguiPushStyleVarFloat,
+             py::arg("index"), py::arg("value"),
+             "Push a float style variable onto the stack.")
+        .def("imgui_push_style_var_vec2", &PyWindow::imguiPushStyleVarVec2,
+             py::arg("index"), py::arg("value"),
+             "Push a 2D vector style variable onto the stack.")
+        .def("imgui_pop_style_var", &PyWindow::imguiPopStyleVar,
+             py::arg("count") = 1,
+             "Pop style variables from the stack.")
+        .def("imgui_get_font_global_scale", &PyWindow::imguiGetFontGlobalScale,
+             "Get the global font scale factor.")
+        .def("imgui_set_font_global_scale", &PyWindow::imguiSetFontGlobalScale,
+             py::arg("scale"),
+             "Set the global font scale factor.")
+        .def("imgui_get_style_color_vec4", &PyWindow::imguiGetStyleColorVec4,
+             py::arg("index"),
+             "Get a style color as an RGBA tuple.")
+        .def("imgui_set_style_color_vec4", &PyWindow::imguiSetStyleColorVec4,
+             py::arg("index"), py::arg("color"),
+             "Set a style color from an RGBA tuple.");
 
     m.def("createWindow",
           [](int width, int height, const std::string& title) {

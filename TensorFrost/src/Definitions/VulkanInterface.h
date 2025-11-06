@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -12,6 +13,9 @@
 
 #include "Backend/Vulkan.h"
 #include "Backend/Window.h"
+
+struct ImVec2;
+struct ImVec4;
 
 namespace TensorFrost {
 
@@ -125,12 +129,72 @@ public:
     void imguiAddBackgroundText(const std::string& text,
                                 pybind11::tuple pos,
                                 pybind11::tuple color);
+    void imguiSameLine(float offsetFromStartX, float spacing);
+    void imguiSeparator();
+    void imguiSpacing();
+    void imguiIndent(float indentW);
+    void imguiUnindent(float indentW);
+    bool imguiBeginChild(const std::string& id,
+                         const pybind11::object& size,
+                         bool border,
+                         int flags);
+    void imguiEndChild();
+    void imguiTextWrapped(const std::string& text);
+    void imguiTextColored(pybind11::tuple color,
+                          const std::string& text);
+    void imguiBulletText(const std::string& text);
+    std::tuple<bool, std::string> imguiInputText(const std::string& label,
+                                                 const std::string& value,
+                                                 size_t bufferLength,
+                                                 int flags);
+    int imguiInputInt(const std::string& label, int value, int step, int stepFast, int flags);
+    float imguiInputFloat(const std::string& label,
+                          float value,
+                          float step,
+                          float stepFast,
+                          const std::string& format,
+                          int flags);
+    std::tuple<bool, pybind11::tuple> imguiColorEdit3(const std::string& label,
+                                                      pybind11::tuple color,
+                                                      int flags);
+    std::tuple<bool, pybind11::tuple> imguiColorEdit4(const std::string& label,
+                                                      pybind11::tuple color,
+                                                      int flags);
+    bool imguiBeginMainMenuBar();
+    void imguiEndMainMenuBar();
+    bool imguiBeginMenuBar();
+    void imguiEndMenuBar();
+    bool imguiBeginMenu(const std::string& label, bool enabled);
+    void imguiEndMenu();
+    bool imguiMenuItem(const std::string& label,
+                       const pybind11::object& shortcut,
+                       bool selected,
+                       bool enabled);
+    void imguiOpenPopup(const std::string& strId, int popupFlags);
+    bool imguiBeginPopup(const std::string& strId, int flags);
+    std::tuple<bool, pybind11::object> imguiBeginPopupModal(const std::string& name,
+                                                            const pybind11::object& open,
+                                                            int flags);
+    void imguiEndPopup();
+    void imguiCloseCurrentPopup();
+    void imguiPushStyleColor(int idx, pybind11::tuple color);
+    void imguiPopStyleColor(int count);
+    void imguiPushStyleVarFloat(int idx, float value);
+    void imguiPushStyleVarVec2(int idx, pybind11::tuple value);
+    void imguiPopStyleVar(int count);
+    float imguiGetFontGlobalScale();
+    void imguiSetFontGlobalScale(float scale);
+    pybind11::tuple imguiGetStyleColorVec4(int idx);
+    void imguiSetStyleColorVec4(int idx, pybind11::tuple color);
 
 private:
     void ensureValid() const;
     void moveFrom(PyWindow&& other);
     ImGuiContext* bindImGui();
     static void validateTupleSize(const pybind11::tuple& tpl, size_t expected, const char* name);
+    static ImVec2 objectToVec2(const pybind11::object& obj, const char* name);
+    static ImVec4 tupleToVec4(const pybind11::tuple& tpl, const char* name);
+    static pybind11::tuple vec4ToTuple(const ImVec4& vec);
 
     VulkanContext* ctx_{};
     WindowContext window_{};

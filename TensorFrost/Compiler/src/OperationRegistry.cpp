@@ -1,3 +1,6 @@
+#include <type_traits>
+#include <utility>
+
 #include "Compiler/Operation.h"
 
 using namespace std;
@@ -118,7 +121,7 @@ bool OpSpec::IsValid(const std::vector<TFDataFormat>& inputs, TFDataFormat outpu
 
 #define BIN_OP_FOLD(op) \
 make_fold2([](auto a, auto b) { \
-    if constexpr (std::is_same_v<decltype(a), bool> || std::is_same_v<decltype(b), bool>) { \
+    if constexpr (std::is_same_v<std::decay_t<decltype(a)>, bool> || std::is_same_v<std::decay_t<decltype(b)>, bool>) { \
         return static_cast<int>(a) op static_cast<int>(b); \
     } else { \
         return a op b; \
@@ -131,8 +134,32 @@ make_fold2([](auto a, auto b) { \
 #define UN_FUNC_FOLD(op) \
     make_fold1([](auto a) { return op(a); })
 
+namespace {
+
+template <typename T>
+auto promote_for_compare(T&& value) {
+    using Decayed = std::decay_t<T>;
+    if constexpr (std::is_same_v<Decayed, bool>) {
+        return static_cast<int>(value);
+    } else {
+        return static_cast<Decayed>(value);
+    }
+}
+
+template <typename Compare>
+FoldFn make_compare_fold_impl(Compare cmp) {
+    return make_fold2([cmp = std::move(cmp)](auto a, auto b) -> Attribute {
+        auto lhs = promote_for_compare(std::forward<decltype(a)>(a));
+        auto rhs = promote_for_compare(std::forward<decltype(b)>(b));
+        using Common = std::common_type_t<decltype(lhs), decltype(rhs)>;
+        return (cmp)(static_cast<Common>(lhs), static_cast<Common>(rhs));
+    });
+}
+
+} // namespace
+
 #define BIN_FUNC_FOLD(op) \
-    make_fold2([](auto a, auto b) { return op(a, b); })
+    make_compare_fold_impl(op)
 
 #define TERN_FUNC_FOLD(op) \
     make_fold3([](auto a, auto b, auto c) { return op(a, b, c); })

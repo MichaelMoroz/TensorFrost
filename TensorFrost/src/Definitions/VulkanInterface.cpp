@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <stdexcept>
 #include <utility>
+#include <vector>
 
 #include <imgui.h>
 
@@ -366,6 +367,250 @@ void PyWindow::imguiAddBackgroundText(const std::string& text,
         text.c_str());
 }
 
+void PyWindow::imguiSameLine(float offsetFromStartX, float spacing) {
+    bindImGui();
+    ImGui::SameLine(offsetFromStartX, spacing);
+}
+
+void PyWindow::imguiSeparator() {
+    bindImGui();
+    ImGui::Separator();
+}
+
+void PyWindow::imguiSpacing() {
+    bindImGui();
+    ImGui::Spacing();
+}
+
+void PyWindow::imguiIndent(float indentW) {
+    bindImGui();
+    ImGui::Indent(indentW);
+}
+
+void PyWindow::imguiUnindent(float indentW) {
+    bindImGui();
+    ImGui::Unindent(indentW);
+}
+
+bool PyWindow::imguiBeginChild(const std::string& id,
+                               const py::object& size,
+                               bool border,
+                               int flags) {
+    bindImGui();
+    ImVec2 vecSize = objectToVec2(size, "size");
+    return ImGui::BeginChild(id.c_str(), vecSize, border, flags);
+}
+
+void PyWindow::imguiEndChild() {
+    bindImGui();
+    ImGui::EndChild();
+}
+
+void PyWindow::imguiTextWrapped(const std::string& text) {
+    bindImGui();
+    ImGui::TextWrapped("%s", text.c_str());
+}
+
+void PyWindow::imguiTextColored(py::tuple color,
+                                const std::string& text) {
+    bindImGui();
+    ImVec4 col = tupleToVec4(color, "color");
+    ImGui::TextColored(col, "%s", text.c_str());
+}
+
+void PyWindow::imguiBulletText(const std::string& text) {
+    bindImGui();
+    ImGui::BulletText("%s", text.c_str());
+}
+
+std::tuple<bool, std::string> PyWindow::imguiInputText(const std::string& label,
+                                                       const std::string& value,
+                                                       size_t bufferLength,
+                                                       int flags) {
+    bindImGui();
+    size_t minimum = value.size() + 1;
+    size_t capacity = bufferLength ? std::max(bufferLength, minimum) : std::max(minimum, value.size() + 256);
+    if (capacity == 0) capacity = 1;
+    std::vector<char> buffer(capacity, '\0');
+    std::copy(value.begin(), value.end(), buffer.begin());
+    bool edited = ImGui::InputText(label.c_str(), buffer.data(), buffer.size(), flags);
+    std::string result(buffer.data());
+    return std::make_tuple(edited, std::move(result));
+}
+
+int PyWindow::imguiInputInt(const std::string& label, int value, int step, int stepFast, int flags) {
+    bindImGui();
+    int v = value;
+    ImGui::InputInt(label.c_str(), &v, step, stepFast, flags);
+    return v;
+}
+
+float PyWindow::imguiInputFloat(const std::string& label,
+                                float value,
+                                float step,
+                                float stepFast,
+                                const std::string& format,
+                                int flags) {
+    bindImGui();
+    float v = value;
+    ImGui::InputFloat(label.c_str(), &v, step, stepFast, format.c_str(), flags);
+    return v;
+}
+
+std::tuple<bool, py::tuple> PyWindow::imguiColorEdit3(const std::string& label,
+                                                      py::tuple color,
+                                                      int flags) {
+    bindImGui();
+    validateTupleSize(color, 3, "color");
+    float col[3] = {
+        color[0].cast<float>(),
+        color[1].cast<float>(),
+        color[2].cast<float>()
+    };
+    bool changed = ImGui::ColorEdit3(label.c_str(), col, flags);
+    return std::make_tuple(changed, py::make_tuple(col[0], col[1], col[2]));
+}
+
+std::tuple<bool, py::tuple> PyWindow::imguiColorEdit4(const std::string& label,
+                                                      py::tuple color,
+                                                      int flags) {
+    bindImGui();
+    validateTupleSize(color, 4, "color");
+    float col[4] = {
+        color[0].cast<float>(),
+        color[1].cast<float>(),
+        color[2].cast<float>(),
+        color[3].cast<float>()
+    };
+    bool changed = ImGui::ColorEdit4(label.c_str(), col, flags);
+    return std::make_tuple(changed, py::make_tuple(col[0], col[1], col[2], col[3]));
+}
+
+bool PyWindow::imguiBeginMainMenuBar() {
+    bindImGui();
+    return ImGui::BeginMainMenuBar();
+}
+
+void PyWindow::imguiEndMainMenuBar() {
+    bindImGui();
+    ImGui::EndMainMenuBar();
+}
+
+bool PyWindow::imguiBeginMenuBar() {
+    bindImGui();
+    return ImGui::BeginMenuBar();
+}
+
+void PyWindow::imguiEndMenuBar() {
+    bindImGui();
+    ImGui::EndMenuBar();
+}
+
+bool PyWindow::imguiBeginMenu(const std::string& label, bool enabled) {
+    bindImGui();
+    return ImGui::BeginMenu(label.c_str(), enabled);
+}
+
+void PyWindow::imguiEndMenu() {
+    bindImGui();
+    ImGui::EndMenu();
+}
+
+bool PyWindow::imguiMenuItem(const std::string& label,
+                             const py::object& shortcut,
+                             bool selected,
+                             bool enabled) {
+    bindImGui();
+    std::string shortcutValue;
+    const char* shortcutPtr = nullptr;
+    if (!shortcut.is_none()) {
+        shortcutValue = shortcut.cast<std::string>();
+        shortcutPtr = shortcutValue.c_str();
+    }
+    return ImGui::MenuItem(label.c_str(), shortcutPtr, selected, enabled);
+}
+
+void PyWindow::imguiOpenPopup(const std::string& strId, int popupFlags) {
+    bindImGui();
+    ImGui::OpenPopup(strId.c_str(), popupFlags);
+}
+
+bool PyWindow::imguiBeginPopup(const std::string& strId, int flags) {
+    bindImGui();
+    return ImGui::BeginPopup(strId.c_str(), flags);
+}
+
+std::tuple<bool, py::object> PyWindow::imguiBeginPopupModal(const std::string& name,
+                                                            const py::object& open,
+                                                            int flags) {
+    bindImGui();
+    bool openValue = open.is_none() ? true : open.cast<bool>();
+    bool visible = ImGui::BeginPopupModal(name.c_str(), open.is_none() ? nullptr : &openValue, flags);
+    if (open.is_none()) {
+        return std::make_tuple(visible, py::none());
+    }
+    return std::make_tuple(visible, py::cast(openValue));
+}
+
+void PyWindow::imguiEndPopup() {
+    bindImGui();
+    ImGui::EndPopup();
+}
+
+void PyWindow::imguiCloseCurrentPopup() {
+    bindImGui();
+    ImGui::CloseCurrentPopup();
+}
+
+void PyWindow::imguiPushStyleColor(int idx, py::tuple color) {
+    bindImGui();
+    ImVec4 col = tupleToVec4(color, "color");
+    ImGui::PushStyleColor(idx, col);
+}
+
+void PyWindow::imguiPopStyleColor(int count) {
+    bindImGui();
+    ImGui::PopStyleColor(count);
+}
+
+void PyWindow::imguiPushStyleVarFloat(int idx, float value) {
+    bindImGui();
+    ImGui::PushStyleVar(idx, value);
+}
+
+void PyWindow::imguiPushStyleVarVec2(int idx, py::tuple value) {
+    bindImGui();
+    ImVec2 vec = objectToVec2(value, "value");
+    ImGui::PushStyleVar(idx, vec);
+}
+
+void PyWindow::imguiPopStyleVar(int count) {
+    bindImGui();
+    ImGui::PopStyleVar(count);
+}
+
+float PyWindow::imguiGetFontGlobalScale() {
+    bindImGui();
+    return ImGui::GetIO().FontGlobalScale;
+}
+
+void PyWindow::imguiSetFontGlobalScale(float scale) {
+    bindImGui();
+    ImGui::GetIO().FontGlobalScale = scale;
+}
+
+py::tuple PyWindow::imguiGetStyleColorVec4(int idx) {
+    bindImGui();
+    ImVec4 col = ImGui::GetStyle().Colors[idx];
+    return vec4ToTuple(col);
+}
+
+void PyWindow::imguiSetStyleColorVec4(int idx, py::tuple color) {
+    bindImGui();
+    ImVec4 col = tupleToVec4(color, "color");
+    ImGui::GetStyle().Colors[idx] = col;
+}
+
 void PyWindow::ensureValid() const {
     if (!window_.wnd) {
         throw std::runtime_error("Window has been closed");
@@ -392,6 +637,27 @@ void PyWindow::validateTupleSize(const py::tuple& tpl, size_t expected, const ch
     if (tpl.size() != expected) {
         throw std::invalid_argument(std::string("Expected tuple of size ") + std::to_string(expected) + " for " + name);
     }
+}
+
+ImVec2 PyWindow::objectToVec2(const py::object& obj, const char* name) {
+    if (obj.is_none()) {
+        return ImVec2(0.0f, 0.0f);
+    }
+    py::tuple tpl = obj.cast<py::tuple>();
+    validateTupleSize(tpl, 2, name);
+    return ImVec2(tpl[0].cast<float>(), tpl[1].cast<float>());
+}
+
+ImVec4 PyWindow::tupleToVec4(const py::tuple& tpl, const char* name) {
+    validateTupleSize(tpl, 4, name);
+    return ImVec4(tpl[0].cast<float>(),
+                  tpl[1].cast<float>(),
+                  tpl[2].cast<float>(),
+                  tpl[3].cast<float>());
+}
+
+py::tuple PyWindow::vec4ToTuple(const ImVec4& vec) {
+    return py::make_tuple(vec.x, vec.y, vec.z, vec.w);
 }
 
 PyComputeProgram MakeComputeProgramFromGLSL(const std::string& source,
