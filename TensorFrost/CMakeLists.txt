@@ -1,6 +1,16 @@
 set(TF_INC_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TF_SRC_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
+find_library(SLANG_LIB_RELEASE NAMES slang        PATHS $ENV{VULKAN_SDK}/Lib)
+find_library(SLANG_LIB_DEBUG   NAMES slangd slang PATHS $ENV{VULKAN_SDK}/Lib)
+
+if (NOT SLANG_LIB_RELEASE)
+        message(FATAL_ERROR "slang.lib not found in %VULKAN_SDK%/Lib")
+endif()
+
+add_subdirectory(Compiler)
+add_subdirectory(Backend)
+
 file(GLOB_RECURSE TENSORFROST_SOURCE_LIST  CONFIGURE_DEPENDS
         ${TF_SRC_DIR}/*.cpp)
 
@@ -32,20 +42,9 @@ if(APPLE)
     )
 endif()
 
-find_library(SLANG_LIB_RELEASE NAMES slang        PATHS $ENV{VULKAN_SDK}/Lib)
-find_library(SLANG_LIB_DEBUG   NAMES slangd slang PATHS $ENV{VULKAN_SDK}/Lib)
-
-if (NOT SLANG_LIB_RELEASE)
-    message(FATAL_ERROR "slang.lib not found in %VULKAN_SDK%/Lib")
-endif()
-
-target_compile_definitions(TensorFrost PRIVATE VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1)
-target_link_libraries(TensorFrost PRIVATE Vulkan::Vulkan Vulkan::shaderc_combined glfw)
 target_link_libraries(TensorFrost PRIVATE
-        $<$<CONFIG:Debug>:${SLANG_LIB_DEBUG}>
-        $<$<NOT:$<CONFIG:Debug>>:${SLANG_LIB_RELEASE}>
-)
-target_include_directories(TensorFrost PRIVATE $ENV{VULKAN_SDK}/Include)
+        TensorFrostCompiler
+        TensorFrostBackend)
 
 if (MSVC)
     target_compile_options(TensorFrost PRIVATE /wd4804 /wd4805 /wd4018)
