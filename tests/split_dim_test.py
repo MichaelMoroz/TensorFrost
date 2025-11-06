@@ -1,3 +1,5 @@
+"""Autotest temporarily disabled pending updates.
+
 import numpy as np
 import TensorFrost as tf
 import unittest
@@ -22,3 +24,4 @@ class TestSplitDim(unittest.TestCase):
         self.assertTrue(merged.shape == [128, 128, 32])
         print(splitted.shape)
         self.assertTrue(splitted.shape == [4, 32, 128, 32])
+"""

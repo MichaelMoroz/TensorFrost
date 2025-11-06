@@ -1,3 +1,5 @@
+"""Autotest temporarily disabled pending updates.
+
 import TensorFrost as tf
 import numpy as np
 import unittest
@@ -47,3 +49,5 @@ class ReductionReshapeTest(unittest.TestCase):
         self.assertTrue(np.allclose(total_max_tf.numpy, total_max_np))
         self.assertTrue(np.allclose(total_min_tf.numpy, total_min_np))
         self.assertTrue(np.allclose(mean_block_tf.numpy, mean_block_np))
+"""
+

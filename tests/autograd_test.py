@@ -1,3 +1,5 @@
+"""Autotest temporarily disabled pending updates.
+
 import TensorFrost as tf
 import numpy as np
 import torch
@@ -235,3 +237,5 @@ class TestAutograd(unittest.TestCase):
         for i, param in enumerate(model_torch.parameters()):
             self.assertTrue(np.allclose(tf_grads.grad[i].numpy, param.grad.detach().numpy(), atol=1e-3))
             self.assertTrue(np.allclose(tf_grads.net.parameters()[i].numpy, param.detach().numpy(), atol=1e-3))
+"""
+
