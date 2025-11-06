@@ -154,6 +154,92 @@ void StartImGuiFrame(WindowContext& ctx) {
     ImGui::NewFrame();
     ctx.imguiFrameActive = true;
 }
+
+void DestroySwapchainViews(WindowContext& ctx) {
+    for (auto fb : ctx.framebuffers) ctx.device.destroyFramebuffer(fb);
+    ctx.framebuffers.clear();
+    for (auto view : ctx.imageViews) ctx.device.destroyImageView(view);
+    ctx.imageViews.clear();
+}
+
+vk::SurfaceFormatKHR SelectSurfaceFormat(const WindowContext& ctx,
+                                         const std::vector<vk::SurfaceFormatKHR>& formats) {
+    if (formats.empty()) {
+        return {vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear};
+    }
+    for (const auto& fmt : formats) {
+        if (fmt.format == ctx.format) {
+            return fmt;
+        }
+    }
+    return formats.front();
+}
+
+void RecreateSwapchain(WindowContext& ctx, vk::Extent2D desiredExtent) {
+    if (!ctx.wnd) return;
+
+    ctx.device.waitIdle();
+
+    DestroySwapchainViews(ctx);
+
+    auto caps = ctx.phys.getSurfaceCapabilitiesKHR(ctx.surface);
+    auto fmts = ctx.phys.getSurfaceFormatsKHR(ctx.surface);
+    if (!(caps.supportedUsageFlags & vk::ImageUsageFlagBits::eTransferDst)) {
+        throw std::runtime_error("swapchain missing TRANSFER_DST");
+    }
+
+    vk::SurfaceFormatKHR surfaceFormat = SelectSurfaceFormat(ctx, fmts);
+
+    vk::Extent2D extent{};
+    if (caps.currentExtent.width != UINT32_MAX) {
+        extent = caps.currentExtent;
+    } else {
+        extent.width = static_cast<uint32_t>(std::clamp<int>(static_cast<int>(desiredExtent.width),
+                                                             static_cast<int>(caps.minImageExtent.width),
+                                                             static_cast<int>(caps.maxImageExtent.width)));
+        extent.height = static_cast<uint32_t>(std::clamp<int>(static_cast<int>(desiredExtent.height),
+                                                              static_cast<int>(caps.minImageExtent.height),
+                                                              static_cast<int>(caps.maxImageExtent.height)));
+    }
+
+    if (extent.width == 0 || extent.height == 0) {
+        ctx.extent = extent;
+        return;
+    }
+
+    uint32_t imageCount = std::max(caps.minImageCount, 2u);
+    if (caps.maxImageCount) imageCount = std::min(imageCount, caps.maxImageCount);
+
+    vk::SwapchainCreateInfoKHR createInfo{};
+    createInfo.surface = ctx.surface;
+    createInfo.minImageCount = imageCount;
+    createInfo.imageFormat = surfaceFormat.format;
+    createInfo.imageColorSpace = surfaceFormat.colorSpace;
+    createInfo.imageExtent = extent;
+    createInfo.imageArrayLayers = 1;
+    createInfo.imageUsage = vk::ImageUsageFlagBits::eTransferDst;
+    createInfo.imageSharingMode = vk::SharingMode::eExclusive;
+    createInfo.preTransform = caps.currentTransform;
+    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    createInfo.presentMode = vk::PresentModeKHR::eFifo;
+    createInfo.clipped = VK_TRUE;
+    createInfo.oldSwapchain = ctx.swapchain;
+
+    vk::SwapchainKHR newSwapchain = ctx.device.createSwapchainKHR(createInfo);
+    if (ctx.swapchain) {
+        ctx.device.destroySwapchainKHR(ctx.swapchain);
+    }
+    ctx.swapchain = newSwapchain;
+    ctx.images = ctx.device.getSwapchainImagesKHR(ctx.swapchain);
+    ctx.extent = extent;
+    ctx.format = surfaceFormat.format;
+
+    EnsureFramebuffers(ctx);
+
+    if (ctx.imguiContext) {
+        ImGui_ImplVulkan_SetMinImageCount(imageCount);
+    }
+}
 } // namespace
 
 void ReleaseImGui(WindowContext& ctx) {
@@ -240,12 +326,39 @@ bool windowOpen(const WindowContext &ctx) {
 }
 
 void drawBuffer(WindowContext &ctx, vk::Buffer src, uint32_t width, uint32_t height, vk::DeviceSize offset) {
+    if (!ctx.wnd) return;
+
     glfwPollEvents();
 
-    auto acq = ctx.device.acquireNextImageKHR(ctx.swapchain, UINT64_MAX, ctx.semImage, {});
-    if (acq.result == vk::Result::eSuboptimalKHR) {} // continue
-    if (acq.result == vk::Result::eErrorOutOfDateKHR) return; // ignore; recreate swapchain if you want
-    uint32_t idx = acq.value;
+    uint32_t idx = 0;
+    while (true) {
+        int fbw = 0;
+        int fbh = 0;
+        glfwGetFramebufferSize(ctx.wnd, &fbw, &fbh);
+        if (fbw <= 0 || fbh <= 0) {
+            if (ctx.imguiContext && ctx.imguiFrameActive) {
+                ImGui::SetCurrentContext(ctx.imguiContext);
+                ImGui::Render();
+                ctx.imguiFrameActive = false;
+            }
+            return;
+        }
+
+        vk::Extent2D desiredExtent{static_cast<uint32_t>(fbw), static_cast<uint32_t>(fbh)};
+        if (desiredExtent.width != ctx.extent.width || desiredExtent.height != ctx.extent.height) {
+            RecreateSwapchain(ctx, desiredExtent);
+            continue;
+        }
+
+        auto acq = ctx.device.acquireNextImageKHR(ctx.swapchain, UINT64_MAX, ctx.semImage, {});
+        if (acq.result == vk::Result::eErrorOutOfDateKHR || acq.result == vk::Result::eSuboptimalKHR) {
+            RecreateSwapchain(ctx, desiredExtent);
+            continue;
+        }
+
+        idx = acq.value;
+        break;
+    }
 
     ctx.cmd.reset({});
     ctx.cmd.begin({vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
@@ -260,31 +373,38 @@ void drawBuffer(WindowContext &ctx, vk::Buffer src, uint32_t width, uint32_t hei
                             vk::PipelineStageFlagBits::eTransfer,
                             {}, nullptr, nullptr, toTransfer);
 
-    if (src) {
+    uint32_t copyWidth = std::min(width, ctx.extent.width);
+    uint32_t copyHeight = std::min(height, ctx.extent.height);
+
+    bool performedTransfer = false;
+
+    if (!src || copyWidth != ctx.extent.width || copyHeight != ctx.extent.height) {
+        vk::ClearColorValue clearColor(std::array<float,4>{0.f, 0.f, 0.f, 1.f});
+        std::array<vk::ImageSubresourceRange, 1> ranges{range};
+        ctx.cmd.clearColorImage(ctx.images[idx], vk::ImageLayout::eTransferDstOptimal, clearColor, ranges);
+        performedTransfer = true;
+    }
+
+    if (src && copyWidth > 0 && copyHeight > 0) {
         vk::BufferImageCopy copy{};
         copy.bufferOffset = offset;
         copy.imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
-        copy.imageExtent = vk::Extent3D{ width, height, 1 };
+        copy.imageExtent = vk::Extent3D{copyWidth, copyHeight, 1};
         ctx.cmd.copyBufferToImage(src, ctx.images[idx], vk::ImageLayout::eTransferDstOptimal, 1, &copy);
+        performedTransfer = true;
     }
 
-    vk::ImageMemoryBarrier toColor(src ? vk::AccessFlagBits::eTransferWrite : vk::AccessFlagBits{},
+    vk::ImageMemoryBarrier toColor(performedTransfer ? vk::AccessFlagBits::eTransferWrite : vk::AccessFlags{},
                                    vk::AccessFlagBits::eColorAttachmentWrite,
-                                   src ? vk::ImageLayout::eTransferDstOptimal : vk::ImageLayout::eUndefined,
+                                   performedTransfer ? vk::ImageLayout::eTransferDstOptimal : vk::ImageLayout::eUndefined,
                                    vk::ImageLayout::eColorAttachmentOptimal,
                                    VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
                                    ctx.images[idx], range);
-    ctx.cmd.pipelineBarrier(src ? vk::PipelineStageFlagBits::eTransfer : vk::PipelineStageFlagBits::eTopOfPipe,
+    ctx.cmd.pipelineBarrier(performedTransfer ? vk::PipelineStageFlagBits::eTransfer : vk::PipelineStageFlagBits::eTopOfPipe,
                             vk::PipelineStageFlagBits::eColorAttachmentOutput,
                             {}, nullptr, nullptr, toColor);
 
     EnsureFramebuffers(ctx);
-
-    if (!src) {
-        vk::ClearColorValue clearColor(std::array<float,4>{0.f, 0.f, 0.f, 1.f});
-        std::array<vk::ImageSubresourceRange, 1> ranges{range};
-        ctx.cmd.clearColorImage(ctx.images[idx], vk::ImageLayout::eColorAttachmentOptimal, clearColor, ranges);
-    }
 
     vk::RenderPassBeginInfo rpBegin{};
     rpBegin.renderPass = ctx.renderPass;

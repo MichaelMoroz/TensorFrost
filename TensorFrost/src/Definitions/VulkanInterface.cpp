@@ -260,8 +260,15 @@ void PyWindow::present() {
     ::drawBuffer(window_, vk::Buffer{}, window_.extent.width, window_.extent.height, 0);
 }
 
-py::tuple PyWindow::size() const {
+py::tuple PyWindow::size() {
     ensureValid();
+    int fbw = 0;
+    int fbh = 0;
+    glfwGetFramebufferSize(window_.wnd, &fbw, &fbh);
+    if (fbw > 0 && fbh > 0) {
+        window_.extent.width = static_cast<uint32_t>(fbw);
+        window_.extent.height = static_cast<uint32_t>(fbh);
+    }
     return py::make_tuple(window_.extent.width, window_.extent.height);
 }
 

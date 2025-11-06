@@ -100,7 +100,7 @@ public:
     bool isOpen() const;
     void drawBuffer(const PyBuffer& buffer, uint32_t width, uint32_t height, size_t offset);
     void present();
-    pybind11::tuple size() const;
+    pybind11::tuple size();
     int format() const;
     void close();
 
