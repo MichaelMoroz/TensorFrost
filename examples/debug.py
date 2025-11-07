@@ -52,6 +52,8 @@ void main() {
 
 def main():
     W, H = 1024, 768
+    local_size = 64
+    group_count = max((W * H + local_size - 1) // local_size, 1)
     win = tf.createWindow(W, H, "Mandelbrot (compute → buffer → swapchain)")
     fmt = int(win.format)
     is_bgra = fmt in (44, 50)  # VK_FORMAT_B8G8R8A8_UNORM / _SRGB
@@ -73,7 +75,7 @@ def main():
 
     try:
         while win.isOpen():
-            prog.run([params], [pix], W*H)
+            prog.run([params], [pix], group_count)
             win.drawBuffer(pix, W, H)
     finally:
         win.close()

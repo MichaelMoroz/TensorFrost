@@ -1,6 +1,6 @@
-static const uint GROUP_SIZE = 128;
+static const uint GROUP_SIZE = TF_GROUP_SIZE;
 static const uint QUARTER_SIZE = GROUP_SIZE / 4;
-static const uint MAX_HIST_SIZE = 256;
+static const uint MAX_HIST_SIZE = 256u;
 
 uint packedCount(uint histogramSize)
 {

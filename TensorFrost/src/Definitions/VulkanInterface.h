@@ -72,7 +72,7 @@ public:
 
     void run(const pybind11::iterable& readonlyBuffers,
              const pybind11::iterable& readwriteBuffers,
-             uint32_t numInvocations);
+             uint32_t groupCount);
 
     void release();
 

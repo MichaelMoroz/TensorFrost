@@ -47,8 +47,8 @@ void VulkanDefinitions(py::module_& m) {
         .def_property_readonly("readwrite_count", &PyComputeProgram::readwriteCount,
                                "Number of read-write storage buffers expected by the program.")
         .def("run", &PyComputeProgram::run,
-             py::arg("readonly_buffers"), py::arg("readwrite_buffers"), py::arg("num_invocations"),
-             "Dispatch the compute pipeline with the provided buffers and invocation count.")
+             py::arg("readonly_buffers"), py::arg("readwrite_buffers"), py::arg("group_count"),
+             "Dispatch the compute pipeline with the provided buffers and workgroup count.")
         .def("release", &PyComputeProgram::release,
              "Explicitly destroy the underlying Vulkan pipeline and associated resources.");
 

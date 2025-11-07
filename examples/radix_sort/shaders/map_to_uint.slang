@@ -3,12 +3,13 @@ static const uint TYPE_INT = 1u;
 static const uint TYPE_FLOAT = 2u;
 static const uint SIGN_BIT = 0x80000000u;
 static const uint FULL_MASK = 0xFFFFFFFFu;
+static const uint GROUP_SIZE = TF_GROUP_SIZE;
 
 [[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
 [[vk::binding(1,0)]] StructuredBuffer<uint> Input : register(t1, space0);
 [[vk::binding(2,0)]] RWStructuredBuffer<uint> Output : register(u2, space0);
 
-[numthreads(128, 1, 1)]
+[numthreads(GROUP_SIZE, 1, 1)]
 void csMapToUint(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint index = dispatchThreadID.x;

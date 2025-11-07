@@ -93,6 +93,9 @@ ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
     const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount);
 void destroyComputeProgram(ComputeProgram& prog);
 
-void runProgram(const ComputeProgram& prog, const std::vector<Buffer*>& readonlyBuffers, const std::vector<Buffer*>& readwriteBuffers, uint32_t n);
+void runProgram(const ComputeProgram& prog,
+                const std::vector<Buffer*>& readonlyBuffers,
+                const std::vector<Buffer*>& readwriteBuffers,
+                uint32_t groupCount);
 
 VulkanContext& getVulkanContext();

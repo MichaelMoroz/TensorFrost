@@ -1,8 +1,5 @@
-static const uint GROUP_SIZE = 128;
+static const uint GROUP_SIZE = TF_GROUP_SIZE;
 static const uint QUARTER_SIZE = GROUP_SIZE / 4;
-#ifndef TF_HISTOGRAM_SIZE
-#define TF_HISTOGRAM_SIZE 256
-#endif
 static const uint HISTOGRAM_SIZE = TF_HISTOGRAM_SIZE;
 
 [[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);

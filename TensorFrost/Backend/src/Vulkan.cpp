@@ -494,7 +494,7 @@ void destroyComputeProgram(ComputeProgram& prog) {
 void runProgram(const ComputeProgram& prog,
                 const std::vector<Buffer*>& readonlyBuffers,
                 const std::vector<Buffer*>& readwriteBuffers,
-                uint32_t n) {
+                uint32_t groupCount) {
     auto& ctx = getVulkanContext();
     auto set = getOrCreateSet(ctx, prog, readonlyBuffers, readwriteBuffers);
 
@@ -504,8 +504,7 @@ void runProgram(const ComputeProgram& prog,
     cmd.begin(vk::CommandBufferBeginInfo{});
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, prog.pipeline);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, prog.pipelineLayout, 0, set, {});
-    uint32_t gs = 64, groups = (n + gs - 1) / gs;
-    cmd.dispatch(groups, 1, 1);
+    cmd.dispatch(groupCount, 1, 1);
     cmd.end();
 
     vk::Fence fence = ctx.device.createFence({});

@@ -58,7 +58,9 @@ def _should_skip_for_backend(exc: Exception) -> bool:
 
 class SlangCompilationTest(unittest.TestCase):
     def test_compile_and_execute_simple_shader(self) -> None:
-        invocation_count = 1
+        thread_count = 1
+        local_size = 64
+        group_count = max((thread_count + local_size - 1) // local_size, 1)
 
         missing_artifacts = _missing_runtime_artifacts()
         if missing_artifacts:  # pragma: no cover - environment not staged
@@ -69,7 +71,7 @@ class SlangCompilationTest(unittest.TestCase):
             )
 
         try:
-            readonly_buffer = tf.createBuffer(invocation_count, 4, True)
+            readonly_buffer = tf.createBuffer(thread_count, 4, True)
         except RuntimeError as exc:  # pragma: no cover - Vulkan not available
             self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
@@ -77,7 +79,7 @@ class SlangCompilationTest(unittest.TestCase):
             resources.callback(readonly_buffer.release)
 
             try:
-                readwrite_buffer = tf.createBuffer(invocation_count, 4, False)
+                readwrite_buffer = tf.createBuffer(thread_count, 4, False)
             except RuntimeError as exc:  # pragma: no cover - Vulkan not available
                 self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
@@ -101,10 +103,10 @@ class SlangCompilationTest(unittest.TestCase):
             readonly_buffer.setData(np.array([7], dtype=np.uint32))
             readwrite_buffer.setData(np.zeros(1, dtype=np.uint32))
 
-            program.run([readonly_buffer], [readwrite_buffer], invocation_count)
+            program.run([readonly_buffer], [readwrite_buffer], group_count)
 
-            result = readwrite_buffer.getData(np.dtype(np.uint32), invocation_count)
-            self.assertEqual(result.shape, (invocation_count,))
+            result = readwrite_buffer.getData(np.dtype(np.uint32), thread_count)
+            self.assertEqual(result.shape, (thread_count,))
             self.assertEqual(int(result[0]), 8)
 
 

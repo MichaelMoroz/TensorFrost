@@ -18,6 +18,12 @@ _TYPE_CODES: Dict[str, np.uint32] = {
 }
 
 
+def _dispatch_groups(work_items: int, threads_per_group: int) -> int:
+	if work_items <= 0:
+		return 0
+	return (work_items + threads_per_group - 1) // threads_per_group
+
+
 def _prepare_keys(keys: np.ndarray) -> Tuple[np.ndarray, np.dtype, str]:
 	array = np.asarray(keys)
 	if array.ndim != 1:
@@ -252,10 +258,20 @@ class HistogramRadixSort:
 			):
 				stack.callback(buf.release)
 
+			map_groups = _dispatch_groups(element_count, self.group_size)
+			reduction_group_size = 64
+			unpack_groups = _dispatch_groups(histogram_size * num_groups, reduction_group_size)
+			prefix_local_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+			prefix_block_groups = _dispatch_groups(histogram_size, reduction_group_size)
+			prefix_accum_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+			bucket_scan_groups = _dispatch_groups(histogram_size, reduction_group_size)
+			scatter_groups = num_groups
+			histogram_groups = num_groups
+
 			self._map_to_uint_program.run(
 				[map_buffer, key_buffers[0]],
 				[key_buffers[1]],
-				element_count,
+				map_groups,
 			)
 
 			key_in = key_buffers[1]
@@ -266,47 +282,46 @@ class HistogramRadixSort:
 				params_array[2] = np.uint32(pass_index * self.bits_per_pass)
 				params_buffer.setData(params_array)
 
-				dispatch_threads = num_groups * self.group_size
 				self._histogram_program.run(
 					[params_buffer, key_in],
 					[packed_hist_buffer],
-					dispatch_threads,
+					histogram_groups,
 				)
 
 				self._unpack_program.run(
 					[params_buffer, packed_hist_buffer],
 					[group_hist_buffer],
-					histogram_size * num_groups,
+					unpack_groups,
 				)
 
 				self._prefix_local_program.run(
 					[params_buffer, group_hist_buffer],
 					[prefix_buffer, block_totals_buffer],
-					histogram_size * block_count,
+					prefix_local_groups,
 				)
 
 				self._prefix_blocks_program.run(
 					[params_buffer, block_totals_buffer],
 					[block_prefix_buffer],
-					histogram_size,
+					prefix_block_groups,
 				)
 
 				self._prefix_accum_program.run(
 					[params_buffer, block_prefix_buffer],
 					[prefix_buffer],
-					histogram_size * block_count,
+					prefix_accum_groups,
 				)
 
 				self._bucket_scan_program.run(
 					[params_buffer, prefix_buffer],
 					[bucket_scan_buffer],
-					histogram_size,
+					bucket_scan_groups,
 				)
 
 				self._scatter_program.run(
 					[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
 					[key_out, val_out],
-					dispatch_threads,
+					scatter_groups,
 				)
 
 				key_in, key_out = key_out, key_in
@@ -316,7 +331,7 @@ class HistogramRadixSort:
 			self._map_from_uint_program.run(
 				[map_buffer, key_in],
 				[key_out],
-				element_count,
+				map_groups,
 			)
 
 			sorted_keys = key_out.getData(key_dtype, element_count)

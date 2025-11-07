@@ -21,10 +21,12 @@ void main() {
 class VulkanWindowTest(unittest.TestCase):
     def test_compute_dispatch_and_window_present(self):
         width = height = 8
-        invocation_count = width * height
+        thread_count = width * height
+        local_size = 64
+        group_count = max((thread_count + local_size - 1) // local_size, 1)
 
         try:
-            pixel_buffer = tf.createBuffer(invocation_count, 4, False)
+            pixel_buffer = tf.createBuffer(thread_count, 4, False)
         except RuntimeError as exc:  # pragma: no cover - Vulkan not available
             self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
@@ -34,8 +36,8 @@ class VulkanWindowTest(unittest.TestCase):
             program = tf.createComputeProgramFromGLSL(_SIMPLE_GLSL, ro_count=0, rw_count=1)
             resources.callback(program.release)
 
-            program.run([], [pixel_buffer], invocation_count)
-            pixels = pixel_buffer.getData(np.dtype(np.uint32), invocation_count)
+            program.run([], [pixel_buffer], group_count)
+            pixels = pixel_buffer.getData(np.dtype(np.uint32), thread_count)
             self.assertTrue(np.all(pixels == 0xFF3366FF), "Compute shader did not write expected color")
 
             try:

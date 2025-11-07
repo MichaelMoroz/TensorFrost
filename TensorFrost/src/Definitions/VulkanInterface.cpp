@@ -174,7 +174,7 @@ PyComputeProgram& PyComputeProgram::operator=(PyComputeProgram&& other) noexcept
 
 void PyComputeProgram::run(const py::iterable& readonlyBuffers,
                            const py::iterable& readwriteBuffers,
-                           uint32_t numInvocations) {
+                           uint32_t groupCount) {
     ensureValid();
     std::vector<Buffer*> ro;
     std::vector<Buffer*> rw;
@@ -184,7 +184,7 @@ void PyComputeProgram::run(const py::iterable& readonlyBuffers,
         throw std::runtime_error("buffer count does not match program layout");
     }
     py::gil_scoped_release release;
-    runProgram(program_, ro, rw, numInvocations);
+    runProgram(program_, ro, rw, groupCount);
 }
 
 void PyComputeProgram::release() {
