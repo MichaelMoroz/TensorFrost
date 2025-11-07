@@ -16,6 +16,7 @@ target_include_directories(TensorFrostBackend
         PUBLIC
         ${TF_BACKEND_INC_DIR}
         $ENV{VULKAN_SDK}/Include
+        ${CMAKE_SOURCE_DIR}/external/renderdoc
         ${CMAKE_SOURCE_DIR}/external/imgui
         ${CMAKE_SOURCE_DIR}/external/imgui/backends)
 

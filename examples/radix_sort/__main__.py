@@ -44,6 +44,19 @@ def main() -> None:
     values = rng.integers(0, 1 << 31, size=count, dtype=np.uint32)
 
     with ExitStack() as stack:
+        renderdoc_is_available = getattr(tf, "renderdoc_is_available", None)
+        renderdoc_start = getattr(tf, "renderdoc_start_capture", None)
+        renderdoc_end = getattr(tf, "renderdoc_end_capture", None)
+        if (
+            callable(renderdoc_is_available)
+            and renderdoc_is_available()
+            and callable(renderdoc_start)
+            and callable(renderdoc_end)
+        ):
+            renderdoc_start()
+            print("RenderDoc capture started")
+            stack.callback(renderdoc_end)
+
         sorter = HistogramRadixSort(bits_per_pass=bits_per_pass)
         stack.callback(sorter.close)
         start_time = time.perf_counter()

@@ -10,6 +10,7 @@
 #include <pybind11/stl.h>
 
 #include "TensorFrost.h"
+#include "Backend/RenderDoc.h"
 #include "Definitions/VulkanBindings.h"
 
 namespace py = pybind11;
@@ -175,6 +176,18 @@ PYBIND11_MODULE(TensorFrost, m) {
 	py::print(program.DebugPrint());
 
 	VulkanDefinitions(m);
+
+	m.def("renderdoc_is_available", []() {
+		return IsRenderDocAvailable();
+	}, "Check if RenderDoc is attached to this process");
+
+	m.def("renderdoc_start_capture", []() {
+		StartRenderDocCapture();
+	}, "Start a RenderDoc capture");
+
+	m.def("renderdoc_end_capture", []() {
+		EndRenderDocCapture();
+	}, "End the current RenderDoc capture");
 // 	VulkanContext ctx;
 //
 // 	const size_t N = 1024;

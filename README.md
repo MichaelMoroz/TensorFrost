@@ -689,11 +689,12 @@ You can also specify the clipping type for the gradients, by default the value o
 For debugging convenience there are 2 function types that you can call inside a tensor program:
 
 ```python
+tf.renderdoc_is_available()
 tf.renderdoc_start_capture()
 tf.renderdoc_end_capture()
 ```
 
-These functions will start and end a RenderDoc capture, only if python is started from the RenderDoc GUI. This is useful for debugging the OpenGL backend, as it allows you to inspect compiled kernel execution, its code and buffers.
+These functions will start and end a RenderDoc capture, only if python is started from the RenderDoc GUI. Call `tf.renderdoc_is_available()` first to check whether RenderDoc is attached so you can skip capture logic when it isn't. This is useful for debugging the OpenGL backend, as it allows you to inspect compiled kernel execution, its code and buffers.
 
 ```python
 tf.region_begin('Region name')

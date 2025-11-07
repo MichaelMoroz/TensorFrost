@@ -3,6 +3,7 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <shaderc/shaderc.hpp>
 #include <slang/slang.h>
 #include <slang/slang-com-ptr.h>
+#include <array>
 #include <stdexcept>
 
 namespace {
@@ -338,6 +339,10 @@ static std::vector<uint32_t> compileGLSLToSpirv(const std::string& source) {
     shaderc::CompileOptions opts;
     opts.SetTargetEnvironment(shaderc_target_env_vulkan,
                               shaderc_env_version_vulkan_1_1);
+#if defined(_RELWITHDEBINFO)
+    opts.SetGenerateDebugInfo();
+    opts.SetOptimizationLevel(shaderc_optimization_level_zero);
+#endif
     shaderc::SpvCompilationResult result =
         compiler.CompileGlslToSpv(source, shaderc_compute_shader, "shader", opts);
     if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
@@ -359,6 +364,17 @@ std::vector<uint32_t> compileSlangToSpirv(const char* moduleName,
 
     slang::SessionDesc sd{};
     sd.targets = &tgt; sd.targetCount = 1;
+#if defined(_RELWITHDEBINFO)
+    std::array<slang::CompilerOptionEntry, 2> optionEntries{};
+    optionEntries[0].name = slang::CompilerOptionName::DebugInformation;
+    optionEntries[0].value.kind = slang::CompilerOptionValueKind::Int;
+    optionEntries[0].value.intValue0 = SLANG_DEBUG_INFO_LEVEL_STANDARD;
+    optionEntries[1].name = slang::CompilerOptionName::Optimization;
+    optionEntries[1].value.kind = slang::CompilerOptionValueKind::Int;
+    optionEntries[1].value.intValue0 = SLANG_OPTIMIZATION_LEVEL_NONE;
+    sd.compilerOptionEntries = optionEntries.data();
+    sd.compilerOptionEntryCount = static_cast<uint32_t>(optionEntries.size());
+#endif
 
     Slang::ComPtr<slang::ISession> session;
     global->createSession(sd, session.writeRef());
