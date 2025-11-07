@@ -47,6 +47,7 @@ def main() -> None:
         renderdoc_is_available = getattr(tf, "renderdoc_is_available", None)
         renderdoc_start = getattr(tf, "renderdoc_start_capture", None)
         renderdoc_end = getattr(tf, "renderdoc_end_capture", None)
+        renderdoc_finalize = None
         if (
             callable(renderdoc_is_available)
             and renderdoc_is_available()
@@ -54,14 +55,21 @@ def main() -> None:
             and callable(renderdoc_end)
         ):
             renderdoc_start()
+            renderdoc_finalize = renderdoc_end
             print("RenderDoc capture started")
-            stack.callback(renderdoc_end)
 
         sorter = HistogramRadixSort(bits_per_pass=bits_per_pass)
         stack.callback(sorter.close)
-        start_time = time.perf_counter()
-        sorted_keys, sorted_values = sorter.sort(keys, values)
-        elapsed = time.perf_counter() - start_time
+        try:
+            start_time = time.perf_counter()
+            sorted_keys, sorted_values = sorter.sort(keys, values)
+            elapsed = time.perf_counter() - start_time
+        finally:
+            if callable(renderdoc_finalize):
+                capture_path = renderdoc_finalize(launch_replay_ui=True)
+                if capture_path:
+                    print(f"RenderDoc capture saved to: {capture_path}")
+                renderdoc_finalize = None
 
     if sorted_values is None:
         sorted_values = np.empty_like(values)

@@ -1,10 +1,11 @@
 #pragma once
 
+#include <string>
+
 namespace TensorFrost {
 
 void StartRenderDocCapture();
-void EndRenderDocCapture();
-
+std::string EndRenderDocCapture(bool launchReplayUI = false);
 bool IsRenderDocAvailable();
 
 }  // namespace TensorFrost

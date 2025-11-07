@@ -79,6 +79,7 @@ class HistogramRadixSort:
 		self.bits_per_pass = bits_per_pass
 		self.block_size = block_size
 		self.group_size = group_size
+		self.histogram_size = 1 << bits_per_pass
 
 		self._map_to_uint_program = tf.createComputeProgramFromSlang(
 			"radix_map_to_uint",
@@ -137,9 +138,10 @@ class HistogramRadixSort:
 			ro_count=2,
 			rw_count=1,
 		)
+		scatter_source = f"#define TF_HISTOGRAM_SIZE {self.histogram_size}u\n" + _load_shader_source("scatter.slang")
 		self._scatter_program = tf.createComputeProgramFromSlang(
 			"radix_scatter",
-			_load_shader_source("scatter.slang"),
+			scatter_source,
 			"csScatter",
 			ro_count=5,
 			rw_count=2,
@@ -189,7 +191,7 @@ class HistogramRadixSort:
 			return empty_keys, values_array.copy()
 
 		max_bits = int(min(max_bits, 32))
-		histogram_size = 1 << self.bits_per_pass
+		histogram_size = self.histogram_size
 		mask = np.uint32(histogram_size - 1)
 
 		num_groups = max((element_count + self.group_size - 1) // self.group_size, 1)

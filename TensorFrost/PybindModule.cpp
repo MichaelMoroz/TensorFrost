@@ -185,9 +185,13 @@ PYBIND11_MODULE(TensorFrost, m) {
 		StartRenderDocCapture();
 	}, "Start a RenderDoc capture");
 
-	m.def("renderdoc_end_capture", []() {
-		EndRenderDocCapture();
-	}, "End the current RenderDoc capture");
+	m.def("renderdoc_end_capture",
+	      [](bool launch_replay_ui) {
+		return EndRenderDocCapture(launch_replay_ui);
+	      },
+	      py::arg("launch_replay_ui") = false,
+	      "End the current RenderDoc capture and optionally launch the RenderDoc replay UI. "
+	      "Returns the capture path if one was produced, otherwise an empty string.");
 // 	VulkanContext ctx;
 //
 // 	const size_t N = 1024;

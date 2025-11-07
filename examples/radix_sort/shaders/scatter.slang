@@ -1,11 +1,9 @@
 static const uint GROUP_SIZE = 128;
 static const uint QUARTER_SIZE = GROUP_SIZE / 4;
-static const uint MAX_HIST_SIZE = 256;
-
-uint packedCount(uint histogramSize)
-{
-    return (histogramSize + 3u) >> 2;
-}
+#ifndef TF_HISTOGRAM_SIZE
+#define TF_HISTOGRAM_SIZE 256
+#endif
+static const uint HISTOGRAM_SIZE = TF_HISTOGRAM_SIZE;
 
 [[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
 [[vk::binding(1,0)]] StructuredBuffer<uint> KeysIn : register(t1, space0);
@@ -16,20 +14,16 @@ uint packedCount(uint histogramSize)
 [[vk::binding(6,0)]] RWStructuredBuffer<uint> ValuesOut : register(u6, space0);
 
 groupshared uint tempBits[GROUP_SIZE];
-groupshared uint halfCount[MAX_HIST_SIZE];
+groupshared uint halfCount[HISTOGRAM_SIZE];
 
 [numthreads(GROUP_SIZE, 1, 1)]
 void csScatter(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
 {
     uint elementCount = Params[0];
-    uint histogramSize = Params[1];
     uint shift = Params[2];
     uint mask = Params[3];
     uint numGroups = Params[4];
     uint hasValues = Params[7];
-
-    if (histogramSize > MAX_HIST_SIZE)
-        return;
 
     uint group = groupID.x;
     if (group >= numGroups)
@@ -37,11 +31,10 @@ void csScatter(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
 
     uint lane = localID.x;
 
-    for (uint idx = lane; idx < histogramSize; idx += GROUP_SIZE)
+    for (uint idx = lane; idx < HISTOGRAM_SIZE; idx += GROUP_SIZE)
     {
         halfCount[idx] = 0;
     }
-    GroupMemoryBarrierWithGroupSync();
 
     uint globalIndex = group * GROUP_SIZE + lane;
     bool active = (globalIndex < elementCount);
@@ -78,7 +71,7 @@ void csScatter(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
         return;
 
     uint prevBucket = (bit == 0) ? 0 : BucketScan[bit - 1u];
-    uint prevGroup = (group == 0) ? 0 : GroupPrefix[(group - 1u) * histogramSize + bit];
+    uint prevGroup = (group == 0) ? 0 : GroupPrefix[(group - 1u) * HISTOGRAM_SIZE + bit];
 
     uint quarterOffset = 0;
     if (quarterIndex > 0)
