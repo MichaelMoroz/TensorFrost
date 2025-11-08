@@ -261,12 +261,20 @@ Buffer createBuffer(size_t count, size_t dtypeSize, bool readOnly) {
     auto memReq = ctx.device.getBufferMemoryRequirements(buf.buffer);
 
     auto memProps = ctx.physicalDevice.getMemoryProperties();
-    uint32_t memTypeIndex = 0;
+    uint32_t memTypeIndex = UINT32_MAX;
+    // Prefer device-local memory for GPU performance
     for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
         if ((memReq.memoryTypeBits & (1u<<i)) &&
-            (memProps.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eHostVisible))
+            (memProps.memoryTypes[i].propertyFlags & vk::MemoryPropertyFlagBits::eDeviceLocal))
         { memTypeIndex = i; break; }
     }
+    // Fallback: pick any compatible memory type
+    if (memTypeIndex == UINT32_MAX) {
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+            if (memReq.memoryTypeBits & (1u<<i)) { memTypeIndex = i; break; }
+        }
+    }
+    if (memTypeIndex == UINT32_MAX) throw std::runtime_error("No compatible memory type for buffer");
     vk::MemoryAllocateInfo allocInfo(memReq.size, memTypeIndex);
     buf.memory = ctx.device.allocateMemory(allocInfo);
     ctx.device.bindBufferMemory(buf.buffer, buf.memory, 0);
@@ -293,31 +301,134 @@ void destroyBuffer(Buffer& buf) {
 void setBufferData(Buffer& buf, const void* src, size_t bytes, size_t offset) {
     auto& ctx = getVulkanContext();
     if (offset + bytes > buf.size) throw std::out_of_range("write out of range");
-    auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
-    vk::DeviceSize mapOff = offset - (offset % atom);
-    vk::DeviceSize mapEnd = ((offset + bytes + atom - 1) / atom) * atom;
-    vk::DeviceSize mapSz  = mapEnd - mapOff;
+    if (bytes == 0) return;
 
-    void* p = ctx.device.mapMemory(buf.memory, mapOff, mapSz);
-    std::memcpy(static_cast<char*>(p) + (offset - mapOff), src, bytes);
-    vk::MappedMemoryRange rng(buf.memory, mapOff, mapSz);
-    ctx.device.flushMappedMemoryRanges(rng);        // needed if memory not coherent
-    ctx.device.unmapMemory(buf.memory);
+    // Create a temporary host-visible staging buffer for upload
+    vk::BufferCreateInfo bci({}, bytes, vk::BufferUsageFlagBits::eTransferSrc);
+    vk::Buffer staging = ctx.device.createBuffer(bci);
+    auto memReq = ctx.device.getBufferMemoryRequirements(staging);
+
+    auto memProps = ctx.physicalDevice.getMemoryProperties();
+    uint32_t memTypeIndex = UINT32_MAX;
+    // Prefer HOST_VISIBLE | HOST_COHERENT for simple map without flush; fallback to HOST_VISIBLE
+    for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+        auto f = memProps.memoryTypes[i].propertyFlags;
+        if ((memReq.memoryTypeBits & (1u<<i)) &&
+            (f & vk::MemoryPropertyFlagBits::eHostVisible) &&
+            (f & vk::MemoryPropertyFlagBits::eHostCoherent))
+        { memTypeIndex = i; break; }
+    }
+    if (memTypeIndex == UINT32_MAX) {
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+            auto f = memProps.memoryTypes[i].propertyFlags;
+            if ((memReq.memoryTypeBits & (1u<<i)) && (f & vk::MemoryPropertyFlagBits::eHostVisible))
+            { memTypeIndex = i; break; }
+        }
+    }
+    if (memTypeIndex == UINT32_MAX) {
+        ctx.device.destroyBuffer(staging);
+        throw std::runtime_error("No host-visible memory type for staging upload");
+    }
+    vk::DeviceMemory stagingMem = ctx.device.allocateMemory(vk::MemoryAllocateInfo(memReq.size, memTypeIndex));
+    ctx.device.bindBufferMemory(staging, stagingMem, 0);
+
+    // Map and copy data into staging (with non-coherent alignment handling)
+    auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
+    vk::DeviceSize mapOff = 0;
+    vk::DeviceSize mapEnd = ((bytes + atom - 1) / atom) * atom;
+    vk::DeviceSize mapSz  = mapEnd - mapOff;
+    void* p = ctx.device.mapMemory(stagingMem, mapOff, mapSz);
+    std::memcpy(p, src, bytes);
+    // Flush if not coherent
+    if (!(memProps.memoryTypes[memTypeIndex].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent)) {
+        vk::MappedMemoryRange rng(stagingMem, mapOff, mapSz);
+        ctx.device.flushMappedMemoryRanges(rng);
+    }
+    ctx.device.unmapMemory(stagingMem);
+
+    // Record and submit copy from staging to device-local buffer
+    vk::CommandBufferAllocateInfo ai(ctx.commandPool, vk::CommandBufferLevel::ePrimary, 1);
+    auto cmd = ctx.device.allocateCommandBuffers(ai)[0];
+    cmd.begin(vk::CommandBufferBeginInfo{});
+    vk::BufferCopy copy(0, offset, bytes);
+    cmd.copyBuffer(staging, buf.buffer, 1, &copy);
+    cmd.end();
+
+    vk::Fence fence = ctx.device.createFence({});
+    ctx.computeQueue.submit(vk::SubmitInfo(0, nullptr, 0, 1, &cmd), fence);
+    [[maybe_unused]] auto rWait = ctx.device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+    ctx.device.destroyFence(fence);
+    ctx.device.freeCommandBuffers(ctx.commandPool, cmd);
+
+    // Destroy staging resources
+    ctx.device.destroyBuffer(staging);
+    ctx.device.freeMemory(stagingMem);
 }
 
 void getBufferData(const Buffer& buf, void* dst, size_t bytes, size_t offset) {
     auto& ctx = getVulkanContext();
     if (offset + bytes > buf.size) throw std::out_of_range("read out of range");
-    auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
-    vk::DeviceSize mapOff = offset - (offset % atom);
-    vk::DeviceSize mapEnd = ((offset + bytes + atom - 1) / atom) * atom;
-    vk::DeviceSize mapSz  = mapEnd - mapOff;
+    if (bytes == 0) return;
 
-    void* p = ctx.device.mapMemory(buf.memory, mapOff, mapSz);
-    vk::MappedMemoryRange rng(buf.memory, mapOff, mapSz);
-    ctx.device.invalidateMappedMemoryRanges(rng);   // needed if memory not coherent
-    std::memcpy(dst, static_cast<char*>(p) + (offset - mapOff), bytes);
-    ctx.device.unmapMemory(buf.memory);
+    // Create a temporary host-visible staging buffer for download
+    vk::BufferCreateInfo bci({}, bytes, vk::BufferUsageFlagBits::eTransferDst);
+    vk::Buffer staging = ctx.device.createBuffer(bci);
+    auto memReq = ctx.device.getBufferMemoryRequirements(staging);
+
+    auto memProps = ctx.physicalDevice.getMemoryProperties();
+    uint32_t memTypeIndex = UINT32_MAX;
+    // Prefer HOST_VISIBLE | HOST_COHERENT; fallback to HOST_VISIBLE
+    for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+        auto f = memProps.memoryTypes[i].propertyFlags;
+        if ((memReq.memoryTypeBits & (1u<<i)) &&
+            (f & vk::MemoryPropertyFlagBits::eHostVisible) &&
+            (f & vk::MemoryPropertyFlagBits::eHostCoherent))
+        { memTypeIndex = i; break; }
+    }
+    if (memTypeIndex == UINT32_MAX) {
+        for (uint32_t i = 0; i < memProps.memoryTypeCount; i++) {
+            auto f = memProps.memoryTypes[i].propertyFlags;
+            if ((memReq.memoryTypeBits & (1u<<i)) && (f & vk::MemoryPropertyFlagBits::eHostVisible))
+            { memTypeIndex = i; break; }
+        }
+    }
+    if (memTypeIndex == UINT32_MAX) {
+        ctx.device.destroyBuffer(staging);
+        throw std::runtime_error("No host-visible memory type for staging download");
+    }
+    vk::DeviceMemory stagingMem = ctx.device.allocateMemory(vk::MemoryAllocateInfo(memReq.size, memTypeIndex));
+    ctx.device.bindBufferMemory(staging, stagingMem, 0);
+
+    // Record and submit copy from device-local buffer to staging
+    vk::CommandBufferAllocateInfo ai(ctx.commandPool, vk::CommandBufferLevel::ePrimary, 1);
+    auto cmd = ctx.device.allocateCommandBuffers(ai)[0];
+    cmd.begin(vk::CommandBufferBeginInfo{});
+    vk::BufferCopy copy(offset, 0, bytes);
+    cmd.copyBuffer(buf.buffer, staging, 1, &copy);
+    cmd.end();
+
+    vk::Fence fence = ctx.device.createFence({});
+    ctx.computeQueue.submit(vk::SubmitInfo(0, nullptr, 0, 1, &cmd), fence);
+    [[maybe_unused]] auto rWait = ctx.device.waitForFences(fence, VK_TRUE, UINT64_MAX);
+    ctx.device.destroyFence(fence);
+    ctx.device.freeCommandBuffers(ctx.commandPool, cmd);
+
+    // Map and read back from staging (with non-coherent alignment handling)
+    auto atom = ctx.physicalDevice.getProperties().limits.nonCoherentAtomSize;
+    vk::DeviceSize mapOff = 0;
+    vk::DeviceSize mapEnd = ((bytes + atom - 1) / atom) * atom;
+    vk::DeviceSize mapSz  = mapEnd - mapOff;
+    void* p = ctx.device.mapMemory(stagingMem, mapOff, mapSz);
+    if (!(memProps.memoryTypes[memTypeIndex].propertyFlags & vk::MemoryPropertyFlagBits::eHostCoherent)) {
+        vk::MappedMemoryRange rng(stagingMem, mapOff, mapSz);
+        ctx.device.invalidateMappedMemoryRanges(rng);
+    }
+    std::memcpy(dst, p, bytes);
+    ctx.device.unmapMemory(stagingMem);
+
+    // Destroy staging resources
+    ctx.device.destroyBuffer(staging);
+    ctx.device.freeMemory(stagingMem);
 }
 
 VulkanContext::~VulkanContext() {
