@@ -132,48 +132,48 @@ PYBIND11_MODULE(TensorFrost, m) {
 	py::print("TensorFrost module loaded in debug mode! Expect slow performance.");
 #endif
 
-	// TEST CODE
-	TFProgram program([]() -> auto {
-		Values inputs;
-		Values outputs;
-		Value a = 5;
-		Value b = 10;
-		Value f = 2.5f;
-		Value g = 3.5f;
-		Value c = a + b * 3;
-		Value mem = memory({a, b, c}, TFFloat32);
-		inputs.push_back(mem);
-		vmap({a, b, c}, [&](Values ids0) {
-			Value something = tofloat(mem * sin(f + g));
-			outputs.push_back(something);
-		});
-		vmap({a, b, c}, [&](Values ids0) {
-			Value imem = toint(mem * sin(f + g));
-			Value d = c + b + ids0[0] * imem;
-			Value m0;
-			vmap({c}, [&](Values ids1) {
-				m0 = 0;
-			});
-			if_cond(d > 0, [&]() {
-		        Value t = d * c * imem;
-		        vmap({c}, [&](Values ids1) {
-			        m0.Set(t * imem[{ids0[1], ids0[1], ids0[1]}]);
-		        });
-	        }, [&]() {
-		        Value t = d * c / imem;
-		        vmap({c}, [&](Values ids1) {
-			        m0.Set(t / imem[{ids1[0], ids0[0], ids0[1]}]);
-		        });
-	        });
-			vmap({c, c}, [&](Values ids1) {
-				Value m = m0 * imem[{ids1[1], ids1[0], ids0[0]}];
-				outputs.push_back(m);
-			});
-		});
-		return std::make_pair(inputs, outputs);
-	});
-	program.Compile();
-	py::print(program.DebugPrint());
+	// // TEST CODE
+	// TFProgram program([]() -> auto {
+	// 	Values inputs;
+	// 	Values outputs;
+	// 	Value a = 5;
+	// 	Value b = 10;
+	// 	Value f = 2.5f;
+	// 	Value g = 3.5f;
+	// 	Value c = a + b * 3;
+	// 	Value mem = memory({a, b, c}, TFFloat32);
+	// 	inputs.push_back(mem);
+	// 	vmap({a, b, c}, [&](Values ids0) {
+	// 		Value something = tofloat(mem * sin(f + g));
+	// 		outputs.push_back(something);
+	// 	});
+	// 	vmap({a, b, c}, [&](Values ids0) {
+	// 		Value imem = toint(mem * sin(f + g));
+	// 		Value d = c + b + ids0[0] * imem;
+	// 		Value m0;
+	// 		vmap({c}, [&](Values ids1) {
+	// 			m0 = 0;
+	// 		});
+	// 		if_cond(d > 0, [&]() {
+	// 	        Value t = d * c * imem;
+	// 	        vmap({c}, [&](Values ids1) {
+	// 		        m0.Set(t * imem[{ids0[1], ids0[1], ids0[1]}]);
+	// 	        });
+	//         }, [&]() {
+	// 	        Value t = d * c / imem;
+	// 	        vmap({c}, [&](Values ids1) {
+	// 		        m0.Set(t / imem[{ids1[0], ids0[0], ids0[1]}]);
+	// 	        });
+	//         });
+	// 		vmap({c, c}, [&](Values ids1) {
+	// 			Value m = m0 * imem[{ids1[1], ids1[0], ids0[0]}];
+	// 			outputs.push_back(m);
+	// 		});
+	// 	});
+	// 	return std::make_pair(inputs, outputs);
+	// });
+	// program.Compile();
+	// py::print(program.DebugPrint());
 
 	VulkanDefinitions(m);
 
