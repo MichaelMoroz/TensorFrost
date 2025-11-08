@@ -88,6 +88,7 @@ class HistogramRadixSort:
 		self.group_size = group_size
 		self.histogram_size = 1 << bits_per_pass
 		self.last_stage_timings = None
+		self.last_validation_errors: Optional[int] = None
 
 		def inject_defines(filename: str, *, with_group: bool = False, with_histogram: bool = False) -> str:
 			defines = []
@@ -166,6 +167,15 @@ class HistogramRadixSort:
 			rw_count=2,
 		)
 
+		# Validation program: checks if adjacent key pairs are sorted (after mapping back to original type)
+		self._validate_program = tf.createComputeProgramFromSlang(
+			"radix_validate_sorted",
+			inject_defines("validate_sorted.slang", with_group=True),
+			"csValidate",
+			ro_count=2,
+			rw_count=1,
+		)
+
 		self._dummy_values_buffer = tf.createBuffer(1, 4, False)
 
 	def close(self) -> None:
@@ -179,6 +189,7 @@ class HistogramRadixSort:
 			self._prefix_accum_program,
 			self._bucket_scan_program,
 			self._scatter_program,
+			self._validate_program,
 		):
 			if program is not None:
 				program.release()
@@ -192,6 +203,8 @@ class HistogramRadixSort:
 		*,
 		max_bits: int = 32,
 		collect_stage_timings: bool = False,
+		validate: bool = False,
+		return_arrays: bool = True,
 	) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 		keys_array, key_dtype, key_kind = _prepare_keys(keys)
 		element_count = int(keys_array.shape[0])
@@ -207,6 +220,8 @@ class HistogramRadixSort:
 		if element_count == 0:
 			empty_keys = keys_array.copy()
 			self.last_stage_timings = {} if collect_stage_timings else None
+			if validate:
+				self.last_validation_errors = 0
 			if values_array is None:
 				return empty_keys, None
 			return empty_keys, values_array.copy()
@@ -298,6 +313,8 @@ class HistogramRadixSort:
 			scatter_groups = num_groups
 			histogram_groups = num_groups
 
+			# Total pass timer starts at the first dispatch and ends after the last (map_from_uint)
+			total_start = time.perf_counter() if collect_stage_timings else None
 			start = time.perf_counter() if collect_stage_timings else None
 			self._map_to_uint_program.run(
 				[map_buffer, key_buffers[0]],
@@ -391,15 +408,48 @@ class HistogramRadixSort:
 			if collect_stage_timings and start is not None:
 				stage_totals["map_from_uint"] += time.perf_counter() - start
 
-			sorted_keys = key_out.getData(key_dtype, element_count)
-			if values_array is not None and values_dtype is not None:
-				sorted_values = val_in.getData(values_dtype, element_count)
+			# Record total time from first to last dispatch in the sort pass
+			if collect_stage_timings and total_start is not None:
+				stage_totals["total_pass"] = time.perf_counter() - total_start
+
+			# Optional GPU-side validation: check adjacent pairs and atomically count violations
+			if validate:
+				validate_params = np.zeros(2, dtype=np.uint32)
+				validate_params[0] = np.uint32(element_count)
+				validate_params[1] = map_params[1]  # type code
+
+				validate_params_buf = tf.createBuffer(validate_params.size, 4, True)
+				stack.callback(validate_params_buf.release)
+				validate_params_buf.setData(validate_params)
+
+				error_buf = tf.createBuffer(1, 4, False)
+				stack.callback(error_buf.release)
+				error_zero = np.zeros(1, dtype=np.uint32)
+				error_buf.setData(error_zero)
+
+				# Reuse map_groups; kernel early-outs for i >= n-1
+				self._validate_program.run(
+					[validate_params_buf, key_out],
+					[error_buf],
+					map_groups,
+				)
+
+				error_count = int(error_buf.getData(np.dtype(np.uint32), 1)[0])
+				self.last_validation_errors = error_count
+
+			if return_arrays:
+				sorted_keys = key_out.getData(key_dtype, element_count)
+				if values_array is not None and values_dtype is not None:
+					sorted_values = val_in.getData(values_dtype, element_count)
+				else:
+					sorted_values = None
 			else:
-				sorted_values = None
+				# Avoid full readback when not needed by caller
+				sorted_keys = np.empty(0, dtype=key_dtype)
+				sorted_values = (np.empty(0, dtype=values_dtype) if values_array is not None and values_dtype is not None else None)
 
 		self.last_stage_timings = stage_totals if collect_stage_timings else None
 		return sorted_keys, sorted_values
-		return sorted_keys, sorted_values, None
 
 
 _SORTER_CACHE: Dict[_SorterKey, HistogramRadixSort] = {}

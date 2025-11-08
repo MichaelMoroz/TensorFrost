@@ -94,12 +94,10 @@ def main() -> None:
 		else np.empty(0, dtype=np.uint32)
 	)
 
+	# GPU-side validation: we'll run a one-time kernel check that counts out-of-order adjacent pairs.
+	# This avoids reading back entire arrays for CPU comparison.
 	reference_keys = None
 	reference_values = None
-	if count:
-		order = np.argsort(keys, kind="stable")
-		reference_keys = keys[order]
-		reference_values = values[order]
 
 	frame_times = deque(maxlen=history_length)
 	sort_times = deque(maxlen=history_length)
@@ -137,9 +135,20 @@ def main() -> None:
 			frame_time_total = sum(frame_times)
 			fps = (len(frame_times) / frame_time_total) if frame_times and frame_time_total > 0.0 else 0.0
 
-			sorted_keys, sorted_values = sorter.sort(keys, values, collect_stage_timings=True)
+			# Perform sort; on the first run also validate on GPU and avoid full array readback.
+			do_validate = not validated
+			_keys_out, _vals_out = sorter.sort(
+				keys,
+				values,
+				collect_stage_timings=True,
+				validate=do_validate,
+				return_arrays=False,
+			)
 			stage_timings = sorter.last_stage_timings or {}
-			kernel_time = float(sum(stage_timings.values()))
+			# Separate total_pass (overall) from per-stage summed time
+			total_pass_time = float(stage_timings.get("total_pass", 0.0))
+			stage_sum_time = float(sum(v for k, v in stage_timings.items() if k != "total_pass"))
+			kernel_time = total_pass_time if total_pass_time > 0.0 else stage_sum_time
 
 			if sort_times.maxlen == len(sort_times):
 				sort_times.popleft()
@@ -150,18 +159,15 @@ def main() -> None:
 			for name in _STAGE_NAMES:
 				stage_totals_overall[name] += stage_timings.get(name, 0.0)
 
-			if not validated and reference_keys is not None and reference_values is not None:
-				key_match = np.allclose(sorted_keys, reference_keys, atol=0.0, rtol=0.0)
-				value_match = np.array_equal(sorted_values, reference_values)
-				validation_ok = bool(key_match and value_match)
+			if do_validate:
+				errors = int(getattr(sorter, "last_validation_errors", 0) or 0)
+				validation_ok = (errors == 0)
 				validation_message = (
-					"GPU results match CPU reference." if validation_ok else "Mismatch detected against CPU reference!"
+					"GPU validation passed (sorted)." if validation_ok else f"GPU validation failed: {errors} out-of-order pairs"
 				)
 				validated = True
 
-			# Release arrays promptly once consumed.
-			del sorted_keys
-			del sorted_values
+			# No large array readback performed when return_arrays=False.
 
 			window_avg_sort = (sum(sort_times) / len(sort_times)) if sort_times else 0.0
 			last_sort_ms = kernel_time * 1000.0
@@ -189,6 +195,8 @@ def main() -> None:
 
 				if sort_count:
 					window.imgui_text(f"Last kernel time: {last_sort_ms:7.3f} ms")
+					if total_pass_time > 0.0:
+						window.imgui_text(f"Total pass time (last): {total_pass_time * 1000.0:7.3f} ms")
 					if window_avg_sort > 0.0:
 						window.imgui_text(f"Window avg kernel: {avg_sort_ms:7.3f} ms")
 					if overall_avg_sort > 0.0:
