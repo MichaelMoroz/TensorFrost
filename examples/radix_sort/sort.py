@@ -4,6 +4,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+import time
 
 import numpy as np
 
@@ -86,6 +87,7 @@ class HistogramRadixSort:
 		self.block_size = block_size
 		self.group_size = group_size
 		self.histogram_size = 1 << bits_per_pass
+		self.last_stage_timings = None
 
 		def inject_defines(filename: str, *, with_group: bool = False, with_histogram: bool = False) -> str:
 			defines = []
@@ -189,6 +191,7 @@ class HistogramRadixSort:
 		values: Optional[np.ndarray] = None,
 		*,
 		max_bits: int = 32,
+		collect_stage_timings: bool = False,
 	) -> Tuple[np.ndarray, Optional[np.ndarray]]:
 		keys_array, key_dtype, key_kind = _prepare_keys(keys)
 		element_count = int(keys_array.shape[0])
@@ -203,6 +206,7 @@ class HistogramRadixSort:
 
 		if element_count == 0:
 			empty_keys = keys_array.copy()
+			self.last_stage_timings = {} if collect_stage_timings else None
 			if values_array is None:
 				return empty_keys, None
 			return empty_keys, values_array.copy()
@@ -228,6 +232,21 @@ class HistogramRadixSort:
 		map_params = np.zeros(4, dtype=np.uint32)
 		map_params[0] = np.uint32(element_count)
 		map_params[1] = _TYPE_CODES[key_kind]
+
+		if collect_stage_timings:
+			stage_totals = {
+				"map_to_uint": 0.0,
+				"histogram": 0.0,
+				"unpack": 0.0,
+				"prefix_local": 0.0,
+				"prefix_blocks": 0.0,
+				"prefix_accum": 0.0,
+				"bucket_scan": 0.0,
+				"scatter": 0.0,
+				"map_from_uint": 0.0,
+			}
+		else:
+			stage_totals = {}
 
 		with ExitStack() as stack:
 			params_buffer = tf.createBuffer(params_array.size, 4, True)
@@ -279,11 +298,14 @@ class HistogramRadixSort:
 			scatter_groups = num_groups
 			histogram_groups = num_groups
 
+			start = time.perf_counter() if collect_stage_timings else None
 			self._map_to_uint_program.run(
 				[map_buffer, key_buffers[0]],
 				[key_buffers[1]],
 				map_groups,
 			)
+			if collect_stage_timings and start is not None:
+				stage_totals["map_to_uint"] += time.perf_counter() - start
 
 			key_in = key_buffers[1]
 			key_out = key_buffers[0]
@@ -293,57 +315,81 @@ class HistogramRadixSort:
 				params_array[2] = np.uint32(pass_index * self.bits_per_pass)
 				params_buffer.setData(params_array)
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._histogram_program.run(
 					[params_buffer, key_in],
 					[packed_hist_buffer],
 					histogram_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["histogram"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._unpack_program.run(
 					[params_buffer, packed_hist_buffer],
 					[group_hist_buffer],
 					unpack_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["unpack"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._prefix_local_program.run(
 					[params_buffer, group_hist_buffer],
 					[prefix_buffer, block_totals_buffer],
 					prefix_local_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["prefix_local"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._prefix_blocks_program.run(
 					[params_buffer, block_totals_buffer],
 					[block_prefix_buffer],
 					prefix_block_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["prefix_blocks"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._prefix_accum_program.run(
 					[params_buffer, block_prefix_buffer],
 					[prefix_buffer],
 					prefix_accum_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["prefix_accum"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._bucket_scan_program.run(
 					[params_buffer, prefix_buffer],
 					[bucket_scan_buffer],
 					bucket_scan_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["bucket_scan"] += time.perf_counter() - start
 
+				start = time.perf_counter() if collect_stage_timings else None
 				self._scatter_program.run(
 					[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
 					[key_out, val_out],
 					scatter_groups,
 				)
+				if collect_stage_timings and start is not None:
+					stage_totals["scatter"] += time.perf_counter() - start
 
 				key_in, key_out = key_out, key_in
 				if values_array is not None:
 					val_in, val_out = val_out, val_in
 
+			start = time.perf_counter() if collect_stage_timings else None
 			self._map_from_uint_program.run(
 				[map_buffer, key_in],
 				[key_out],
 				map_groups,
 			)
+			if collect_stage_timings and start is not None:
+				stage_totals["map_from_uint"] += time.perf_counter() - start
 
 			sorted_keys = key_out.getData(key_dtype, element_count)
 			if values_array is not None and values_dtype is not None:
@@ -351,7 +397,9 @@ class HistogramRadixSort:
 			else:
 				sorted_values = None
 
+		self.last_stage_timings = stage_totals if collect_stage_timings else None
 		return sorted_keys, sorted_values
+		return sorted_keys, sorted_values, None
 
 
 _SORTER_CACHE: Dict[_SorterKey, HistogramRadixSort] = {}

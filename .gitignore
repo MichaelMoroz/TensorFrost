@@ -58,3 +58,4 @@ imgui.ini
 *.pyc
 /.cmake
 /CMakeFiles
+/.debug

@@ -1,12 +1,3 @@
-static const uint GROUP_SIZE = 128;
-static const uint QUARTER_SIZE = GROUP_SIZE / 4;
-static const uint MAX_HIST_SIZE = 256;
-
-uint packedCount(uint histogramSize)
-{
-    return (histogramSize + 3u) >> 2;
-}
-
 [[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
 [[vk::binding(1,0)]] StructuredBuffer<uint> BlockTotals : register(t1, space0);
 [[vk::binding(2,0)]] RWStructuredBuffer<uint> BlockPrefix : register(u2, space0);

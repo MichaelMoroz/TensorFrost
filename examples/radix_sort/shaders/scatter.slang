@@ -28,9 +28,9 @@ void csScatter(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
 
     uint lane = localID.x;
 
-    for (uint idx = lane; idx < HISTOGRAM_SIZE; idx += GROUP_SIZE)
+    [unroll] for (uint idx = lane; idx < HISTOGRAM_SIZE; idx += GROUP_SIZE)
     {
-        halfCount[idx] = 0;
+        if (idx < HISTOGRAM_SIZE) halfCount[idx] = 0;
     }
 
     uint globalIndex = group * GROUP_SIZE + lane;
@@ -64,31 +64,29 @@ void csScatter(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
     }
     GroupMemoryBarrierWithGroupSync();
 
-    if (!active)
-        return;
+    if (active) {
+        uint prevBucket = (bit == 0) ? 0 : BucketScan[bit - 1u];
+        uint prevGroup = (group == 0) ? 0 : GroupPrefix[(group - 1u) * HISTOGRAM_SIZE + bit];
 
-    uint prevBucket = (bit == 0) ? 0 : BucketScan[bit - 1u];
-    uint prevGroup = (group == 0) ? 0 : GroupPrefix[(group - 1u) * HISTOGRAM_SIZE + bit];
+        uint quarterOffset = 0;
+        if (quarterIndex > 0)
+        {
+            uint packed = halfCount[bit];
+            uint shiftBytes = (quarterIndex - 1u) * 8u;
+            quarterOffset = (packed >> shiftBytes) & 0xFFu;
+        }
 
-    uint quarterOffset = 0;
-    if (quarterIndex > 0)
-    {
-        uint packed = halfCount[bit];
-        uint shiftBytes = (quarterIndex - 1u) * 8u;
-        quarterOffset = (packed >> shiftBytes) & 0xFFu;
+        uint begin = quarterIndex * QUARTER_SIZE;
+        uint localCount = 0;
+        [unroll] for (uint t = begin; t < lane; ++t)
+        {
+            localCount += (tempBits[t] == bit) ? 1u : 0u;
+        }
+
+        uint totalOffset = prevBucket + prevGroup + quarterOffset + localCount;
+        KeysOut[totalOffset] = key;
+
+        if (hasValues != 0)
+            ValuesOut[totalOffset] = value;
     }
-
-    uint begin = quarterIndex * QUARTER_SIZE;
-    uint localCount = 0;
-    for (uint t = begin; t < lane; ++t)
-    {
-        if (tempBits[t] == bit)
-            ++localCount;
-    }
-
-    uint totalOffset = prevBucket + prevGroup + quarterOffset + localCount;
-    KeysOut[totalOffset] = key;
-
-    if (hasValues != 0)
-        ValuesOut[totalOffset] = value;
 }
