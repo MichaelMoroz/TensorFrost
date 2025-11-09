@@ -36,25 +36,24 @@ class VulkanWindowTest(unittest.TestCase):
             self.skipTest(f"Vulkan program creation failed: {exc}")
 
         window = None
+        program.run([], [pixel_buffer], group_count)
+        pixels = pixel_buffer.getData(np.dtype(np.uint32), thread_count)
+        self.assertTrue(np.all(pixels == 0xFF3366FF), "Compute shader did not write expected color")
+
         try:
-            program.run([], [pixel_buffer], group_count)
-            pixels = pixel_buffer.getData(np.dtype(np.uint32), thread_count)
-            self.assertTrue(np.all(pixels == 0xFF3366FF), "Compute shader did not write expected color")
+            window = tf.createWindow(width, height, "TensorFrost Vulkan Test")
+        except RuntimeError as exc:  # pragma: no cover - Vulkan window not available
+            self.skipTest(f"Vulkan window creation failed: {exc}")
 
-            try:
-                window = tf.createWindow(width, height, "TensorFrost Vulkan Test")
-            except RuntimeError as exc:  # pragma: no cover - Vulkan window not available
-                self.skipTest(f"Vulkan window creation failed: {exc}")
+        # Present once to ensure the binding path is exercised.
+        window.drawBuffer(pixel_buffer, width, height)
+        self.assertTrue(window.isOpen(), "Window should report as open after initial present")
 
-            # Present once to ensure the binding path is exercised.
-            window.drawBuffer(pixel_buffer, width, height)
-            self.assertTrue(window.isOpen(), "Window should report as open after initial present")
-        finally:
-            if window is not None:
-                window.close()
-            window = None
-            program = None
-            pixel_buffer = None
+        if window is not None:
+            window.close()
+        window = None
+        program = None
+        pixel_buffer = None
 
         # Ensure GPU resources are released before interpreter shutdown.
         import gc

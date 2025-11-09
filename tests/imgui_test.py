@@ -1,5 +1,4 @@
 import unittest
-from contextlib import contextmanager
 
 import numpy as np
 import TensorFrost as tf
@@ -17,21 +16,34 @@ def _should_skip_for_backend(exc: RuntimeError) -> bool:
     return any(token in message for token in keywords)
 
 
-@contextmanager
-def managed_window(width=320, height=240, title="ImGui Test Window"):
-    try:
-        win = tf.createWindow(width, height, title)
-    except RuntimeError as exc:
-        if _should_skip_for_backend(exc):
-            raise unittest.SkipTest(f"Window backend unavailable: {exc}") from exc
-        raise
-    try:
-        yield win
-    finally:
+class _ManagedWindow:
+    def __init__(self, width=320, height=240, title="ImGui Test Window"):
+        self._width = width
+        self._height = height
+        self._title = title
+        self._window = None
+
+    def __enter__(self):
         try:
-            win.close()
-        except Exception:
-            pass
+            self._window = tf.createWindow(self._width, self._height, self._title)
+        except RuntimeError as exc:
+            if _should_skip_for_backend(exc):
+                raise unittest.SkipTest(f"Window backend unavailable: {exc}") from exc
+            raise
+        return self._window
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._window is not None:
+            try:
+                self._window.close()
+            except Exception:
+                pass
+            self._window = None
+        return False
+
+
+def managed_window(width=320, height=240, title="ImGui Test Window"):
+    return _ManagedWindow(width, height, title)
 
 
 class ImGuiIntegrationTest(unittest.TestCase):

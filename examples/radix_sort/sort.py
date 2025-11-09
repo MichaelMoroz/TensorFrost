@@ -177,24 +177,6 @@ class HistogramRadixSort:
 
 		self._dummy_values_buffer = tf.createBuffer(1, 4, False)
 
-	def close(self) -> None:
-		for program in (
-			self._map_to_uint_program,
-			self._map_from_uint_program,
-			self._histogram_program,
-			self._unpack_program,
-			self._prefix_local_program,
-			self._prefix_blocks_program,
-			self._prefix_accum_program,
-			self._bucket_scan_program,
-			self._scatter_program,
-			self._validate_program,
-		):
-			if program is not None:
-				program.release()
-		if self._dummy_values_buffer is not None:
-			self._dummy_values_buffer.release()
-
 	def sort(
 		self,
 		keys: np.ndarray,

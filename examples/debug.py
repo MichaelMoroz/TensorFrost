@@ -73,12 +73,11 @@ def main():
     p = np.array([float(W), float(H), xmin, ymin, dx, dy, max_iter, 1.0 if is_bgra else 0.0], dtype=np.float32)
     params.setData(p)
 
-    try:
-        while win.isOpen():
-            prog.run([params], [pix], group_count)
-            win.drawBuffer(pix, W, H)
-    finally:
-        win.close()
+    while win.isOpen():
+        prog.run([params], [pix], group_count)
+        win.drawBuffer(pix, W, H)
+
+    win.close()
 
 if __name__ == "__main__":
     main()

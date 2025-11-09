@@ -73,8 +73,7 @@ def main() -> None:
     window.imgui_scale_all_sizes(2.0)
     window.imgui_set_font_global_scale(state["font_scale"])
 
-    try:
-        while window.isOpen():
+    while window.isOpen():
             now = time.perf_counter()
             dt = now - last_time
             last_time = now
@@ -263,8 +262,8 @@ def main() -> None:
             )
 
             window.present()
-    finally:
-        window.close()
+
+    window.close()
 
 
 if __name__ == "__main__":
