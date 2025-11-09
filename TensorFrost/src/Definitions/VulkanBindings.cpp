@@ -2,6 +2,7 @@
 #include "VulkanInterface.h"
 
 #include <cfloat>
+#include <optional>
 
 #include <pybind11/numpy.h>
 #include <pybind11/pybind11.h>
@@ -58,11 +59,18 @@ void VulkanDefinitions(py::module_& m) {
              "Explicitly destroy the underlying Vulkan pipeline and associated resources.");
 
     m.def("createComputeProgramFromSlang",
-          [](const std::string& moduleName, const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount) {
-              return MakeComputeProgramFromSlang(moduleName, source, entry, roCount, rwCount);
+          [](const std::string& moduleName,
+             const std::string& source,
+             const std::string& entry,
+             uint32_t roCount,
+             uint32_t rwCount,
+             uint32_t pushConstantSize) {
+              return MakeComputeProgramFromSlang(
+                  moduleName, source, entry, roCount, rwCount, pushConstantSize);
           },
           py::arg("module_name"), py::arg("source"), py::arg("entry"),
           py::arg("ro_count"), py::arg("rw_count"),
+          py::arg("push_constant_size") = 0,
           py::return_value_policy::move,
           "Compile a Slang module to SPIR-V and wrap it in a :class:`ComputeProgram`.");
 

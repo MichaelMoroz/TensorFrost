@@ -131,14 +131,15 @@ def main() -> None:
 		frame_time_total = sum(frame_times)
 		fps = (len(frame_times) / frame_time_total) if frame_times and frame_time_total > 0.0 else 0.0
 
-		# Perform sort; on the first run also validate on GPU and avoid full array readback.
+		# Perform sort; on the first run also validate on GPU and read back buffers for NumPy comparison.
 		do_validate = not validated
+		return_arrays = do_validate
 		_keys_out, _vals_out = sorter.sort(
 			keys,
 			values,
 			collect_stage_timings=True,
 			validate=do_validate,
-			return_arrays=False,
+			return_arrays=return_arrays,
 		)
 		stage_timings = sorter.last_stage_timings or {}
 		# Separate total_pass (overall) from per-stage summed time
@@ -157,10 +158,39 @@ def main() -> None:
 
 		if do_validate:
 			errors = int(getattr(sorter, "last_validation_errors", 0) or 0)
-			validation_ok = (errors == 0)
-			validation_message = (
-				"GPU validation passed (sorted)." if validation_ok else f"GPU validation failed: {errors} out-of-order pairs"
-			)
+			gpu_validation_ok = (errors == 0)
+
+			cpu_validation_ok = True
+			cpu_messages = []
+			if return_arrays:
+				if count:
+					reference_indices = np.argsort(keys, kind="stable")
+					reference_keys = keys[reference_indices]
+					reference_values = values[reference_indices] if values is not None else None
+				else:
+					reference_keys = np.copy(keys)
+					reference_values = np.copy(values) if values is not None else None
+
+				if not np.array_equal(_keys_out, reference_keys):
+					cpu_validation_ok = False
+					cpu_messages.append("key mismatch")
+
+				if values is not None and _vals_out is not None and not np.array_equal(_vals_out, reference_values):
+					cpu_validation_ok = False
+					cpu_messages.append("value mismatch")
+
+			validation_ok = gpu_validation_ok and cpu_validation_ok
+			if validation_ok:
+				validation_message = "GPU + NumPy validation passed."
+			else:
+				failure_reasons = []
+				if not gpu_validation_ok:
+					failure_reasons.append(f"GPU reported {errors} out-of-order pairs")
+				if not cpu_validation_ok:
+					reason = ", ".join(cpu_messages) if cpu_messages else "NumPy comparison failed"
+					failure_reasons.append(reason)
+				validation_message = "Validation failed: " + "; ".join(failure_reasons)
+
 			validated = True
 
 		# No large array readback performed when return_arrays=False.

@@ -743,8 +743,10 @@ PyComputeProgram MakeComputeProgramFromSlang(const std::string& moduleName,
                                              const std::string& source,
                                              const std::string& entry,
                                              uint32_t roCount,
-                                             uint32_t rwCount) {
-    return PyComputeProgram(createComputeProgramFromSlang(moduleName, source, entry, roCount, rwCount));
+                                             uint32_t rwCount,
+                                             uint32_t pushConstantSize) {
+    return PyComputeProgram(createComputeProgramFromSlang(
+        moduleName, source, entry, roCount, rwCount, pushConstantSize));
 }
 
 }  // namespace TensorFrost

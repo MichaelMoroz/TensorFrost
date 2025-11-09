@@ -106,6 +106,7 @@ class HistogramRadixSort:
 			"csMapToUint",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=8,
 		)
 		self._map_from_uint_program = tf.createComputeProgramFromSlang(
 			"radix_map_from_uint",
@@ -113,6 +114,7 @@ class HistogramRadixSort:
 			"csMapFromUint",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=8,
 		)
 
 		self._histogram_program = tf.createComputeProgramFromSlang(
@@ -121,6 +123,7 @@ class HistogramRadixSort:
 			"csHistogram",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=32,
 		)
 		self._unpack_program = tf.createComputeProgramFromSlang(
 			"radix_unpack",
@@ -128,6 +131,7 @@ class HistogramRadixSort:
 			"csUnpack",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=32,
 		)
 		self._prefix_local_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_local",
@@ -135,6 +139,7 @@ class HistogramRadixSort:
 			"csPrefixLocal",
 			ro_count=1,
 			rw_count=2,
+			push_constant_size=32,
 		)
 		self._prefix_blocks_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_blocks",
@@ -142,6 +147,7 @@ class HistogramRadixSort:
 			"csPrefixBlocks",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=32,
 		)
 		self._prefix_accum_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_accum",
@@ -149,6 +155,7 @@ class HistogramRadixSort:
 			"csPrefixAccumulate",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=32,
 		)
 		self._bucket_scan_program = tf.createComputeProgramFromSlang(
 			"radix_bucket_scan",
@@ -156,6 +163,7 @@ class HistogramRadixSort:
 			"csBucketScan",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=32,
 		)
 		scatter_source = inject_defines("scatter.slang", with_group=True, with_histogram=True)
 		self._scatter_program = tf.createComputeProgramFromSlang(
@@ -164,6 +172,7 @@ class HistogramRadixSort:
 			"csScatter",
 			ro_count=4,
 			rw_count=2,
+			push_constant_size=32,
 		)
 
 		# Validation program: checks if adjacent key pairs are sorted (after mapping back to original type)
@@ -173,6 +182,7 @@ class HistogramRadixSort:
 			"csValidate",
 			ro_count=1,
 			rw_count=1,
+			push_constant_size=8,
 		)
 
 		self._dummy_values_buffer = tf.createBuffer(1, 4, False)

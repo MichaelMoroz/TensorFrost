@@ -445,15 +445,10 @@ VulkanContext::~VulkanContext() {
     instance.destroy();
 }
 
-struct SlangCompileResult {
-    std::vector<uint32_t> spirv;
-    uint32_t pushConstantSize = 0;
-};
-
-SlangCompileResult compileSlangToSpirv(const char* moduleName,
-                                       const char* source,
-                                       const char* entry,
-                                       const char* profile /* e.g., "spirv_1_5" */) {
+std::vector<uint32_t> compileSlangToSpirv(const char* moduleName,
+                                          const char* source,
+                                          const char* entry,
+                                          const char* profile /* e.g., "spirv_1_5" */) {
     Slang::ComPtr<slang::IGlobalSession> global;
     createGlobalSession(global.writeRef());
 
@@ -512,32 +507,11 @@ SlangCompileResult compileSlangToSpirv(const char* moduleName,
         if (SLANG_FAILED(r)) throw std::runtime_error("slang: getEntryPointCode failed");
     }
 
-    uint32_t pushConstantSize = 0;
-    {
-        Slang::ComPtr<slang::IBlob> diag;
-        slang::ProgramLayout* layout = linked->getLayout(0, diag.writeRef());
-        if (diag && diag->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)diag->getBufferPointer());
-        if (!layout) throw std::runtime_error("slang: failed to obtain program layout");
-
-        if (auto* globalLayout = layout->getGlobalParamsTypeLayout()) {
-            size_t size = globalLayout->getSize(slang::ParameterCategory::PushConstantBuffer);
-            pushConstantSize = std::max(pushConstantSize, static_cast<uint32_t>(size));
-        }
-        for (SlangUInt i = 0; i < layout->getEntryPointCount(); ++i) {
-            if (auto* entry = layout->getEntryPointByIndex(i)) {
-                if (auto* typeLayout = entry->getTypeLayout()) {
-                    size_t size = typeLayout->getSize(slang::ParameterCategory::PushConstantBuffer);
-                    pushConstantSize = std::max(pushConstantSize, static_cast<uint32_t>(size));
-                }
-            }
-        }
-    }
-
     size_t n = spirv->getBufferSize();
     auto* p = static_cast<const uint8_t*>(spirv->getBufferPointer());
     std::vector<uint32_t> out((n + 3) / 4);
     std::memcpy(out.data(), p, n);
-    return {std::move(out), pushConstantSize};
+    return out;
 }
 
 ComputeBindings createBindings(VulkanContext& ctx, const ComputeProgram& prog,
@@ -605,9 +579,10 @@ static ComputeProgram createComputeProgram(const std::vector<uint32_t>& spirv,
 }
 
 ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
-    const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount) {
-    auto result = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
-    return createComputeProgram(result.spirv, roCount, rwCount, result.pushConstantSize);
+    const std::string& source, const std::string& entry,
+    uint32_t roCount, uint32_t rwCount, uint32_t pushConstantSize) {
+    auto spirv = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
+    return createComputeProgram(spirv, roCount, rwCount, pushConstantSize);
 }
 
 void destroyComputeProgram(ComputeProgram& prog) {

@@ -24,7 +24,14 @@ def main() -> None:
     pixel_buffer = tf.createBuffer(pixel_capacity, 4, False)
 
     shader_source = load_shader()
-    program = tf.createComputeProgramFromSlang("mandelbrot", shader_source, "csMain", ro_count=0, rw_count=1)
+    program = tf.createComputeProgramFromSlang(
+        "mandelbrot",
+        shader_source,
+        "csMain",
+        ro_count=0,
+        rw_count=1,
+        push_constant_size=32,
+    )
     local_size = 64
 
     center = [-0.5, 0.0]

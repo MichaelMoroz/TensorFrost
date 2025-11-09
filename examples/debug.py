@@ -35,7 +35,14 @@ def main() -> None:
 
     window = tf.createWindow(width, height, "TensorFrost Debug Fill")
     pixel_buffer = tf.createBuffer(thread_count, 4, False)
-    program = tf.createComputeProgramFromSlang("debug_fill", _SLANG, "csMain", ro_count=0, rw_count=1)
+    program = tf.createComputeProgramFromSlang(
+        "debug_fill",
+        _SLANG,
+        "csMain",
+        ro_count=0,
+        rw_count=1,
+        push_constant_size=16,
+    )
 
     color = np.array([0.15, 0.45, 0.95, 1.0], dtype=np.float32)
 

@@ -90,7 +90,8 @@ void setBufferData(Buffer& buf, const void* src, size_t bytes, size_t offset = 0
 void getBufferData(const Buffer& buf, void* dst, size_t bytes, size_t offset = 0);
 
 ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
-    const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount);
+    const std::string& source, const std::string& entry,
+    uint32_t roCount, uint32_t rwCount, uint32_t pushConstantSize = 0);
 void destroyComputeProgram(ComputeProgram& prog);
 
 void runProgram(const ComputeProgram& prog,
