@@ -4,7 +4,6 @@ import argparse
 import math
 import time
 from collections import deque
-from contextlib import ExitStack
 
 import numpy as np
 import TensorFrost as tf
@@ -110,22 +109,22 @@ def main() -> None:
 	sort_count = 0
 	total_kernel_time = 0.0
 
-	with ExitStack() as stack:
+	sorter = None
+	window = None
+	try:
 		sorter = HistogramRadixSort(bits_per_pass=bits_per_pass)
-		stack.callback(sorter.close)
 
 		window_title = f"TensorFrost Radix Sort ({count:,} elements)"
 		window = tf.createWindow(window_width, window_height, window_title)
-		stack.callback(window.close)
 
-		if font_scale > 0.0:
+		if font_scale > 0.0 and window is not None:
 			window.imgui_scale_all_sizes(font_scale)
 			window.imgui_set_font_global_scale(font_scale)
 
 		start_time = time.perf_counter()
 		last_frame_time = start_time
 
-		while window.isOpen():
+		while window is not None and window.isOpen():
 			now = time.perf_counter()
 			dt = now - last_frame_time
 			last_frame_time = now
@@ -258,6 +257,11 @@ def main() -> None:
 
 			window.imgui_end()
 			window.present()
+	finally:
+		if window is not None:
+			window.close()
+		if sorter is not None:
+			sorter.close()
 
 
 if __name__ == "__main__":

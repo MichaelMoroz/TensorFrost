@@ -1,5 +1,4 @@
 import unittest
-from contextlib import ExitStack
 from pathlib import Path
 
 import numpy as np
@@ -75,39 +74,40 @@ class SlangCompilationTest(unittest.TestCase):
         except RuntimeError as exc:  # pragma: no cover - Vulkan not available
             self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
-        with ExitStack() as resources:
-            resources.callback(readonly_buffer.release)
+        try:
+            readwrite_buffer = tf.createBuffer(thread_count, 4, False)
+        except RuntimeError as exc:  # pragma: no cover - Vulkan not available
+            self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
-            try:
-                readwrite_buffer = tf.createBuffer(thread_count, 4, False)
-            except RuntimeError as exc:  # pragma: no cover - Vulkan not available
-                self.skipTest(f"Vulkan buffer creation failed: {exc}")
+        try:
+            program = tf.createComputeProgramFromSlang(
+                "tensorfrost_test_shader",
+                _SIMPLE_SLANG_SHADER,
+                "csMain",
+                ro_count=1,
+                rw_count=1,
+            )
+        except RuntimeError as exc:
+            if _should_skip_for_backend(exc):  # pragma: no cover - Vulkan not available
+                self.skipTest(f"Slang compilation backend unavailable: {exc}")
+            raise
 
-            resources.callback(readwrite_buffer.release)
+        readonly_buffer.setData(np.array([7], dtype=np.uint32))
+        readwrite_buffer.setData(np.zeros(1, dtype=np.uint32))
 
-            try:
-                program = tf.createComputeProgramFromSlang(
-                    "tensorfrost_test_shader",
-                    _SIMPLE_SLANG_SHADER,
-                    "csMain",
-                    ro_count=1,
-                    rw_count=1,
-                )
-            except RuntimeError as exc:
-                if _should_skip_for_backend(exc):  # pragma: no cover - Vulkan not available
-                    self.skipTest(f"Slang compilation backend unavailable: {exc}")
-                raise
+        program.run([readonly_buffer], [readwrite_buffer], group_count)
 
-            resources.callback(program.release)
+        result = readwrite_buffer.getData(np.dtype(np.uint32), thread_count)
+        self.assertEqual(result.shape, (thread_count,))
+        self.assertEqual(int(result[0]), 8)
 
-            readonly_buffer.setData(np.array([7], dtype=np.uint32))
-            readwrite_buffer.setData(np.zeros(1, dtype=np.uint32))
+    readonly_buffer = None
+    readwrite_buffer = None
+    program = None
 
-            program.run([readonly_buffer], [readwrite_buffer], group_count)
+    import gc
 
-            result = readwrite_buffer.getData(np.dtype(np.uint32), thread_count)
-            self.assertEqual(result.shape, (thread_count,))
-            self.assertEqual(int(result[0]), 8)
+    gc.collect()
 
 
 if __name__ == "__main__":

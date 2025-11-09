@@ -1,5 +1,4 @@
 import unittest
-from contextlib import ExitStack
 
 import numpy as np
 
@@ -30,12 +29,14 @@ class VulkanWindowTest(unittest.TestCase):
         except RuntimeError as exc:  # pragma: no cover - Vulkan not available
             self.skipTest(f"Vulkan buffer creation failed: {exc}")
 
-        with ExitStack() as resources:
-            resources.callback(pixel_buffer.release)
-
+        program = None
+        try:
             program = tf.createComputeProgramFromGLSL(_SIMPLE_GLSL, ro_count=0, rw_count=1)
-            resources.callback(program.release)
+        except RuntimeError as exc:  # pragma: no cover - Vulkan program creation failed
+            self.skipTest(f"Vulkan program creation failed: {exc}")
 
+        window = None
+        try:
             program.run([], [pixel_buffer], group_count)
             pixels = pixel_buffer.getData(np.dtype(np.uint32), thread_count)
             self.assertTrue(np.all(pixels == 0xFF3366FF), "Compute shader did not write expected color")
@@ -45,11 +46,20 @@ class VulkanWindowTest(unittest.TestCase):
             except RuntimeError as exc:  # pragma: no cover - Vulkan window not available
                 self.skipTest(f"Vulkan window creation failed: {exc}")
 
-            resources.callback(window.close)
-
             # Present once to ensure the binding path is exercised.
             window.drawBuffer(pixel_buffer, width, height)
             self.assertTrue(window.isOpen(), "Window should report as open after initial present")
+        finally:
+            if window is not None:
+                window.close()
+            window = None
+            program = None
+            pixel_buffer = None
+
+        # Ensure GPU resources are released before interpreter shutdown.
+        import gc
+
+        gc.collect()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -263,190 +262,171 @@ class HistogramRadixSort:
 		else:
 			stage_totals = {}
 
-		with ExitStack() as stack:
-			params_buffer = tf.createBuffer(params_array.size, 4, True)
-			stack.callback(params_buffer.release)
+		params_buffer = tf.createBuffer(params_array.size, 4, True)
+		params_buffer.setData(params_array)
+
+		map_buffer = tf.createBuffer(map_params.size, 4, True)
+		map_buffer.setData(map_params)
+
+		key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
+		key_buffers[0].setData(keys_array)
+
+		if values_array is not None:
+			value_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
+			value_buffers[0].setData(values_array)
+		else:
+			dummy = self._dummy_values_buffer
+			value_buffers = [dummy, dummy]
+
+		packed_hist_buffer = tf.createBuffer(max(packed_count * num_groups, 1), 4, False)
+		group_hist_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
+		prefix_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
+		block_totals_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
+		block_prefix_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
+		bucket_scan_buffer = tf.createBuffer(max(histogram_size, 1), 4, False)
+
+		map_groups = _dispatch_groups(element_count, self.group_size)
+		reduction_group_size = 64
+		unpack_groups = _dispatch_groups(histogram_size * num_groups, reduction_group_size)
+		prefix_local_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+		prefix_block_groups = _dispatch_groups(histogram_size, reduction_group_size)
+		prefix_accum_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+		bucket_scan_groups = _dispatch_groups(histogram_size, reduction_group_size)
+		scatter_groups = num_groups
+		histogram_groups = num_groups
+
+		# Total pass timer starts at the first dispatch and ends after the last (map_from_uint)
+		total_start = time.perf_counter() if collect_stage_timings else None
+		start = time.perf_counter() if collect_stage_timings else None
+		self._map_to_uint_program.run(
+			[map_buffer, key_buffers[0]],
+			[key_buffers[1]],
+			map_groups,
+		)
+		if collect_stage_timings and start is not None:
+			stage_totals["map_to_uint"] += time.perf_counter() - start
+
+		key_in = key_buffers[1]
+		key_out = key_buffers[0]
+		val_in, val_out = value_buffers
+
+		for pass_index in range(passes):
+			params_array[2] = np.uint32(pass_index * self.bits_per_pass)
 			params_buffer.setData(params_array)
 
-			map_buffer = tf.createBuffer(map_params.size, 4, True)
-			stack.callback(map_buffer.release)
-			map_buffer.setData(map_params)
+			start = time.perf_counter() if collect_stage_timings else None
+			self._histogram_program.run(
+				[params_buffer, key_in],
+				[packed_hist_buffer],
+				histogram_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["histogram"] += time.perf_counter() - start
 
-			key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
-			for buf in key_buffers:
-				stack.callback(buf.release)
-			key_buffers[0].setData(keys_array)
+			start = time.perf_counter() if collect_stage_timings else None
+			self._unpack_program.run(
+				[params_buffer, packed_hist_buffer],
+				[group_hist_buffer],
+				unpack_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["unpack"] += time.perf_counter() - start
 
+			start = time.perf_counter() if collect_stage_timings else None
+			self._prefix_local_program.run(
+				[params_buffer, group_hist_buffer],
+				[prefix_buffer, block_totals_buffer],
+				prefix_local_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["prefix_local"] += time.perf_counter() - start
+
+			start = time.perf_counter() if collect_stage_timings else None
+			self._prefix_blocks_program.run(
+				[params_buffer, block_totals_buffer],
+				[block_prefix_buffer],
+				prefix_block_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["prefix_blocks"] += time.perf_counter() - start
+
+			start = time.perf_counter() if collect_stage_timings else None
+			self._prefix_accum_program.run(
+				[params_buffer, block_prefix_buffer],
+				[prefix_buffer],
+				prefix_accum_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["prefix_accum"] += time.perf_counter() - start
+
+			start = time.perf_counter() if collect_stage_timings else None
+			self._bucket_scan_program.run(
+				[params_buffer, prefix_buffer],
+				[bucket_scan_buffer],
+				bucket_scan_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["bucket_scan"] += time.perf_counter() - start
+
+			start = time.perf_counter() if collect_stage_timings else None
+			self._scatter_program.run(
+				[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
+				[key_out, val_out],
+				scatter_groups,
+			)
+			if collect_stage_timings and start is not None:
+				stage_totals["scatter"] += time.perf_counter() - start
+
+			key_in, key_out = key_out, key_in
 			if values_array is not None:
-				value_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
-				for buf in value_buffers:
-					stack.callback(buf.release)
-				value_buffers[0].setData(values_array)
-			else:
-				dummy = self._dummy_values_buffer
-				value_buffers = [dummy, dummy]
+				val_in, val_out = val_out, val_in
 
-			packed_hist_buffer = tf.createBuffer(max(packed_count * num_groups, 1), 4, False)
-			group_hist_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
-			prefix_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
-			block_totals_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
-			block_prefix_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
-			bucket_scan_buffer = tf.createBuffer(max(histogram_size, 1), 4, False)
+		start = time.perf_counter() if collect_stage_timings else None
+		self._map_from_uint_program.run(
+			[map_buffer, key_in],
+			[key_out],
+			map_groups,
+		)
+		if collect_stage_timings and start is not None:
+			stage_totals["map_from_uint"] += time.perf_counter() - start
 
-			for buf in (
-				packed_hist_buffer,
-				group_hist_buffer,
-				prefix_buffer,
-				block_totals_buffer,
-				block_prefix_buffer,
-				bucket_scan_buffer,
-			):
-				stack.callback(buf.release)
+		# Record total time from first to last dispatch in the sort pass
+		if collect_stage_timings and total_start is not None:
+			stage_totals["total_pass"] = time.perf_counter() - total_start
 
-			map_groups = _dispatch_groups(element_count, self.group_size)
-			reduction_group_size = 64
-			unpack_groups = _dispatch_groups(histogram_size * num_groups, reduction_group_size)
-			prefix_local_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
-			prefix_block_groups = _dispatch_groups(histogram_size, reduction_group_size)
-			prefix_accum_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
-			bucket_scan_groups = _dispatch_groups(histogram_size, reduction_group_size)
-			scatter_groups = num_groups
-			histogram_groups = num_groups
+		# Optional GPU-side validation: check adjacent pairs and atomically count violations
+		if validate:
+			validate_params = np.zeros(2, dtype=np.uint32)
+			validate_params[0] = np.uint32(element_count)
+			validate_params[1] = map_params[1]  # type code
 
-			# Total pass timer starts at the first dispatch and ends after the last (map_from_uint)
-			total_start = time.perf_counter() if collect_stage_timings else None
-			start = time.perf_counter() if collect_stage_timings else None
-			self._map_to_uint_program.run(
-				[map_buffer, key_buffers[0]],
-				[key_buffers[1]],
+			validate_params_buf = tf.createBuffer(validate_params.size, 4, True)
+			validate_params_buf.setData(validate_params)
+
+			error_buf = tf.createBuffer(1, 4, False)
+			error_zero = np.zeros(1, dtype=np.uint32)
+			error_buf.setData(error_zero)
+
+			# Reuse map_groups; kernel early-outs for i >= n-1
+			self._validate_program.run(
+				[validate_params_buf, key_out],
+				[error_buf],
 				map_groups,
 			)
-			if collect_stage_timings and start is not None:
-				stage_totals["map_to_uint"] += time.perf_counter() - start
 
-			key_in = key_buffers[1]
-			key_out = key_buffers[0]
-			val_in, val_out = value_buffers
+			error_count = int(error_buf.getData(np.dtype(np.uint32), 1)[0])
+			self.last_validation_errors = error_count
 
-			for pass_index in range(passes):
-				params_array[2] = np.uint32(pass_index * self.bits_per_pass)
-				params_buffer.setData(params_array)
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._histogram_program.run(
-					[params_buffer, key_in],
-					[packed_hist_buffer],
-					histogram_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["histogram"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._unpack_program.run(
-					[params_buffer, packed_hist_buffer],
-					[group_hist_buffer],
-					unpack_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["unpack"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._prefix_local_program.run(
-					[params_buffer, group_hist_buffer],
-					[prefix_buffer, block_totals_buffer],
-					prefix_local_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["prefix_local"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._prefix_blocks_program.run(
-					[params_buffer, block_totals_buffer],
-					[block_prefix_buffer],
-					prefix_block_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["prefix_blocks"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._prefix_accum_program.run(
-					[params_buffer, block_prefix_buffer],
-					[prefix_buffer],
-					prefix_accum_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["prefix_accum"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._bucket_scan_program.run(
-					[params_buffer, prefix_buffer],
-					[bucket_scan_buffer],
-					bucket_scan_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["bucket_scan"] += time.perf_counter() - start
-
-				start = time.perf_counter() if collect_stage_timings else None
-				self._scatter_program.run(
-					[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
-					[key_out, val_out],
-					scatter_groups,
-				)
-				if collect_stage_timings and start is not None:
-					stage_totals["scatter"] += time.perf_counter() - start
-
-				key_in, key_out = key_out, key_in
-				if values_array is not None:
-					val_in, val_out = val_out, val_in
-
-			start = time.perf_counter() if collect_stage_timings else None
-			self._map_from_uint_program.run(
-				[map_buffer, key_in],
-				[key_out],
-				map_groups,
-			)
-			if collect_stage_timings and start is not None:
-				stage_totals["map_from_uint"] += time.perf_counter() - start
-
-			# Record total time from first to last dispatch in the sort pass
-			if collect_stage_timings and total_start is not None:
-				stage_totals["total_pass"] = time.perf_counter() - total_start
-
-			# Optional GPU-side validation: check adjacent pairs and atomically count violations
-			if validate:
-				validate_params = np.zeros(2, dtype=np.uint32)
-				validate_params[0] = np.uint32(element_count)
-				validate_params[1] = map_params[1]  # type code
-
-				validate_params_buf = tf.createBuffer(validate_params.size, 4, True)
-				stack.callback(validate_params_buf.release)
-				validate_params_buf.setData(validate_params)
-
-				error_buf = tf.createBuffer(1, 4, False)
-				stack.callback(error_buf.release)
-				error_zero = np.zeros(1, dtype=np.uint32)
-				error_buf.setData(error_zero)
-
-				# Reuse map_groups; kernel early-outs for i >= n-1
-				self._validate_program.run(
-					[validate_params_buf, key_out],
-					[error_buf],
-					map_groups,
-				)
-
-				error_count = int(error_buf.getData(np.dtype(np.uint32), 1)[0])
-				self.last_validation_errors = error_count
-
-			if return_arrays:
-				sorted_keys = key_out.getData(key_dtype, element_count)
-				if values_array is not None and values_dtype is not None:
-					sorted_values = val_in.getData(values_dtype, element_count)
-				else:
-					sorted_values = None
+		if return_arrays:
+			sorted_keys = key_out.getData(key_dtype, element_count)
+			if values_array is not None and values_dtype is not None:
+				sorted_values = val_in.getData(values_dtype, element_count)
 			else:
-				# Avoid full readback when not needed by caller
-				sorted_keys = np.empty(0, dtype=key_dtype)
-				sorted_values = (np.empty(0, dtype=values_dtype) if values_array is not None and values_dtype is not None else None)
+				sorted_values = None
+		else:
+			# Avoid full readback when not needed by caller
+			sorted_keys = np.empty(0, dtype=key_dtype)
+			sorted_values = (np.empty(0, dtype=values_dtype) if values_array is not None and values_dtype is not None else None)
 
 		self.last_stage_timings = stage_totals if collect_stage_timings else None
 		return sorted_keys, sorted_values

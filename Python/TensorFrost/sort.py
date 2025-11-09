@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from contextlib import ExitStack
 from dataclasses import dataclass
 from importlib import resources
 from typing import Dict, Optional, Tuple
@@ -156,21 +155,19 @@ class HistogramRadixSort:
 		self._dummy_values_buffer = tf.createBuffer(1, 4, False)
 
 	def close(self) -> None:
-		for program in (
-			self._map_to_uint_program,
-			self._map_from_uint_program,
-			self._histogram_program,
-			self._unpack_program,
-			self._prefix_local_program,
-			self._prefix_blocks_program,
-			self._prefix_accum_program,
-			self._bucket_scan_program,
-			self._scatter_program,
+		for attr in (
+			"_map_to_uint_program",
+			"_map_from_uint_program",
+			"_histogram_program",
+			"_unpack_program",
+			"_prefix_local_program",
+			"_prefix_blocks_program",
+			"_prefix_accum_program",
+			"_bucket_scan_program",
+			"_scatter_program",
 		):
-			if program is not None:
-				program.release()
-		if self._dummy_values_buffer is not None:
-			self._dummy_values_buffer.release()
+			setattr(self, attr, None)
+		self._dummy_values_buffer = None
 
 	def sort(
 		self,
@@ -218,127 +215,110 @@ class HistogramRadixSort:
 		map_params[0] = np.uint32(element_count)
 		map_params[1] = _TYPE_CODES[key_kind]
 
-		with ExitStack() as stack:
-			params_buffer = tf.createBuffer(params_array.size, 4, True)
-			stack.callback(params_buffer.release)
+		params_buffer = tf.createBuffer(params_array.size, 4, True)
+		params_buffer.setData(params_array)
+
+		map_buffer = tf.createBuffer(map_params.size, 4, True)
+		map_buffer.setData(map_params)
+
+		key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
+		key_buffers[0].setData(keys_array)
+
+		if values_array is not None:
+			value_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
+			value_buffers[0].setData(values_array)
+		else:
+			dummy = self._dummy_values_buffer
+			value_buffers = [dummy, dummy]
+
+		packed_hist_buffer = tf.createBuffer(max(packed_count * num_groups, 1), 4, False)
+		group_hist_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
+		prefix_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
+		block_totals_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
+		block_prefix_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
+		bucket_scan_buffer = tf.createBuffer(max(histogram_size, 1), 4, False)
+
+		map_groups = _dispatch_groups(element_count, self.group_size)
+		reduction_group_size = 64
+		unpack_groups = _dispatch_groups(histogram_size * num_groups, reduction_group_size)
+		prefix_local_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+		prefix_block_groups = _dispatch_groups(histogram_size, reduction_group_size)
+		prefix_accum_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
+		bucket_scan_groups = _dispatch_groups(histogram_size, reduction_group_size)
+		scatter_groups = num_groups
+		histogram_groups = num_groups
+
+		self._map_to_uint_program.run(
+			[map_buffer, key_buffers[0]],
+			[key_buffers[1]],
+			map_groups,
+		)
+
+		key_in = key_buffers[1]
+		key_out = key_buffers[0]
+		val_in, val_out = value_buffers
+
+		for pass_index in range(passes):
+			params_array[2] = np.uint32(pass_index * self.bits_per_pass)
 			params_buffer.setData(params_array)
 
-			map_buffer = tf.createBuffer(map_params.size, 4, True)
-			stack.callback(map_buffer.release)
-			map_buffer.setData(map_params)
+			self._histogram_program.run(
+				[params_buffer, key_in],
+				[packed_hist_buffer],
+				histogram_groups,
+			)
 
-			key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
-			for buf in key_buffers:
-				stack.callback(buf.release)
-			key_buffers[0].setData(keys_array)
+			self._unpack_program.run(
+				[params_buffer, packed_hist_buffer],
+				[group_hist_buffer],
+				unpack_groups,
+			)
 
+			self._prefix_local_program.run(
+				[params_buffer, group_hist_buffer],
+				[prefix_buffer, block_totals_buffer],
+				prefix_local_groups,
+			)
+
+			self._prefix_blocks_program.run(
+				[params_buffer, block_totals_buffer],
+				[block_prefix_buffer],
+				prefix_block_groups,
+			)
+
+			self._prefix_accum_program.run(
+				[params_buffer, block_prefix_buffer],
+				[prefix_buffer],
+				prefix_accum_groups,
+			)
+
+			self._bucket_scan_program.run(
+				[params_buffer, prefix_buffer],
+				[bucket_scan_buffer],
+				bucket_scan_groups,
+			)
+
+			self._scatter_program.run(
+				[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
+				[key_out, val_out],
+				scatter_groups,
+			)
+
+			key_in, key_out = key_out, key_in
 			if values_array is not None:
-				value_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
-				for buf in value_buffers:
-					stack.callback(buf.release)
-				value_buffers[0].setData(values_array)
-			else:
-				dummy = self._dummy_values_buffer
-				value_buffers = [dummy, dummy]
+				val_in, val_out = val_out, val_in
 
-			packed_hist_buffer = tf.createBuffer(max(packed_count * num_groups, 1), 4, False)
-			group_hist_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
-			prefix_buffer = tf.createBuffer(max(histogram_size * num_groups, 1), 4, False)
-			block_totals_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
-			block_prefix_buffer = tf.createBuffer(max(histogram_size * block_count, 1), 4, False)
-			bucket_scan_buffer = tf.createBuffer(max(histogram_size, 1), 4, False)
+		self._map_from_uint_program.run(
+			[map_buffer, key_in],
+			[key_out],
+			map_groups,
+		)
 
-			for buf in (
-				packed_hist_buffer,
-				group_hist_buffer,
-				prefix_buffer,
-				block_totals_buffer,
-				block_prefix_buffer,
-				bucket_scan_buffer,
-			):
-				stack.callback(buf.release)
-
-			map_groups = _dispatch_groups(element_count, self.group_size)
-			reduction_group_size = 64
-			unpack_groups = _dispatch_groups(histogram_size * num_groups, reduction_group_size)
-			prefix_local_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
-			prefix_block_groups = _dispatch_groups(histogram_size, reduction_group_size)
-			prefix_accum_groups = _dispatch_groups(histogram_size * block_count, reduction_group_size)
-			bucket_scan_groups = _dispatch_groups(histogram_size, reduction_group_size)
-			scatter_groups = num_groups
-			histogram_groups = num_groups
-
-			self._map_to_uint_program.run(
-				[map_buffer, key_buffers[0]],
-				[key_buffers[1]],
-				map_groups,
-			)
-
-			key_in = key_buffers[1]
-			key_out = key_buffers[0]
-			val_in, val_out = value_buffers
-
-			for pass_index in range(passes):
-				params_array[2] = np.uint32(pass_index * self.bits_per_pass)
-				params_buffer.setData(params_array)
-
-				self._histogram_program.run(
-					[params_buffer, key_in],
-					[packed_hist_buffer],
-					histogram_groups,
-				)
-
-				self._unpack_program.run(
-					[params_buffer, packed_hist_buffer],
-					[group_hist_buffer],
-					unpack_groups,
-				)
-
-				self._prefix_local_program.run(
-					[params_buffer, group_hist_buffer],
-					[prefix_buffer, block_totals_buffer],
-					prefix_local_groups,
-				)
-
-				self._prefix_blocks_program.run(
-					[params_buffer, block_totals_buffer],
-					[block_prefix_buffer],
-					prefix_block_groups,
-				)
-
-				self._prefix_accum_program.run(
-					[params_buffer, block_prefix_buffer],
-					[prefix_buffer],
-					prefix_accum_groups,
-				)
-
-				self._bucket_scan_program.run(
-					[params_buffer, prefix_buffer],
-					[bucket_scan_buffer],
-					bucket_scan_groups,
-				)
-
-				self._scatter_program.run(
-					[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
-					[key_out, val_out],
-					scatter_groups,
-				)
-
-				key_in, key_out = key_out, key_in
-				if values_array is not None:
-					val_in, val_out = val_out, val_in
-
-			self._map_from_uint_program.run(
-				[map_buffer, key_in],
-				[key_out],
-				map_groups,
-			)
-
-			sorted_keys = key_out.getData(key_dtype, element_count)
-			if values_array is not None and values_dtype is not None:
-				sorted_values = val_in.getData(values_dtype, element_count)
-			else:
-				sorted_values = None
+		sorted_keys = key_out.getData(key_dtype, element_count)
+		if values_array is not None and values_dtype is not None:
+			sorted_values = val_in.getData(values_dtype, element_count)
+		else:
+			sorted_values = None
 
 		return sorted_keys, sorted_values
 

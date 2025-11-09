@@ -48,7 +48,6 @@ def main() -> None:
         nonlocal pixel_buffer, pixel_capacity
         required = max(1, cur_width * cur_height)
         if required != pixel_capacity:
-            pixel_buffer.release()
             pixel_buffer = tf.createBuffer(required, 4, False)
             pixel_capacity = required
 
@@ -148,8 +147,8 @@ def main() -> None:
                 pending_scroll += scroll_dy
     finally:
         win.close()
-        pixel_buffer.release()
-        params_buffer.release()
+        pixel_buffer = None
+        params_buffer = None
 
 
 if __name__ == "__main__":
