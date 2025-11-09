@@ -22,10 +22,9 @@ def main() -> None:
 
     pixel_capacity = max(1, width * height)
     pixel_buffer = tf.createBuffer(pixel_capacity, 4, False)
-    params_buffer = tf.createBuffer(8, 4, True)
 
     shader_source = load_shader()
-    program = tf.createComputeProgramFromSlang("mandelbrot", shader_source, "csMain", ro_count=1, rw_count=1)
+    program = tf.createComputeProgramFromSlang("mandelbrot", shader_source, "csMain", ro_count=0, rw_count=1)
     local_size = 64
 
     center = [-0.5, 0.0]
@@ -136,8 +135,7 @@ def main() -> None:
         params[6] = float(manual_iterations)
         params[7] = 1.0 if swap_rb else 0.0
 
-        params_buffer.setData(params)
-        program.run([params_buffer], [pixel_buffer], group_count)
+        program.run([], [pixel_buffer], group_count, params)
 
         win.drawBuffer(pixel_buffer, width, height)
 

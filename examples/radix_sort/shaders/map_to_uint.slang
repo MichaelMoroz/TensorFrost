@@ -5,19 +5,26 @@ static const uint SIGN_BIT = 0x80000000u;
 static const uint FULL_MASK = 0xFFFFFFFFu;
 static const uint GROUP_SIZE = TF_GROUP_SIZE;
 
-[[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
-[[vk::binding(1,0)]] StructuredBuffer<uint> Input : register(t1, space0);
-[[vk::binding(2,0)]] RWStructuredBuffer<uint> Output : register(u2, space0);
+struct MapParams {
+    uint count;
+    uint typeCode;
+};
+
+[[vk::push_constant]]
+MapParams gParams;
+
+[[vk::binding(0,0)]] StructuredBuffer<uint> Input : register(t0, space0);
+[[vk::binding(1,0)]] RWStructuredBuffer<uint> Output : register(u1, space0);
 
 [numthreads(GROUP_SIZE, 1, 1)]
 void csMapToUint(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint index = dispatchThreadID.x;
-    uint count = Params[0];
+    uint count = gParams.count;
     if (index >= count)
         return;
 
-    uint typeCode = Params[1];
+    uint typeCode = gParams.typeCode;
     uint value = Input[index];
 
     if (typeCode == TYPE_INT)

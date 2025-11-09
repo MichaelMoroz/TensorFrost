@@ -1,15 +1,28 @@
-[[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
-[[vk::binding(1,0)]] StructuredBuffer<uint> GroupHistogram : register(t1, space0);
-[[vk::binding(2,0)]] RWStructuredBuffer<uint> GroupPrefix : register(u2, space0);
-[[vk::binding(3,0)]] RWStructuredBuffer<uint> BlockTotals : register(u3, space0);
+struct SortParams {
+    uint elementCount;
+    uint histogramSize;
+    uint shift;
+    uint mask;
+    uint numGroups;
+    uint blockSize;
+    uint blockCount;
+    uint hasValues;
+};
+
+[[vk::push_constant]]
+SortParams gParams;
+
+[[vk::binding(0,0)]] StructuredBuffer<uint> GroupHistogram : register(t0, space0);
+[[vk::binding(1,0)]] RWStructuredBuffer<uint> GroupPrefix : register(u1, space0);
+[[vk::binding(2,0)]] RWStructuredBuffer<uint> BlockTotals : register(u2, space0);
 
 [numthreads(64, 1, 1)]
 void csPrefixLocal(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
-    uint histogramSize = Params[1];
-    uint numGroups = Params[4];
-    uint blockSize = Params[5];
-    uint blockCount = Params[6];
+    uint histogramSize = gParams.histogramSize;
+    uint numGroups = gParams.numGroups;
+    uint blockSize = gParams.blockSize;
+    uint blockCount = gParams.blockCount;
 
     uint totalThreads = blockCount * histogramSize;
     uint index = dispatchThreadID.x;

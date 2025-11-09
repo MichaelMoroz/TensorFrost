@@ -5,9 +5,16 @@ static const uint SIGN_BIT = 0x80000000u;
 static const uint FULL_MASK = 0xFFFFFFFFu;
 static const uint GROUP_SIZE = TF_GROUP_SIZE;
 
-[[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0); // [0] = count, [1] = typeCode
-[[vk::binding(1,0)]] StructuredBuffer<uint> Keys : register(t1, space0);   // original key bit patterns
-[[vk::binding(2,0)]] RWStructuredBuffer<uint> Errors : register(u2, space0); // single uint atomic counter
+struct ValidateParams {
+    uint elementCount;
+    uint typeCode;
+};
+
+[[vk::push_constant]]
+ValidateParams gParams;
+
+[[vk::binding(0,0)]] StructuredBuffer<uint> Keys : register(t0, space0);   // original key bit patterns
+[[vk::binding(1,0)]] RWStructuredBuffer<uint> Errors : register(u1, space0); // single uint atomic counter
 
 // Map a key to sortable uint (same transform as map_to_uint.slang)
 uint mapKey(uint raw, uint typeCode)
@@ -28,11 +35,11 @@ uint mapKey(uint raw, uint typeCode)
 void csValidate(uint3 dispatchThreadID : SV_DispatchThreadID)
 {
     uint i = dispatchThreadID.x;
-    uint n = Params[0];
+    uint n = gParams.elementCount;
     if (n < 2 || i >= n - 1)
         return;
 
-    uint typeCode = Params[1];
+    uint typeCode = gParams.typeCode;
 
     uint a = mapKey(Keys[i], typeCode);
     uint b = mapKey(Keys[i + 1u], typeCode);

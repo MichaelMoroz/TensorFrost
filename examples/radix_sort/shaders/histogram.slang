@@ -7,20 +7,33 @@ uint packedCount(uint histogramSize)
     return (histogramSize + 3u) >> 2;
 }
 
-[[vk::binding(0,0)]] StructuredBuffer<uint> Params : register(t0, space0);
-[[vk::binding(1,0)]] StructuredBuffer<uint> KeysIn : register(t1, space0);
-[[vk::binding(2,0)]] RWStructuredBuffer<uint> PackedHistogram : register(u2, space0);
+struct SortParams {
+    uint elementCount;
+    uint histogramSize;
+    uint shift;
+    uint mask;
+    uint numGroups;
+    uint blockSize;
+    uint blockCount;
+    uint hasValues;
+};
+
+[[vk::push_constant]]
+SortParams gParams;
+
+[[vk::binding(0,0)]] StructuredBuffer<uint> KeysIn : register(t0, space0);
+[[vk::binding(1,0)]] RWStructuredBuffer<uint> PackedHistogram : register(u1, space0);
 
 groupshared uint sPacked[MAX_HIST_SIZE / 4];
 
 [numthreads(GROUP_SIZE, 1, 1)]
 void csHistogram(uint3 groupID : SV_GroupID, uint3 localID : SV_GroupThreadID)
 {
-    uint elementCount = Params[0];
-    uint histogramSize = Params[1];
-    uint shift = Params[2];
-    uint mask = Params[3];
-    uint numGroups = Params[4];
+    uint elementCount = gParams.elementCount;
+    uint histogramSize = gParams.histogramSize;
+    uint shift = gParams.shift;
+    uint mask = gParams.mask;
+    uint numGroups = gParams.numGroups;
 
     if (histogramSize > MAX_HIST_SIZE)
         return;

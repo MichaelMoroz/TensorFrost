@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -26,6 +27,44 @@ bool isCContiguous(const py::buffer_info& info) {
         stride *= info.shape[d];
     }
     return true;
+}
+
+struct PushConstantPayload {
+    const void* data = nullptr;
+    size_t size = 0;
+    std::vector<uint8_t> storage;
+};
+
+PushConstantPayload preparePushConstantPayload(const ComputeProgram& program,
+                                               const py::object& pushConstants) {
+    PushConstantPayload payload;
+    if (program.pushConstantSize == 0) {
+        if (!pushConstants.is_none()) {
+            throw std::runtime_error("program does not declare push constants");
+        }
+        return payload;
+    }
+    if (pushConstants.is_none()) {
+        throw std::runtime_error("push constant payload required for this program");
+    }
+
+    py::buffer buffer(pushConstants);
+    auto info = buffer.request();
+    if (!isCContiguous(info)) {
+        throw std::runtime_error("push constant payload must be C-contiguous");
+    }
+    size_t totalBytes = static_cast<size_t>(info.size) * static_cast<size_t>(info.itemsize);
+    if (totalBytes != program.pushConstantSize) {
+        throw std::runtime_error(
+            "push constant payload size mismatch (got " + std::to_string(totalBytes) +
+            ", expected " + std::to_string(program.pushConstantSize) + ")");
+    }
+
+    payload.storage.resize(totalBytes);
+    std::memcpy(payload.storage.data(), info.ptr, totalBytes);
+    payload.data = payload.storage.data();
+    payload.size = totalBytes;
+    return payload;
 }
 
 }  // namespace
@@ -174,7 +213,8 @@ PyComputeProgram& PyComputeProgram::operator=(PyComputeProgram&& other) noexcept
 
 void PyComputeProgram::run(const py::iterable& readonlyBuffers,
                            const py::iterable& readwriteBuffers,
-                           uint32_t groupCount) {
+                           uint32_t groupCount,
+                           const py::object& pushConstants) {
     ensureValid();
     std::vector<Buffer*> ro;
     std::vector<Buffer*> rw;
@@ -183,8 +223,9 @@ void PyComputeProgram::run(const py::iterable& readonlyBuffers,
     if (ro.size() != program_.numRO || rw.size() != program_.numRW) {
         throw std::runtime_error("buffer count does not match program layout");
     }
+    auto payload = preparePushConstantPayload(program_, pushConstants);
     py::gil_scoped_release release;
-    runProgram(program_, ro, rw, groupCount);
+    runProgram(program_, ro, rw, groupCount, payload.data, payload.size);
 }
 
 void PyComputeProgram::release() {
@@ -198,6 +239,8 @@ void PyComputeProgram::release() {
 uint32_t PyComputeProgram::readonlyCount() const { return program_.numRO; }
 
 uint32_t PyComputeProgram::readwriteCount() const { return program_.numRW; }
+
+uint32_t PyComputeProgram::pushConstantSize() const { return program_.pushConstantSize; }
 
 void PyComputeProgram::ensureValid() const {
     if (!ctx_ || !program_.pipeline) {
@@ -694,12 +737,6 @@ ImVec4 PyWindow::tupleToVec4(const py::tuple& tpl, const char* name) {
 
 py::tuple PyWindow::vec4ToTuple(const ImVec4& vec) {
     return py::make_tuple(vec.x, vec.y, vec.z, vec.w);
-}
-
-PyComputeProgram MakeComputeProgramFromGLSL(const std::string& source,
-                                            uint32_t roCount,
-                                            uint32_t rwCount) {
-    return PyComputeProgram(createComputeProgramFromGLSL(source, roCount, rwCount));
 }
 
 PyComputeProgram MakeComputeProgramFromSlang(const std::string& moduleName,

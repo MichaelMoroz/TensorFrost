@@ -1,5 +1,18 @@
-[[vk::binding(0,0)]] StructuredBuffer<float> Params : register(t0, space0);
-[[vk::binding(1,0)]] RWStructuredBuffer<uint> Pixels : register(u1, space0);
+struct MandelbrotParams {
+    float width;
+    float height;
+    float xmin;
+    float ymin;
+    float dx;
+    float dy;
+    float maxIter;
+    float swapRB;
+};
+
+[[vk::push_constant]]
+MandelbrotParams gParams;
+
+[[vk::binding(0,0)]] RWStructuredBuffer<uint> Pixels : register(u0, space0);
 
 static float3 palette(float t) {
     return sin(6.3 * float3(0.0, 0.33, 0.67) * t);
@@ -9,17 +22,20 @@ static float3 palette(float t) {
 void csMain(uint3 tid : SV_DispatchThreadID)
 {
     uint idx = tid.x;
-    int  W = (int)(Params[0] + 0.5);
-    int  H = (int)(Params[1] + 0.5);
+    int  W = (int)(gParams.width + 0.5);
+    int  H = (int)(gParams.height + 0.5);
     uint N = (uint)(W * H);
     if (idx >= N) return;
 
     int x = int(idx % (uint)W);
     int y = int(idx / (uint)W);
 
-    float xmin = Params[2], ymin = Params[3], dx = Params[4], dy = Params[5];
-    int   maxIter = (int)(Params[6] + 0.5);
-    bool  isBGRA  = (Params[7] > 0.5);
+    float xmin = gParams.xmin;
+    float ymin = gParams.ymin;
+    float dx = gParams.dx;
+    float dy = gParams.dy;
+    int   maxIter = (int)(gParams.maxIter + 0.5);
+    bool  isBGRA  = (gParams.swapRB > 0.5);
 
     float cx = xmin + float(x) * dx;
     float cy = ymin + float(y) * dy;

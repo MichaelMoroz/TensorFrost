@@ -1,9 +1,10 @@
 #include "Backend/Vulkan.h"
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#include <shaderc/shaderc.hpp>
 #include <slang/slang.h>
 #include <slang/slang-com-ptr.h>
 #include <array>
+#include <cstdio>
+#include <cstring>
 #include <stdexcept>
 
 namespace {
@@ -444,28 +445,15 @@ VulkanContext::~VulkanContext() {
     instance.destroy();
 }
 
-// compile GLSL to SPIR-V at runtime
-static std::vector<uint32_t> compileGLSLToSpirv(const std::string& source) {
-    shaderc::Compiler compiler;
-    shaderc::CompileOptions opts;
-    opts.SetTargetEnvironment(shaderc_target_env_vulkan,
-                              shaderc_env_version_vulkan_1_1);
-#if defined(_RELWITHDEBINFO)
-    opts.SetGenerateDebugInfo();
-    opts.SetOptimizationLevel(shaderc_optimization_level_zero);
-#endif
-    shaderc::SpvCompilationResult result =
-        compiler.CompileGlslToSpv(source, shaderc_compute_shader, "shader", opts);
-    if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-        throw std::runtime_error(result.GetErrorMessage());
-    }
-    return {result.cbegin(), result.cend()};
-}
+struct SlangCompileResult {
+    std::vector<uint32_t> spirv;
+    uint32_t pushConstantSize = 0;
+};
 
-std::vector<uint32_t> compileSlangToSpirv(const char* moduleName,
-                                          const char* source,
-                                          const char* entry,
-                                          const char* profile /* e.g., "spirv_1_5" */) {
+SlangCompileResult compileSlangToSpirv(const char* moduleName,
+                                       const char* source,
+                                       const char* entry,
+                                       const char* profile /* e.g., "spirv_1_5" */) {
     Slang::ComPtr<slang::IGlobalSession> global;
     createGlobalSession(global.writeRef());
 
@@ -524,11 +512,32 @@ std::vector<uint32_t> compileSlangToSpirv(const char* moduleName,
         if (SLANG_FAILED(r)) throw std::runtime_error("slang: getEntryPointCode failed");
     }
 
+    uint32_t pushConstantSize = 0;
+    {
+        Slang::ComPtr<slang::IBlob> diag;
+        slang::ProgramLayout* layout = linked->getLayout(0, diag.writeRef());
+        if (diag && diag->getBufferSize()) std::fprintf(stderr, "%s\n", (const char*)diag->getBufferPointer());
+        if (!layout) throw std::runtime_error("slang: failed to obtain program layout");
+
+        if (auto* globalLayout = layout->getGlobalParamsTypeLayout()) {
+            size_t size = globalLayout->getSize(slang::ParameterCategory::PushConstantBuffer);
+            pushConstantSize = std::max(pushConstantSize, static_cast<uint32_t>(size));
+        }
+        for (SlangUInt i = 0; i < layout->getEntryPointCount(); ++i) {
+            if (auto* entry = layout->getEntryPointByIndex(i)) {
+                if (auto* typeLayout = entry->getTypeLayout()) {
+                    size_t size = typeLayout->getSize(slang::ParameterCategory::PushConstantBuffer);
+                    pushConstantSize = std::max(pushConstantSize, static_cast<uint32_t>(size));
+                }
+            }
+        }
+    }
+
     size_t n = spirv->getBufferSize();
     auto* p = static_cast<const uint8_t*>(spirv->getBufferPointer());
     std::vector<uint32_t> out((n + 3) / 4);
     std::memcpy(out.data(), p, n);
-    return out;
+    return {std::move(out), pushConstantSize};
 }
 
 ComputeBindings createBindings(VulkanContext& ctx, const ComputeProgram& prog,
@@ -556,11 +565,19 @@ ComputeBindings createBindings(VulkanContext& ctx, const ComputeProgram& prog,
 }
 
 static ComputeProgram createComputeProgram(const std::vector<uint32_t>& spirv,
-    uint32_t roCount, uint32_t rwCount) {
+    uint32_t roCount, uint32_t rwCount, uint32_t pushConstantSize) {
     auto& ctx = getVulkanContext();
 
     ComputeProgram prog;
     prog.numRO = roCount; prog.numRW = rwCount;
+    prog.pushConstantSize = pushConstantSize;
+
+    if (prog.pushConstantSize) {
+        auto limits = ctx.physicalDevice.getProperties().limits;
+        if (prog.pushConstantSize > limits.maxPushConstantsSize) {
+            throw std::runtime_error("push constant block exceeds device limit");
+        }
+    }
 
     vk::ShaderModuleCreateInfo smci({}, spirv.size() * sizeof(uint32_t), spirv.data());
     prog.shaderModule = ctx.device.createShaderModule(smci);
@@ -572,7 +589,12 @@ static ComputeProgram createComputeProgram(const std::vector<uint32_t>& spirv,
 
     vk::DescriptorSetLayoutCreateInfo dsInfo({}, bindings.size(), bindings.data());
     prog.descriptorLayout = ctx.device.createDescriptorSetLayout(dsInfo);
-    vk::PipelineLayoutCreateInfo plInfo({}, 1, &prog.descriptorLayout);
+
+    vk::PushConstantRange pushRange(vk::ShaderStageFlagBits::eCompute, 0, prog.pushConstantSize);
+    auto pushPtr = prog.pushConstantSize ? &pushRange : nullptr;
+    uint32_t pushCount = prog.pushConstantSize ? 1u : 0u;
+
+    vk::PipelineLayoutCreateInfo plInfo({}, 1, &prog.descriptorLayout, pushCount, pushPtr);
     prog.pipelineLayout = ctx.device.createPipelineLayout(plInfo);
 
     vk::PipelineShaderStageCreateInfo stageInfo({}, vk::ShaderStageFlagBits::eCompute, prog.shaderModule, "main");
@@ -582,14 +604,10 @@ static ComputeProgram createComputeProgram(const std::vector<uint32_t>& spirv,
     return prog;
 }
 
-ComputeProgram createComputeProgramFromGLSL(const std::string& glsl, uint32_t roCount, uint32_t rwCount) {
-    auto spirv = compileGLSLToSpirv(glsl);
-    return createComputeProgram(spirv, roCount, rwCount);
-}
 ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
     const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount) {
-    auto spirv = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
-    return createComputeProgram(spirv, roCount, rwCount);
+    auto result = compileSlangToSpirv(moduleName.c_str(), source.c_str(), entry.c_str(), "spirv_1_5");
+    return createComputeProgram(result.spirv, roCount, rwCount, result.pushConstantSize);
 }
 
 void destroyComputeProgram(ComputeProgram& prog) {
@@ -605,7 +623,9 @@ void destroyComputeProgram(ComputeProgram& prog) {
 void runProgram(const ComputeProgram& prog,
                 const std::vector<Buffer*>& readonlyBuffers,
                 const std::vector<Buffer*>& readwriteBuffers,
-                uint32_t groupCount) {
+                uint32_t groupCount,
+                const void* pushConstants,
+                size_t pushConstantSize) {
     auto& ctx = getVulkanContext();
     auto set = getOrCreateSet(ctx, prog, readonlyBuffers, readwriteBuffers);
 
@@ -615,6 +635,20 @@ void runProgram(const ComputeProgram& prog,
     cmd.begin(vk::CommandBufferBeginInfo{});
     cmd.bindPipeline(vk::PipelineBindPoint::eCompute, prog.pipeline);
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eCompute, prog.pipelineLayout, 0, set, {});
+
+    if (prog.pushConstantSize) {
+        if (!pushConstants) {
+            throw std::runtime_error("push constant payload missing");
+        }
+        if (pushConstantSize != prog.pushConstantSize) {
+            throw std::runtime_error("push constant payload size mismatch");
+        }
+        cmd.pushConstants(prog.pipelineLayout, vk::ShaderStageFlagBits::eCompute, 0,
+                          prog.pushConstantSize, pushConstants);
+    } else if (pushConstantSize != 0) {
+        throw std::runtime_error("push constant payload provided but pipeline has none");
+    }
+
     cmd.dispatch(groupCount, 1, 1);
     cmd.end();
 

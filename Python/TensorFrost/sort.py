@@ -90,14 +90,14 @@ class HistogramRadixSort:
 			"radix_map_to_uint",
 			_load_shader_source("map_to_uint.slang"),
 			"csMapToUint",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._map_from_uint_program = tf.createComputeProgramFromSlang(
 			"radix_map_from_uint",
 			_load_shader_source("map_from_uint.slang"),
 			"csMapFromUint",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 
@@ -105,42 +105,42 @@ class HistogramRadixSort:
 			"radix_histogram",
 			_load_shader_source("histogram.slang"),
 			"csHistogram",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._unpack_program = tf.createComputeProgramFromSlang(
 			"radix_unpack",
 			_load_shader_source("unpack.slang"),
 			"csUnpack",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._prefix_local_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_local",
 			_load_shader_source("prefix_local.slang"),
 			"csPrefixLocal",
-			ro_count=2,
+			ro_count=1,
 			rw_count=2,
 		)
 		self._prefix_blocks_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_blocks",
 			_load_shader_source("prefix_block.slang"),
 			"csPrefixBlocks",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._prefix_accum_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_accum",
 			_load_shader_source("prefix_accum.slang"),
 			"csPrefixAccumulate",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._bucket_scan_program = tf.createComputeProgramFromSlang(
 			"radix_bucket_scan",
 			_load_shader_source("bucket_scan.slang"),
 			"csBucketScan",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		scatter_source = f"#define TF_HISTOGRAM_SIZE {self.histogram_size}u\n" + _load_shader_source("scatter.slang")
@@ -148,7 +148,7 @@ class HistogramRadixSort:
 			"radix_scatter",
 			scatter_source,
 			"csScatter",
-			ro_count=5,
+			ro_count=4,
 			rw_count=2,
 		)
 
@@ -211,15 +211,9 @@ class HistogramRadixSort:
 		params_array[6] = np.uint32(block_count)
 		params_array[7] = np.uint32(1 if values_array is not None else 0)
 
-		map_params = np.zeros(4, dtype=np.uint32)
+		map_params = np.zeros(2, dtype=np.uint32)
 		map_params[0] = np.uint32(element_count)
 		map_params[1] = _TYPE_CODES[key_kind]
-
-		params_buffer = tf.createBuffer(params_array.size, 4, True)
-		params_buffer.setData(params_array)
-
-		map_buffer = tf.createBuffer(map_params.size, 4, True)
-		map_buffer.setData(map_params)
 
 		key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
 		key_buffers[0].setData(keys_array)
@@ -249,9 +243,10 @@ class HistogramRadixSort:
 		histogram_groups = num_groups
 
 		self._map_to_uint_program.run(
-			[map_buffer, key_buffers[0]],
+			[key_buffers[0]],
 			[key_buffers[1]],
 			map_groups,
+			map_params,
 		)
 
 		key_in = key_buffers[1]
@@ -260,48 +255,54 @@ class HistogramRadixSort:
 
 		for pass_index in range(passes):
 			params_array[2] = np.uint32(pass_index * self.bits_per_pass)
-			params_buffer.setData(params_array)
 
 			self._histogram_program.run(
-				[params_buffer, key_in],
+				[key_in],
 				[packed_hist_buffer],
 				histogram_groups,
+				params_array,
 			)
 
 			self._unpack_program.run(
-				[params_buffer, packed_hist_buffer],
+				[packed_hist_buffer],
 				[group_hist_buffer],
 				unpack_groups,
+				params_array,
 			)
 
 			self._prefix_local_program.run(
-				[params_buffer, group_hist_buffer],
+				[group_hist_buffer],
 				[prefix_buffer, block_totals_buffer],
 				prefix_local_groups,
+				params_array,
 			)
 
 			self._prefix_blocks_program.run(
-				[params_buffer, block_totals_buffer],
+				[block_totals_buffer],
 				[block_prefix_buffer],
 				prefix_block_groups,
+				params_array,
 			)
 
 			self._prefix_accum_program.run(
-				[params_buffer, block_prefix_buffer],
+				[block_prefix_buffer],
 				[prefix_buffer],
 				prefix_accum_groups,
+				params_array,
 			)
 
 			self._bucket_scan_program.run(
-				[params_buffer, prefix_buffer],
+				[prefix_buffer],
 				[bucket_scan_buffer],
 				bucket_scan_groups,
+				params_array,
 			)
 
 			self._scatter_program.run(
-				[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
+				[key_in, val_in, prefix_buffer, bucket_scan_buffer],
 				[key_out, val_out],
 				scatter_groups,
+				params_array,
 			)
 
 			key_in, key_out = key_out, key_in
@@ -309,9 +310,10 @@ class HistogramRadixSort:
 				val_in, val_out = val_out, val_in
 
 		self._map_from_uint_program.run(
-			[map_buffer, key_in],
+			[key_in],
 			[key_out],
 			map_groups,
+			map_params,
 		)
 
 		sorted_keys = key_out.getData(key_dtype, element_count)

@@ -5,14 +5,15 @@ import numpy as np
 import TensorFrost as tf
 
 
-_SIMPLE_GLSL = """#version 450
-layout(local_size_x = 64) in;
-layout(set = 0, binding = 0) buffer Pixels { uint data[]; };
+_SIMPLE_SLANG = r"""
+[[vk::binding(0,0)]] RWStructuredBuffer<uint> Pixels : register(u0, space0);
 
-void main() {
-    uint idx = gl_GlobalInvocationID.x;
-    if (idx >= data.length()) return;
-    data[idx] = 0xff3366ff;
+[numthreads(64,1,1)]
+void csMain(uint3 tid : SV_DispatchThreadID)
+{
+    uint idx = tid.x;
+    if (idx >= Pixels.length()) return;
+    Pixels[idx] = 0xff3366ff;
 }
 """
 
@@ -31,7 +32,9 @@ class VulkanWindowTest(unittest.TestCase):
 
         program = None
         try:
-            program = tf.createComputeProgramFromGLSL(_SIMPLE_GLSL, ro_count=0, rw_count=1)
+            program = tf.createComputeProgramFromSlang(
+                "window_test_fill", _SIMPLE_SLANG, "csMain", ro_count=0, rw_count=1
+            )
         except RuntimeError as exc:  # pragma: no cover - Vulkan program creation failed
             self.skipTest(f"Vulkan program creation failed: {exc}")
 

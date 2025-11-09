@@ -104,14 +104,14 @@ class HistogramRadixSort:
 			"radix_map_to_uint",
 			inject_defines("map_to_uint.slang", with_group=True),
 			"csMapToUint",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._map_from_uint_program = tf.createComputeProgramFromSlang(
 			"radix_map_from_uint",
 			inject_defines("map_from_uint.slang", with_group=True),
 			"csMapFromUint",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 
@@ -119,42 +119,42 @@ class HistogramRadixSort:
 			"radix_histogram",
 			inject_defines("histogram.slang", with_group=True),
 			"csHistogram",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._unpack_program = tf.createComputeProgramFromSlang(
 			"radix_unpack",
 			_load_shader_source("unpack.slang"),
 			"csUnpack",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._prefix_local_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_local",
 			_load_shader_source("prefix_local.slang"),
 			"csPrefixLocal",
-			ro_count=2,
+			ro_count=1,
 			rw_count=2,
 		)
 		self._prefix_blocks_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_blocks",
 			_load_shader_source("prefix_block.slang"),
 			"csPrefixBlocks",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._prefix_accum_program = tf.createComputeProgramFromSlang(
 			"radix_prefix_accum",
 			_load_shader_source("prefix_accum.slang"),
 			"csPrefixAccumulate",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		self._bucket_scan_program = tf.createComputeProgramFromSlang(
 			"radix_bucket_scan",
 			_load_shader_source("bucket_scan.slang"),
 			"csBucketScan",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 		scatter_source = inject_defines("scatter.slang", with_group=True, with_histogram=True)
@@ -162,7 +162,7 @@ class HistogramRadixSort:
 			"radix_scatter",
 			scatter_source,
 			"csScatter",
-			ro_count=5,
+			ro_count=4,
 			rw_count=2,
 		)
 
@@ -171,7 +171,7 @@ class HistogramRadixSort:
 			"radix_validate_sorted",
 			inject_defines("validate_sorted.slang", with_group=True),
 			"csValidate",
-			ro_count=2,
+			ro_count=1,
 			rw_count=1,
 		)
 
@@ -225,7 +225,7 @@ class HistogramRadixSort:
 		params_array[6] = np.uint32(block_count)
 		params_array[7] = np.uint32(1 if values_array is not None else 0)
 
-		map_params = np.zeros(4, dtype=np.uint32)
+		map_params = np.zeros(2, dtype=np.uint32)
 		map_params[0] = np.uint32(element_count)
 		map_params[1] = _TYPE_CODES[key_kind]
 
@@ -243,12 +243,6 @@ class HistogramRadixSort:
 			}
 		else:
 			stage_totals = {}
-
-		params_buffer = tf.createBuffer(params_array.size, 4, True)
-		params_buffer.setData(params_array)
-
-		map_buffer = tf.createBuffer(map_params.size, 4, True)
-		map_buffer.setData(map_params)
 
 		key_buffers = [tf.createBuffer(max(element_count, 1), 4, False) for _ in range(2)]
 		key_buffers[0].setData(keys_array)
@@ -281,9 +275,10 @@ class HistogramRadixSort:
 		total_start = time.perf_counter() if collect_stage_timings else None
 		start = time.perf_counter() if collect_stage_timings else None
 		self._map_to_uint_program.run(
-			[map_buffer, key_buffers[0]],
+			[key_buffers[0]],
 			[key_buffers[1]],
 			map_groups,
+			map_params,
 		)
 		if collect_stage_timings and start is not None:
 			stage_totals["map_to_uint"] += time.perf_counter() - start
@@ -294,67 +289,73 @@ class HistogramRadixSort:
 
 		for pass_index in range(passes):
 			params_array[2] = np.uint32(pass_index * self.bits_per_pass)
-			params_buffer.setData(params_array)
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._histogram_program.run(
-				[params_buffer, key_in],
+				[key_in],
 				[packed_hist_buffer],
 				histogram_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["histogram"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._unpack_program.run(
-				[params_buffer, packed_hist_buffer],
+				[packed_hist_buffer],
 				[group_hist_buffer],
 				unpack_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["unpack"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._prefix_local_program.run(
-				[params_buffer, group_hist_buffer],
+				[group_hist_buffer],
 				[prefix_buffer, block_totals_buffer],
 				prefix_local_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["prefix_local"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._prefix_blocks_program.run(
-				[params_buffer, block_totals_buffer],
+				[block_totals_buffer],
 				[block_prefix_buffer],
 				prefix_block_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["prefix_blocks"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._prefix_accum_program.run(
-				[params_buffer, block_prefix_buffer],
+				[block_prefix_buffer],
 				[prefix_buffer],
 				prefix_accum_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["prefix_accum"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._bucket_scan_program.run(
-				[params_buffer, prefix_buffer],
+				[prefix_buffer],
 				[bucket_scan_buffer],
 				bucket_scan_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["bucket_scan"] += time.perf_counter() - start
 
 			start = time.perf_counter() if collect_stage_timings else None
 			self._scatter_program.run(
-				[params_buffer, key_in, val_in, prefix_buffer, bucket_scan_buffer],
+				[key_in, val_in, prefix_buffer, bucket_scan_buffer],
 				[key_out, val_out],
 				scatter_groups,
+				params_array,
 			)
 			if collect_stage_timings and start is not None:
 				stage_totals["scatter"] += time.perf_counter() - start
@@ -365,9 +366,10 @@ class HistogramRadixSort:
 
 		start = time.perf_counter() if collect_stage_timings else None
 		self._map_from_uint_program.run(
-			[map_buffer, key_in],
+			[key_in],
 			[key_out],
 			map_groups,
+			map_params,
 		)
 		if collect_stage_timings and start is not None:
 			stage_totals["map_from_uint"] += time.perf_counter() - start
@@ -382,18 +384,16 @@ class HistogramRadixSort:
 			validate_params[0] = np.uint32(element_count)
 			validate_params[1] = map_params[1]  # type code
 
-			validate_params_buf = tf.createBuffer(validate_params.size, 4, True)
-			validate_params_buf.setData(validate_params)
-
 			error_buf = tf.createBuffer(1, 4, False)
 			error_zero = np.zeros(1, dtype=np.uint32)
 			error_buf.setData(error_zero)
 
 			# Reuse map_groups; kernel early-outs for i >= n-1
 			self._validate_program.run(
-				[validate_params_buf, key_out],
+				[key_out],
 				[error_buf],
 				map_groups,
+				validate_params,
 			)
 
 			error_count = int(error_buf.getData(np.dtype(np.uint32), 1)[0])

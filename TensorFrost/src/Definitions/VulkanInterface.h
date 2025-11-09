@@ -72,12 +72,14 @@ public:
 
     void run(const pybind11::iterable& readonlyBuffers,
              const pybind11::iterable& readwriteBuffers,
-             uint32_t groupCount);
+             uint32_t groupCount,
+             const pybind11::object& pushConstants);
 
     void release();
 
     uint32_t readonlyCount() const;
     uint32_t readwriteCount() const;
+    uint32_t pushConstantSize() const;
 
 private:
     void ensureValid() const;
@@ -204,10 +206,6 @@ private:
     VulkanContext* ctx_{};
     WindowContext window_{};
 };
-
-PyComputeProgram MakeComputeProgramFromGLSL(const std::string& source,
-                                            uint32_t roCount,
-                                            uint32_t rwCount);
 
 PyComputeProgram MakeComputeProgramFromSlang(const std::string& moduleName,
                                              const std::string& source,

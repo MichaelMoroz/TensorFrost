@@ -46,19 +46,16 @@ void VulkanDefinitions(py::module_& m) {
                                "Number of read-only storage buffers expected by the program.")
         .def_property_readonly("readwrite_count", &PyComputeProgram::readwriteCount,
                                "Number of read-write storage buffers expected by the program.")
+        .def_property_readonly("push_constant_size", &PyComputeProgram::pushConstantSize,
+                               "Size in bytes of the push-constant block expected by this program (0 if unused).")
         .def("run", &PyComputeProgram::run,
-             py::arg("readonly_buffers"), py::arg("readwrite_buffers"), py::arg("group_count"),
-             "Dispatch the compute pipeline with the provided buffers and workgroup count.")
+             py::arg("readonly_buffers"),
+             py::arg("readwrite_buffers"),
+             py::arg("group_count"),
+             py::arg("push_constants") = py::none(),
+             "Dispatch the compute pipeline with the provided buffers, workgroup count, and optional push constants.")
         .def("release", &PyComputeProgram::release,
              "Explicitly destroy the underlying Vulkan pipeline and associated resources.");
-
-    m.def("createComputeProgramFromGLSL",
-          [](const std::string& source, uint32_t roCount, uint32_t rwCount) {
-              return MakeComputeProgramFromGLSL(source, roCount, rwCount);
-          },
-          py::arg("glsl_source"), py::arg("ro_count"), py::arg("rw_count"),
-          py::return_value_policy::move,
-          "Compile a compute shader written in GLSL to SPIR-V and wrap it in a :class:`ComputeProgram`.");
 
     m.def("createComputeProgramFromSlang",
           [](const std::string& moduleName, const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount) {

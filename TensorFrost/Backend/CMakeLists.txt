@@ -23,7 +23,6 @@ target_include_directories(TensorFrostBackend
 target_link_libraries(TensorFrostBackend
         PUBLIC
         Vulkan::Vulkan
-        Vulkan::shaderc_combined
         glfw
         $<$<CONFIG:Debug>:${SLANG_LIB_DEBUG}>
         $<$<NOT:$<CONFIG:Debug>>:${SLANG_LIB_RELEASE}>)

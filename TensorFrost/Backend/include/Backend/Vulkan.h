@@ -18,6 +18,7 @@ struct ComputeProgram {
     vk::PipelineLayout pipelineLayout;
     vk::Pipeline pipeline;
     uint32_t numRO = 0, numRW = 0;
+    uint32_t pushConstantSize = 0;
 };
 
 struct ComputeBindings {
@@ -88,7 +89,6 @@ void destroyBuffer(Buffer& buf);
 void setBufferData(Buffer& buf, const void* src, size_t bytes, size_t offset = 0);
 void getBufferData(const Buffer& buf, void* dst, size_t bytes, size_t offset = 0);
 
-ComputeProgram createComputeProgramFromGLSL(const std::string& glsl, uint32_t roCount, uint32_t rwCount);
 ComputeProgram createComputeProgramFromSlang(const std::string& moduleName,
     const std::string& source, const std::string& entry, uint32_t roCount, uint32_t rwCount);
 void destroyComputeProgram(ComputeProgram& prog);
@@ -96,6 +96,8 @@ void destroyComputeProgram(ComputeProgram& prog);
 void runProgram(const ComputeProgram& prog,
                 const std::vector<Buffer*>& readonlyBuffers,
                 const std::vector<Buffer*>& readwriteBuffers,
-                uint32_t groupCount);
+                uint32_t groupCount,
+                const void* pushConstants,
+                size_t pushConstantSize);
 
 VulkanContext& getVulkanContext();
