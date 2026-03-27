@@ -1,46 +1,57 @@
 import numpy as np
 import TensorFrost as tf
 
-tf.initialize(tf.cpu)
+_SLANG = r"""
+struct FillParams {
+    float4 color;
+};
 
-blur_d = 16
-blur_r = blur_d * 0.5
+[[vk::push_constant]]
+FillParams gParams;
 
-def kernel(r):
-    #return 1.0
-    return tf.exp(-0.5 * (r / blur_r)**2.0) / (blur_r * np.sqrt(2.0 * np.pi))
+[[vk::binding(0,0)]] RWStructuredBuffer<uint> Pixels : register(u0, space0);
 
-# def blurfunc():
-#     img = tf.func_input([-1, -1], tf.float32)
-#     with tf.loop(-blur_d, blur_d+1, 1) as k:
-#         blur_h += img[i+k, j] * kernel(tf.float(k))
-#     with tf.loop(-blur_d, blur_d+1, 1) as k:
-#         blur_v += blur_h[i, j+k] * kernel(tf.float(k))
-#     return blur_v
-#
-# def blur():
-#     img = tf.input([-1, -1, -1], tf.float32)
-#     N, M, C = img.shape
-#     blur_h = tf.zeros(img.shape, tf.float32)
-#     blur_v = tf.zeros(img.shape, tf.float32)
-#     i, j, ch = img.indices
-#
-#     tf.vmap(inputs=[img], map=[C], func=blurfunc);
-#
-#     return blur_v
+[numthreads(64,1,1)]
+void csMain(uint3 tid : SV_DispatchThreadID)
+{
+    uint idx = tid.x;
+    if (idx >= Pixels.length()) return;
 
-@tf.compile
-def blur(img: tf.Arg([-1, -1, -1], tf.float32)):
-    blur_h = tf.zeros(img.shape, tf.float32)
-    blur_v = tf.zeros(img.shape, tf.float32)
-    i, j, ch = img.indices
+    float4 c = saturate(gParams.color);
+    uint r = (uint)round(c.r * 255.0);
+    uint g = (uint)round(c.g * 255.0);
+    uint b = (uint)round(c.b * 255.0);
+    uint a = (uint)round(c.a * 255.0);
+    Pixels[idx] = r | (g << 8) | (b << 16) | (a << 24);
+}
+"""
 
-    #horizontal blur
-    with tf.loop(-blur_d, blur_d+1, 1) as k:
-        blur_h += img[i+k, j, ch] * kernel(tf.float(k))
 
-    #vertical blur
-    with tf.loop(-blur_d, blur_d+1, 1) as k:
-        blur_v += blur_h[i, j+k, ch] * kernel(tf.float(k))
+def main() -> None:
+    width = height = 512
+    local_size = 64
+    thread_count = width * height
+    group_count = max((thread_count + local_size - 1) // local_size, 1)
 
-    return blur_v
+    window = tf.createWindow(width, height, "TensorFrost Debug Fill")
+    pixel_buffer = tf.createBuffer(thread_count, 4, False)
+    program = tf.createComputeProgramFromSlang(
+        "debug_fill",
+        _SLANG,
+        "csMain",
+        ro_count=0,
+        rw_count=1,
+        push_constant_size=16,
+    )
+
+    color = np.array([0.15, 0.45, 0.95, 1.0], dtype=np.float32)
+
+    while window.isOpen():
+        program.run([], [pixel_buffer], group_count, color)
+        window.drawBuffer(pixel_buffer, width, height)
+
+    window.close()
+
+
+if __name__ == "__main__":
+    main()

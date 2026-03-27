@@ -34,9 +34,10 @@ set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(PYBIND11_FINDPYTHON ON)
 
+find_package(Vulkan REQUIRED)
+
 add_subdirectory(external/pybind11)
 add_subdirectory(external/glfw)
-add_subdirectory(external/glad/cmake)
 add_subdirectory(TensorFrost)
 add_subdirectory(examples)
 

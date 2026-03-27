@@ -56,3 +56,6 @@ imgui.ini
 *.npz
 /cmake-build-*
 *.pyc
+/.cmake
+/CMakeFiles
+/.debug
